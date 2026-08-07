@@ -76,8 +76,10 @@ export default tseslint.config(
   },
 
   // apps/api: Node. Los decoradores de Nest usan parámetros de constructor.
+  // Incluye los `.mjs` de `scripts/`: `db:seed` los ejecuta con `node` directo,
+  // sin paso de compilación, así que también corren en Node.
   {
-    files: ['apps/api/**/*.ts'],
+    files: ['apps/api/**/*.{ts,mjs}'],
     languageOptions: { globals: globals.node },
     rules: {
       '@typescript-eslint/no-extraneous-class': 'off',
