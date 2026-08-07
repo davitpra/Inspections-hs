@@ -1,0 +1,27 @@
+{
+  "name": "@hs/forms",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Motor de formularios. ADR-007: cero dependencias, cero builtins de Node.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3",
+    "vitest": "^4.1.10"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "name": "api",
+  "version": "0.0.1",
+  "description": "",
+  "author": "",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "commonjs",
+  "scripts": {
+    "build": "nest build",
+    "start": "nest start",
+    "start:dev": "nest start --watch",
+    "start:prod": "node dist/main",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@hs/contracts": "workspace:*",
+    "@hs/forms": "workspace:*",
+    "@nestjs/common": "^11.0.1",
+    "@nestjs/core": "^11.0.1",
+    "@nestjs/platform-express": "^11.0.1",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^11.0.0",
+    "@nestjs/schematics": "^11.0.0",
+    "@nestjs/testing": "^11.0.1",
+    "@swc/core": "^1.13.5",
+    "@types/express": "^5.0.0",
+    "@types/node": "^24.13.3",
+    "source-map-support": "^0.5.21",
+    "ts-loader": "^9.5.2",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "~5.9.3",
+    "unplugin-swc": "^1.5.7",
+    "vitest": "^4.1.10"
+  }
+}

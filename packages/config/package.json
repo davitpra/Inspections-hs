@@ -1,0 +1,16 @@
+{
+  "name": "@hs/config",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "tsconfig compartidos. Sin build: son archivos de configuración, no código.",
+  "exports": {
+    "./tsconfig/base.json": "./tsconfig/base.json",
+    "./tsconfig/library.json": "./tsconfig/library.json",
+    "./tsconfig/node.json": "./tsconfig/node.json",
+    "./tsconfig/react.json": "./tsconfig/react.json"
+  },
+  "files": [
+    "tsconfig"
+  ]
+}

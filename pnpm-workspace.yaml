@@ -1,0 +1,10 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# pnpm bloquea los postinstall por defecto. Sin esto, esbuild y swc se instalan
+# sin binario y el build falla en CI con un error que no dice eso.
+# (pnpm 11 reemplazó `onlyBuiltDependencies` por este mapa explícito.)
+allowBuilds:
+  esbuild: true
+  "@swc/core": true

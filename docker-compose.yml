@@ -1,0 +1,28 @@
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: hs-platform-db
+    restart: unless-stopped
+    environment:
+      # El superusuario existe solo para el bootstrap del contenedor. Ninguna app
+      # lo usa: la API se conecta como hs_app y las migraciones como hs_migrator
+      # (ADR-002). Ver db/init/01-roles.sql y .env.example.
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: hs_platform
+    ports:
+      # Configurable porque es habitual tener otro Postgres escuchando en 5432.
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      # Los scripts de este directorio corren una única vez, cuando el volumen
+      # está vacío. Si cambiás 01-roles.sql, hace falta `pnpm db:reset`.
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d hs_platform"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  db-data:

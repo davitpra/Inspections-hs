@@ -1,0 +1,14 @@
+{
+  "extends": "../../packages/config/tsconfig/node.json",
+  "compilerOptions": {
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "resolvePackageJsonExports": true,
+    "declaration": true,
+    "removeComments": true,
+    "incremental": true,
+    "outDir": "./dist",
+    "baseUrl": "./"
+  },
+  "include": ["src", "vitest.config.mts"]
+}

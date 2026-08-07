@@ -1,0 +1,30 @@
+{
+  "name": "@hs/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Esquemas Zod de request/response y tipos derivados. El esquema Drizzle NO vive acá (ADR-007).",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3",
+    "vitest": "^4.1.10"
+  }
+}
