@@ -1,4 +1,12 @@
 {
   "extends": "./tsconfig.json",
-  "exclude": ["node_modules", "dist", "vitest.config.mts", "**/*.spec.ts"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "test",
+    "vitest.config.mts",
+    "vitest.integration.config.mts",
+    "drizzle.config.ts",
+    "**/*.spec.ts"
+  ]
 }

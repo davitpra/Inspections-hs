@@ -8,3 +8,11 @@ packages:
 allowBuilds:
   esbuild: true
   "@swc/core": true
+  # Dependencias nativas de testcontainers (vía dockerode/ssh2). Se declaran en
+  # false a propósito: los tres tienen fallback en JS puro y solo hacen falta
+  # para conectarse a un Docker remoto por SSH, que no es el caso ni en local ni
+  # en el runner. Sin declararlas, `pnpm install --frozen-lockfile` falla en CI
+  # con ERR_PNPM_IGNORED_BUILDS en vez de limitarse a avisar.
+  cpu-features: false
+  protobufjs: false
+  ssh2: false

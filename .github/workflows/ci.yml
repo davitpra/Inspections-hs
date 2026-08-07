@@ -34,3 +34,26 @@ jobs:
       - run: pnpm typecheck
 
       - run: pnpm test
+
+  # Job aparte del de lint/typecheck para que un fallo de integración se
+  # distinga de un fallo de compilación. Levanta un Postgres real con
+  # Testcontainers: el runner de GitHub ya trae Docker.
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Mismo motivo que arriba: apps/api no tipa hasta que @hs/forms y
+      # @hs/contracts estén compilados.
+      - run: pnpm -r build
+
+      - run: pnpm --filter api test:int

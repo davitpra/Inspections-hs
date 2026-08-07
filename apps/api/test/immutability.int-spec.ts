@@ -1,0 +1,213 @@
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
+import { withSiteScope } from '../src/db/site-scope';
+import {
+  insertEvent,
+  inScope,
+  one,
+  sqlstate,
+  startTestDatabase,
+  type TestDatabase,
+} from './helpers/postgres';
+
+const SITE_A = '11111111-1111-1111-1111-111111111111';
+const SITE_B = '22222222-2222-2222-2222-222222222222';
+
+/** insufficient_privilege. También es el SQLSTATE de una violación de política RLS. */
+const INSUFFICIENT_PRIVILEGE = '42501';
+
+/** El SQLSTATE propio del trigger de inmutabilidad (migración 0001). */
+const APPEND_ONLY = 'HS001';
+
+let db: TestDatabase;
+let seeded: { id: string; hash: Buffer };
+
+beforeAll(async () => {
+  db = await startTestDatabase();
+  const row = await insertEvent(db.app, SITE_A, { payload: { seeded: true } });
+  seeded = { id: row.id, hash: row.hash };
+});
+
+afterAll(async () => {
+  await db?.stop();
+});
+
+describe('el rol de la aplicación no puede mutar filas inmutables', () => {
+  // Spike 2 de requisitos §7: el UPDATE con el rol de la app falla en el motor.
+  it('rechaza UPDATE con 42501 y deja la fila intacta', async () => {
+    await expect(
+      inScope(db.app, [SITE_A], `UPDATE audit_log SET payload = '{}'::jsonb WHERE id = $1`, [
+        seeded.id,
+      ]),
+    ).rejects.toSatisfy((error) => sqlstate(error) === INSUFFICIENT_PRIVILEGE);
+
+    const row = one(
+      await inScope<{ payload: unknown; hash: Buffer }>(
+        db.app,
+        [SITE_A],
+        'SELECT payload, hash FROM audit_log WHERE id = $1',
+        [seeded.id],
+      ),
+    );
+
+    expect(row.payload).toEqual({ seeded: true });
+    expect(row.hash.equals(seeded.hash)).toBe(true);
+  });
+
+  it('rechaza DELETE con 42501 y la fila sigue estando', async () => {
+    await expect(
+      inScope(db.app, [SITE_A], 'DELETE FROM audit_log WHERE id = $1', [seeded.id]),
+    ).rejects.toSatisfy((error) => sqlstate(error) === INSUFFICIENT_PRIVILEGE);
+
+    const rows = await inScope(db.app, [SITE_A], 'SELECT id FROM audit_log WHERE id = $1', [
+      seeded.id,
+    ]);
+
+    expect(rows).toHaveLength(1);
+  });
+
+  it('rechaza TRUNCATE con 42501', async () => {
+    await expect(inScope(db.app, [SITE_A], 'TRUNCATE audit_log')).rejects.toSatisfy(
+      (error) => sqlstate(error) === INSUFFICIENT_PRIVILEGE,
+    );
+  });
+
+  it('no puede crear tablas ni tocar el trigger de inmutabilidad', async () => {
+    await expect(inScope(db.app, [SITE_A], 'CREATE TABLE probe (id int)')).rejects.toSatisfy(
+      (error) => sqlstate(error) === INSUFFICIENT_PRIVILEGE,
+    );
+
+    // No es dueño de la tabla: no puede desarmar la barrera.
+    await expect(
+      inScope(db.app, [SITE_A], 'DROP TRIGGER audit_log_forbid_mutation ON audit_log'),
+    ).rejects.toThrow();
+  });
+
+  it('acepta INSERT dentro del alcance de sitio', async () => {
+    const row = await insertEvent(db.app, SITE_A, { payload: { inserted: true } });
+
+    expect(row.id).toBeTruthy();
+    expect(row.payload).toEqual({ inserted: true });
+  });
+});
+
+describe('el trigger frena también al dueño de la tabla', () => {
+  // Con hs_app el REVOKE dispara primero y el trigger nunca llega a ejecutarse.
+  // hs_migrator es dueño de la tabla y tiene el privilegio, así que es el único
+  // rol con el que se puede probar la segunda barrera.
+  it('rechaza UPDATE de hs_migrator con el SQLSTATE del trigger', async () => {
+    let caught: unknown;
+
+    try {
+      await inScope(db.migrator, [SITE_A], `UPDATE audit_log SET payload = '{}'::jsonb WHERE id = $1`, [
+        seeded.id,
+      ]);
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(sqlstate(caught)).toBe(APPEND_ONLY);
+    expect((caught as Error).message).toContain('audit_log');
+    expect((caught as Error).message).toContain('append-only');
+  });
+
+  it('rechaza DELETE de hs_migrator y la fila sigue estando', async () => {
+    await expect(
+      inScope(db.migrator, [SITE_A], 'DELETE FROM audit_log WHERE id = $1', [seeded.id]),
+    ).rejects.toSatisfy((error) => sqlstate(error) === APPEND_ONLY);
+
+    const rows = await inScope(db.app, [SITE_A], 'SELECT id FROM audit_log WHERE id = $1', [
+      seeded.id,
+    ]);
+
+    expect(rows).toHaveLength(1);
+  });
+});
+
+describe('aislamiento por sitio', () => {
+  beforeAll(async () => {
+    await insertEvent(db.app, SITE_B, { payload: { site: 'b' } });
+    await insertEvent(db.app, SITE_B, { payload: { site: 'b' } });
+  });
+
+  it('el alcance de un sitio no ve las filas del otro', async () => {
+    const row = one(
+      await inScope<{ count: string }>(
+      db.app,
+      [SITE_B],
+      'SELECT count(*)::text AS count FROM audit_log',
+    ),
+    );
+
+    const all = one(
+      await inScope<{ count: string }>(
+      db.app,
+      [SITE_A, SITE_B],
+      'SELECT count(*)::text AS count FROM audit_log',
+    ),
+    );
+
+    expect(row.count).toBe('2');
+    expect(Number(all.count)).toBeGreaterThan(2);
+  });
+
+  it('rechaza un INSERT fuera del alcance declarado', async () => {
+    await expect(
+      inScope(
+        db.app,
+        [SITE_A],
+        `INSERT INTO audit_log (site_id, event_type, payload, occurred_at, recorded_at, hash)
+         VALUES ($1, 'x', '{}'::jsonb, now(), now(), '\\x00'::bytea)`,
+        [SITE_B],
+      ),
+    ).rejects.toSatisfy((error) => sqlstate(error) === INSUFFICIENT_PRIVILEGE);
+  });
+
+  it('sin alcance declarado devuelve cero filas, no todas', async () => {
+    const row = one(
+      await inScope<{ count: string }>(
+      db.app,
+      [],
+      'SELECT count(*)::text AS count FROM audit_log',
+    ),
+    );
+
+    expect(row.count).toBe('0');
+  });
+
+  // FORCE ROW LEVEL SECURITY: sin él, el dueño de la tabla evade sus políticas.
+  it('hs_migrator tampoco evade las políticas por sitio', async () => {
+    const row = one(
+      await inScope<{ count: string }>(
+      db.migrator,
+      [SITE_B],
+      'SELECT count(*)::text AS count FROM audit_log',
+    ),
+    );
+
+    expect(row.count).toBe('2');
+  });
+
+  // SET LOCAL, no SET: el alcance muere con la transacción. Si sobreviviera, una
+  // conexión del pool arrastraría el alcance de un request al siguiente.
+  it('el alcance no sobrevive a la transacción en una conexión reusada', async () => {
+    const single = db.singleConnectionApp();
+
+    const before = await withSiteScope(single, { siteIds: [SITE_A, SITE_B] }, async (client) => {
+      const result = await client.query<{ count: string }>(
+        'SELECT count(*)::text AS count FROM audit_log',
+      );
+      return one(result.rows).count;
+    });
+
+    const after = await withSiteScope(single, { siteIds: [] }, async (client) => {
+      const result = await client.query<{ count: string }>(
+        'SELECT count(*)::text AS count FROM audit_log',
+      );
+      return one(result.rows).count;
+    });
+
+    expect(Number(before)).toBeGreaterThan(0);
+    expect(after).toBe('0');
+  });
+});
