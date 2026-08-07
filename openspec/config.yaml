@@ -1,32 +1,50 @@
+# openspec/config.yaml
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+context: |
+  Plataforma de inspecciones e incidentes OHSA. Un solo desarrollador.
+  2 sitios (St. Thomas, Glencoe), ~15-20 usuarios auth, 200+ personas en roster.
+  UI y contenido: SOLO INGLÉS. Sin i18n.
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+  Stack: pnpm workspaces (apps/web Vite+React+TanStack, apps/api NestJS,
+  packages/forms, packages/contracts). Postgres + Drizzle + RLS. pg-boss.
+  Dexie + Serwist offline. Zod compartido. S3-compatible + Playwright PDF.
 
-# Per-operation guidance (optional)
-# Add advisory guidance for how apply and archive work should be conducted.
-# This is separate from artifact rules above.
-# Example:
-#   operations:
-#     apply:
-#       guidance:
-#         - Keep test summaries concise
-#     archive:
-#       guidance:
-#         - Summarize the archive outcome before finishing
+  Invariantes que ningún change puede violar:
+  - Inmutabilidad forzada por el motor (REVOKE UPDATE/DELETE + triggers),
+    no por código de aplicación. Nunca DELETE: siempre deactivated_at.
+  - Aislamiento por sitio vía políticas RLS, nunca vía WHERE en el endpoint.
+  - packages/forms sin dependencias de Node (va dentro del service worker).
+  - El esquema Drizzle vive solo en apps/api. El cliente consume contracts.
+  - El estado de AcciónCorrectiva se deriva de eventos, no es columna.
+  - Persona ≠ Usuario. Sin detalle clínico en el sistema.
+
+  Capabilities válidas para openspec/specs/. Usar exactamente estos nombres;
+  no inventar variantes ni crear capabilities nuevas sin decisión explícita:
+    identity · catalog · templates · inspections · findings · actions
+    incidents · audit · reporting · offline-capture · immutability
+
+  Fuera de alcance en v1 — no proponer aunque parezca una mejora obvia:
+  i18n o traducción de cualquier tipo; reporte de incidentes en primera
+  persona; formulario sin cuenta, kiosco o link público; canal anónimo de
+  peligros; scoring ponderado; clasificación "casi-accidente"; diagnóstico,
+  parte médico o restricción funcional; segunda firma; sincronización
+  multi-dispositivo de una misma inspección; envío automático al MLITSD o
+  al WSIB; QR por estación; capacitación, SDS/WHMIS, permisos de trabajo, EPP.
+
+  Referencias: docs/requisitos-v1.2.md, docs/adr/
+
+rules:
+  proposal:
+    - 'Declarar qué etapa de requisitos-v1.2 §7 implementa el change.'
+    - 'Si el change no cierra ninguna etapa, justificar por qué existe.'
+  specs:
+    - 'Requisitos en inglés, sintaxis EARS ("The system SHALL...").'
+    - 'Cada requisito con al menos un "#### Scenario" en formato WHEN/THEN.'
+    - 'Los nombres de campo del scenario deben coincidir con el esquema real.'
+    - 'Usar solo capabilities de la lista del contexto.'
+  design:
+    - 'Referenciar el ADR aplicable por número; no reescribir su contenido.'
+    - 'Declarar explícitamente si el change toca una tabla inmutable.'
+  tasks:
+    - 'Toda tarea que toque el esquema incluye la migración SQL con REVOKE/RLS.'
