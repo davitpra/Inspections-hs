@@ -10,6 +10,8 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 
+import { site } from './catalog';
+
 /**
  * ADR-004 — La fuente de verdad de esta tabla es
  * `apps/api/drizzle/0002_audit_log.sql`, no este archivo.
@@ -31,8 +33,11 @@ export const auditLog = pgTable(
   {
     id: bigint('id', { mode: 'bigint' }).generatedAlwaysAsIdentity().primaryKey(),
 
-    // Sin referencia: la tabla `site` llega en la etapa 2, que agrega la FK.
-    siteId: uuid('site_id').notNull(),
+    // La FK la agrega `0004_site_location_catalog.sql`: cuando se escribió 0002 la
+    // tabla `site` todavía no existía.
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => site.id),
 
     // Los cuatro campos que asigna el trigger `BEFORE INSERT`. Se declaran para
     // poder leerlos; escribirlos no tiene efecto, la base los sobrescribe.

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withSiteScope } from '../src/db/site-scope';
+import { registerSite } from './helpers/catalog';
 import {
   insertEvent,
   inScope,
@@ -24,6 +25,12 @@ let seeded: { id: string; hash: Buffer };
 
 beforeAll(async () => {
   db = await startTestDatabase();
+
+  // Desde `0004` toda entrada del log referencia una fila de `site`: un evento
+  // que nadie puede atribuir a un lugar de trabajo no sostiene nada.
+  await registerSite(db.migrator, SITE_A, 'immutability-a');
+  await registerSite(db.migrator, SITE_B, 'immutability-b');
+
   const row = await insertEvent(db.app, SITE_A, { payload: { seeded: true } });
   seeded = { id: row.id, hash: row.hash };
 });

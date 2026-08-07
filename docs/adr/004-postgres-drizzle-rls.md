@@ -7,7 +7,7 @@
 | **Supersede**               | —                                                               |
 | **Superada por**            | —                                                               |
 | **Referencias**             | `docs/requisitos-v1.2.md` §6 preguntas 5 y 6, riesgo A; ADR-002 |
-| **Changes que la consumen** | `bootstrap-immutable-persistence`, `template-versioning-item-identity`, `recurrence-compliance-reporting` |
+| **Changes que la consumen** | `bootstrap-immutable-persistence`, `template-versioning-item-identity`, `site-location-catalog` (primera tabla con política RLS aplicada: `location`), `recurrence-compliance-reporting` |
 
 ## RLS para el aislamiento por sitio
 

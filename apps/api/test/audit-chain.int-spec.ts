@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { registerSite } from './helpers/catalog';
 import {
   insertEvent,
   inScope,
@@ -28,6 +29,14 @@ let db: TestDatabase;
 
 beforeAll(async () => {
   db = await startTestDatabase();
+
+  // Desde `0004` toda entrada del log referencia una fila de `site`. Cada cadena
+  // de este spec es la de un sitio, así que cada sitio tiene que existir.
+  await registerSite(db.migrator, SITE_A, 'chain-a');
+  await registerSite(db.migrator, SITE_B, 'chain-b');
+  await registerSite(db.migrator, SITE_CONCURRENT, 'chain-concurrent');
+  await registerSite(db.migrator, SITE_TAMPERED, 'chain-tampered');
+  await registerSite(db.migrator, SITE_GAP, 'chain-gap');
 });
 
 afterAll(async () => {

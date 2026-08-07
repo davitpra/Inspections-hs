@@ -6,8 +6,9 @@
 CREATE TABLE audit_log (
   id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 
-  -- Sin FK a propósito: la tabla `site` es de dominio y llega en la etapa 2, que
-  -- es la migración que agrega la referencia.
+  -- Sin FK a propósito: la tabla `site` es de dominio y llega en la etapa 2. La
+  -- referencia la agrega `0004_site_location_catalog.sql`, que es donde nace
+  -- `site`. Esta migración ya está aplicada y no se toca.
   site_id uuid NOT NULL,
 
   -- Posición dentro de la cadena del sitio. La asigna el trigger; lo que mande el

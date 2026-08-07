@@ -4,6 +4,7 @@ import { dirname, resolve } from 'node:path';
 import type { TemplateDocument } from '@hs/contracts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { createLocation, registerSite } from './helpers/catalog';
 import { inScope, one, sqlstate, startTestDatabase, type TestDatabase } from './helpers/postgres';
 import {
   createTemplate,
@@ -32,10 +33,18 @@ import {
  */
 
 const ITEM_KEY = 'guards.packaging-lines';
+const SPIKE_SITE = '88888888-8888-4888-8888-888888888888';
 const FOREIGN_KEY_VIOLATION = '23503';
 
 let db: TestDatabase;
 let templateId: string;
+
+// El hallazgo lleva ubicación desde `0004`. Para el spike da lo mismo cuál sea:
+// lo que se prueba acá es la identidad del ítem. Que la ubicación sea del mismo
+// sitio lo prueba `catalog.int-spec.ts`.
+let siteId: string;
+let locationId: string;
+
 const versionIds: string[] = [];
 
 /** El documento de una versión: una sección, un ítem. */
@@ -72,8 +81,9 @@ async function recordFindings(row: VersionItemRow, count: number): Promise<void>
     await inScope(
       db.migrator,
       [],
-      'INSERT INTO finding_stub (template_version_item_id, item_key) VALUES ($1, $2)',
-      [row.id, row.item_key],
+      `INSERT INTO finding_stub (template_version_item_id, item_key, site_id, location_id)
+       VALUES ($1, $2, $3, $4)`,
+      [row.id, row.item_key, siteId, locationId],
     );
   }
 }
@@ -103,6 +113,9 @@ beforeAll(async () => {
 
   const fixture = resolve(dirname(__filename), 'fixtures/finding_stub.sql');
   await db.migrator.query(await readFile(fixture, 'utf8'));
+
+  siteId = await registerSite(db.migrator, SPIKE_SITE, 'spike-site');
+  locationId = await createLocation(db.migrator, siteId, 'packaging-line-3', 'Packaging line 3');
 
   templateId = await createTemplate(db.migrator, 'monthly-inspection-spike');
   await registerItems(db.migrator, templateId, [ITEM_KEY]);
@@ -334,8 +347,9 @@ describe('linaje y punto ciego', () => {
     await inScope(
       db.migrator,
       [],
-      'INSERT INTO finding_stub (template_version_item_id, item_key) VALUES ($1, NULL)',
-      [row.id],
+      `INSERT INTO finding_stub (template_version_item_id, item_key, site_id, location_id)
+       VALUES ($1, NULL, $2, $3)`,
+      [row.id, siteId, locationId],
     );
 
     const series = await recurrenceSeries();
@@ -350,8 +364,9 @@ describe('linaje y punto ciego', () => {
       inScope(
         db.migrator,
         [],
-        'INSERT INTO finding_stub (template_version_item_id, item_key) VALUES ($1, $2)',
-        [row.id, 'guards.invented'],
+        `INSERT INTO finding_stub (template_version_item_id, item_key, site_id, location_id)
+         VALUES ($1, $2, $3, $4)`,
+        [row.id, 'guards.invented', siteId, locationId],
       ),
     ).rejects.toSatisfy((error) => sqlstate(error) === FOREIGN_KEY_VIOLATION);
   });
