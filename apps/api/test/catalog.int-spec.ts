@@ -13,6 +13,7 @@ import {
   SEEDED_SITES,
   type LocationRow,
 } from './helpers/catalog';
+import { createAccount } from './helpers/identity';
 import { inScope, one, sqlstate, startTestDatabase, type TestDatabase } from './helpers/postgres';
 import { createTemplate, itemRow, publishVersion, registerItems } from './helpers/templates';
 
@@ -28,6 +29,11 @@ import { createTemplate, itemRow, publishVersion, registerItems } from './helper
 
 const SITE_A = '99999999-0000-4000-8000-00000000000a';
 const SITE_B = '99999999-0000-4000-8000-00000000000b';
+/**
+ * Desde 0005, `audit_log.actor_user_id` referencia una cuenta real: un uuid
+ * inventado ya no es legal. Lo que cambia es el arranque, no lo que este spec
+ * prueba.
+ */
 const ACTOR = '99999999-0000-4000-8000-0000000000ac';
 
 /** insufficient_privilege. También es el SQLSTATE de una violación de política RLS. */
@@ -60,6 +66,8 @@ beforeAll(async () => {
 
   await registerSite(db.migrator, SITE_A, 'catalog-a', 'Catalog A');
   await registerSite(db.migrator, SITE_B, 'catalog-b', 'Catalog B');
+
+  await createAccount(db.migrator, { id: ACTOR, siteIds: [SITE_A, SITE_B] });
 
   dockA = await createLocation(db.migrator, SITE_A, 'shipping-dock', 'Shipping dock');
   dockB = await createLocation(db.migrator, SITE_B, 'shipping-dock', 'Shipping dock');

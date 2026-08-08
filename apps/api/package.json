@@ -15,7 +15,8 @@
     "test": "vitest run --passWithNoTests",
     "test:int": "vitest run --config vitest.integration.config.mts",
     "db:migrate": "node --env-file-if-exists=../../.env node_modules/drizzle-kit/bin.cjs migrate",
-    "db:seed": "node --env-file-if-exists=../../.env scripts/seed.mjs"
+    "db:seed": "node --env-file-if-exists=../../.env scripts/seed.mjs",
+    "roster:import": "node --env-file-if-exists=../../.env scripts/roster-import.mjs"
   },
   "dependencies": {
     "@hs/contracts": "workspace:*",
@@ -23,6 +24,7 @@
     "@nestjs/common": "^11.0.1",
     "@nestjs/core": "^11.0.1",
     "@nestjs/platform-express": "^11.0.1",
+    "csv-parse": "^7.0.2",
     "drizzle-orm": "^0.45.2",
     "pg": "^8.22.0",
     "reflect-metadata": "^0.2.2",

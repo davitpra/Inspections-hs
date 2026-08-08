@@ -16,7 +16,8 @@
     "db:down": "docker compose down",
     "db:reset": "docker compose down -v && docker compose up -d --wait",
     "db:migrate": "pnpm --filter api db:migrate",
-    "db:seed": "pnpm --filter api db:seed"
+    "db:seed": "pnpm --filter api db:seed",
+    "roster:import": "pnpm --filter api roster:import"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

@@ -16,6 +16,10 @@ CREATE TABLE audit_log (
   seq bigint NOT NULL,
 
   -- Nullable: hay eventos del sistema que no tienen un usuario detrás.
+  --
+  -- Sin FK acá por orden de construcción: `app_user` es de dominio y llega en la
+  -- etapa 2. La referencia la agrega `0005_identity.sql`, que es donde nace la
+  -- tabla de cuentas. Esta migración ya está aplicada y no se toca.
   actor_user_id uuid,
 
   event_type text NOT NULL,

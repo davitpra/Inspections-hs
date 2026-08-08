@@ -308,9 +308,9 @@ REVOKE INSERT ON site FROM hs_app;
 -- de alta, y UPDATE ACOTADO POR COLUMNA para renombrar y dar de baja. Cualquier
 -- otra columna la frena el motor con 42501 sin que el trigger llegue a correr.
 --
--- Que sea *el coordinador* y no cualquier usuario autenticado lo va a exigir el
--- change de `identity`, que es el que trae los roles. Hasta entonces no existe
--- ningún endpoint de catálogo, así que la superficie es cero.
+-- Que sea *el coordinador* y no cualquier usuario autenticado necesita dos cosas:
+-- el rol, que ya existe desde `0005_identity.sql`, y un endpoint que lo exija, que
+-- todavía no. Mientras no exista ningún endpoint de catálogo, la superficie es cero.
 GRANT UPDATE (name, deactivated_at) ON location TO hs_app;
 
 --> statement-breakpoint
