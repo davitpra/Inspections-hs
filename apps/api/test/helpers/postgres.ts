@@ -52,6 +52,12 @@ export interface TestDatabase {
    * transacción usa por fuerza la misma conexión que la primera.
    */
   singleConnectionApp: () => Pool;
+  /**
+   * La URL de `hs_app` contra este contenedor. La usan los tests que construyen los
+   * servicios reales de la API —que leen `DATABASE_URL`— en vez de hablarle a la base
+   * directamente.
+   */
+  appUrl: string;
   stop: () => Promise<void>;
 }
 
@@ -89,6 +95,7 @@ export async function startTestDatabase(): Promise<TestDatabase> {
     app,
     migrator,
     superuser,
+    appUrl: `postgresql://hs_app:hs_app_dev@${host}:${port}/${DATABASE}`,
     singleConnectionApp: () => {
       const pool = poolFor('hs_app', 'hs_app_dev', 1);
       extraPools.push(pool);

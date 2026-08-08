@@ -10,6 +10,7 @@ import {
   selectablePeople,
 } from './helpers/identity';
 import { inScope, one, startTestDatabase, type TestDatabase } from './helpers/postgres';
+import { createAuthStack, grantCredential } from './helpers/auth';
 
 /**
  * Requisitos §4 ("Persona ≠ Usuario") y §5 riesgo I (ciclo de vida del auditor
@@ -673,17 +674,55 @@ describe('el alcance manda, el rol no', () => {
     ).resolves.toEqual([]);
   });
 
-  it('un jhsc_member de una planta no ve la otra', async () => {
-    const seeded = await createAccount(db.migrator, { siteIds: [SITE_A], role: 'jhsc_member' });
-    const atB = await createPerson(db.migrator, SITE_B);
+  /**
+   * ADR-011 — Este caso es el que la etapa 2 de §7 tiene que dejar probado:
+   * *"permisos por sitio verificados con datos reales"*.
+   *
+   * Y por eso NO declara el alcance a mano. Un test que fija `app.site_ids` con la
+   * lista que él mismo armó prueba que la política RLS funciona, que es una cosa
+   * distinta y ya está probada más arriba. Lo que falta probar —y lo que un inspector
+   * del MLITSD preguntaría— es que el alcance con el que la aplicación consulta sea el
+   * de la persona que inició sesión, y eso solo se prueba iniciando sesión.
+   *
+   * El recorrido completo, sin atajos: el coordinador invita, el titular acepta y fija
+   * su contraseña, entra con email y contraseña, y el alcance sale del token.
+   */
+  it('un jhsc_member que INICIÓ SESIÓN de verdad no ve la otra planta', async () => {
+    const stack = createAuthStack(db.appUrl);
 
-    const visible = await withSiteScope(
-      db.app,
-      { siteIds: await effectiveScope(db.migrator, seeded.accountId), userId: seeded.accountId },
-      (client) => client.query<{ id: string }>('SELECT id FROM person').then((result) => result.rows),
-    );
+    try {
+      const coordinator = await createAccount(db.migrator, {
+        siteIds: [SITE_A, SITE_B],
+        role: 'hs_coordinator',
+      });
 
-    expect(visible.map((row) => row.id)).not.toContain(atB);
+      const member = await createAccount(db.migrator, { siteIds: [SITE_A], role: 'jhsc_member' });
+      const atB = await createPerson(db.migrator, SITE_B);
+
+      const password = 'a-long-enough-password';
+      await grantCredential(
+        stack,
+        { userId: coordinator.accountId, role: 'hs_coordinator' },
+        member.accountId,
+        password,
+      );
+
+      const { tokens } = await stack.auth.signIn({ email: member.email, password });
+      const session = await stack.sessions.resolve(tokens.accessToken);
+
+      expect(session.siteIds).toEqual([SITE_A]);
+
+      const visible = await stack.db.withSession(session, (dbx) =>
+        dbx.execute(`SELECT id FROM person` as never),
+      );
+
+      const rows = (visible as unknown as { rows: { id: string }[] }).rows;
+
+      expect(rows.map((row) => row.id)).not.toContain(atB);
+      expect(rows.length).toBeGreaterThan(0);
+    } finally {
+      await stack.stop();
+    }
   });
 });
 
