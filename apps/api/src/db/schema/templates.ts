@@ -1,4 +1,4 @@
-import type { TemplateDocument } from '@hs/contracts';
+import type { ResponseType, TemplateDocument, VisibleWhen } from '@hs/contracts';
 import {
   boolean,
   index,
@@ -94,6 +94,13 @@ export const templateVersionItem = pgTable(
     prompt: text('prompt').notNull(),
     responseType: text('response_type').$type<ResponseType>().notNull(),
     required: boolean('required').notNull(),
+
+    // Proyectadas por el trigger desde el documento (migración 0007). Nulables:
+    // las filas publicadas antes de 0007 son de los cuatro tipos originales, que
+    // no llevan configuración, y re-proyectarlas sería escribir sobre una tabla
+    // inmutable. La fuente de verdad para validar sigue siendo `document`.
+    config: jsonb('config').$type<Record<string, unknown>>(),
+    visibleWhen: jsonb('visible_when').$type<VisibleWhen>(),
   },
   (table) => [
     unique('template_version_item_key_uq').on(table.templateVersionId, table.itemKey),
@@ -107,8 +114,12 @@ export const templateVersionItem = pgTable(
   ],
 );
 
-/** El mismo enum que el `CHECK` del SQL y que `responseTypeSchema`. */
-export type ResponseType = 'yes_no' | 'scale' | 'text' | 'number';
+/**
+ * El mismo enum que el `CHECK` del SQL. Ya no se escribe acá: viene de
+ * `@hs/forms` vía `@hs/contracts`, que es donde el motor lo define. La única
+ * copia que queda es la del SQL, y un test de integración la compara.
+ */
+export type { ResponseType };
 
 export type Template = typeof template.$inferSelect;
 export type TemplateItemRow = typeof templateItem.$inferSelect;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { templateDocumentSchema, type TemplateDocument } from './template-document.js';
+import { templateDocumentSchema, type TemplateDocument } from './schema.js';
 
 /** Documento mínimo válido. Cada test lo deforma en un solo punto. */
 function validDocument(): TemplateDocument {
@@ -63,7 +63,7 @@ describe('templateDocumentSchema', () => {
 
   it('rechaza un response_type que no está en el enum', () => {
     const document = validDocument();
-    (document.sections[0]!.items[0] as { response_type: string }).response_type = 'signature';
+    (document.sections[0]!.items[0] as { response_type: string }).response_type = 'rating_stars';
 
     expect(errors(document)).toContain('response_type');
   });

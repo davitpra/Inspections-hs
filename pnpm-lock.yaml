@@ -152,10 +152,20 @@ importers:
         specifier: ^4.1.10
         version: 4.1.10(@types/node@24.13.3)(vite@8.2.0(@types/node@24.13.3)(esbuild@0.28.1)(terser@5.49.2)(tsx@4.23.9)(yaml@2.9.0))
 
-  packages/config: {}
+  packages/config:
+    devDependencies:
+      eslint:
+        specifier: ^9.39.1
+        version: 9.39.5(supports-color@8.1.1)
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.10(@types/node@24.13.3)(vite@8.2.0(@types/node@24.13.3)(esbuild@0.28.1)(terser@5.49.2)(tsx@4.23.9)(yaml@2.9.0))
 
   packages/contracts:
     dependencies:
+      '@hs/forms':
+        specifier: workspace:*
+        version: link:../forms
       zod:
         specifier: ^4.1.13
         version: 4.4.3
@@ -168,6 +178,10 @@ importers:
         version: 4.1.10(@types/node@24.13.3)(vite@8.2.0(@types/node@24.13.3)(esbuild@0.28.1)(terser@5.49.2)(tsx@4.23.9)(yaml@2.9.0))
 
   packages/forms:
+    dependencies:
+      zod:
+        specifier: ^4.1.13
+        version: 4.4.3
     devDependencies:
       typescript:
         specifier: ~5.9.3

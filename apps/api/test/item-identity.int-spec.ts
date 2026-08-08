@@ -47,29 +47,24 @@ let locationId: string;
 
 const versionIds: string[] = [];
 
-/** El documento de una versión: una sección, un ítem. */
-function documentFor(item: {
-  section_key: string;
-  section_title: string;
-  prompt: string;
-  position: number;
-  response_type: TemplateDocument['sections'][number]['items'][number]['response_type'];
-}): TemplateDocument {
+/**
+ * El documento de una versión: una sección, un ítem.
+ *
+ * El ítem entero viaja como parámetro y no campo por campo: desde que el
+ * `response_type` es una unión discriminada, cada tipo trae su propia
+ * configuración y no hay una firma común que los cubra a todos.
+ */
+function documentFor(
+  section: { section_key: string; section_title: string },
+  item: TemplateDocument['sections'][number]['items'][number],
+): TemplateDocument {
   return {
     sections: [
       {
-        section_key: item.section_key,
-        section_title: item.section_title,
+        section_key: section.section_key,
+        section_title: section.section_title,
         position: 1,
-        items: [
-          {
-            item_key: ITEM_KEY,
-            prompt: item.prompt,
-            position: item.position,
-            response_type: item.response_type,
-            required: true,
-          },
-        ],
+        items: [item],
       },
     ],
   };
@@ -125,13 +120,16 @@ beforeAll(async () => {
     db.migrator,
     templateId,
     1,
-    documentFor({
-      section_key: 'general',
-      section_title: 'General',
-      prompt: 'Machine guards present?',
-      position: 4,
-      response_type: 'yes_no',
-    }),
+    documentFor(
+      { section_key: 'general', section_title: 'General' },
+      {
+        item_key: ITEM_KEY,
+        prompt: 'Machine guards present?',
+        position: 4,
+        response_type: 'yes_no',
+        required: true,
+      },
+    ),
   );
   await recordFindings(await itemRow(db.migrator, versionIds[0], ITEM_KEY), 1);
 
@@ -140,13 +138,16 @@ beforeAll(async () => {
     db.migrator,
     templateId,
     2,
-    documentFor({
-      section_key: 'machine-safety',
-      section_title: 'Machine safety',
-      prompt: 'Are machine guards in place and secured on all packaging lines?',
-      position: 1,
-      response_type: 'yes_no',
-    }),
+    documentFor(
+      { section_key: 'machine-safety', section_title: 'Machine safety' },
+      {
+        item_key: ITEM_KEY,
+        prompt: 'Are machine guards in place and secured on all packaging lines?',
+        position: 1,
+        response_type: 'yes_no',
+        required: true,
+      },
+    ),
   );
   await recordFindings(await itemRow(db.migrator, versionIds[1], ITEM_KEY), 2);
 
@@ -155,13 +156,18 @@ beforeAll(async () => {
     db.migrator,
     templateId,
     3,
-    documentFor({
-      section_key: 'machine-safety',
-      section_title: 'Machine safety',
-      prompt: 'Are machine guards in place and secured on all packaging lines?',
-      position: 1,
-      response_type: 'scale',
-    }),
+    documentFor(
+      { section_key: 'machine-safety', section_title: 'Machine safety' },
+      {
+        item_key: ITEM_KEY,
+        prompt: 'Are machine guards in place and secured on all packaging lines?',
+        position: 1,
+        response_type: 'scale',
+        min: 1,
+        max: 5,
+        required: true,
+      },
+    ),
   );
   await recordFindings(await itemRow(db.migrator, versionIds[2], ITEM_KEY), 1);
 });

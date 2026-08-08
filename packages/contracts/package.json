@@ -21,6 +21,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@hs/forms": "workspace:*",
     "zod": "^4.1.13"
   },
   "devDependencies": {

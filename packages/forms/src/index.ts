@@ -3,11 +3,19 @@
  *
  * Este paquete viaja dentro del bundle del service worker: no puede importar
  * builtins de Node ni librerías que asuman servidor. La regla se aplica por lint
- * (bloque `packages/forms` en `eslint.config.js`), no por disciplina.
+ * (bloque `packages/forms` en `eslint.config.js`), no por disciplina. `zod` es
+ * la única dependencia y es isomórfica.
  *
- * Etapa 0: solo el esqueleto. Los tipos de ítem, la lógica condicional y la
- * validación contra una `template_version` llegan en la etapa 3.
+ * El paquete es dueño del documento de `template_version`: el mismo esquema que
+ * el dispositivo usa para renderizar sin red es el que el servidor usa para
+ * re-validar el envío. `@hs/contracts` lo re-exporta.
  */
+
+export * from './document/answers.js';
+export * from './document/conditions.js';
+export * from './document/schema.js';
+export * from './document/validate.js';
+export * from './document/visibility.js';
 
 /**
  * Una respuesta se considera sin contestar cuando está vacía. `false` y `0` son

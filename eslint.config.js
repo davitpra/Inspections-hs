@@ -18,6 +18,16 @@ import tseslint from 'typescript-eslint';
 const nodeBuiltinsMessage =
   'ADR-007: packages/forms va dentro del bundle del service worker. Sin builtins de Node.';
 
+/**
+ * El motor corre dos veces sobre la misma entrada: en el dispositivo antes de
+ * dejar enviar, y en el servidor al recibir el envío. Si una de esas corridas
+ * mira el reloj, tira un número al azar o sale a la red, el veredicto puede
+ * diferir — que es el modo de falla que ADR-007 evita poniendo el motor en un
+ * solo paquete. La pureza no se puede probar con un test: se aplica acá.
+ */
+const impurityMessage =
+  'ADR-007: el motor corre en el dispositivo y en el servidor sobre la misma entrada. Sin reloj, sin azar y sin red.';
+
 const forbidNodeBuiltins = {
   files: ['packages/forms/**/*.{ts,tsx}'],
   rules: {
@@ -35,6 +45,28 @@ const forbidNodeBuiltins = {
       { name: '__filename', message: nodeBuiltinsMessage },
       { name: 'require', message: nodeBuiltinsMessage },
       { name: 'Buffer', message: nodeBuiltinsMessage },
+      // Red: mismo glob, misma lista. Ver `forbidImpurity` más abajo.
+      { name: 'fetch', message: impurityMessage },
+      { name: 'XMLHttpRequest', message: impurityMessage },
+    ],
+  },
+};
+
+/** Ver `impurityMessage`. Reloj y azar, que no son globals sino propiedades. */
+const forbidImpurity = {
+  files: ['packages/forms/**/*.ts'],
+  rules: {
+    // `no-restricted-globals` no se configura acá: `forbidNodeBuiltins` ya lo
+    // usa para el mismo glob y el último bloque que lo declare reemplaza al
+    // anterior entero. Los globals de red se agregan allá, en una sola lista.
+    'no-restricted-properties': [
+      'error',
+      { object: 'Math', property: 'random', message: impurityMessage },
+      { object: 'Date', property: 'now', message: impurityMessage },
+    ],
+    'no-restricted-syntax': [
+      'error',
+      { selector: "NewExpression[callee.name='Date']", message: impurityMessage },
     ],
   },
 };
@@ -93,6 +125,7 @@ export default tseslint.config(
   },
 
   forbidNodeBuiltins,
+  forbidImpurity,
 
   // Los archivos de configuración de la raíz y de las apps sí corren en Node.
   {

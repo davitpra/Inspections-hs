@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "tsconfig compartidos. Sin build: son archivos de configuración, no código.",
+  "description": "tsconfig compartidos y la verificación de las reglas de lint que protegen ADR-007.",
   "exports": {
     "./tsconfig/base.json": "./tsconfig/base.json",
     "./tsconfig/library.json": "./tsconfig/library.json",
@@ -12,5 +12,12 @@
   },
   "files": [
     "tsconfig"
-  ]
+  ],
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "eslint": "^9.39.1",
+    "vitest": "^4.1.10"
+  }
 }
