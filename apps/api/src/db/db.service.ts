@@ -78,6 +78,23 @@ export class DbService implements OnModuleDestroy {
   }
 
   /**
+   * El mismo alcance de sesión, con el cliente crudo en vez del constructor de
+   * Drizzle. Lo usan los servicios de dominio que escriben SQL a mano —CTEs, `ON
+   * CONFLICT DO NOTHING`, `RETURNING` compuesto— que el query builder no expresa sin
+   * perder de vista lo que hace el motor.
+   *
+   * Mantiene todo lo que hace `withSession`: la ventana de fechas del auditor externo
+   * y su registro de lecturas. Es la misma puerta, no un atajo alrededor.
+   */
+  async withSessionClient<T>(
+    session: SessionScope,
+    run: (client: PoolClient) => Promise<T>,
+    read?: ReadDescriptor,
+  ): Promise<T> {
+    return withSessionScope(this.pool, session, run, read);
+  }
+
+  /**
    * El pool crudo, para lo que corre ANTES de que exista un alcance: la resolución
    * del token, la rotación del refresh y la revocación. Ninguna de esas tablas lleva
    * política RLS —una política sobre el alcance que se lee para CONSTRUIR el alcance
