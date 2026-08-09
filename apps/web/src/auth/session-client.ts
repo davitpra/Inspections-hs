@@ -144,14 +144,14 @@ export class SessionClient {
       if (isRenewable(error.code) && (await this.refresh())) {
         response = await attempt();
       } else {
-        if (error.code === 'session_ended') this.options.onSessionEnded?.();
+        if (sessionReallyEnded(response, error)) this.options.onSessionEnded?.();
         return failure(error);
       }
     }
 
     if (!response.ok) {
       const error = await readError(response);
-      if (error.code === 'session_ended') this.options.onSessionEnded?.();
+      if (sessionReallyEnded(response, error)) this.options.onSessionEnded?.();
       return failure(error);
     }
 
@@ -214,6 +214,28 @@ export function refreshOnReconnect(client: SessionClient): () => void {
     globalThis.removeEventListener?.('online', handler);
     globalThis.removeEventListener?.('visibilitychange', handler);
   };
+}
+
+/**
+ * Si esto es de verdad el fin de la sesión, o solo un error que no supimos leer.
+ *
+ * `readError` cae en `session_ended` ante CUALQUIER respuesta sin código tipado, y para
+ * lo que esa función protege —no descartar nada de la cola— es el default correcto. Pero
+ * "no descartes" y "echá al usuario a la pantalla de login" no son la misma decisión, y
+ * tratarlas igual tiene una consecuencia concreta: un `404` de una ruta que todavía no
+ * existe, un `502` de un proxy o una página de error en HTML sacarían al inspector de su
+ * recorrido en medio de la planta.
+ *
+ * Ese error se vio de verdad: con `POST /inspection-submissions` sin implementar, el
+ * `404` sin código deslogueaba al inspector al reconectar. No se perdía trabajo —el
+ * borrador y la cola sobreviven— pero la sesión se caía sin motivo.
+ *
+ * Así que se pide la evidencia mínima antes de dar la sesión por terminada: que el
+ * servidor haya contestado `401`. Cualquier otra cosa sigue devolviendo `session_ended`
+ * a quien llamó —la cola sigue sin descartar nada— pero no desloguea.
+ */
+function sessionReallyEnded(response: Response, error: AuthError): boolean {
+  return error.code === 'session_ended' && response.status === 401;
 }
 
 async function readError(response: Response): Promise<AuthError> {

@@ -6,8 +6,11 @@ import {
   createScheduledInspectionSchema,
   updateInspectionScheduleSchema,
   type InspectionSchedule,
+  type LocationPackage,
   type PendingInspection,
+  type RosterPackage,
   type ScheduledInspection,
+  type TemplateVersionPackage,
 } from '@hs/contracts';
 
 import { CurrentSession } from '../auth/session.decorator';
@@ -95,6 +98,45 @@ export class InspectionsController {
     const { reason } = cancelScheduledInspectionSchema.parse(body);
 
     return this.inspections.cancel(session, id, reason);
+  }
+
+  // -------------------------------------------------------------------------
+  // El paquete de campo, para el dispositivo que va a recorrer sin señal.
+  //
+  // Tres rutas y no una: la descarga previa las pide por separado para que un fallo
+  // parcial deje evidencia de QUÉ falta. Una respuesta única solo podría fallar entera, y
+  // la pantalla de preparación no podría decirle al inspector que le falta el roster.
+  //
+  // Las tres cuelgan de la inspección y no del recurso —no hay `GET /locations`— porque
+  // así el alcance es una sola pregunta, resuelta por RLS sobre `scheduled_inspection`, y
+  // porque lo que el dispositivo pide no es el catálogo sino lo que ESTA inspección
+  // necesita.
+
+  /** El documento congelado. Nunca "la versión más alta publicada". */
+  @Get('scheduled-inspections/:id/template-version')
+  async templateVersionPackage(
+    @CurrentSession() session: SessionContext,
+    @Param('id') id: string,
+  ): Promise<TemplateVersionPackage> {
+    return this.inspections.templateVersionPackage(session, id);
+  }
+
+  /** El catálogo cerrado de ubicaciones activas de la planta de la inspección. */
+  @Get('scheduled-inspections/:id/locations')
+  async locationPackage(
+    @CurrentSession() session: SessionContext,
+    @Param('id') id: string,
+  ): Promise<LocationPackage> {
+    return this.inspections.locationPackage(session, id);
+  }
+
+  /** El subconjunto activo del roster de esa misma planta. */
+  @Get('scheduled-inspections/:id/roster')
+  async rosterPackage(
+    @CurrentSession() session: SessionContext,
+    @Param('id') id: string,
+  ): Promise<RosterPackage> {
+    return this.inspections.rosterPackage(session, id);
   }
 
   // -------------------------------------------------------------------------

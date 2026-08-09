@@ -1,0 +1,162 @@
+import type { LocationOption, PersonOption } from '@hs/contracts';
+import type { TemplateDocument } from '@hs/forms';
+import Dexie, { type EntityTable, type Table } from 'dexie';
+
+/**
+ * Design D5 — El almacén local. Cinco tablas, y el blob vive con la foto.
+ *
+ * ADR-001: esto NO es una réplica ni un motor de sincronización. Es un borrador con
+ * dueño único que se convierte en un envío y muere. Nada de acá converge con nada del
+ * servidor: se envía una vez, el servidor acepta, y la fila se borra.
+ */
+
+/** Qué baja la descarga previa. Las tres tienen que estar para salir a recorrer. */
+export type PrefetchKind = 'template_version' | 'locations' | 'roster';
+
+export type DraftStatus =
+  /** Se está capturando. */
+  | 'capturing'
+  /** Completada y firmada; espera en el outbox. */
+  | 'signed'
+  /** El servidor la aceptó. La inspección queda cerrada y de solo lectura. */
+  | 'accepted';
+
+export type UploadState = 'pending' | 'uploaded' | 'failed';
+
+export type OutboxState =
+  | 'queued'
+  /** Un `4xx` de validación. No se reintenta; se muestra con el motivo del servidor. */
+  | 'rejected';
+
+export interface DraftRow {
+  /**
+   * D4 — `client_submission_id` ES la clave primaria de la fila, no un campo que se
+   * agrega al enviar. Un identificador que es la clave primaria no se puede regenerar
+   * por accidente en un `put`, y no existe un camino de código donde el borrador
+   * exista sin él.
+   */
+  client_submission_id: string;
+  scheduled_inspection_id: string;
+  /** Quién es el dueño. Un borrador de la cuenta A no se le lista a la cuenta B. */
+  account_id: string;
+  site_id: string;
+  /** La versión CONGELADA. No se recalcula al reconectar. */
+  template_version_id: string;
+  created_at: string;
+  updated_at: string;
+  /** Dónde estaba el inspector. Reabrir vuelve acá. */
+  current_item_key: string | null;
+  status: DraftStatus;
+  signed_at: string | null;
+}
+
+export interface AnswerRow {
+  client_submission_id: string;
+  item_key: string;
+  value: unknown;
+  answered_at: string;
+}
+
+export interface PhotoRow {
+  id: string;
+  client_submission_id: string;
+  item_key: string;
+  /**
+   * Los bytes viven acá y no en el sistema de archivos: IndexedDB los almacena
+   * nativamente y `navigator.storage.persist()` los cubre. Se conservan después de
+   * subir para que el borrador se pueda ver sin red.
+   *
+   * `ArrayBuffer` y no `Blob`, con su `content_type` al lado. Un `Blob` es
+   * estructurado-clonable en un navegador de verdad, pero no en la implementación de
+   * IndexedDB con la que corre la suite, y una foto que solo se puede probar a mano es
+   * una foto que se pierde sin que nadie se entere. El `Blob` se reconstruye donde se
+   * usa —`photoBlob()`—, que es un constructor y no una conversión.
+   */
+  bytes: ArrayBuffer;
+  content_type: string;
+  object_key: string | null;
+  upload_state: UploadState;
+  attempts: number;
+  last_error: string | null;
+  captured_at: string;
+}
+
+export interface OutboxRow {
+  client_submission_id: string;
+  state: OutboxState;
+  attempts: number;
+  next_attempt_at: number;
+  last_error: string | null;
+  /**
+   * D3 — El lock. Vive en la fila y no en una variable de módulo: una bandera en
+   * memoria protege contra dos llamadas del mismo contexto y contra nada más.
+   */
+  sending_since: number | null;
+  lock_owner: string | null;
+}
+
+export type PrefetchPayload =
+  | {
+      kind: 'template_version';
+      site_id: string;
+      template_version_id: string;
+      version: number;
+      document: TemplateDocument;
+    }
+  | { kind: 'locations'; locations: LocationOption[] }
+  | { kind: 'roster'; people: PersonOption[] };
+
+export interface PrefetchRow {
+  scheduled_inspection_id: string;
+  kind: PrefetchKind;
+  payload: PrefetchPayload;
+  fetched_at: string;
+}
+
+/** Los bytes guardados, otra vez como `Blob`: para mostrarlos y para subirlos. */
+export function photoBlob(photo: Pick<PhotoRow, 'bytes' | 'content_type'>): Blob {
+  return new Blob([photo.bytes], { type: photo.content_type });
+}
+
+/** El par de tokens de sesión, guardado acá y no en `localStorage` (D10). */
+export interface TokenRow {
+  id: string;
+  value: unknown;
+}
+
+export class OfflineDatabase extends Dexie {
+  drafts!: EntityTable<DraftRow, 'client_submission_id'>;
+  /** Clave compuesta `[client_submission_id+item_key]`: `Table`, no `EntityTable`. */
+  answers!: Table<AnswerRow, [string, string]>;
+  photos!: EntityTable<PhotoRow, 'id'>;
+  outbox!: EntityTable<OutboxRow, 'client_submission_id'>;
+  prefetch!: Table<PrefetchRow, [string, PrefetchKind]>;
+  tokens!: EntityTable<TokenRow, 'id'>;
+
+  constructor(name = 'hs-offline') {
+    super(name);
+
+    /**
+     * El esquema nace en la versión `1` y se declara explícitamente para que la
+     * primera evolución tenga a qué encadenarse. Un dispositivo con un borrador
+     * adentro no puede permitirse una base recreada: la migración es lo que separa un
+     * rollback de una pérdida de datos.
+     */
+    this.version(1).stores({
+      drafts: 'client_submission_id, scheduled_inspection_id, account_id, status, created_at',
+      // Compuesta: la respuesta se identifica por su borrador y su ítem, y esa es la
+      // clave que hace que reescribir una respuesta sea un `put` y no un borrar-e-insertar.
+      answers: '[client_submission_id+item_key], client_submission_id',
+      photos: 'id, client_submission_id, [client_submission_id+item_key], upload_state',
+      outbox: 'client_submission_id, state, next_attempt_at',
+      prefetch: '[scheduled_inspection_id+kind], scheduled_inspection_id',
+      tokens: 'id',
+    });
+  }
+}
+
+/**
+ * La instancia de la aplicación. Los tests construyen la suya con un nombre propio:
+ * un módulo con una base compartida es un test que contamina al siguiente.
+ */
+export const db = new OfflineDatabase();

@@ -3,16 +3,21 @@ import type {
   CreateInspectionSchedule,
   CreateScheduledInspection,
   InspectionSchedule,
+  LocationPackage,
   PendingInspection,
   Role,
+  RosterPackage,
   ScheduledInspection,
+  TemplateVersionPackage,
   UpdateInspectionSchedule,
 } from '@hs/contracts';
+import type { TemplateDocument } from '@hs/forms';
 import type { PoolClient } from 'pg';
 
 import { DbService } from '../db/db.service';
 import { forbidden } from '../auth/auth.errors';
 import type { SessionScope } from '../db/site-scope';
+import { findActiveInspection, type ActiveInspection } from './active-inspection';
 import { SITE_TIME_ZONE } from '../jobs/job-registry';
 import { civilDate } from './period';
 import { inspectionNotFound, inspectorInvalid, templateNotPublishable } from './inspections.errors';
@@ -242,6 +247,126 @@ export class InspectionsService {
         overdue: row.overdue,
       }));
     });
+  }
+
+  // -------------------------------------------------------------------------
+  // El paquete de campo: lo que el dispositivo baja antes de perder señal.
+  //
+  // Las tres lecturas son SEPARADAS y no una sola respuesta, y eso es el requisito: un
+  // dispositivo que obtiene dos de las tres tiene que poder nombrar cuál le falta. Con
+  // una respuesta única el único fallo posible sería "todo o nada", y la pantalla de
+  // preparación no podría decir "falta el roster".
+
+  /**
+   * El documento CONGELADO contra el que se va a capturar.
+   *
+   * Se une por el `template_version_id` de la inspección y NUNCA se resuelve "la más
+   * alta publicada": publicar la v3 no mueve una inspección atada a la v2, y este
+   * método es donde esa garantía se sostiene o se pierde. Es la misma razón por la que
+   * `schedule()` resuelve la versión una sola vez, al programar.
+   *
+   * El documento sale de la columna `template_version.document` tal cual. No se
+   * reconstruye desde `template_version_item`: esas filas las proyecta un trigger DESDE
+   * el documento y existen para consultar la recurrencia de un ítem entre versiones. La
+   * fuente de verdad para validar es la columna, y reconstruirla sería una segunda
+   * representación del mismo documento que puede divergir.
+   */
+  async templateVersionPackage(
+    session: SessionScope,
+    id: string,
+  ): Promise<TemplateVersionPackage> {
+    return this.db.withSessionClient(session, async (client) => {
+      const inspection = await this.requireActive(client, id);
+
+      const { rows } = await client.query<{ version: number; document: TemplateDocument }>(
+        `SELECT version, document
+           FROM template_version
+          WHERE id = $1`,
+        [inspection.template_version_id],
+      );
+
+      // La FK garantiza que exista: si no está, la base está rota y el 404 es honesto.
+      const row = rows[0];
+      if (!row) throw inspectionNotFound();
+
+      return {
+        site_id: inspection.site_id,
+        template_version_id: inspection.template_version_id,
+        version: row.version,
+        document: row.document,
+      };
+    });
+  }
+
+  /** El catálogo cerrado de ubicaciones ACTIVAS de la planta de la inspección. */
+  async locationPackage(session: SessionScope, id: string): Promise<LocationPackage> {
+    return this.db.withSessionClient(session, async (client) => {
+      const inspection = await this.requireActive(client, id);
+
+      const { rows } = await client.query<LocationPackage[number]>(
+        // EL `site_id` DE ACÁ ES UN FILTRO DE SELECCIÓN, NO EL LÍMITE DE SEGURIDAD.
+        //
+        // Parece lo que ADR-002 prohíbe y no lo es. El límite lo pone la política RLS:
+        // una cuenta sin alcance en la planta no ve la inspección, y sin la inspección
+        // esta consulta no llega a correr. Lo que el `WHERE` elige es CUÁL de las plantas
+        // del alcance corresponde — el coordinador ve las dos, y devolverle las
+        // ubicaciones de St. Thomas para una inspección de Glencoe no sería una fuga,
+        // sería un desplegable de la planta equivocada.
+        //
+        // La prueba que las separa: sin este `WHERE` hay un bug de producto (opciones de
+        // más, todas dentro del alcance); sin la política habría uno de seguridad.
+        `SELECT id, code, name
+           FROM location
+          WHERE site_id = $1
+            AND deactivated_at IS NULL
+          ORDER BY name`,
+        [inspection.site_id],
+      );
+
+      return rows;
+    });
+  }
+
+  /**
+   * El subconjunto ACTIVO del roster de esa misma planta.
+   *
+   * Cuatro columnas y ni una más: §4 dice que el operador elige a una persona **sin
+   * poder ver su perfil**. `employee_number` viaja porque el nombre no identifica —dos
+   * personas activas pueden llamarse igual—, y nada más viaja porque nada más hace falta
+   * para elegir.
+   */
+  async rosterPackage(session: SessionScope, id: string): Promise<RosterPackage> {
+    return this.db.withSessionClient(session, async (client) => {
+      const inspection = await this.requireActive(client, id);
+
+      const { rows } = await client.query<RosterPackage[number]>(
+        // Mismo criterio que en `locationPackage`: selección entre las plantas del
+        // alcance, no el límite de seguridad. Ver el comentario largo de arriba.
+        `SELECT id, employee_number, first_name, last_name
+           FROM person
+          WHERE site_id = $1
+            AND deactivated_at IS NULL
+          ORDER BY last_name, first_name`,
+        [inspection.site_id],
+      );
+
+      return rows;
+    });
+  }
+
+  /**
+   * La inspección visible y no cancelada, o el mismo 404 para los tres casos.
+   *
+   * "No existe", "está cancelada" y "es de la otra planta" comparten respuesta a
+   * propósito: distinguirlas convertiría estas rutas en un oráculo de qué se inspecciona
+   * donde el solicitante no tiene alcance. La política RLS ya hace que las tres se vean
+   * igual desde acá; el error solo evita volver a separarlas.
+   */
+  private async requireActive(client: PoolClient, id: string): Promise<ActiveInspection> {
+    const inspection = await findActiveInspection(client, id);
+    if (!inspection) throw inspectionNotFound();
+
+    return inspection;
   }
 
   // -------------------------------------------------------------------------

@@ -84,6 +84,34 @@ describe('el cliente de sesión', () => {
     expect(fetchImpl).toHaveBeenCalledOnce();
   });
 
+  /**
+   * REGRESIÓN. Un `404` de una ruta que todavía no existe no lleva código tipado, así
+   * que `readError` cae en `session_ended` — y eso está bien para la cola, que no
+   * descarta nada. Lo que NO puede pasar es que desloguee al inspector: se vio de
+   * verdad, con `POST /inspection-submissions` sin implementar, sacando al usuario de su
+   * recorrido al reconectar.
+   */
+  it('un error sin código tipado NO termina la sesión', async () => {
+    for (const status of [404, 500, 502]) {
+      const fetchImpl = vi.fn(async () => json(status, { message: 'Cannot POST' }));
+      const onSessionEnded = vi.fn();
+
+      const client = new SessionClient({
+        baseUrl: 'https://api.test',
+        store: memoryStore(),
+        fetch: fetchImpl as unknown as typeof globalThis.fetch,
+        onSessionEnded,
+      });
+
+      const result = await client.request('/inspection-submissions', { method: 'POST' });
+
+      // Sigue reportándose como no-descartable para quien llama…
+      expect(result.ok).toBe(false);
+      // …pero la sesión no se da por terminada.
+      expect(onSessionEnded).not.toHaveBeenCalled();
+    }
+  });
+
   it('un 403 no refresca ni reintenta', async () => {
     const fetchImpl = vi.fn(async () => json(403, { code: 'forbidden', message: 'no' }));
 

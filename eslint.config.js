@@ -107,6 +107,15 @@ export default tseslint.config(
     rules: reactHooks.configs.recommended.rules,
   },
 
+  // Los `.mjs` de `apps/web/scripts/`: comprobaciones del artefacto construido
+  // (`check-service-worker.mjs`) que corren con `node` después del build. Son de Node
+  // aunque vivan al lado de código de navegador, y por eso van en su propio bloque
+  // después del de `apps/web`.
+  {
+    files: ['apps/web/scripts/**/*.mjs'],
+    languageOptions: { globals: globals.node },
+  },
+
   // apps/api: Node. Los decoradores de Nest usan parámetros de constructor.
   // Incluye los `.mjs` de `scripts/`: `db:seed` los ejecuta con `node` directo,
   // sin paso de compilación, así que también corren en Node.

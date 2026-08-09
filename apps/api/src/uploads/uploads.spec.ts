@@ -1,0 +1,138 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import type { DbService } from '../db/db.service';
+import type { SessionScope } from '../db/site-scope';
+import { ObjectStorageService, deriveObjectKey } from './object-storage';
+import { UploadsService } from './uploads.service';
+
+const SITE_ID = '11111111-1111-4111-8111-111111111111';
+const OTHER_SITE_ID = '99999999-9999-4999-8999-999999999999';
+const INSPECTION_ID = '22222222-2222-4222-8222-222222222222';
+const USER_ID = '33333333-3333-4333-8333-333333333333';
+
+const session: SessionScope = {
+  userId: USER_ID,
+  siteIds: [SITE_ID],
+  role: 'jhsc_member',
+};
+
+const request = {
+  scheduled_inspection_id: INSPECTION_ID,
+  item_key: 'guarding.photo',
+  content_type: 'image/jpeg',
+  content_length: 900_000,
+} as const;
+
+/**
+ * El doble de la base devuelve lo que la política RLS haría devolver: las filas que la
+ * transacción VE. Una inspección fuera del alcance no es una fila filtrada acá — es una
+ * fila que la consulta no trae, y el doble modela exactamente eso.
+ */
+function dbReturning(rows: { site_id: string }[]): DbService {
+  return {
+    withSessionClient: async <T>(
+      _session: SessionScope,
+      run: (client: { query: () => Promise<{ rows: { site_id: string }[] }> }) => Promise<T>,
+    ): Promise<T> => run({ query: async () => ({ rows }) }),
+  } as unknown as DbService;
+}
+
+function storageSpy() {
+  const presignPut = vi.fn(async () => ({
+    url: 'https://bucket.example.com/signed',
+    object_key: `${SITE_ID}/${INSPECTION_ID}/abc`,
+    expires_at: new Date(Date.now() + 300_000).toISOString(),
+  }));
+
+  return { presignPut } as unknown as ObjectStorageService & { presignPut: typeof presignPut };
+}
+
+describe('UploadsService.presign', () => {
+  it('firma una subida para una inspección dentro del alcance', async () => {
+    const storage = storageSpy();
+    const service = new UploadsService(dbReturning([{ site_id: SITE_ID }]), storage);
+
+    const response = await service.presign(session, request);
+
+    expect(response.object_key.startsWith(`${SITE_ID}/${INSPECTION_ID}/`)).toBe(true);
+    // El `site_id` que se firma sale de la FILA, no del pedido: el cliente no tiene
+    // forma de nombrar la planta bajo la que escribe.
+    expect(storage.presignPut).toHaveBeenCalledWith(
+      expect.objectContaining({ site_id: SITE_ID, scheduled_inspection_id: INSPECTION_ID }),
+    );
+  });
+
+  /** Spec: "A presigned URL is scoped to the requester". */
+  it('rechaza con 403 una inspección fuera del alcance y no emite URL', async () => {
+    const storage = storageSpy();
+    const service = new UploadsService(dbReturning([]), storage);
+
+    await expect(service.presign(session, request)).rejects.toMatchObject({ status: 403 });
+    expect(storage.presignPut).not.toHaveBeenCalled();
+  });
+
+  /**
+   * D7 — una key propuesta por el cliente se ignora. El `strictObject` del contrato la
+   * rechaza en el borde; acá se comprueba lo que importa aunque alguien lo saltara: el
+   * servicio no lee nada del pedido para armar la key.
+   */
+  it('ignora una object key propuesta por el cliente', async () => {
+    const storage = storageSpy();
+    const service = new UploadsService(dbReturning([{ site_id: SITE_ID }]), storage);
+
+    await service.presign(session, {
+      ...request,
+      object_key: `${OTHER_SITE_ID}/robada/mia.jpg`,
+    } as never);
+
+    expect(storage.presignPut).toHaveBeenCalledWith(
+      expect.not.objectContaining({ object_key: expect.anything() }),
+    );
+  });
+});
+
+describe('deriveObjectKey', () => {
+  it('prefija por sitio y por inspección, y no colisiona', () => {
+    const first = deriveObjectKey(SITE_ID, INSPECTION_ID);
+    const second = deriveObjectKey(SITE_ID, INSPECTION_ID);
+
+    expect(first.startsWith(`${SITE_ID}/${INSPECTION_ID}/`)).toBe(true);
+    expect(first).not.toBe(second);
+  });
+});
+
+describe('ObjectStorageService', () => {
+  beforeEach(() => {
+    vi.stubEnv('S3_BUCKET', 'hs-platform-test');
+    vi.stubEnv('S3_ACCESS_KEY_ID', 'test-key');
+    vi.stubEnv('S3_SECRET_ACCESS_KEY', 'test-secret');
+    vi.stubEnv('S3_ENDPOINT', 'http://localhost:9000');
+    vi.stubEnv('S3_UPLOAD_TTL_SECONDS', '300');
+  });
+
+  it('no arranca sin bucket ni credencial', () => {
+    vi.stubEnv('S3_BUCKET', '');
+
+    expect(() => new ObjectStorageService()).toThrow(/S3_BUCKET/);
+  });
+
+  it('emite una URL firmada que expira', async () => {
+    const before = Date.now();
+    const signed = await new ObjectStorageService().presignPut({
+      site_id: SITE_ID,
+      scheduled_inspection_id: INSPECTION_ID,
+      content_type: 'image/jpeg',
+      content_length: 900_000,
+    });
+
+    const url = new URL(signed.url);
+
+    expect(url.searchParams.get('X-Amz-Expires')).toBe('300');
+    expect(url.searchParams.get('X-Amz-Signature')).toBeTruthy();
+    expect(url.pathname).toContain(signed.object_key);
+
+    const expiresAt = Date.parse(signed.expires_at);
+    expect(expiresAt).toBeGreaterThan(before);
+    expect(expiresAt).toBeLessThanOrEqual(before + 300_000 + 5_000);
+  });
+});

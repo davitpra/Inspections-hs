@@ -6,9 +6,17 @@ import { DbModule } from './db/db.module';
 import { InspectionsModule } from './inspections/inspections.module';
 import { JobsModule } from './jobs/jobs.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { UploadsModule } from './uploads/uploads.module';
 
 @Module({
-  imports: [DbModule, JobsModule, AuthModule, InspectionsModule, NotificationsModule],
+  imports: [
+    DbModule,
+    JobsModule,
+    AuthModule,
+    InspectionsModule,
+    NotificationsModule,
+    UploadsModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })

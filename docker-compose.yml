@@ -24,5 +24,71 @@ services:
       timeout: 5s
       retries: 10
 
+  # ADR-006 — El almacenamiento de objetos para desarrollo. Las fotos de una
+  # inspección se suben con presigned URL directo del dispositivo al bucket; la API
+  # solo firma y nunca ve los bytes.
+  storage:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    container_name: hs-platform-storage
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      # El usuario raíz existe solo para el bootstrap del contenedor. La API NO lo
+      # usa: usa la credencial limitada que crea `storage-init` (ADR-006).
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "${S3_PORT:-9000}:9000"
+      # La consola web, para mirar el bucket a mano durante el desarrollo.
+      - "${S3_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - storage-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "mc ready local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # El bucket, su versioning y la credencial de la aplicación. Corre una vez y sale.
+  #
+  # LO QUE ESTE CONTENEDOR HACE Y NO ES DECORATIVO: la credencial que recibe la API
+  # tiene `PutObject` y `GetObject` sobre el prefijo del bucket, y **no tiene
+  # `DeleteObject`**. Es la mitad de ADR-006 que el código no puede aplicar: en
+  # `apps/api` no hay método para borrar, y acá se hace que tampoco haya permiso. Con
+  # versioning activado, ni siquiera una sobreescritura pierde la foto que respalda un
+  # hallazgo.
+  #
+  # Que el entorno de desarrollo tenga la misma restricción que producción es el
+  # punto: si alguien escribe un borrado, falla en su máquina y no en la planta.
+  storage-init:
+    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    container_name: hs-platform-storage-init
+    depends_on:
+      storage:
+        condition: service_healthy
+    restart: "no"
+    entrypoint: >
+      /bin/sh -c "
+      set -e;
+      mc alias set root http://storage:9000 minioadmin minioadmin;
+      mc mb --ignore-existing root/hs-platform-dev;
+      mc version enable root/hs-platform-dev;
+      echo '{
+        \"Version\": \"2012-10-17\",
+        \"Statement\": [
+          {
+            \"Effect\": \"Allow\",
+            \"Action\": [\"s3:PutObject\", \"s3:GetObject\"],
+            \"Resource\": [\"arn:aws:s3:::hs-platform-dev/*\"]
+          }
+        ]
+      }' > /tmp/uploads-policy.json;
+      mc admin policy create root hs-uploads /tmp/uploads-policy.json || true;
+      mc admin user add root hs_uploads_dev hs_uploads_dev_secret || true;
+      mc admin policy attach root hs-uploads --user hs_uploads_dev || true;
+      echo 'bucket hs-platform-dev listo: versioning on, credencial sin DeleteObject';
+      "
+
 volumes:
   db-data:
+  storage-data:
