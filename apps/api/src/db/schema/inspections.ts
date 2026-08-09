@@ -1,13 +1,27 @@
 import { sql } from 'drizzle-orm';
-import { check, date, index, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import {
+  check,
+  date,
+  foreignKey,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
 
 import { site } from './catalog';
 import { appUser } from './identity';
-import { template, templateVersion } from './templates';
+import { template, templateItem, templateVersion, templateVersionItem } from './templates';
 
 /**
  * ADR-004 — La fuente de verdad de estas tablas es
- * `apps/api/drizzle/0008_inspection_scheduling.sql`, no este archivo.
+ * `apps/api/drizzle/0008_inspection_scheduling.sql` y
+ * `apps/api/drizzle/0009_inspection_submissions.sql`, no este archivo.
  *
  * Acá solo viven los tipos con los que el repositorio consulta. El SQL lleva además
  * el trigger `hs_scheduling_guard` —que es lo que hace que la versión de plantilla
@@ -134,8 +148,138 @@ export const scheduledInspection = pgTable(
   ],
 );
 
+/**
+ * El envío congelado (migración 0009). ADR-008, costura crítica 1.
+ *
+ * **Íntegramente inmutable**: 0009 no tiene un solo `GRANT UPDATE`, así que no hay un
+ * tipo `InspectionUpdate` acá abajo y esa ausencia es deliberada. Corregir una
+ * inspección enviada es un `RegistroSuplementario` que la supera, no un UPDATE.
+ *
+ * `clientSubmissionId` es la clave de idempotencia del sistema entero (ADR-001) y su
+ * único es lo que absorbe un reintento del outbox. `signedAt` es el reloj del
+ * dispositivo y `receivedAt` el del servidor: el riesgo C de §5 pide los dos.
+ */
+export const inspection = pgTable(
+  'inspection',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => site.id),
+    scheduledInspectionId: uuid('scheduled_inspection_id')
+      .notNull()
+      .references(() => scheduledInspection.id),
+
+    // Copiada de la inspección programada. Que la copia sea fiel —y que la programada
+    // no esté cancelada— lo defiende el trigger `hs_inspection_freeze_guard`.
+    templateVersionId: uuid('template_version_id')
+      .notNull()
+      .references(() => templateVersion.id),
+
+    clientSubmissionId: uuid('client_submission_id').notNull(),
+
+    // NOT NULL, a diferencia de `scheduledBy`: nada automático firma una inspección.
+    submittedBy: uuid('submitted_by')
+      .notNull()
+      .references(() => appUser.id),
+
+    signedAt: timestamp('signed_at', { withTimezone: true }).notNull(),
+    receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
+
+    answerCount: integer('answer_count').notNull(),
+  },
+  (table) => [
+    check('inspection_answer_count_check', sql`${table.answerCount} >= 0`),
+
+    // LA IDEMPOTENCIA. Reenviar el mismo id devuelve el registro existente y no crea
+    // otro, y lo garantiza este único, no una comprobación previa del servicio.
+    uniqueIndex('inspection_client_submission_uq').on(table.clientSubmissionId),
+
+    // Un envío por inspección programada. Total y no parcial: hoy no existe ningún
+    // estado que excluya una fila.
+    uniqueIndex('inspection_scheduled_uq').on(table.scheduledInspectionId),
+
+    // Destino de la FK compuesta de `inspectionAnswer`.
+    unique('inspection_id_site_uq').on(table.id, table.siteId),
+
+    index('inspection_site_received_idx').on(table.siteId, table.receivedAt),
+  ],
+);
+
+/**
+ * Las respuestas, COMO FILAS y no como un documento (migración 0009).
+ *
+ * La identidad dual de §4 vive en dos columnas: `templateVersionItemId` es la fila
+ * publicada que se contestó —fidelidad legal— e `itemKey` es el concepto estable por
+ * el que agrupa la recurrencia de la etapa 7. Que la segunda no mienta sobre la
+ * primera lo defiende la FK compuesta contra `template_version_item (id, item_key)`.
+ *
+ * `value` es jsonb porque UNA respuesta cambia de forma según el `response_type`:
+ * booleano, número, cadena, o lista de object keys. Eso no es guardar el conjunto de
+ * respuestas como documento, que es justamente lo que esta tabla existe para no hacer.
+ */
+export const inspectionAnswer = pgTable(
+  'inspection_answer',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+
+    inspectionId: uuid('inspection_id')
+      .notNull()
+      .references(() => inspection.id),
+
+    // Denormalizado: la política RLS necesita el sitio en la fila. La FK compuesta de
+    // abajo impide que diga algo distinto del sitio de su inspección.
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => site.id),
+
+    templateVersionItemId: uuid('template_version_item_id')
+      .notNull()
+      .references(() => templateVersionItem.id),
+    itemKey: text('item_key')
+      .notNull()
+      .references(() => templateItem.itemKey),
+
+    value: jsonb('value').notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.inspectionId, table.siteId],
+      foreignColumns: [inspection.id, inspection.siteId],
+    }),
+    foreignKey({
+      columns: [table.templateVersionItemId, table.itemKey],
+      foreignColumns: [templateVersionItem.id, templateVersionItem.itemKey],
+    }),
+
+    uniqueIndex('inspection_answer_item_uq').on(table.inspectionId, table.itemKey),
+
+    // El índice del GROUP BY de recurrencia de la etapa 7.
+    index('inspection_answer_recurrence_idx').on(table.siteId, table.itemKey),
+    index('inspection_answer_inspection_idx').on(table.inspectionId),
+  ],
+);
+
 export type InspectionSchedule = typeof inspectionSchedule.$inferSelect;
 export type ScheduledInspection = typeof scheduledInspection.$inferSelect;
+export type Inspection = typeof inspection.$inferSelect;
+export type InspectionAnswer = typeof inspectionAnswer.$inferSelect;
+
+/**
+ * Lo que un caller aporta al insertar un envío. `id` y `receivedAt` no están: los pone
+ * la base, y `receivedAt` es el reloj del servidor, que es el punto de que exista.
+ */
+export type NewInspection = Pick<
+  typeof inspection.$inferInsert,
+  | 'siteId'
+  | 'scheduledInspectionId'
+  | 'templateVersionId'
+  | 'clientSubmissionId'
+  | 'submittedBy'
+  | 'signedAt'
+  | 'answerCount'
+>;
 
 /**
  * Lo que un caller puede cambiar de una regla. `site_id` y `template_id` no están: una

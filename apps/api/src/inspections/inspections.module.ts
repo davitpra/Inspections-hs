@@ -4,6 +4,8 @@ import { JobsModule } from '../jobs/jobs.module';
 import { InspectionsController } from './inspections.controller';
 import { InspectionsService } from './inspections.service';
 import { OpenPeriodService } from './open-period.service';
+import { SubmissionsController } from './submissions.controller';
+import { SubmissionsService } from './submissions.service';
 
 /**
  * Requisitos §4 — La obligación de inspeccionar.
@@ -18,8 +20,8 @@ import { OpenPeriodService } from './open-period.service';
   // módulo después de los de aquellos que importa, y sin esta arista el registro del
   // cron podría ejecutarse antes de que el planificador arrancara.
   imports: [JobsModule],
-  controllers: [InspectionsController],
-  providers: [InspectionsService, OpenPeriodService],
-  exports: [InspectionsService, OpenPeriodService],
+  controllers: [InspectionsController, SubmissionsController],
+  providers: [InspectionsService, OpenPeriodService, SubmissionsService],
+  exports: [InspectionsService, OpenPeriodService, SubmissionsService],
 })
 export class InspectionsModule {}
