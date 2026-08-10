@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type {
+  PresignActionUploadRequest,
   PresignFindingUploadRequest,
   PresignUploadRequest,
   PresignUploadResponse,
@@ -92,6 +93,43 @@ export class UploadsService {
     return this.storage.presignManualPut({
       site_id: input.site_id,
       draft_finding_id: input.draft_finding_id,
+      content_type: input.content_type,
+      content_length: input.content_length,
+    });
+  }
+
+  /**
+   * La evidencia de una acción correctiva (etapa 5, design D9).
+   *
+   * La planta NO viaja en el request: la acción ya la sabe, y se lee de ella dentro de
+   * la transacción con alcance. Si la política no devuelve la acción, no es del
+   * solicitante — mismo mecanismo que en todo el resto (ADR-002) y no una comparación
+   * en memoria contra `session.siteIds` que hay que acordarse de escribir.
+   *
+   * Que quien pide la URL pueda además avanzar la acción NO se comprueba acá: lo hace
+   * la transición, que es donde la evidencia entra al registro. Una URL firmada sin
+   * evento asociado deja un archivo huérfano en el bucket y nada en la base.
+   */
+  async presignAction(
+    session: SessionScope,
+    input: PresignActionUploadRequest,
+  ): Promise<PresignUploadResponse> {
+    const siteId = await this.db.withSessionClient(session, async (client) => {
+      const { rows } = await client.query<{ site_id: string }>(
+        `SELECT site_id FROM corrective_action WHERE id = $1`,
+        [input.action_id],
+      );
+
+      return rows[0]?.site_id ?? null;
+    });
+
+    if (!siteId) {
+      throw forbidden('No such action within your scope');
+    }
+
+    return this.storage.presignActionPut({
+      site_id: siteId,
+      action_id: input.action_id,
       content_type: input.content_type,
       content_length: input.content_length,
     });

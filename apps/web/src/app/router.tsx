@@ -6,7 +6,10 @@ import {
   createRouter,
 } from '@tanstack/react-router';
 
+import { ActionRoute } from '../routes/ActionRoute';
+import { ActionsRoute } from '../routes/ActionsRoute';
 import { CaptureRoute } from '../routes/CaptureRoute';
+import { InboxRoute } from '../routes/InboxRoute';
 import { OfflineRoute } from '../routes/OfflineRoute';
 import { OutboxRoute } from '../routes/OutboxRoute';
 import { PendingRoute } from '../routes/PendingRoute';
@@ -18,9 +21,13 @@ import { SessionProvider, useAppSession } from './session-context';
 /**
  * ADR-003 — TanStack Router, definido en código y no por archivos.
  *
- * Cinco rutas y todas dentro del shell precacheado. El árbol explícito es también la
- * lista de lo que el service worker tiene que poder servir sin red: un router por
- * convención de archivos escondería esa lista en la estructura de un directorio.
+ * El árbol explícito es también la lista de lo que el service worker tiene que poder
+ * servir sin red: un router por convención de archivos escondería esa lista en la
+ * estructura de un directorio.
+ *
+ * Las rutas de la etapa 5 —acciones correctivas y bandeja— son ONLINE (design D15) y no
+ * dependen del precacheo para funcionar: una acción se ejecuta con red. Están en el
+ * mismo shell porque son la misma aplicación, no porque necesiten estar sin señal.
  */
 
 const rootRoute = createRootRoute({
@@ -60,6 +67,8 @@ function Shell(): React.JSX.Element {
     <div className="shell">
       <nav className="shell__nav">
         <Link to="/">Inspections</Link>
+        <Link to="/actions">Corrective actions</Link>
+        <Link to="/inbox">Inbox</Link>
         <Link to="/outbox">Waiting to be sent</Link>
         <button type="button" className="shell__signout" onClick={() => void signOut()}>
           Sign out
@@ -97,6 +106,24 @@ const reviewRoute = createRoute({
   component: ReviewRoute,
 });
 
+const actionsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/actions',
+  component: ActionsRoute,
+});
+
+const actionRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/actions/$id',
+  component: ActionRoute,
+});
+
+const inboxRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/inbox',
+  component: InboxRoute,
+});
+
 const outboxRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/outbox',
@@ -109,6 +136,9 @@ const routeTree = rootRoute.addChildren([
   captureRoute,
   reviewRoute,
   outboxRoute,
+  actionsRoute,
+  actionRoute,
+  inboxRoute,
 ]);
 
 export const router = createRouter({ routeTree, defaultPreload: false });

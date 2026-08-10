@@ -144,6 +144,20 @@ textarea {
   border-color: var(--warn-ink);
 }
 
+/*
+ * Los estados de una acción correctiva. `closed` se apaga y el resto queda neutro: lo
+ * único que se destaca en esta pantalla es lo vencido, que es lo que pide una decisión.
+ * Un semáforo de cuatro colores compite con esa señal y no agrega nada — el estado ya
+ * está escrito en palabras.
+ */
+.badge--closed {
+  opacity: 0.6;
+}
+
+.list__row--unread {
+  font-weight: 600;
+}
+
 .item {
   padding: 1rem 0;
   border-bottom: 1px solid var(--line);

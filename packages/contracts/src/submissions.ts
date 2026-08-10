@@ -86,6 +86,25 @@ export const presignFindingUploadRequestSchema = z.strictObject({
 export type PresignFindingUploadRequest = z.infer<typeof presignFindingUploadRequestSchema>;
 
 /**
+ * El mismo permiso, para la evidencia de una acción correctiva (design D9).
+ *
+ * La tercera forma, y la más simple de las tres: cuando se sube evidencia **la
+ * acción ya existe**, así que no hace falta ningún `draft_*_id` generado por el
+ * cliente para agrupar archivos de algo que todavía no está en la base. El
+ * servidor deriva `{site_id}/actions/{action_id}/{uuid}`.
+ *
+ * Sin `site_id` en el request: la acción ya lo sabe, y el servidor lo lee de ella.
+ * Aceptarlo del cliente sería aceptar que diga a qué planta pertenece la foto.
+ */
+export const presignActionUploadRequestSchema = z.strictObject({
+  action_id: z.uuid(),
+  content_type: uploadContentTypeSchema,
+  content_length: z.int().positive().max(MAX_UPLOAD_BYTES),
+});
+
+export type PresignActionUploadRequest = z.infer<typeof presignActionUploadRequestSchema>;
+
+/**
  * La URL firmada, su key y cuándo deja de servir. `expires_at` viaja para que el
  * dispositivo pueda decidir que una URL guardada ya no sirve sin tener que pedirla y
  * comerse el error — aunque el camino normal es pedirla y usarla en el acto.

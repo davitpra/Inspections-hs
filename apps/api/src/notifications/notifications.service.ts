@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import type { InspectionPeriodOpenedPayload, Notification } from '@hs/contracts';
+import { notificationSchema, type Notification } from '@hs/contracts';
 
 import { DbService } from '../db/db.service';
 import type { SessionScope } from '../db/site-scope';
@@ -55,19 +55,32 @@ export class NotificationsService {
 interface NotificationRow extends Record<string, unknown> {
   id: string;
   site_id: string;
-  kind: Notification['kind'];
-  payload: InspectionPeriodOpenedPayload;
+  kind: string;
+  /**
+   * `unknown` y no un tipo concreto: desde la etapa 5 hay cuatro formas posibles y cuál
+   * es la de esta fila lo decide `kind`. Afirmar acá que es la del período fue cierto
+   * mientras hubo un solo tipo y sería mentira ahora.
+   */
+  payload: unknown;
   created_at: Date;
   read_at: Date | null;
 }
 
+/**
+ * La fila, validada contra la unión discriminada del contrato (design D11).
+ *
+ * **Parsea en vez de castear, y esa es la decisión.** Un `as Notification` haría que un
+ * `kind` que la base tiene y el contrato no —una migración a medio desplegar, un
+ * `INSERT` a mano— llegue a la bandeja como una tarjeta que no sabe renderizarse. Con
+ * el parseo, la lectura falla ruidoso donde alguien lo va a ver.
+ */
 function toNotification(row: NotificationRow): Notification {
-  return {
+  return notificationSchema.parse({
     id: row.id,
     site_id: row.site_id,
     kind: row.kind,
     payload: row.payload,
     created_at: row.created_at.toISOString(),
     read_at: row.read_at?.toISOString() ?? null,
-  };
+  });
 }

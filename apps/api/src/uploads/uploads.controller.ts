@@ -1,5 +1,6 @@
 import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import {
+  presignActionUploadRequestSchema,
   presignFindingUploadRequestSchema,
   presignUploadRequestSchema,
   type PresignUploadResponse,
@@ -47,5 +48,22 @@ export class UploadsController {
     @Body() body: unknown,
   ): Promise<PresignUploadResponse> {
     return this.uploads.presignFinding(session, presignFindingUploadRequestSchema.parse(body));
+  }
+
+  /**
+   * La misma operación para la evidencia de una acción correctiva (etapa 5, design D9).
+   *
+   * Tercera ruta y no un campo más, por lo mismo que la segunda: los tres pedidos se
+   * autorizan contra tres cosas distintas —una inspección activa, el catálogo de la
+   * planta, una acción del alcance— y un cuerpo con tres formas posibles habría dejado
+   * esa diferencia adentro de un `if`.
+   */
+  @Post('presign/action')
+  @HttpCode(HttpStatus.OK)
+  async presignAction(
+    @CurrentSession() session: SessionContext,
+    @Body() body: unknown,
+  ): Promise<PresignUploadResponse> {
+    return this.uploads.presignAction(session, presignActionUploadRequestSchema.parse(body));
   }
 }

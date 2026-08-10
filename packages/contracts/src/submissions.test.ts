@@ -5,6 +5,7 @@ import {
   acceptedSubmissionSchema,
   inspectionSubmissionSchema,
   presignFindingUploadRequestSchema,
+  presignActionUploadRequestSchema,
   presignUploadRequestSchema,
   presignUploadResponseSchema,
 } from './submissions.js';
@@ -89,6 +90,43 @@ describe('presignUploadRequestSchema', () => {
     });
 
     expect(result.success).toBe(false);
+  });
+});
+
+describe('presignActionUploadRequestSchema', () => {
+  const valid = {
+    action_id: '66666666-6666-4666-8666-666666666666',
+    content_type: 'image/jpeg',
+    content_length: 1024,
+  };
+
+  it('acepta un pedido de subida de evidencia', () => {
+    expect(presignActionUploadRequestSchema.safeParse(valid).success).toBe(true);
+  });
+
+  /**
+   * Las tres formas son tres afirmaciones distintas sobre tres prefijos distintos
+   * (design D9). Que la de la evidencia no acepte los campos de las otras dos es lo
+   * que impide que un pedido termine escribiendo bajo el prefijo equivocado.
+   */
+  it('rechaza los campos de las otras dos formas', () => {
+    for (const extra of [
+      { scheduled_inspection_id: '77777777-7777-4777-8777-777777777777' },
+      { draft_finding_id: '88888888-8888-4888-8888-888888888888' },
+      { site_id: '99999999-9999-4999-8999-999999999999' },
+      { object_key: 'otro-sitio/actions/otra/mia.jpg' },
+    ]) {
+      expect(presignActionUploadRequestSchema.safeParse({ ...valid, ...extra }).success).toBe(false);
+    }
+  });
+
+  it('rechaza un content_length por encima del tope', () => {
+    expect(
+      presignActionUploadRequestSchema.safeParse({
+        ...valid,
+        content_length: MAX_UPLOAD_BYTES + 1,
+      }).success,
+    ).toBe(false);
   });
 });
 

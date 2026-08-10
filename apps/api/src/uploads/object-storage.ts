@@ -42,6 +42,14 @@ export interface PresignManualInput {
   content_length: number;
 }
 
+/** Lo mismo, para la evidencia de una acción correctiva (etapa 5, design D9). */
+export interface PresignActionInput {
+  site_id: string;
+  action_id: string;
+  content_type: UploadContentType;
+  content_length: number;
+}
+
 /**
  * Corta a propósito (design D7). La URL se pide justo antes del PUT y se usa en el
  * acto; una expiración larga es una URL de escritura circulando por el `fetch` de un
@@ -93,6 +101,18 @@ export class ObjectStorageService {
   async presignManualPut(input: PresignManualInput): Promise<PresignedUpload> {
     return this.sign(
       deriveManualObjectKey(input.site_id, input.draft_finding_id),
+      input.content_type,
+      input.content_length,
+    );
+  }
+
+  /**
+   * La misma firma, en el prefijo de una acción correctiva. La acción ya existe, así
+   * que su id es la carpeta y el cliente sigue sin elegir dónde escribe.
+   */
+  async presignActionPut(input: PresignActionInput): Promise<PresignedUpload> {
+    return this.sign(
+      deriveActionObjectKey(input.site_id, input.action_id),
       input.content_type,
       input.content_length,
     );
@@ -150,6 +170,19 @@ export function deriveObjectKey(siteId: string, scheduledInspectionId: string): 
  */
 export function deriveManualObjectKey(siteId: string, draftFindingId: string): string {
   return `${siteId}/manual/${draftFindingId}/${randomUUID()}`;
+}
+
+/**
+ * `{site_id}/actions/{action_id}/{uuid}` — la evidencia de una acción correctiva
+ * (etapa 5, design D9).
+ *
+ * La más simple de las tres: cuando se sube evidencia la acción YA EXISTE, así que su
+ * id sirve de carpeta y no hace falta un borrador que el cliente invente antes. El
+ * literal `actions/` cumple el mismo papel que `manual/`: sin él, el `action_id` sería
+ * un uuid en la misma posición que el de una inspección programada.
+ */
+export function deriveActionObjectKey(siteId: string, actionId: string): string {
+  return `${siteId}/actions/${actionId}/${randomUUID()}`;
 }
 
 interface ObjectStorageConfig {

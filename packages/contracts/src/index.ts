@@ -14,6 +14,7 @@ export const healthResponseSchema = z.object({
 
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
 
+export * from './actions.js';
 export * from './auth.js';
 export * from './catalog.js';
 export * from './field-package.js';

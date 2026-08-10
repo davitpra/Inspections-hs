@@ -14,6 +14,8 @@
 Los trabajos programados del sistema son:
 
 - Escalamiento de acciones vencidas: +3 días al supervisor, +7 días a gerencia (R3).
+  **Implementado** en `actions.escalate-overdue` (change `corrective-action-lifecycle`),
+  con la idempotencia en el único `(action_id, level)` y no en el handler.
 - Apertura de inspecciones del período por sitio.
 - Notificaciones al coordinador de HS.
 

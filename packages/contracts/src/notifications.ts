@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { severitySchema } from './findings.js';
+
 /**
  * La bandeja in-app.
  *
@@ -10,7 +12,12 @@ import { z } from 'zod';
  * que saber leer el payload, así que un tipo nuevo no puede aparecer sin que alguien
  * escriba cómo se muestra.
  */
-export const NOTIFICATION_KINDS = ['inspection_period_opened'] as const;
+export const NOTIFICATION_KINDS = [
+  'inspection_period_opened',
+  'corrective_action_assigned',
+  'corrective_action_overdue_supervisor',
+  'corrective_action_overdue_management',
+] as const;
 
 export const notificationKindSchema = z.enum(NOTIFICATION_KINDS);
 
@@ -32,13 +39,85 @@ export const inspectionPeriodOpenedPayloadSchema = z.strictObject({
 
 export type InspectionPeriodOpenedPayload = z.infer<typeof inspectionPeriodOpenedPayloadSchema>;
 
-export const notificationSchema = z.strictObject({
+/**
+ * El payload de `corrective_action_assigned`: qué te tocó y para cuándo.
+ *
+ * Lleva `due_at` y no solo el id porque la bandeja tiene que poder decir "vence el
+ * 17" sin ir a buscar la acción, que es la diferencia entre una notificación que
+ * sirve y un aviso de que hay algo que mirar.
+ */
+export const correctiveActionAssignedPayloadSchema = z.strictObject({
+  action_id: z.uuid(),
+  finding_id: z.uuid(),
+  description: z.string().min(1),
+  severity: severitySchema,
+  due_at: z.iso.datetime({ offset: true }),
+});
+
+export type CorrectiveActionAssignedPayload = z.infer<
+  typeof correctiveActionAssignedPayloadSchema
+>;
+
+/**
+ * El payload de los dos escalamientos de §3 R3.
+ *
+ * Los dos niveles comparten forma —cambia quién lo recibe, no qué dice— pero son
+ * dos `kind` distintos y no uno con un campo `level`: quién recibe qué es la
+ * decisión de R3, y un solo `kind` haría que la bandeja de gerencia y la del
+ * supervisor se distingan por el contenido en vez de por el destinatario.
+ */
+export const correctiveActionOverduePayloadSchema = z.strictObject({
+  action_id: z.uuid(),
+  finding_id: z.uuid(),
+  description: z.string().min(1),
+  assignee_person_id: z.uuid(),
+  due_at: z.iso.datetime({ offset: true }),
+  days_overdue: z.number().int().min(0),
+});
+
+export type CorrectiveActionOverduePayload = z.infer<typeof correctiveActionOverduePayloadSchema>;
+
+/**
+ * **La notificación, discriminada por `kind`.**
+ *
+ * Hasta la etapa 5 hubo un solo `kind` y el `payload` tenía una sola forma. Ahora
+ * son cuatro, y el comentario de arriba —"el consumidor tiene que saber leer el
+ * payload"— se cobra acá: una unión discriminada hace que agregar un `kind` sin
+ * decir cómo se lee sea un error de compilación en la UI, y que un `kind`
+ * desconocido llegado de la base falle ruidoso al parsear en vez de renderizar una
+ * tarjeta vacía.
+ *
+ * **BREAKING**: `Notification['payload']` ya no es `InspectionPeriodOpenedPayload`.
+ * Quien lo lea tiene que estrechar por `kind` primero.
+ */
+const notificationBase = {
   id: z.uuid(),
   site_id: z.uuid(),
-  kind: notificationKindSchema,
-  payload: inspectionPeriodOpenedPayloadSchema,
   created_at: z.iso.datetime({ offset: true }),
   read_at: z.iso.datetime({ offset: true }).nullable(),
-});
+};
+
+export const notificationSchema = z.discriminatedUnion('kind', [
+  z.strictObject({
+    ...notificationBase,
+    kind: z.literal('inspection_period_opened'),
+    payload: inspectionPeriodOpenedPayloadSchema,
+  }),
+  z.strictObject({
+    ...notificationBase,
+    kind: z.literal('corrective_action_assigned'),
+    payload: correctiveActionAssignedPayloadSchema,
+  }),
+  z.strictObject({
+    ...notificationBase,
+    kind: z.literal('corrective_action_overdue_supervisor'),
+    payload: correctiveActionOverduePayloadSchema,
+  }),
+  z.strictObject({
+    ...notificationBase,
+    kind: z.literal('corrective_action_overdue_management'),
+    payload: correctiveActionOverduePayloadSchema,
+  }),
+]);
 
 export type Notification = z.infer<typeof notificationSchema>;

@@ -1,3 +1,4 @@
+export * from './actions';
 export * from './audit-log';
 export * from './auth';
 export * from './catalog';

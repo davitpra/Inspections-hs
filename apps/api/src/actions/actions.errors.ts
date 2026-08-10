@@ -1,0 +1,133 @@
+import { HttpException, HttpStatus } from '@nestjs/common';
+import type { DatabaseError } from 'pg';
+
+/**
+ * Los errores del módulo de acciones correctivas.
+ *
+ * Mismo criterio que `findings.errors.ts`: el código va en el CUERPO y no solo en el
+ * status, para que el cliente decida sin parsear un mensaje.
+ *
+ * Ninguno de estos códigos lo lee el outbox. Una acción correctiva se ejecuta online
+ * (design D15): no hay dispositivo reintentando en un rincón sin señal.
+ */
+export type ActionErrorCode =
+  | 'action_not_found'
+  | 'finding_not_classified'
+  | 'invalid_assignee'
+  | 'invalid_transition'
+  | 'evidence_required'
+  | 'invalid_evidence'
+  | 'verifier_is_executor'
+  | 'action_changed'
+  | 'forbidden';
+
+export class ActionException extends HttpException {
+  constructor(
+    readonly code: ActionErrorCode,
+    message: string,
+    status: HttpStatus,
+  ) {
+    super({ code, message }, status);
+  }
+}
+
+/**
+ * Una sola respuesta para "no existe" y "es de la otra planta": la política RLS hace
+ * que las dos se vean igual desde el servicio, y distinguirlas convertiría el endpoint
+ * en un oráculo de qué se está arreglando en la planta donde el solicitante no tiene
+ * alcance (§6 pregunta 5).
+ */
+export const actionNotFound = (): ActionException =>
+  new ActionException('action_not_found', 'No such action within your scope', HttpStatus.NOT_FOUND);
+
+/**
+ * Un hallazgo sin clasificación vigente no puede recibir acciones.
+ *
+ * Sin severidad no hay fecha límite, y una acción sin fecha límite no vence nunca y por
+ * lo tanto no escala nunca: sería una obligación que el sistema no puede hacer cumplir.
+ */
+export const findingNotClassified = (): ActionException =>
+  new ActionException(
+    'finding_not_classified',
+    'Classify the finding before opening a corrective action for it',
+    HttpStatus.CONFLICT,
+  );
+
+/** La persona responsable no existe, no es de este sitio, o está dada de baja. */
+export const invalidAssignee = (message: string): ActionException =>
+  new ActionException('invalid_assignee', message, HttpStatus.BAD_REQUEST);
+
+/** El par (estado actual, destino) no está en la máquina de estados. */
+export const invalidTransition = (message: string): ActionException =>
+  new ActionException('invalid_transition', message, HttpStatus.CONFLICT);
+
+/** Declarar el trabajo hecho sin nada que verificar. */
+export const evidenceRequired = (): ActionException =>
+  new ActionException(
+    'evidence_required',
+    'Declaring the work done requires at least one `after` evidence',
+    HttpStatus.BAD_REQUEST,
+  );
+
+/** Una object key que no pertenece al prefijo de esta acción. */
+export const invalidEvidence = (message: string): ActionException =>
+  new ActionException('invalid_evidence', message, HttpStatus.BAD_REQUEST);
+
+/** §3 R3: quien ejecutó no verifica. */
+export const verifierIsExecutor = (): ActionException =>
+  new ActionException(
+    'verifier_is_executor',
+    'A corrective action is verified by someone other than whoever did the work',
+    HttpStatus.FORBIDDEN,
+  );
+
+/**
+ * Dos transiciones concurrentes desde el mismo estado: una comete y la otra viola el
+ * único de `(action_id, position)`.
+ *
+ * Se traduce a esto y no a un `23505` sin traducir, por lo mismo que
+ * `already_reclassified` en hallazgos: quien pierde tiene que entender que alguien más
+ * movió la acción mientras él miraba, y que lo que corresponde es releer y decidir otra
+ * vez — no reintentar a ciegas.
+ */
+export const actionChanged = (): ActionException =>
+  new ActionException(
+    'action_changed',
+    'This action was advanced by someone else; reload it and try again',
+    HttpStatus.CONFLICT,
+  );
+
+export const actionForbidden = (message: string): ActionException =>
+  new ActionException('forbidden', message, HttpStatus.FORBIDDEN);
+
+/**
+ * La traducción de los SQLSTATE de la migración 0011.
+ *
+ * El servicio comprueba las mismas cosas antes, para devolver un mensaje legible; esto
+ * existe para el caso en que el motor gane la carrera —dos requests concurrentes— y
+ * para que un fallo de guarda nunca salga como un 500 sin explicación. Que las dos
+ * capas digan lo mismo es lo que los tests de integración afirman por los dos caminos.
+ */
+export function translatePgError(error: unknown): ActionException | undefined {
+  const candidate = error as DatabaseError | undefined;
+
+  switch (candidate?.code) {
+    case 'HS004':
+      return invalidTransition(candidate.message);
+    case 'HS005':
+      return verifierIsExecutor();
+    case 'HS006':
+      return evidenceRequired();
+    case 'HS007':
+      // No hay camino por el que un request llegue acá: el servicio escribe la acción y
+      // su primer evento en la misma transacción. Se traduce igual porque un 500 mudo
+      // en un registro regulatorio es peor que un 409 que sobra.
+      return invalidTransition('An action must be created with its first event');
+    case '23505':
+      return candidate.constraint === 'corrective_action_event_position_uq'
+        ? actionChanged()
+        : undefined;
+    default:
+      return undefined;
+  }
+}
