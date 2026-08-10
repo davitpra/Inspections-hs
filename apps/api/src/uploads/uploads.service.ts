@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import type { PresignUploadRequest, PresignUploadResponse } from '@hs/contracts';
+import type {
+  PresignFindingUploadRequest,
+  PresignUploadRequest,
+  PresignUploadResponse,
+} from '@hs/contracts';
 
 import { forbidden } from '../auth/auth.errors';
 import { DbService } from '../db/db.service';
@@ -50,6 +54,44 @@ export class UploadsService {
     return this.storage.presignPut({
       site_id: inspection.site_id,
       scheduled_inspection_id: input.scheduled_inspection_id,
+      content_type: input.content_type,
+      content_length: input.content_length,
+    });
+  }
+
+  /**
+   * La foto de un hallazgo de entrada manual (etapa 4, design D9).
+   *
+   * No hay inspección programada de la que colgar el alcance, así que la planta la
+   * nombra el cliente. **Que esa planta sea suya no se comprueba comparando contra
+   * `session.siteIds`**: se comprueba leyendo el catálogo de ubicaciones de esa planta
+   * dentro de la transacción con alcance. Si la política no devuelve ninguna fila, la
+   * planta no es del solicitante — mismo mecanismo que en todo el resto (ADR-002), y no
+   * una comparación en memoria que hay que acordarse de escribir.
+   *
+   * Un sitio sin catálogo respondería igual que uno ajeno. Es correcto: sin ubicaciones
+   * no se puede reportar un hallazgo ahí, porque `location_id` es obligatorio.
+   */
+  async presignFinding(
+    session: SessionScope,
+    input: PresignFindingUploadRequest,
+  ): Promise<PresignUploadResponse> {
+    const inScope = await this.db.withSessionClient(session, async (client) => {
+      const { rows } = await client.query(
+        `SELECT 1 FROM location WHERE site_id = $1 AND deactivated_at IS NULL LIMIT 1`,
+        [input.site_id],
+      );
+
+      return rows.length > 0;
+    });
+
+    if (!inScope) {
+      throw forbidden('No such site within your scope');
+    }
+
+    return this.storage.presignManualPut({
+      site_id: input.site_id,
+      draft_finding_id: input.draft_finding_id,
       content_type: input.content_type,
       content_length: input.content_length,
     });

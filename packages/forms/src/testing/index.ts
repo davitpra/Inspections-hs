@@ -1,3 +1,4 @@
+import { negativeAnswers } from '../document/negative.js';
 import { templateDocumentSchema } from '../document/schema.js';
 import { validateAnswers } from '../document/validate.js';
 import { evaluateVisibility } from '../document/visibility.js';
@@ -56,6 +57,21 @@ export function runEngineCase(engineCase: EngineCase): string[] {
           } y no lo fue`,
         );
       }
+    }
+  }
+
+  if (engineCase.expected_negative) {
+    const actualNegative = negativeAnswers(document, engineCase.answers);
+
+    // Se compara en orden: la derivación recorre el documento, y que dos
+    // entornos deriven el mismo conjunto en el mismo orden es más fuerte —y
+    // igual de barato— que compararlos como conjuntos.
+    if (actualNegative.join(' | ') !== engineCase.expected_negative.join(' | ')) {
+      failures.push(
+        `${engineCase.name}: se esperaban los negativos [${engineCase.expected_negative.join(
+          ', ',
+        )}] y se obtuvieron [${actualNegative.join(', ')}]`,
+      );
     }
   }
 

@@ -279,6 +279,10 @@ describe('el envío de una inspección en la cadena', () => {
       template_version_id: versionId,
       answers: answers as InspectionSubmission['answers'],
       photos: {},
+      // Todas las respuestas son afirmativas, así que este envío no deriva ningún
+      // hallazgo: el bloque va vacío y el conteo de eslabones de esta suite sigue
+      // midiendo exactamente lo que dice medir.
+      findings: {},
       signed_at: SIGNED_AT,
     };
   }

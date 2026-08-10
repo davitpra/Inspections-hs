@@ -1,5 +1,9 @@
 import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
-import { presignUploadRequestSchema, type PresignUploadResponse } from '@hs/contracts';
+import {
+  presignFindingUploadRequestSchema,
+  presignUploadRequestSchema,
+  type PresignUploadResponse,
+} from '@hs/contracts';
 
 import { CurrentSession } from '../auth/session.decorator';
 import type { SessionContext } from '../auth/session.service';
@@ -25,5 +29,23 @@ export class UploadsController {
     @Body() body: unknown,
   ): Promise<PresignUploadResponse> {
     return this.uploads.presign(session, presignUploadRequestSchema.parse(body));
+  }
+
+  /**
+   * La misma operación para la foto de un hallazgo de entrada manual, que no tiene
+   * inspección programada de la que colgar (etapa 4, design D9).
+   *
+   * Una ruta aparte y no un campo opcional en la de arriba: los dos pedidos se
+   * autorizan distinto —uno contra una inspección activa, el otro contra el catálogo de
+   * la planta— y un cuerpo con dos formas posibles habría dejado esa diferencia adentro
+   * de un `if`.
+   */
+  @Post('presign/finding')
+  @HttpCode(HttpStatus.OK)
+  async presignFinding(
+    @CurrentSession() session: SessionContext,
+    @Body() body: unknown,
+  ): Promise<PresignUploadResponse> {
+    return this.uploads.presignFinding(session, presignFindingUploadRequestSchema.parse(body));
   }
 }

@@ -50,20 +50,30 @@ export function mergePhotoAnswers(
 
 /**
  * Toda object key que el envío referencia, mirada donde puede haberlas: las listas de
- * `photos` y el `object_key` de una firma.
+ * `photos`, las fotos del bloque `findings` y el `object_key` de una firma.
  *
  * Se recorre `answers` con el esquema de la firma y no con el `response_type` del
  * ítem: esto corre ANTES de validar contra el documento, que es donde tiene que
  * correr — comprobar el prefijo después de aceptar la forma sería aceptar primero y
  * preguntar después.
+ *
+ * `findings` entró acá el mismo día que entró al payload, y tenía que entrar: una
+ * lista de keys que el dispositivo escribe y que nadie verifica es exactamente el
+ * agujero por el que el registro legal de una inspección termina apuntando a las
+ * fotos de la otra planta.
  */
 export function objectKeysOf(
   answers: InspectionSubmission['answers'],
   photos: InspectionSubmission['photos'],
+  // Sin valor por defecto a propósito: un parámetro opcional dejaría que un caller
+  // futuro se olvide del bloque y la verificación de prefijo pase sin mirarlo.
+  findings: InspectionSubmission['findings'],
 ): string[] {
   const keys: string[] = [];
 
   for (const list of Object.values(photos)) keys.push(...list);
+
+  for (const details of Object.values(findings)) keys.push(...details.photo_object_keys);
 
   for (const value of Object.values(answers)) {
     const signature = signatureAnswerSchema.safeParse(value);

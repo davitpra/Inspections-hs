@@ -1,6 +1,8 @@
 import { ITEM_KEY_PATTERN, signatureAnswerSchema } from '@hs/forms';
 import { z } from 'zod';
 
+import { submissionFindingsSchema } from './findings.js';
+
 /**
  * Requisitos §7 etapa 3 — Lo que sale del dispositivo: la subida de una foto y el
  * envío de la inspección.
@@ -64,6 +66,26 @@ export const presignUploadRequestSchema = z.strictObject({
 export type PresignUploadRequest = z.infer<typeof presignUploadRequestSchema>;
 
 /**
+ * El mismo permiso, para la foto de un hallazgo de entrada manual (design D9).
+ *
+ * Un hallazgo manual no cuelga de ninguna inspección programada, así que no
+ * puede usar su prefijo. El servidor deriva `{site_id}/manual/{draft_finding_id}/
+ * {uuid}` y el cliente sigue sin elegir dónde escribe: `draft_finding_id` lo
+ * genera antes de subir la primera foto, igual que `client_submission_id`.
+ *
+ * Sin `item_key`: un hallazgo manual no tiene ítem, que es justamente lo que lo
+ * deja fuera de la detección de recurrencia (§5 riesgo F).
+ */
+export const presignFindingUploadRequestSchema = z.strictObject({
+  site_id: z.uuid(),
+  draft_finding_id: z.uuid(),
+  content_type: uploadContentTypeSchema,
+  content_length: z.int().positive().max(MAX_UPLOAD_BYTES),
+});
+
+export type PresignFindingUploadRequest = z.infer<typeof presignFindingUploadRequestSchema>;
+
+/**
  * La URL firmada, su key y cuándo deja de servir. `expires_at` viaja para que el
  * dispositivo pueda decidir que una URL guardada ya no sirve sin tener que pedirla y
  * comerse el error — aunque el camino normal es pedirla y usarla en el acto.
@@ -123,6 +145,18 @@ export const inspectionSubmissionSchema = z.strictObject({
   template_version_id: z.uuid(),
   answers: z.record(itemKeySchema, answerValueSchema),
   photos: z.record(itemKeySchema, z.array(objectKeySchema)),
+  /**
+   * Los detalles del hallazgo de cada respuesta negativa (requisitos §3 R2,
+   * etapa 4). Las claves tienen que ser **exactamente** las de `negativeAnswers`
+   * de `@hs/forms`: una de menos es `finding_missing`, una de más es
+   * `unexpected_finding`, y las dos son `validation_failed`.
+   *
+   * Va aparte de `photos` a propósito. Si las fotos del hallazgo viajaran ahí,
+   * `mergePhotoAnswers` las fundiría en `answers` bajo la misma `item_key` y
+   * chocarían con el booleano de la respuesta — que es la colisión que esa
+   * función ya rechaza, y hace bien en rechazar.
+   */
+  findings: submissionFindingsSchema,
   /** El reloj del dispositivo. El servidor guarda además el suyo (§5 riesgo C). */
   signed_at: z.iso.datetime({ offset: true }),
 });

@@ -17,6 +17,7 @@ export type HealthResponse = z.infer<typeof healthResponseSchema>;
 export * from './auth.js';
 export * from './catalog.js';
 export * from './field-package.js';
+export * from './findings.js';
 export * from './identity.js';
 export * from './inspections.js';
 export * from './notifications.js';

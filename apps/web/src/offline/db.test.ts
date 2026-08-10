@@ -93,6 +93,7 @@ describe('el almacén local', () => {
       item_key: 'guarding.photo',
       bytes,
       content_type: 'image/jpeg',
+      kind: 'answer',
       object_key: null,
       upload_state: 'pending',
       attempts: 0,

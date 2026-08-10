@@ -215,7 +215,7 @@ describe('uploadedKeysByItem', () => {
 
     await uploadPendingPhotos(DRAFT_ID, INSPECTION_ID, { database, client, put });
 
-    expect(await uploadedKeysByItem(DRAFT_ID, database)).toEqual({
+    expect(await uploadedKeysByItem(DRAFT_ID, 'answer', database)).toEqual({
       'guarding.photo': ['site/inspection/key-1'],
     });
   });

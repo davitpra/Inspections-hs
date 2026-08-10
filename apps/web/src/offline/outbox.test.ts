@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TEST_DOCUMENT, fail, fakeSessionClient, ok, type FakeCall } from '../test/fixtures';
 import { freshDatabase, reopen } from '../test/database';
 import type { OfflineDatabase } from './db';
-import { openDraft, saveAnswer, signDraft } from './drafts';
+import { openDraft, saveAnswer, saveFinding, signDraft } from './drafts';
 import { capturePhoto } from './photos';
 import {
   BACKOFF_CAP_MS,
@@ -403,6 +403,75 @@ describe('sendEntry', () => {
 
     expect(firstAttempt?.client_submission_id).toBe(id);
     expect(secondAttempt?.client_submission_id).toBe(id);
+  });
+});
+
+describe('el bloque de hallazgos del payload', () => {
+  /** Requisitos §3 R2: la respuesta negativa viaja con su descripción, ubicación y foto. */
+  it('viaja con una entrada por respuesta negativa', async () => {
+    database = freshDatabase();
+    const draft = await openDraft(draftInput(), database);
+    const id = draft.client_submission_id;
+
+    await saveAnswer(id, 'guarding.installed', false, TEST_DOCUMENT, database);
+    await saveFinding(
+      id,
+      'guarding.installed',
+      {
+        description: 'Guard missing on the infeed of line 3',
+        location_id: '44444444-4444-4444-8444-444444444444',
+      },
+      database,
+    );
+    await capturePhoto(
+      {
+        client_submission_id: id,
+        item_key: 'guarding.installed',
+        blob: new Blob(['foto-hallazgo'], { type: 'image/jpeg' }),
+        kind: 'finding',
+      },
+      database,
+    );
+
+    await signDraft(id, database);
+    await enqueue(id, database);
+
+    const client = acceptingServer();
+    await sendEntry(id, { database, client, put: bucketOk });
+
+    const [payload] = submissions(client.calls) as unknown as [
+      {
+        photos: Record<string, string[]>;
+        findings: Record<
+          string,
+          { description: string; location_id: string; photo_object_keys: string[] }
+        >;
+      },
+    ];
+
+    expect(payload.findings['guarding.installed']).toMatchObject({
+      description: 'Guard missing on the infeed of line 3',
+      location_id: '44444444-4444-4444-8444-444444444444',
+    });
+    expect(payload.findings['guarding.installed']?.photo_object_keys).toHaveLength(1);
+
+    // LA SEPARACIÓN QUE IMPORTA: la foto del hallazgo NO cae en `photos`, donde
+    // chocaría con la respuesta booleana del mismo ítem y el servidor rechazaría el
+    // envío por colisión.
+    expect(payload.photos['guarding.installed']).toBeUndefined();
+    expect(JSON.stringify(payload)).not.toContain('foto-hallazgo');
+  });
+
+  it('un envío sin negativos lleva el bloque vacío', async () => {
+    database = freshDatabase();
+    const id = await readyDraft(database);
+    const client = acceptingServer();
+
+    await sendEntry(id, { database, client, put: bucketOk });
+
+    const [payload] = submissions(client.calls) as unknown as [{ findings: Record<string, unknown> }];
+
+    expect(payload.findings).toEqual({});
   });
 });
 

@@ -1,6 +1,7 @@
 import {
   evaluateVisibility,
   itemsInDocumentOrder,
+  negativeAnswers,
   sectionsInDocumentOrder,
   validateAnswers,
   type TemplateDocument,
@@ -9,11 +10,20 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from '@tanstack/react-router';
 
 import { useAppSession } from '../app/session-context';
+import { FindingFields } from '../components/FindingFields';
 import { ItemInput } from '../components/ItemInput';
 import { UnsyncedIndicator } from '../components/UnsyncedIndicator';
-import { documentForDraft, loadDraft, openDraft, saveAnswer, setCurrentItem } from '../offline/drafts';
+import {
+  documentForDraft,
+  loadDraft,
+  openDraft,
+  saveAnswer,
+  saveFinding,
+  setCurrentItem,
+} from '../offline/drafts';
+import type { FindingDraftRow } from '../offline/db';
 import { capturePhoto, discardPhoto } from '../offline/photos';
-import { missingForField, storedTemplateVersion } from '../offline/prefetch';
+import { missingForField, storedLocations, storedTemplateVersion } from '../offline/prefetch';
 import { readableKind } from './PendingRoute';
 
 /**
@@ -73,14 +83,30 @@ export function CaptureRoute(): React.JSX.Element {
   });
 
   const photo = useMutation({
-    mutationFn: async (input: { itemKey: string; blob: Blob }) => {
+    mutationFn: async (input: { itemKey: string; blob: Blob; kind?: 'answer' | 'finding' }) => {
       if (!draft.data) return;
 
       await capturePhoto({
         client_submission_id: draft.data.draft.client_submission_id,
         item_key: input.itemKey,
         blob: input.blob,
+        kind: input.kind,
       });
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['draft', id] }),
+  });
+
+  /** La lista cerrada que bajó la descarga previa. Sin red y sin texto libre. */
+  const locations = useQuery({ queryKey: ['locations', id], queryFn: () => storedLocations(id) });
+
+  const finding = useMutation({
+    mutationFn: async (input: {
+      itemKey: string;
+      patch: Partial<Pick<FindingDraftRow, 'description' | 'location_id'>>;
+    }) => {
+      if (!draft.data) return;
+
+      await saveFinding(draft.data.draft.client_submission_id, input.itemKey, input.patch);
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['draft', id] }),
   });
@@ -115,9 +141,13 @@ export function CaptureRoute(): React.JSX.Element {
 
   if (!draft.data || !document.data) return <p>Loading the inspection…</p>;
 
-  const { answers, photos } = draft.data;
+  const { answers, photos, findings } = draft.data;
   const readOnly = draft.data.draft.status === 'accepted';
   const visibility = evaluateVisibility(document.data, answers);
+  // La MISMA función que corre en el servidor (ADR-007). Si el dispositivo pidiera
+  // detalles para un conjunto de ítems y el servidor esperara otro, el inspector
+  // recorrería la planta, firmaría, y el envío volvería rechazado.
+  const negative = new Set(negativeAnswers(document.data, answers));
   const validation = validateAnswers(document.data, answers);
   const violations = validation.ok ? [] : validation.violations;
 
@@ -158,13 +188,32 @@ export function CaptureRoute(): React.JSX.Element {
                     item={item}
                     value={answers[item.item_key]}
                     invalid={violations.some((violation) => violation.item_key === item.item_key)}
-                    photos={photos.filter((row) => row.item_key === item.item_key)}
+                    photos={photos.filter(
+                      (row) => row.item_key === item.item_key && row.kind === 'answer',
+                    )}
                     onChange={(value) =>
                       answer.mutate({ itemKey: item.item_key, value, document: document.data! })
                     }
                     onCapturePhoto={(blob) => photo.mutate({ itemKey: item.item_key, blob })}
                     onDiscardPhoto={(photoId) => removePhoto.mutate(photoId)}
                   />
+
+                  {negative.has(item.item_key) ? (
+                    <FindingFields
+                      itemKey={item.item_key}
+                      finding={findings.find((row) => row.item_key === item.item_key)}
+                      photos={photos.filter(
+                        (row) => row.item_key === item.item_key && row.kind === 'finding',
+                      )}
+                      locations={locations.data ?? []}
+                      disabled={readOnly}
+                      onChange={(patch) => finding.mutate({ itemKey: item.item_key, patch })}
+                      onCapturePhoto={(blob) =>
+                        photo.mutate({ itemKey: item.item_key, blob, kind: 'finding' })
+                      }
+                      onDiscardPhoto={(photoId) => removePhoto.mutate(photoId)}
+                    />
+                  ) : null}
                 </fieldset>
               </div>
             ))}

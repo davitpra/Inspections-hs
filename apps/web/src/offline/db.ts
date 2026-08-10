@@ -23,6 +23,18 @@ export type DraftStatus =
 
 export type UploadState = 'pending' | 'uploaded' | 'failed';
 
+/**
+ * De qué es la foto (etapa 4).
+ *
+ * `answer` es la respuesta de un ítem de tipo `photo`; `finding` es la foto obligatoria
+ * del hallazgo que derivó una respuesta negativa. **Tienen que distinguirse aunque
+ * compartan `item_key`**: las de `answer` viajan en `photos` del envío y las de
+ * `finding` en `findings[item_key].photo_object_keys`. Si las de un hallazgo cayeran en
+ * `photos`, chocarían con la respuesta booleana del mismo ítem y el servidor rechazaría
+ * el envío por colisión — que es exactamente lo que `mergePhotoAnswers` detecta.
+ */
+export type PhotoKind = 'answer' | 'finding';
+
 export type OutboxState =
   | 'queued'
   /** Un `4xx` de validación. No se reintenta; se muestra con el motivo del servidor. */
@@ -74,11 +86,32 @@ export interface PhotoRow {
    */
   bytes: ArrayBuffer;
   content_type: string;
+  kind: PhotoKind;
   object_key: string | null;
   upload_state: UploadState;
   attempts: number;
   last_error: string | null;
   captured_at: string;
+}
+
+/**
+ * Los detalles del hallazgo de una respuesta negativa (requisitos §3 R2, etapa 4).
+ *
+ * Una fila por `item_key`, con la misma clave compuesta que `answers` y por el mismo
+ * motivo: corregir la descripción es un `put` y no un borrar-e-insertar. Las fotos NO
+ * están acá —viven en `photos` con `kind: 'finding'`— porque una foto es bytes y estas
+ * filas se leen enteras en cada pantalla.
+ *
+ * `description` y `location_id` pueden estar vacíos mientras el inspector escribe: la
+ * fila existe desde que la respuesta se vuelve negativa. Lo que no puede quedar
+ * incompleto es el borrador al firmar, y de eso se ocupa `incompleteFindings`.
+ */
+export interface FindingDraftRow {
+  client_submission_id: string;
+  item_key: string;
+  description: string;
+  location_id: string | null;
+  updated_at: string;
 }
 
 export interface OutboxRow {
@@ -129,6 +162,8 @@ export class OfflineDatabase extends Dexie {
   /** Clave compuesta `[client_submission_id+item_key]`: `Table`, no `EntityTable`. */
   answers!: Table<AnswerRow, [string, string]>;
   photos!: EntityTable<PhotoRow, 'id'>;
+  /** Clave compuesta `[client_submission_id+item_key]`, igual que `answers`. */
+  findings!: Table<FindingDraftRow, [string, string]>;
   outbox!: EntityTable<OutboxRow, 'client_submission_id'>;
   prefetch!: Table<PrefetchRow, [string, PrefetchKind]>;
   tokens!: EntityTable<TokenRow, 'id'>;
@@ -152,6 +187,27 @@ export class OfflineDatabase extends Dexie {
       prefetch: '[scheduled_inspection_id+kind], scheduled_inspection_id',
       tokens: 'id',
     });
+
+    /**
+     * Versión 2 (etapa 4): los hallazgos.
+     *
+     * La migración es lo que la versión 1 dejó preparado. Un dispositivo con un
+     * borrador a medio recorrer no puede permitirse una base recreada, así que las
+     * fotos que ya existen se marcan como `answer`: son de un ítem de tipo `photo`,
+     * porque hasta esta versión no había otra clase.
+     */
+    this.version(2)
+      .stores({
+        findings: '[client_submission_id+item_key], client_submission_id',
+      })
+      .upgrade(async (transaction) =>
+        transaction
+          .table<PhotoRow>('photos')
+          .toCollection()
+          .modify((photo) => {
+            photo.kind = 'answer';
+          }),
+      );
   }
 }
 

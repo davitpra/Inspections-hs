@@ -6,6 +6,7 @@ import type { PoolClient } from 'pg';
 
 import { DbService } from '../db/db.service';
 import type { SessionScope } from '../db/site-scope';
+import { deriveFindings, type DerivedFinding } from '../findings/derive';
 import { foreignObjectKeys, mergePhotoAnswers, objectKeysOf } from './submission';
 import {
   alreadySubmitted,
@@ -13,6 +14,7 @@ import {
   notTheAssignedInspector,
   submissionInspectionNotFound,
   validationFailed,
+  type SubmissionViolation,
 } from './submissions.errors';
 
 /**
@@ -78,7 +80,20 @@ export class SubmissionsService {
       // acres, firma, sincroniza y el servidor lo rechaza.
       const validation = validateAnswers(document, answers);
 
-      if (!validation.ok) throw validationFailed(validation.violations);
+      // La derivación corre ACÁ y no después del insert, aunque escriba después: es lo
+      // que permite devolver en una sola respuesta lo que le falta al envío. Un
+      // inspector que descubre de a una las cosas que le faltan vuelve a caminar la
+      // planta una vez por cada una.
+      const derived = deriveFindings(document, answers, payload.findings);
+
+      if (!validation.ok || !derived.ok) {
+        const violations: SubmissionViolation[] = [
+          ...(validation.ok ? [] : validation.violations),
+          ...(derived.ok ? [] : derived.violations),
+        ];
+
+        throw validationFailed(violations);
+      }
 
       const entries = Object.entries(answers);
       const created = await this.insertInspection(
@@ -95,17 +110,15 @@ export class SubmissionsService {
 
       await this.insertAnswers(client, created.row, entries);
 
-      // AQUÍ VA LA DERIVACIÓN DE HALLAZGOS (etapa 4, change `findings`).
+      // LA DERIVACIÓN DE HALLAZGOS (etapa 4). Acá, dentro de ESTA transacción y antes
+      // del commit, y no en un manejador posterior: la costura de ADR-008 es una sola
+      // transacción, y un hallazgo que se derive después puede faltar. Lo que falta es
+      // la mitad de R2.
       //
-      // Lee las filas de `inspection_answer` que se acaban de escribir, dentro de ESTA
-      // transacción y antes del commit, y escribe los hallazgos de las respuestas
-      // negativas. Va acá y no en un manejador de eventos posterior porque la costura
-      // de ADR-008 es una sola transacción: un hallazgo que se derive después puede
-      // faltar, y lo que falta es la mitad de R2.
-      //
-      // No hay interfaz, ni hook, ni puerto vacío esperándolo: un punto de extensión
-      // sin segundo implementador es la ceremonia contra la que advierte el riesgo B.
-      // El change que lo necesite escribe la llamada en esta línea.
+      // Esta línea es la que hace que `inspections` conozca `findings`, que es la
+      // excepción declarada de ADR-008. Lo que no puede pasar nunca es la inversa:
+      // `findings` no llama a `inspections`.
+      await this.insertFindings(client, created.row, derived.findings);
 
       return toAccepted(created.row, true);
     });
@@ -149,7 +162,7 @@ export class SubmissionsService {
     siteId: string,
   ): Record<string, unknown> {
     const foreign = foreignObjectKeys(
-      objectKeysOf(payload.answers, payload.photos),
+      objectKeysOf(payload.answers, payload.photos, payload.findings),
       siteId,
       payload.scheduled_inspection_id,
     );
@@ -310,6 +323,83 @@ export class SubmissionsService {
       );
     }
   }
+
+  /**
+   * Los hallazgos y sus fotos, EN DOS SENTENCIAS. Mismo criterio que las respuestas:
+   * una inspección con cuarenta negativos no puede ser ochenta idas y vueltas dentro
+   * de la transacción que va a tomar el lock de la cadena del sitio.
+   *
+   * `template_version_item_id` sale del mismo JOIN que en las respuestas. Que el
+   * `item_key` sea el del ítem referenciado lo defiende además la FK compuesta: la
+   * identidad dual no depende de que este SQL esté bien escrito.
+   *
+   * `occurred_at` es el `signed_at` del envío: el hallazgo ocurrió cuando el inspector
+   * lo vio, no cuando el teléfono encontró señal (§5 riesgo C).
+   *
+   * Las fotos van después y por eso la restricción de "al menos una" es diferida: acá
+   * se ve por qué. Si fuera inmediata, no habría orden posible — la foto necesita el
+   * `finding_id` que solo existe después de insertar el hallazgo.
+   */
+  private async insertFindings(
+    client: PoolClient,
+    inspection: InspectionRow,
+    findings: readonly DerivedFinding[],
+  ): Promise<void> {
+    if (findings.length === 0) return;
+
+    const { rows } = await client.query<{ id: string; item_key: string }>(
+      `INSERT INTO finding (site_id, origin, inspection_id, template_version_item_id,
+                            item_key, location_id, description, reported_by, occurred_at)
+       SELECT $1, 'inspection', $2, v.id, f.item_key, f.location_id, f.description, $3, $4
+         FROM unnest($5::text[], $6::uuid[], $7::text[])
+              AS f(item_key, location_id, description)
+         JOIN template_version_item v
+           ON v.template_version_id = $8
+          AND v.item_key = f.item_key
+       RETURNING id, item_key`,
+      [
+        inspection.site_id,
+        inspection.id,
+        inspection.submitted_by,
+        inspection.signed_at,
+        findings.map((finding) => finding.item_key),
+        findings.map((finding) => finding.details.location_id),
+        findings.map((finding) => finding.details.description),
+        inspection.template_version_id,
+      ],
+    );
+
+    // Misma comprobación que en las respuestas y por el mismo motivo: no defiende
+    // contra el payload —`deriveFindings` ya lo comparó contra el documento— sino
+    // contra una divergencia entre el documento y las filas proyectadas.
+    if (rows.length !== findings.length) {
+      throw new Error(
+        `inspection ${inspection.id}: ${findings.length} findings derived but ${rows.length} rows written`,
+      );
+    }
+
+    // `RETURNING` no promete orden, así que las fotos se asocian por `item_key` y no
+    // por posición. Asociarlas por posición funcionaría casi siempre, que es la peor
+    // clase de error para un registro inmutable.
+    const idOf = new Map(rows.map((row) => [row.item_key, row.id]));
+    const photos = findings.flatMap((finding) =>
+      finding.details.photo_object_keys.map((objectKey) => ({
+        findingId: idOf.get(finding.item_key) as string,
+        objectKey,
+      })),
+    );
+
+    await client.query(
+      `INSERT INTO finding_photo (finding_id, site_id, object_key)
+       SELECT p.finding_id, $1, p.object_key
+         FROM unnest($2::uuid[], $3::text[]) AS p(finding_id, object_key)`,
+      [
+        inspection.site_id,
+        photos.map((photo) => photo.findingId),
+        photos.map((photo) => photo.objectKey),
+      ],
+    );
+  }
 }
 
 interface ScheduledRow {
@@ -328,10 +418,14 @@ interface InspectionRow {
   client_submission_id: string;
   submitted_by: string;
   received_at: Date;
+  // El reloj del dispositivo. Se lee de vuelta en vez de tomarlo del payload porque es
+  // lo que quedó escrito: el `occurred_at` de los hallazgos tiene que ser el mismo
+  // instante que el de la inspección, no uno parecido.
+  signed_at: Date;
 }
 
 const INSPECTION_COLUMNS = `id, site_id, scheduled_inspection_id, template_version_id,
-                            client_submission_id, submitted_by, received_at`;
+                            client_submission_id, submitted_by, received_at, signed_at`;
 
 /**
  * `submitted_at` es `received_at`, el reloj del SERVIDOR, y no `signed_at`.

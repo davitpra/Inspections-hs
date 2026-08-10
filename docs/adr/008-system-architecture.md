@@ -75,6 +75,21 @@ carga que los pida.
 conoce `findings`. `reporting` lee de todos y no lo llama nadie. Si aparece un ciclo, hay un
 módulo mal recortado.
 
+**Excepción declarada, agregada al implementar la etapa 4.** La ingesta del envío —costura
+crítica 1, más abajo— importa la derivación de hallazgos desde `findings`, así que ahí
+`inspections` sí conoce `findings`. No es un módulo mal recortado y no es un ciclo:
+`findings` no llama a `inspections` en ningún punto, y la flecha va en una sola dirección
+igual, solo que en la contraria a la que este párrafo suponía.
+
+El motivo es que la lista de pasos de la costura es **una transacción**, no una secuencia de
+llamadas entre servicios: derivar el hallazgo después del commit es exactamente lo que la
+transacción existe para impedir. Componer los dos módulos en ese punto es la consecuencia de
+esa decisión, y esconderla detrás de un puerto con un solo implementador la haría más difícil
+de leer sin cambiar quién depende de quién en la práctica.
+
+La regla que sigue en pie, y es la que importa: **`findings` no puede llamar a `inspections`**.
+El día que haga falta, hay un ciclo y hay un módulo mal recortado.
+
 ## Las dos costuras críticas
 
 Todo lo demás del sistema es CRUD con permisos. Estas dos concentran el riesgo y merecen el

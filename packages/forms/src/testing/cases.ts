@@ -31,6 +31,15 @@ export interface EngineCase {
   readonly expected: readonly ExpectedViolation[];
   /** Visibilidad esperada, para los casos de lógica condicional. */
   readonly expected_visibility?: Readonly<Record<string, boolean>>;
+  /**
+   * Las `item_key` que derivan hallazgo, en orden de documento.
+   *
+   * Está en la tabla compartida y no solo en un test del paquete porque el
+   * dispositivo pide los detalles del hallazgo y el servidor los exige: que los
+   * dos deriven exactamente el mismo conjunto es la garantía de ADR-007 aplicada
+   * a la etapa 4, y se prueba del mismo modo que la de las violaciones.
+   */
+  readonly expected_negative?: readonly string[];
 }
 
 /** Un documento de una sección con los ítems que se le pasen. */
@@ -362,5 +371,73 @@ export const ENGINE_CASES: readonly EngineCase[] = [
       { item_key: 'housekeeping.score', code: 'out_of_range' },
       { item_key: 'ppe.worn', code: 'selection_count_out_of_range' },
     ],
+  },
+
+  // — Qué respuesta deriva hallazgo (requisitos §3 R2, etapa 4) —
+  {
+    name: 'negativo: yes_no en false deriva hallazgo',
+    document: doc([yesNo]),
+    answers: { 'guards.present': false },
+    expected: [],
+    expected_negative: ['guards.present'],
+  },
+  {
+    name: 'negativo: yes_no en true no deriva',
+    document: doc([yesNo]),
+    answers: { 'guards.present': true },
+    expected: [],
+    expected_negative: [],
+  },
+  {
+    name: 'negativo: yes_no_na en no deriva hallazgo',
+    document: doc([yesNoNa]),
+    answers: { 'eyewash.tested': 'no' },
+    expected: [],
+    expected_negative: ['eyewash.tested'],
+  },
+  {
+    name: 'negativo: na no es un incumplimiento',
+    document: doc([yesNoNa]),
+    answers: { 'eyewash.tested': 'na' },
+    expected: [],
+    expected_negative: [],
+  },
+  {
+    name: 'negativo: ningún otro tipo de respuesta deriva',
+    document: doc([scale, numberItem, singleChoice, multiChoice, photo, signature]),
+    answers: {
+      'housekeeping.score': 1,
+      'temperature.reading': -10,
+      'floor.condition': 'wet',
+      'ppe.worn': ['gloves'],
+      'evidence.photos': ['inspections/a.jpg'],
+      'closeout.signature': VALID_SIGNATURE,
+    },
+    expected: [],
+    expected_negative: [],
+  },
+  {
+    name: 'negativo: un ítem oculto no deriva aunque traiga respuesta',
+    document: doc([
+      hazardPresent,
+      {
+        item_key: 'hazard.followup',
+        prompt: 'Was the hazard contained?',
+        required: true,
+        response_type: 'yes_no',
+        visible_when: { item_key: 'hazard.present', operator: 'equals', value: true },
+      },
+    ]),
+    answers: { 'hazard.present': false, 'hazard.followup': false },
+    expected: [{ item_key: 'hazard.followup', code: 'answer_for_hidden_item' }],
+    expected_visibility: { 'hazard.followup': false },
+    expected_negative: ['hazard.present'],
+  },
+  {
+    name: 'negativo: varios, en orden de documento',
+    document: doc([yesNo, yesNoNa, scale]),
+    answers: { 'guards.present': false, 'eyewash.tested': 'no', 'housekeeping.score': 2 },
+    expected: [],
+    expected_negative: ['guards.present', 'eyewash.tested'],
   },
 ];

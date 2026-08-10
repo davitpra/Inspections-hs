@@ -1,6 +1,18 @@
-import { evaluateVisibility, itemsInDocumentOrder, type TemplateDocument } from '@hs/forms';
+import {
+  evaluateVisibility,
+  itemsInDocumentOrder,
+  negativeAnswers,
+  type TemplateDocument,
+} from '@hs/forms';
 
-import { db, type AnswerRow, type DraftRow, type OfflineDatabase, type PhotoRow } from './db';
+import {
+  db,
+  type AnswerRow,
+  type DraftRow,
+  type FindingDraftRow,
+  type OfflineDatabase,
+  type PhotoRow,
+} from './db';
 import { storedTemplateVersion } from './prefetch';
 
 /**
@@ -25,6 +37,8 @@ export interface LoadedDraft {
   draft: DraftRow;
   answers: Record<string, unknown>;
   photos: PhotoRow[];
+  /** Los detalles del hallazgo de cada respuesta negativa, por `item_key`. */
+  findings: FindingDraftRow[];
 }
 
 /**
@@ -113,12 +127,13 @@ export async function loadDraft(
   const draft = await database.drafts.get(clientSubmissionId);
   if (!draft) return null;
 
-  const [answerRows, photos] = await Promise.all([
+  const [answerRows, photos, findings] = await Promise.all([
     database.answers.where('client_submission_id').equals(clientSubmissionId).toArray(),
     database.photos.where('client_submission_id').equals(clientSubmissionId).toArray(),
+    database.findings.where('client_submission_id').equals(clientSubmissionId).toArray(),
   ]);
 
-  return { draft, answers: toAnswerSet(answerRows), photos };
+  return { draft, answers: toAnswerSet(answerRows), photos, findings };
 }
 
 export function toAnswerSet(rows: readonly AnswerRow[]): Record<string, unknown> {
@@ -150,54 +165,206 @@ export async function saveAnswer(
   document: TemplateDocument,
   database: OfflineDatabase = db,
 ): Promise<{ pruned: string[] }> {
-  return database.transaction('rw', database.answers, database.drafts, async () => {
+  return database.transaction(
+    'rw',
+    database.answers,
+    database.drafts,
+    database.findings,
+    database.photos,
+    async () => {
+      const draft = await database.drafts.get(clientSubmissionId);
+      if (!draft) throw new Error(`No existe el borrador ${clientSubmissionId}`);
+
+      // Una inspección cuyo envío el servidor aceptó está cerrada. La comprobación va
+      // adentro de la transacción: afuera sería una carrera con el outbox.
+      if (draft.status === 'accepted') {
+        throw new Error('La inspección ya fue aceptada por el servidor y es de solo lectura');
+      }
+
+      const now = new Date().toISOString();
+
+      if (isEmpty(value)) {
+        await database.answers.delete([clientSubmissionId, itemKey]);
+      } else {
+        await database.answers.put({
+          client_submission_id: clientSubmissionId,
+          item_key: itemKey,
+          value,
+          answered_at: now,
+        });
+      }
+
+      const rows = await database.answers
+        .where('client_submission_id')
+        .equals(clientSubmissionId)
+        .toArray();
+
+      const visibility = evaluateVisibility(document, toAnswerSet(rows));
+      const known = new Set(itemsInDocumentOrder(document).map((item) => item.item_key));
+
+      // Se poda lo oculto Y lo que el documento no contiene: una respuesta huérfana de un
+      // ítem que ya no existe contaría en el indicador y no se podría contestar.
+      const pruned = rows
+        .map((row) => row.item_key)
+        .filter((key) => key !== itemKey && (!known.has(key) || visibility[key] === false));
+
+      for (const key of pruned) {
+        await database.answers.delete([clientSubmissionId, key]);
+      }
+
+      await database.drafts.update(clientSubmissionId, {
+        current_item_key: itemKey,
+        updated_at: now,
+      });
+
+      // La otra mitad de la poda, y la que la etapa 4 agrega: los detalles de un
+      // hallazgo cuya respuesta dejó de ser negativa —o cuyo ítem quedó oculto— se
+      // borran, junto con sus fotos. Un borrador que arrastra el hallazgo de una
+      // respuesta corregida produce un envío con `unexpected_finding`, y el inspector
+      // se entera después de firmar.
+      const remaining = await database.answers
+        .where('client_submission_id')
+        .equals(clientSubmissionId)
+        .toArray();
+
+      const stillNegative = new Set(negativeAnswers(document, toAnswerSet(remaining)));
+      const findingRows = await database.findings
+        .where('client_submission_id')
+        .equals(clientSubmissionId)
+        .toArray();
+
+      for (const row of findingRows) {
+        if (stillNegative.has(row.item_key)) continue;
+
+        await database.findings.delete([clientSubmissionId, row.item_key]);
+        await database.photos
+          .where('[client_submission_id+item_key]')
+          .equals([clientSubmissionId, row.item_key])
+          .filter((photo) => photo.kind === 'finding')
+          .delete();
+      }
+
+      // La fila del hallazgo existe desde que la respuesta se vuelve negativa, vacía.
+      // Que exista es lo que hace que la pantalla tenga dónde escribir y que
+      // `incompleteFindings` pueda nombrar lo que falta sin inventar filas.
+      for (const negativeKey of stillNegative) {
+        const existing = await database.findings.get([clientSubmissionId, negativeKey]);
+
+        if (existing) continue;
+
+        await database.findings.put({
+          client_submission_id: clientSubmissionId,
+          item_key: negativeKey,
+          description: '',
+          location_id: null,
+          updated_at: now,
+        });
+      }
+
+      return { pruned };
+    },
+  );
+}
+
+/**
+ * Los detalles del hallazgo, escritos en el acto igual que una respuesta.
+ *
+ * Acepta un cambio parcial —la descripción sin la ubicación, o al revés— porque el
+ * inspector escribe uno y después el otro, y esperar a tener los dos para persistir es
+ * volver a abrir la ventana de 300 ms que `saveAnswer` existe para cerrar.
+ */
+export async function saveFinding(
+  clientSubmissionId: string,
+  itemKey: string,
+  patch: Partial<Pick<FindingDraftRow, 'description' | 'location_id'>>,
+  database: OfflineDatabase = db,
+): Promise<FindingDraftRow> {
+  return database.transaction('rw', database.findings, database.drafts, async () => {
     const draft = await database.drafts.get(clientSubmissionId);
     if (!draft) throw new Error(`No existe el borrador ${clientSubmissionId}`);
 
-    // Una inspección cuyo envío el servidor aceptó está cerrada. La comprobación va
-    // adentro de la transacción: afuera sería una carrera con el outbox.
     if (draft.status === 'accepted') {
       throw new Error('La inspección ya fue aceptada por el servidor y es de solo lectura');
     }
 
+    const existing = await database.findings.get([clientSubmissionId, itemKey]);
+
+    // Sin fila previa no hay hallazgo que describir: la fila la crea `saveAnswer` al
+    // detectar la respuesta negativa. Escribir una acá dejaría detalles de un hallazgo
+    // que ninguna respuesta implica.
+    if (!existing) throw new Error(`El ítem ${itemKey} no tiene una respuesta negativa`);
+
     const now = new Date().toISOString();
+    const row: FindingDraftRow = { ...existing, ...patch, updated_at: now };
 
-    if (isEmpty(value)) {
-      await database.answers.delete([clientSubmissionId, itemKey]);
-    } else {
-      await database.answers.put({
-        client_submission_id: clientSubmissionId,
-        item_key: itemKey,
-        value,
-        answered_at: now,
-      });
-    }
+    await database.findings.put(row);
+    await database.drafts.update(clientSubmissionId, { updated_at: now });
 
-    const rows = await database.answers
-      .where('client_submission_id')
-      .equals(clientSubmissionId)
-      .toArray();
-
-    const visibility = evaluateVisibility(document, toAnswerSet(rows));
-    const known = new Set(itemsInDocumentOrder(document).map((item) => item.item_key));
-
-    // Se poda lo oculto Y lo que el documento no contiene: una respuesta huérfana de un
-    // ítem que ya no existe contaría en el indicador y no se podría contestar.
-    const pruned = rows
-      .map((row) => row.item_key)
-      .filter((key) => key !== itemKey && (!known.has(key) || visibility[key] === false));
-
-    for (const key of pruned) {
-      await database.answers.delete([clientSubmissionId, key]);
-    }
-
-    await database.drafts.update(clientSubmissionId, {
-      current_item_key: itemKey,
-      updated_at: now,
-    });
-
-    return { pruned };
+    return row;
   });
+}
+
+/**
+ * Qué le falta a cada hallazgo del borrador: la comprobación previa a firmar.
+ *
+ * Devuelve una entrada por ítem incompleto, con lo que le falta **nombrado**. El
+ * requisito no es "no dejar firmar": es que el inspector sepa a qué ítem volver
+ * mientras todavía está parado en la planta. Un "faltan datos" a secas lo obliga a
+ * recorrer el formulario de nuevo.
+ *
+ * Corre en el dispositivo y sin red. El servidor rechaza lo mismo con
+ * `finding_missing`, pero eso es el respaldo: para entonces el inspector ya firmó y
+ * probablemente ya se fue.
+ */
+export interface IncompleteFinding {
+  item_key: string;
+  missing: ('description' | 'location' | 'photo')[];
+}
+
+export function incompleteFindings(
+  document: TemplateDocument,
+  answers: Record<string, unknown>,
+  findings: readonly FindingDraftRow[],
+  photos: readonly PhotoRow[],
+): IncompleteFinding[] {
+  const byItem = new Map(findings.map((row) => [row.item_key, row]));
+
+  return negativeAnswers(document, answers)
+    .map((itemKey) => missingOf(itemKey, byItem.get(itemKey), photos))
+    .filter((entry) => entry.missing.length > 0);
+}
+
+/**
+ * La misma pregunta, respondida SIN el documento: mirando las filas que hay.
+ *
+ * Una fila de hallazgo existe porque `saveAnswer` vio una respuesta negativa con el
+ * documento en la mano, así que las filas ya son la conclusión de esa evaluación. Esto
+ * es lo que usa `signDraft`, y por eso la firma no se puede escapar por un documento
+ * que no esté guardado: la comprobación no depende de volver a tenerlo.
+ */
+export function incompleteFindingRows(
+  findings: readonly FindingDraftRow[],
+  photos: readonly PhotoRow[],
+): IncompleteFinding[] {
+  return findings
+    .map((row) => missingOf(row.item_key, row, photos))
+    .filter((entry) => entry.missing.length > 0);
+}
+
+function missingOf(
+  itemKey: string,
+  row: FindingDraftRow | undefined,
+  photos: readonly PhotoRow[],
+): IncompleteFinding {
+  const missing: IncompleteFinding['missing'] = [];
+
+  if (!row || row.description.trim().length === 0) missing.push('description');
+  if (!row || row.location_id === null) missing.push('location');
+  if (!photos.some((photo) => photo.kind === 'finding' && photo.item_key === itemKey)) {
+    missing.push('photo');
+  }
+
+  return { item_key: itemKey, missing };
 }
 
 /** Dónde quedó el inspector. Se guarda al navegar, no solo al contestar. */
@@ -206,7 +373,22 @@ export async function setCurrentItem(
   itemKey: string | null,
   database: OfflineDatabase = db,
 ): Promise<void> {
-  await database.drafts.update(clientSubmissionId, { current_item_key: itemKey });
+  await database.drafts.update(clientSubmissionId, {
+    current_item_key: itemKey,
+  });
+}
+
+/**
+ * Lo que se lanza cuando el borrador no se puede firmar todavía. Lleva la lista, no un
+ * mensaje: la pantalla tiene que poder nombrar cada ítem y qué le falta.
+ */
+export class IncompleteFindingsError extends Error {
+  constructor(readonly incomplete: readonly IncompleteFinding[]) {
+    super(
+      `Faltan datos del hallazgo en: ${incomplete.map((entry) => entry.item_key).join(', ')}`,
+    );
+    this.name = 'IncompleteFindingsError';
+  }
 }
 
 /**
@@ -215,26 +397,52 @@ export async function setCurrentItem(
  * `signed_at` es el reloj del dispositivo, que puede estar mal. El servidor guarda
  * además el suyo (§5 riesgo C): los dos hacen falta, porque el del dispositivo es
  * cuándo el inspector dice que firmó y el del servidor es cuándo el sistema lo supo.
+ *
+ * Desde la etapa 4 puede **negarse**: un hallazgo sin descripción, sin ubicación o sin
+ * foto detiene la firma con `IncompleteFindingsError`.
  */
 export async function signDraft(
   clientSubmissionId: string,
   database: OfflineDatabase = db,
 ): Promise<DraftRow> {
-  return database.transaction('rw', database.drafts, async () => {
-    const draft = await database.drafts.get(clientSubmissionId);
-    if (!draft) throw new Error(`No existe el borrador ${clientSubmissionId}`);
+  return database.transaction(
+    'rw',
+    database.drafts,
+    database.findings,
+    database.photos,
+    async () => {
+      const draft = await database.drafts.get(clientSubmissionId);
+      if (!draft) throw new Error(`No existe el borrador ${clientSubmissionId}`);
 
-    if (draft.status === 'accepted') return draft;
+      if (draft.status === 'accepted') return draft;
 
-    const now = new Date().toISOString();
-    await database.drafts.update(clientSubmissionId, {
-      status: 'signed',
-      signed_at: draft.signed_at ?? now,
-      updated_at: now,
-    });
+      // NO SE FIRMA CON UN HALLAZGO INCOMPLETO (requisitos §3 R2). Acá, en el
+      // dispositivo y antes de firmar, porque es el único momento en que el inspector
+      // todavía puede volver caminando al lugar. El `finding_missing` del servidor es el
+      // respaldo, no la primera línea.
+      //
+      // Se mira lo que hay en la base y no se reevalúa el documento: las filas de
+      // hallazgo existen porque `saveAnswer` ya lo evaluó. Depender del documento acá
+      // dejaría que un borrador cuyo `prefetch` se perdió firmara sin comprobar nada.
+      const [findingRows, photoRows] = await Promise.all([
+        database.findings.where('client_submission_id').equals(clientSubmissionId).toArray(),
+        database.photos.where('client_submission_id').equals(clientSubmissionId).toArray(),
+      ]);
 
-    return (await database.drafts.get(clientSubmissionId)) as DraftRow;
-  });
+      const incomplete = incompleteFindingRows(findingRows, photoRows);
+
+      if (incomplete.length > 0) throw new IncompleteFindingsError(incomplete);
+
+      const now = new Date().toISOString();
+      await database.drafts.update(clientSubmissionId, {
+        status: 'signed',
+        signed_at: draft.signed_at ?? now,
+        updated_at: now,
+      });
+
+      return (await database.drafts.get(clientSubmissionId)) as DraftRow;
+    },
+  );
 }
 
 /**

@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 
 import { SubmissionsService } from '../src/inspections/submissions.service';
-import { registerSite } from './helpers/catalog';
+import { createLocation, registerSite } from './helpers/catalog';
 import { createAccount } from './helpers/identity';
 import { scheduleInspection } from './helpers/inspections';
 import { inScope, one, startTestDatabase, type TestDatabase } from './helpers/postgres';
@@ -37,6 +37,9 @@ let submissions: SubmissionsService;
 let templateId: string;
 let versionV1: string;
 let versionV2: string;
+
+/** La ubicación del hallazgo que `sub.guards` deriva. Lista cerrada (§6 pregunta 1). */
+let locationA: string;
 
 let inspector: { accountId: string };
 let otherInspector: { accountId: string };
@@ -132,7 +135,7 @@ const sessionFor = (accountId: string, siteIds: string[], role = 'jhsc_member') 
 });
 
 /** Una object key con el prefijo que `uploads` deriva para esta inspección. */
-const keyFor = (siteId: string, inspectionId: string, name = randomUUID()) =>
+const keyFor = (siteId: string, inspectionId: string, name: string = randomUUID()) =>
   `${siteId}/${inspectionId}/${name}`;
 
 /**
@@ -165,6 +168,16 @@ function submissionFor(
     // La foto va SOLO acá y no en `answers`: es exactamente lo que el dispositivo
     // manda, y sin la fusión del servicio `sub.photo` saldría `required_missing`.
     photos: { 'sub.photo': [keyFor(siteId, scheduledInspectionId)] },
+    // `sub.guards` viene en `false`, así que el envío TIENE que traer su hallazgo
+    // (etapa 4). Sus fotos van acá y no en `photos`: ahí chocarían con la respuesta
+    // booleana del mismo ítem.
+    findings: {
+      'sub.guards': {
+        description: 'Guard missing on the infeed of the packaging line',
+        location_id: locationA,
+        photo_object_keys: [keyFor(siteId, scheduledInspectionId, 'finding')],
+      },
+    },
     signed_at: '2026-08-03T14:20:00-04:00',
     ...overrides,
   };
@@ -246,6 +259,8 @@ beforeAll(async () => {
 
   await registerSite(db.migrator, SITE_A, 'ingest-a');
   await registerSite(db.migrator, SITE_B, 'ingest-b');
+
+  locationA = await createLocation(db.app, SITE_A, 'dock-1', 'Dock 1');
 
   templateId = await createTemplate(db.migrator, 'ingest-template', 'Monthly walkthrough');
   await registerItems(db.migrator, templateId, ITEM_KEYS);
@@ -427,7 +442,13 @@ describe('todo o nada', () => {
     ).rejects.toMatchObject({
       response: {
         code: 'validation_failed',
-        violations: [{ item_key: 'sub.guards', code: 'required_missing' }],
+        // Dos violaciones y no una: al borrar la respuesta, `sub.guards` deja de estar
+        // contestado —`required_missing`— y sus detalles de hallazgo pasan a sobrar
+        // —`unexpected_finding`—. Las dos fuentes viajan en la misma lista.
+        violations: [
+          { item_key: 'sub.guards', code: 'required_missing' },
+          { item_key: 'sub.guards', code: 'unexpected_finding' },
+        ],
       },
     });
 
@@ -457,11 +478,16 @@ describe('todo o nada', () => {
     answers['sub.item-2'] = 3;
     answers['sub.item-3'] = ['tampoco'];
 
-    const failure = await submissions
+    const failure: { violations: unknown[] } = await submissions
       .ingest(sessionFor(inspector.accountId, [SITE_A]), payload)
-      .catch((error: { response: { violations: unknown[] } }) => error.response);
+      .then(
+        () => ({ violations: [] as unknown[] }),
+        (error: { response: { violations: unknown[] } }) => error.response,
+      );
 
-    expect(failure.violations).toHaveLength(4);
+    // Cinco: las cuatro de siempre más el `unexpected_finding` del hallazgo que quedó
+    // huérfano al borrar la respuesta negativa que lo implicaba.
+    expect(failure.violations).toHaveLength(5);
   });
 
   it('rechaza una respuesta de una item_key que el documento no tiene', async () => {
@@ -655,7 +681,10 @@ describe('alcance y autoría', () => {
 
     const failure = await submissions
       .ingest(sessionFor(inspector.accountId, [SITE_A]), payload)
-      .catch((error: { response: { code: string; message: string } }) => error.response);
+      .then(
+        () => ({ code: 'accepted', message: '' }),
+        (error: { response: { code: string; message: string } }) => error.response,
+      );
 
     expect(failure.code).toBe('inspection_not_found');
 
@@ -691,6 +720,7 @@ describe('alcance y autoría', () => {
       'template_version_id',
       'answers',
       'photos',
+      'findings',
       'signed_at',
     ]);
 

@@ -4,7 +4,13 @@ import { Link, useNavigate, useParams } from '@tanstack/react-router';
 
 import { useAppSession } from '../app/session-context';
 import { UnsyncedIndicator } from '../components/UnsyncedIndicator';
-import { documentForDraft, findDraft, loadDraft, signDraft } from '../offline/drafts';
+import {
+  documentForDraft,
+  findDraft,
+  incompleteFindings,
+  loadDraft,
+  signDraft,
+} from '../offline/drafts';
 import { countPending } from '../offline/photos';
 import { enqueue, runOutbox } from '../offline/outbox';
 
@@ -63,6 +69,20 @@ export function ReviewRoute(): React.JSX.Element {
   const pendingPhotos = countPending(draft.data.photos);
   const submitted = draft.data.draft.status !== 'capturing';
 
+  /**
+   * R2 — no se firma con un hallazgo incompleto, y se NOMBRA lo que falta.
+   *
+   * `signDraft` lo vuelve a comprobar y lanza si algo cambió entre esta pantalla y el
+   * clic; lo de acá es para que el inspector sepa a qué ítem volver mientras todavía
+   * puede caminar hasta él.
+   */
+  const incomplete = incompleteFindings(
+    document.data,
+    draft.data.answers,
+    draft.data.findings,
+    draft.data.photos,
+  );
+
   return (
     <>
       <UnsyncedIndicator accountId={account?.userId ?? null} />
@@ -84,6 +104,21 @@ export function ReviewRoute(): React.JSX.Element {
         </>
       )}
 
+      {incomplete.length > 0 ? (
+        <>
+          <p className="notice notice--warn">
+            These findings still need details before you can sign:
+          </p>
+          <ul className="list">
+            {incomplete.map((entry) => (
+              <li key={entry.item_key} className="list__row">
+                {entry.item_key}: missing {entry.missing.join(', ')}
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+
       {pendingPhotos > 0 ? (
         <p className="notice">
           {pendingPhotos} photo{pendingPhotos === 1 ? '' : 's'} still to upload. They upload
@@ -100,7 +135,7 @@ export function ReviewRoute(): React.JSX.Element {
 
       <button
         type="button"
-        disabled={!validation.ok || submitted || submit.isPending}
+        disabled={!validation.ok || incomplete.length > 0 || submitted || submit.isPending}
         onClick={() => submit.mutate()}
       >
         {submitted ? 'Signed' : 'Sign and submit'}

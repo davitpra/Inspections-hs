@@ -1,6 +1,8 @@
 import { HttpException, HttpStatus } from '@nestjs/common';
 import type { Violation } from '@hs/forms';
 
+import type { FindingViolation } from '../findings/derive';
+
 /**
  * Los errores de la ingesta de envíos.
  *
@@ -88,10 +90,17 @@ export const invalidSubmission = (message: string): SubmissionException =>
  * envío rechazado por vez. Es la misma decisión que toma `validateAnswers`, sostenida
  * hasta la respuesta HTTP.
  *
+ * Desde la etapa 4 la lista lleva dos fuentes: las violaciones del motor de formularios
+ * y las del bloque de hallazgos (`finding_missing`, `unexpected_finding`). Van juntas
+ * en la misma respuesta y con la misma forma —`item_key` y `code`— porque para el
+ * inspector son la misma pregunta: qué le falta a este envío.
+ *
  * `422` y no `400`: el cuerpo se entendió perfectamente, es su contenido el que no
  * corresponde a la plantilla. Para el outbox los dos son igual de no reintentables.
  */
-export const validationFailed = (violations: readonly Violation[]): SubmissionException =>
+export type SubmissionViolation = Violation | FindingViolation;
+
+export const validationFailed = (violations: readonly SubmissionViolation[]): SubmissionException =>
   new SubmissionException(
     'validation_failed',
     'The answers do not satisfy the template version',

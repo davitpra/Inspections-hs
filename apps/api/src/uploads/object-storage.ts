@@ -34,6 +34,14 @@ export interface PresignInput {
   content_length: number;
 }
 
+/** Lo mismo, para la foto de un hallazgo de entrada manual (design D9). */
+export interface PresignManualInput {
+  site_id: string;
+  draft_finding_id: string;
+  content_type: UploadContentType;
+  content_length: number;
+}
+
 /**
  * Corta a propósito (design D7). La URL se pide justo antes del PUT y se usa en el
  * acto; una expiración larga es una URL de escritura circulando por el `fetch` de un
@@ -71,15 +79,37 @@ export class ObjectStorageService {
    * inspección, o de otra planta: el prefijo es lo único que separa las dos.
    */
   async presignPut(input: PresignInput): Promise<PresignedUpload> {
-    const objectKey = deriveObjectKey(input.site_id, input.scheduled_inspection_id);
+    return this.sign(
+      deriveObjectKey(input.site_id, input.scheduled_inspection_id),
+      input.content_type,
+      input.content_length,
+    );
+  }
 
+  /**
+   * La misma firma, en el prefijo del hallazgo manual. Mismo principio que arriba: la
+   * key la deriva el servidor, y el cliente solo dice de qué borrador es la foto.
+   */
+  async presignManualPut(input: PresignManualInput): Promise<PresignedUpload> {
+    return this.sign(
+      deriveManualObjectKey(input.site_id, input.draft_finding_id),
+      input.content_type,
+      input.content_length,
+    );
+  }
+
+  private async sign(
+    objectKey: string,
+    contentType: UploadContentType,
+    contentLength: number,
+  ): Promise<PresignedUpload> {
     const url = await getSignedUrl(
       this.client,
       new PutObjectCommand({
         Bucket: this.bucket,
         Key: objectKey,
-        ContentType: input.content_type,
-        ContentLength: input.content_length,
+        ContentType: contentType,
+        ContentLength: contentLength,
       }),
       { expiresIn: this.ttlSeconds },
     );
@@ -102,6 +132,24 @@ export class ObjectStorageService {
  */
 export function deriveObjectKey(siteId: string, scheduledInspectionId: string): string {
   return `${siteId}/${scheduledInspectionId}/${randomUUID()}`;
+}
+
+/**
+ * `{site_id}/manual/{draft_finding_id}/{uuid}` — la foto de un hallazgo de entrada
+ * manual (design D9).
+ *
+ * Un hallazgo manual no cuelga de ninguna inspección programada, así que no hay un
+ * `scheduled_inspection_id` que ponga en el segundo segmento. El literal `manual/`
+ * ocupa ese lugar a propósito: sin él, el `draft_finding_id` sería un uuid en la misma
+ * posición que el de una inspección y los dos prefijos dejarían de distinguirse.
+ *
+ * Esta función dice DÓNDE SE ESCRIBE. Qué se acepta lo dice `foreignManualKeys` en
+ * `findings/object-key.ts`, escrito por separado y a propósito: son dos afirmaciones
+ * que tienen que coincidir, y un test las compara. Mismo criterio que con
+ * `objectKeyPrefix` de `inspections/submission.ts`.
+ */
+export function deriveManualObjectKey(siteId: string, draftFindingId: string): string {
+  return `${siteId}/manual/${draftFindingId}/${randomUUID()}`;
 }
 
 interface ObjectStorageConfig {

@@ -183,7 +183,8 @@ export async function sendEntry(
       template_version_id: draft.template_version_id,
       answers: toAnswerSet(answers) as InspectionSubmission['answers'],
       // Object keys, nunca bytes (ADR-001).
-      photos: await uploadedKeysByItem(clientSubmissionId, database),
+      photos: await uploadedKeysByItem(clientSubmissionId, 'answer', database),
+      findings: await findingsBlock(clientSubmissionId, database),
       signed_at: draft.signed_at ?? new Date(now()).toISOString(),
     };
 
@@ -270,6 +271,40 @@ async function classify(
   }
 
   return retryLater(clientSubmissionId, message, deps);
+}
+
+/**
+ * El bloque de hallazgos del payload (requisitos §3 R2, etapa 4).
+ *
+ * Se arma de lo que hay en el dispositivo, sin volver a decidir qué respuesta es
+ * negativa: la fila del hallazgo existe porque `saveAnswer` la creó al detectarlo, y la
+ * comprobación previa a firmar ya garantizó que esté completa. Reevaluar acá sería
+ * responder dos veces la misma pregunta, con la segunda respuesta llegando después de
+ * la firma.
+ *
+ * Una fila incompleta que se colara igual llega al servidor y vuelve como
+ * `validation_failed`, que es el respaldo correcto: la entrada no se reintenta y el
+ * borrador queda legible.
+ */
+async function findingsBlock(
+  clientSubmissionId: string,
+  database: OfflineDatabase,
+): Promise<InspectionSubmission['findings']> {
+  const [rows, keysByItem] = await Promise.all([
+    database.findings.where('client_submission_id').equals(clientSubmissionId).toArray(),
+    uploadedKeysByItem(clientSubmissionId, 'finding', database),
+  ]);
+
+  return Object.fromEntries(
+    rows.map((row) => [
+      row.item_key,
+      {
+        description: row.description,
+        location_id: row.location_id ?? '',
+        photo_object_keys: keysByItem[row.item_key] ?? [],
+      },
+    ]),
+  );
 }
 
 /**

@@ -80,6 +80,7 @@ describe('objectKeysOf', () => {
         'sign.inspector': { object_key: key(SITE, INSPECTION, 'sig'), signed_at: '2026-08-03T14:20:00-04:00' },
       },
       { 'dock.photo': [key(), key(SITE, INSPECTION, 'def')] },
+      {},
     );
 
     expect(keys.sort()).toEqual(
@@ -87,8 +88,48 @@ describe('objectKeysOf', () => {
     );
   });
 
+  /**
+   * El bloque de hallazgos entró al payload en la etapa 4 y tuvo que entrar acá el
+   * mismo día: una lista de object keys que el dispositivo escribe y que la
+   * verificación de prefijo no mira es el agujero por el que el registro legal de una
+   * inspección termina apuntando a las fotos de la otra planta.
+   */
+  it('junta también las fotos del bloque de hallazgos', () => {
+    const keys = objectKeysOf(
+      { 'dock.guards': false },
+      {},
+      {
+        'dock.guards': {
+          description: 'Guard missing on the infeed of packaging line 3',
+          location_id: '11111111-1111-4111-8111-111111111111',
+          photo_object_keys: [key(SITE, INSPECTION, 'f1'), key(SITE, INSPECTION, 'f2')],
+        },
+      },
+    );
+
+    expect(keys.sort()).toEqual([key(SITE, INSPECTION, 'f1'), key(SITE, INSPECTION, 'f2')].sort());
+  });
+
+  it('una foto de hallazgo de otra inspección queda expuesta por foreignObjectKeys', () => {
+    const keys = objectKeysOf(
+      { 'dock.guards': false },
+      {},
+      {
+        'dock.guards': {
+          description: 'Guard missing on the infeed of packaging line 3',
+          location_id: '11111111-1111-4111-8111-111111111111',
+          photo_object_keys: [key(SITE, 'otra-inspeccion', 'robada')],
+        },
+      },
+    );
+
+    expect(foreignObjectKeys(keys, SITE, INSPECTION)).toEqual([
+      key(SITE, 'otra-inspeccion', 'robada'),
+    ]);
+  });
+
   it('no confunde una respuesta de texto con una firma', () => {
-    expect(objectKeysOf({ 'dock.note': 'algo', 'dock.scale': 3 }, {})).toEqual([]);
+    expect(objectKeysOf({ 'dock.note': 'algo', 'dock.scale': 3 }, {}, {})).toEqual([]);
   });
 
   it('ignora un objeto que no tiene la forma de una firma', () => {
@@ -97,7 +138,7 @@ describe('objectKeysOf', () => {
     // no puede convertirse en una object key aceptada por descuido.
     const malformed = { x: { object_key: 'k' } } as unknown as InspectionSubmission['answers'];
 
-    expect(objectKeysOf(malformed, {})).toEqual([]);
+    expect(objectKeysOf(malformed, {}, {})).toEqual([]);
   });
 });
 

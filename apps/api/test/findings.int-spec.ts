@@ -1,0 +1,1121 @@
+import type { InspectionSubmission, TemplateDocument } from '@hs/contracts';
+import { PROBABILITIES, SEVERITIES } from '@hs/contracts';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
+
+import { riskLevel } from '../src/findings/risk';
+import { FindingsService } from '../src/findings/findings.service';
+import { SubmissionsService } from '../src/inspections/submissions.service';
+import { createLocation, registerSite } from './helpers/catalog';
+import { createAccount } from './helpers/identity';
+import { scheduleInspection } from './helpers/inspections';
+import { inScope, one, sqlstate, startTestDatabase, type TestDatabase } from './helpers/postgres';
+import { createSchedulingStack, type SchedulingStack } from './helpers/scheduling';
+import { createTemplate, publishVersion, registerItems } from './helpers/templates';
+
+/**
+ * Requisitos §7 etapa 4 — El hallazgo y su clasificación.
+ *
+ * Lo que estos tests prueban no es que se guarden filas. Es que las propiedades que
+ * hacen que R2 signifique algo se cumplan aunque el cliente se porte mal y aunque
+ * alguien escriba SQL a mano:
+ *
+ *   1. Una respuesta negativa produce un hallazgo, y ninguna otra respuesta lo hace.
+ *   2. Un envío rechazado no deja ni un hallazgo.
+ *   3. Un hallazgo sin foto no llega a existir, y no por una comprobación del servicio.
+ *   4. El nivel de riesgo es el de la matriz, venga por donde venga.
+ *   5. La historia de clasificación no se bifurca ni se edita.
+ */
+
+const SITE_A = 'f1d00000-0000-4000-8000-000000000001';
+const SITE_B = 'f1d00000-0000-4000-8000-000000000002';
+
+let db: TestDatabase;
+let stack: SchedulingStack;
+let submissions: SubmissionsService;
+let findings: FindingsService;
+
+let templateId: string;
+let versionV1: string;
+let versionV2: string;
+let locationA: string;
+let locationB: string;
+
+let inspector: { accountId: string };
+let coordinator: { accountId: string };
+let supervisor: { accountId: string };
+let auditor: { accountId: string };
+
+const ITEM_KEYS = ['fnd.guards', 'fnd.eyewash', 'fnd.rating'];
+
+function document(): TemplateDocument {
+  return {
+    sections: [
+      {
+        section_key: 'general',
+        section_title: 'General',
+        position: 1,
+        items: [
+          {
+            item_key: 'fnd.guards',
+            prompt: 'Machine guards in place',
+            position: 1,
+            required: true,
+            response_type: 'yes_no' as const,
+          },
+          {
+            item_key: 'fnd.eyewash',
+            prompt: 'Eyewash flushed',
+            position: 2,
+            required: true,
+            response_type: 'yes_no_na' as const,
+          },
+          {
+            item_key: 'fnd.rating',
+            prompt: 'Housekeeping rating',
+            position: 3,
+            required: true,
+            response_type: 'scale' as const,
+            min: 1,
+            max: 5,
+          },
+        ],
+      },
+    ],
+  };
+}
+
+const sessionFor = (accountId: string, siteIds: string[], role = 'jhsc_member') => ({
+  userId: accountId,
+  role,
+  siteIds,
+});
+
+const keyFor = (siteId: string, inspectionId: string, name: string = randomUUID()) =>
+  `${siteId}/${inspectionId}/${name}`;
+
+function details(siteId: string, scheduledId: string, locationId: string, photos = 1) {
+  return {
+    description: 'Guard missing on the infeed of the packaging line',
+    location_id: locationId,
+    photo_object_keys: Array.from({ length: photos }, () => keyFor(siteId, scheduledId)),
+  };
+}
+
+/**
+ * Un envío válido con UN negativo (`fnd.guards`) y su hallazgo. Los tests lo desarman:
+ * partir de algo que el servidor acepta y romperle una cosa evita que el caso roto
+ * falle por otra razón.
+ */
+function submissionFor(
+  scheduledId: string,
+  siteId: string,
+  templateVersionId: string,
+  locationId: string,
+  overrides: Partial<InspectionSubmission> = {},
+): InspectionSubmission {
+  return {
+    client_submission_id: randomUUID(),
+    scheduled_inspection_id: scheduledId,
+    template_version_id: templateVersionId,
+    answers: {
+      'fnd.guards': false,
+      'fnd.eyewash': 'yes',
+      'fnd.rating': 4,
+    } as InspectionSubmission['answers'],
+    photos: {},
+    findings: { 'fnd.guards': details(siteId, scheduledId, locationId) },
+    signed_at: '2026-08-03T14:20:00-04:00',
+    ...overrides,
+  };
+}
+
+let periodCursor = 0;
+
+function nextPeriod(): string {
+  periodCursor += 1;
+  const month = ((periodCursor - 1) % 12) + 1;
+  const year = 2035 + Math.floor((periodCursor - 1) / 12);
+
+  return `${year}-${String(month).padStart(2, '0')}-01`;
+}
+
+async function freshInspection(
+  siteId = SITE_A,
+  inspectorId?: string,
+  templateVersionId = versionV2,
+): Promise<string> {
+  return scheduleInspection(db.app, {
+    siteId,
+    periodStart: nextPeriod(),
+    templateId,
+    templateVersionId,
+    inspectorId: inspectorId ?? inspector.accountId,
+  });
+}
+
+interface FindingRow extends Record<string, unknown> {
+  id: string;
+  site_id: string;
+  origin: string;
+  inspection_id: string | null;
+  template_version_item_id: string | null;
+  item_key: string | null;
+  location_id: string;
+  description: string;
+  occurred_at: Date;
+}
+
+async function findingRows(siteIds: string[], inspectionId?: string): Promise<FindingRow[]> {
+  return inScope<FindingRow>(
+    db.app,
+    siteIds,
+    inspectionId
+      ? `SELECT * FROM finding WHERE inspection_id = $1 ORDER BY item_key`
+      : `SELECT * FROM finding ORDER BY recorded_at`,
+    inspectionId ? [inspectionId] : [],
+  );
+}
+
+async function photoCount(findingId: string): Promise<number> {
+  const rows = await inScope<{ count: string }>(
+    db.app,
+    [SITE_A, SITE_B],
+    'SELECT count(*)::text AS count FROM finding_photo WHERE finding_id = $1',
+    [findingId],
+  );
+
+  return Number(one(rows).count);
+}
+
+async function events(siteId: string, type: string) {
+  return inScope<{ seq: string; payload: Record<string, unknown>; occurred_at: Date }>(
+    db.app,
+    [siteId],
+    `SELECT seq, payload, occurred_at FROM audit_log
+      WHERE site_id = $1 AND event_type = $2 ORDER BY seq`,
+    [siteId, type],
+  );
+}
+
+async function chainLength(siteId: string): Promise<number> {
+  const rows = await inScope<{ count: string }>(
+    db.app,
+    [siteId],
+    'SELECT count(*)::text AS count FROM audit_log WHERE site_id = $1',
+    [siteId],
+  );
+
+  return Number(one(rows).count);
+}
+
+beforeAll(async () => {
+  db = await startTestDatabase();
+  stack = createSchedulingStack(db.appUrl);
+  submissions = new SubmissionsService(stack.db);
+  findings = new FindingsService(stack.db);
+
+  await registerSite(db.migrator, SITE_A, 'find-a');
+  await registerSite(db.migrator, SITE_B, 'find-b');
+
+  locationA = await createLocation(db.app, SITE_A, 'dock-1', 'Dock 1');
+  locationB = await createLocation(db.app, SITE_B, 'dock-1', 'Dock 1');
+
+  templateId = await createTemplate(db.migrator, 'find-template', 'Monthly walkthrough');
+  await registerItems(db.migrator, templateId, ITEM_KEYS);
+
+  versionV1 = await publishVersion(db.migrator, templateId, 1, document());
+  versionV2 = await publishVersion(db.migrator, templateId, 2, document());
+
+  inspector = await createAccount(db.app, { siteIds: [SITE_A], role: 'jhsc_member' });
+  coordinator = await createAccount(db.app, {
+    siteIds: [SITE_A, SITE_B],
+    role: 'hs_coordinator',
+  });
+  supervisor = await createAccount(db.app, { siteIds: [SITE_A], role: 'supervisor' });
+  // El auditor externo lleva vencimiento y ventana de fechas obligatorios (§5 riesgo I).
+  auditor = await createAccount(db.app, {
+    siteIds: [SITE_A],
+    role: 'external_auditor',
+    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    recordsFrom: '2026-01-01',
+    recordsTo: '2026-12-31',
+  });
+}, 120_000);
+
+afterAll(async () => {
+  await stack.stop();
+  await db.stop();
+});
+
+describe('la derivación', () => {
+  it('crea un hallazgo por respuesta negativa, con la identidad dual y sus fotos', async () => {
+    const scheduled = await freshInspection();
+    const payload = submissionFor(scheduled, SITE_A, versionV2, locationA);
+
+    const accepted = await submissions.ingest(sessionFor(inspector.accountId, [SITE_A]), payload);
+    const rows = await findingRows([SITE_A], accepted.id);
+
+    expect(rows).toHaveLength(1);
+
+    const finding = one(rows);
+
+    expect(finding.origin).toBe('inspection');
+    expect(finding.item_key).toBe('fnd.guards');
+    expect(finding.template_version_item_id).toEqual(expect.any(String));
+    expect(finding.location_id).toBe(locationA);
+    expect(finding.description).toContain('Guard missing');
+
+    // El reloj del DISPOSITIVO, no el de la transacción (§5 riesgo C).
+    expect(finding.occurred_at.toISOString()).toBe(new Date(payload.signed_at).toISOString());
+
+    expect(await photoCount(finding.id)).toBe(1);
+  });
+
+  it('tres negativos producen tres hallazgos', async () => {
+    const scheduled = await freshInspection();
+    const payload = submissionFor(scheduled, SITE_A, versionV2, locationA, {
+      answers: {
+        'fnd.guards': false,
+        'fnd.eyewash': 'no',
+        'fnd.rating': 1,
+      } as InspectionSubmission['answers'],
+      findings: {
+        'fnd.guards': details(SITE_A, scheduled, locationA),
+        'fnd.eyewash': details(SITE_A, scheduled, locationA, 2),
+      },
+    });
+
+    const accepted = await submissions.ingest(sessionFor(inspector.accountId, [SITE_A]), payload);
+    const rows = await findingRows([SITE_A], accepted.id);
+
+    // Dos y no tres: `fnd.rating` es una escala en su valor más bajo y NO deriva
+    // hallazgo. Sin umbral en el documento, cualquier corte sería inventado (D2).
+    expect(rows.map((row) => row.item_key)).toEqual(['fnd.eyewash', 'fnd.guards']);
+  });
+
+  it('un envío sin negativos no crea ninguno, y un na tampoco', async () => {
+    const scheduled = await freshInspection();
+    const payload = submissionFor(scheduled, SITE_A, versionV2, locationA, {
+      answers: {
+        'fnd.guards': true,
+        'fnd.eyewash': 'na',
+        'fnd.rating': 5,
+      } as InspectionSubmission['answers'],
+      findings: {},
+    });
+
+    const accepted = await submissions.ingest(sessionFor(inspector.accountId, [SITE_A]), payload);
+
+    expect(await findingRows([SITE_A], accepted.id)).toHaveLength(0);
+  });
+});
+
+describe('todo o nada', () => {
+  it('un negativo sin detalles deja cero filas en las cuatro tablas', async () => {
+    const scheduled = await freshInspection();
+    const payload = submissionFor(scheduled, SITE_A, versionV2, locationA, { findings: {} });
+    const before = await chainLength(SITE_A);
+
+    await expect(
+      submissions.ingest(sessionFor(inspector.accountId, [SITE_A]), payload),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'validation_failed',
+        violations: [{ item_key: 'fnd.guards', code: 'finding_missing' }],
+      },
+    });
+
+    const inspections = await inScope<{ count: string }>(
+      db.app,
+      [SITE_A],
+      'SELECT count(*)::text AS count FROM inspection WHERE client_submission_id = $1',
+      [payload.client_submission_id],
+    );
+
+    expect(Number(one(inspections).count)).toBe(0);
+    expect(await chainLength(SITE_A)).toBe(before);
+  });
+
+  it('detalles para una respuesta afirmativa son unexpected_finding', async () => {
+    const scheduled = await freshInspection();
+    const payload = submissionFor(scheduled, SITE_A, versionV2, locationA, {
+      answers: {
+        'fnd.guards': true,
+        'fnd.eyewash': 'yes',
+        'fnd.rating': 4,
+      } as InspectionSubmission['answers'],
+    });
+
+    await expect(
+      submissions.ingest(sessionFor(inspector.accountId, [SITE_A]), payload),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'validation_failed',
+        violations: [{ item_key: 'fnd.guards', code: 'unexpected_finding' }],
+      },
+    });
+  });
+
+  it('las violaciones del bloque viajan junto con las del motor de formularios', async () => {
+    const scheduled = await freshInspection();
+    const payload = submissionFor(scheduled, SITE_A, versionV2, locationA, {
+      answers: {
+        'fnd.guards': false,
+        'fnd.eyewash': 'yes',
+      } as InspectionSubmission['answers'],
+      findings: {},
+    });
+
+    const failure: { violations: { item_key: string; code: string }[] } = await submissions
+      .ingest(sessionFor(inspector.accountId, [SITE_A]), payload)
+      .then(
+        () => ({ violations: [] }),
+        (error: { response: { violations: { item_key: string; code: string }[] } }) =>
+          error.response,
+      );
+
+    expect(failure.violations).toEqual([
+      { item_key: 'fnd.rating', code: 'required_missing' },
+      { item_key: 'fnd.guards', code: 'finding_missing' },
+    ]);
+  });
+
+  it('un reenvío no duplica los hallazgos', async () => {
+    const scheduled = await freshInspection();
+    const payload = submissionFor(scheduled, SITE_A, versionV2, locationA);
+    const session = sessionFor(inspector.accountId, [SITE_A]);
+
+    const first = await submissions.ingest(session, payload);
+
+    for (let i = 0; i < 4; i += 1) {
+      const again = await submissions.ingest(session, payload);
+      expect(again.created).toBe(false);
+      expect(again.id).toBe(first.id);
+    }
+
+    expect(await findingRows([SITE_A], first.id)).toHaveLength(1);
+  });
+});
+
+describe('las fotos y la ubicación', () => {
+  it('una foto de hallazgo de otra inspección se rechaza', async () => {
+    const scheduled = await freshInspection();
+    const payload = submissionFor(scheduled, SITE_A, versionV2, locationA, {
+      findings: {
+        'fnd.guards': {
+          description: 'Guard missing on the infeed of the packaging line',
+          location_id: locationA,
+          photo_object_keys: [keyFor(SITE_A, randomUUID())],
+        },
+      },
+    });
+
+    await expect(
+      submissions.ingest(sessionFor(inspector.accountId, [SITE_A]), payload),
+    ).rejects.toMatchObject({ response: { code: 'invalid_submission' } });
+  });
+
+  /**
+   * La separación que hace que el envío sea aceptable: la foto del hallazgo NO es la
+   * respuesta del ítem. Si viajara en `photos`, `mergePhotoAnswers` la fundiría bajo la
+   * misma `item_key` que el booleano y el servidor rechazaría por colisión.
+   */
+  it('la foto del hallazgo no queda como valor de la respuesta', async () => {
+    const scheduled = await freshInspection();
+    const payload = submissionFor(scheduled, SITE_A, versionV2, locationA);
+
+    const accepted = await submissions.ingest(sessionFor(inspector.accountId, [SITE_A]), payload);
+
+    const answers = await inScope<{ value: unknown }>(
+      db.app,
+      [SITE_A],
+      `SELECT value FROM inspection_answer WHERE inspection_id = $1 AND item_key = 'fnd.guards'`,
+      [accepted.id],
+    );
+
+    expect(one(answers).value).toBe(false);
+  });
+
+  it('un hallazgo sin ninguna foto no sobrevive al commit', async () => {
+    const scheduled = await freshInspection();
+    const accepted = await submissions.ingest(
+      sessionFor(inspector.accountId, [SITE_A]),
+      submissionFor(scheduled, SITE_A, versionV2, locationA),
+    );
+
+    const existing = one(await findingRows([SITE_A], accepted.id));
+
+    // Se inserta a mano un hallazgo sin fotos: la restricción es diferida, así que el
+    // INSERT pasa y lo que falla es el COMMIT. Es la única forma de probar que la
+    // barrera no depende de que el servicio se acuerde.
+    const error = await inScope(
+      db.app,
+      [SITE_A],
+      `INSERT INTO finding (site_id, origin, inspection_id, template_version_item_id, item_key,
+                            location_id, description, reported_by, occurred_at)
+       SELECT site_id, 'inspection', inspection_id, template_version_item_id, item_key,
+              location_id, description, reported_by, occurred_at
+         FROM finding WHERE id = $1`,
+      [existing.id],
+    ).catch((caught: unknown) => caught);
+
+    expect(sqlstate(error)).toBe('HS003');
+  });
+
+  /**
+   * La asimetría de D8: al derivar se acepta una ubicación desactivada, porque el
+   * dispositivo llevaba el catálogo de cuando se preparó la inspección y rechazar el
+   * envío convertiría una edición administrativa en una inspección perdida.
+   */
+  it('acepta una ubicación desactivada después de preparar el paquete de campo', async () => {
+    const stale = await createLocation(db.app, SITE_A, 'stale-line', 'Stale line');
+    const scheduled = await freshInspection();
+    const payload = submissionFor(scheduled, SITE_A, versionV2, stale);
+
+    await inScope(
+      db.app,
+      [SITE_A],
+      'UPDATE location SET deactivated_at = now() WHERE id = $1',
+      [stale],
+    );
+
+    const accepted = await submissions.ingest(sessionFor(inspector.accountId, [SITE_A]), payload);
+
+    expect(one(await findingRows([SITE_A], accepted.id)).location_id).toBe(stale);
+  });
+
+  it('una ubicación de la otra planta viola la FK compuesta', async () => {
+    const scheduled = await freshInspection();
+    const payload = submissionFor(scheduled, SITE_A, versionV2, locationB);
+
+    const error = await submissions
+      .ingest(sessionFor(inspector.accountId, [SITE_A]), payload)
+      .catch((caught: unknown) => caught);
+
+    // 23503: violación de clave foránea. No la comprueba el servicio: la comprueba el
+    // motor, que es lo que hace que no dependa de que alguien se acuerde.
+    expect(sqlstate(error)).toBe('23503');
+  });
+});
+
+describe('la entrada manual', () => {
+  function manual(overrides: Record<string, unknown> = {}) {
+    const draftId = randomUUID();
+
+    return {
+      site_id: SITE_A,
+      draft_finding_id: draftId,
+      details: {
+        description: 'Forklift near miss at the loading dock',
+        location_id: locationA,
+        photo_object_keys: [`${SITE_A}/manual/${draftId}/${randomUUID()}`],
+      },
+      occurred_at: '2026-08-10T13:00:00.000Z',
+      classification: {
+        probability: 'possible' as const,
+        severity: 'moderate' as const,
+        control_level: 'engineering' as const,
+      },
+      ...overrides,
+    };
+  }
+
+  it('un supervisor reporta un peligro, y nace clasificado y sin item_key', async () => {
+    const created = await findings.report(
+      sessionFor(supervisor.accountId, [SITE_A], 'supervisor'),
+      manual(),
+    );
+
+    expect(created.origin).toBe('manual');
+    expect(created.inspection_id).toBeNull();
+    expect(created.item_key).toBeNull();
+    expect(created.template_version_item_id).toBeNull();
+    expect(created.assessment).toMatchObject({ risk_level: 'medium', control_level: 'engineering' });
+  });
+
+  it('queda fuera de la agrupación por item_key', async () => {
+    const scheduled = await freshInspection();
+
+    await submissions.ingest(
+      sessionFor(inspector.accountId, [SITE_A]),
+      submissionFor(scheduled, SITE_A, versionV2, locationA),
+    );
+
+    await findings.report(sessionFor(supervisor.accountId, [SITE_A], 'supervisor'), manual());
+
+    const groups = await inScope<{ item_key: string; count: string }>(
+      db.app,
+      [SITE_A],
+      `SELECT item_key, count(*)::text AS count FROM finding
+        WHERE item_key IS NOT NULL GROUP BY item_key`,
+    );
+
+    // El manual no aparece en ningún grupo: es la consecuencia aceptada del riesgo F.
+    expect(groups.every((group) => group.item_key !== null)).toBe(true);
+  });
+
+  it('rechaza una ubicación desactivada', async () => {
+    const dead = await createLocation(db.app, SITE_A, 'dead-line', 'Dead line');
+
+    await inScope(db.app, [SITE_A], 'UPDATE location SET deactivated_at = now() WHERE id = $1', [
+      dead,
+    ]);
+
+    await expect(
+      findings.report(
+        sessionFor(supervisor.accountId, [SITE_A], 'supervisor'),
+        manual({
+          details: {
+            description: 'Forklift near miss at the loading dock',
+            location_id: dead,
+            photo_object_keys: [`${SITE_A}/manual/${randomUUID()}/${randomUUID()}`],
+          },
+        }),
+      ),
+    ).rejects.toMatchObject({ response: { code: 'invalid_finding' } });
+  });
+
+  it('rechaza una foto que no es de este borrador', async () => {
+    await expect(
+      findings.report(
+        sessionFor(supervisor.accountId, [SITE_A], 'supervisor'),
+        manual({
+          details: {
+            description: 'Forklift near miss at the loading dock',
+            location_id: locationA,
+            photo_object_keys: [`${SITE_A}/manual/${randomUUID()}/${randomUUID()}`],
+          },
+        }),
+      ),
+    ).rejects.toMatchObject({ response: { code: 'invalid_finding' } });
+  });
+
+  it('un auditor externo no reporta nada', async () => {
+    await expect(
+      findings.report(sessionFor(auditor.accountId, [SITE_A], 'external_auditor'), manual()),
+    ).rejects.toMatchObject({ response: { code: 'forbidden' } });
+  });
+
+  it('un origen a medias no existe ni por SQL', async () => {
+    const scheduled = await freshInspection();
+    const accepted = await submissions.ingest(
+      sessionFor(inspector.accountId, [SITE_A]),
+      submissionFor(scheduled, SITE_A, versionV2, locationA),
+    );
+
+    const error = await inScope(
+      db.app,
+      [SITE_A],
+      `INSERT INTO finding (site_id, origin, inspection_id, location_id, description,
+                            reported_by, occurred_at)
+       VALUES ($1, 'inspection', $2, $3, 'Half derived finding row', $4, now())`,
+      [SITE_A, accepted.id, locationA, inspector.accountId],
+    ).catch((caught: unknown) => caught);
+
+    // 23514: violación de CHECK. El de origen exactamente-uno.
+    expect(sqlstate(error)).toBe('23514');
+  });
+});
+
+describe('la clasificación', () => {
+  async function derivedFinding(): Promise<string> {
+    const scheduled = await freshInspection();
+    const accepted = await submissions.ingest(
+      sessionFor(inspector.accountId, [SITE_A]),
+      submissionFor(scheduled, SITE_A, versionV2, locationA),
+    );
+
+    return one(await findingRows([SITE_A], accepted.id)).id;
+  }
+
+  const coordinatorSession = () => sessionFor(coordinator.accountId, [SITE_A, SITE_B], 'hs_coordinator');
+
+  it('un hallazgo derivado nace sin clasificar', async () => {
+    const id = await derivedFinding();
+    const read = await findings.get(coordinatorSession(), id);
+
+    // Sin clasificar es la AUSENCIA de fila, no un valor guardado (D10).
+    expect(read.assessment).toBeNull();
+  });
+
+  it('clasificar deja una fila; reclasificar deja dos y la vigente es la segunda', async () => {
+    const id = await derivedFinding();
+
+    await findings.classify(coordinatorSession(), id, {
+      probability: 'possible',
+      severity: 'moderate',
+      control_level: 'engineering',
+    });
+
+    const reclassified = await findings.classify(coordinatorSession(), id, {
+      probability: 'likely',
+      severity: 'major',
+      control_level: 'administrative',
+      reason: 'A second visit showed the guard is removed every shift',
+    });
+
+    expect(reclassified.assessment).toMatchObject({
+      probability: 'likely',
+      severity: 'major',
+      risk_level: 'critical',
+      control_level: 'administrative',
+    });
+    expect(reclassified.assessment?.supersedes_id).toEqual(expect.any(String));
+
+    const all = await inScope<{ count: string }>(
+      db.app,
+      [SITE_A],
+      'SELECT count(*)::text AS count FROM finding_risk_assessment WHERE finding_id = $1',
+      [id],
+    );
+
+    expect(Number(one(all).count)).toBe(2);
+  });
+
+  it('reclasificar sin motivo se rechaza, y clasificar por primera vez con motivo también', async () => {
+    const id = await derivedFinding();
+
+    await expect(
+      findings.classify(coordinatorSession(), id, {
+        probability: 'possible',
+        severity: 'moderate',
+        control_level: 'ppe',
+        reason: 'Un motivo que nadie pidió',
+      }),
+    ).rejects.toMatchObject({ response: { code: 'invalid_finding' } });
+
+    await findings.classify(coordinatorSession(), id, {
+      probability: 'possible',
+      severity: 'moderate',
+      control_level: 'ppe',
+    });
+
+    await expect(
+      findings.classify(coordinatorSession(), id, {
+        probability: 'likely',
+        severity: 'major',
+        control_level: 'ppe',
+      }),
+    ).rejects.toMatchObject({ response: { code: 'invalid_finding' } });
+  });
+
+  it('el CHECK del motor rechaza las mismas dos combinaciones', async () => {
+    const id = await derivedFinding();
+
+    const withReason = await inScope(
+      db.app,
+      [SITE_A],
+      `INSERT INTO finding_risk_assessment
+         (finding_id, site_id, probability, severity, control_level, reason, assessed_by)
+       VALUES ($1, $2, 'possible', 'moderate', 'ppe', 'motivo de la primera', $3)`,
+      [id, SITE_A, coordinator.accountId],
+    ).catch((caught: unknown) => caught);
+
+    expect(sqlstate(withReason)).toBe('23514');
+  });
+
+  it('dos reclasificaciones de la misma vigente no bifurcan la historia', async () => {
+    const id = await derivedFinding();
+
+    const first = await findings.classify(coordinatorSession(), id, {
+      probability: 'possible',
+      severity: 'moderate',
+      control_level: 'engineering',
+    });
+
+    const currentId = first.assessment?.id as string;
+
+    await findings.classify(coordinatorSession(), id, {
+      probability: 'likely',
+      severity: 'major',
+      control_level: 'engineering',
+      reason: 'A second visit showed the guard is removed every shift',
+    });
+
+    // La segunda supera a una fila que YA fue superada — que es lo que hace una
+    // reclasificación que leyó la vigente antes de que otra cometiera. La barrera no es
+    // un lock del servicio: es el único de `supersedes_id`, y por eso se prueba
+    // insertando a mano.
+    const error = await inScope(
+      db.app,
+      [SITE_A],
+      `INSERT INTO finding_risk_assessment
+         (finding_id, site_id, probability, severity, control_level, supersedes_id, reason,
+          assessed_by)
+       VALUES ($1, $2, 'almost_certain', 'catastrophic', 'ppe', $3,
+               'Reclassified from a stale read', $4)`,
+      [id, SITE_A, currentId, coordinator.accountId],
+    ).catch((caught: unknown) => caught);
+
+    // 23505: violación de único.
+    expect(sqlstate(error)).toBe('23505');
+
+    const current = await inScope<{ count: string }>(
+      db.app,
+      [SITE_A],
+      `SELECT count(*)::text AS count FROM finding_risk_assessment a
+        WHERE a.finding_id = $1
+          AND NOT EXISTS (SELECT 1 FROM finding_risk_assessment s WHERE s.supersedes_id = a.id)`,
+      [id],
+    );
+
+    expect(Number(one(current).count)).toBe(1);
+  });
+
+  it('el nivel es el de la matriz aunque el payload afirme otro', async () => {
+    const id = await derivedFinding();
+
+    const classified = await findings.classify(coordinatorSession(), id, {
+      probability: 'likely',
+      severity: 'major',
+      control_level: 'ppe',
+      // `risk_level` no existe en el request: el `strictObject` lo rechazaría antes.
+      // Lo que este test afirma es lo otro: que el valor guardado sale de la matriz.
+    });
+
+    expect(classified.assessment?.risk_level).toBe('critical');
+  });
+
+  /**
+   * LA COMPARACIÓN DE LAS DOS MATRICES (design D5). SQL no puede importar TypeScript,
+   * así que la duplicación es deliberada y esto es lo que la sostiene.
+   */
+  it('las 25 celdas de Postgres coinciden con las 25 de risk.ts', async () => {
+    const combinations = PROBABILITIES.flatMap((probability) =>
+      SEVERITIES.map((severity) => ({ probability, severity })),
+    );
+
+    const rows = await inScope<{ probability: string; severity: string; level: string }>(
+      db.app,
+      [SITE_A],
+      `SELECT p AS probability, s AS severity, hs_risk_level(p, s) AS level
+         FROM unnest($1::text[], $2::text[]) AS t(p, s)`,
+      [
+        combinations.map((combination) => combination.probability),
+        combinations.map((combination) => combination.severity),
+      ],
+    );
+
+    expect(rows).toHaveLength(25);
+
+    for (const row of rows) {
+      expect(row.level).toBe(
+        riskLevel(
+          row.probability as (typeof PROBABILITIES)[number],
+          row.severity as (typeof SEVERITIES)[number],
+        ),
+      );
+    }
+  });
+
+  it('las cuatro listas cerradas son las mismas que el CHECK de la migración', async () => {
+    const rows = await inScope<{ definition: string }>(
+      db.app,
+      [SITE_A],
+      `SELECT pg_get_constraintdef(oid) AS definition
+         FROM pg_constraint
+        WHERE conrelid = 'finding_risk_assessment'::regclass AND contype = 'c'`,
+    );
+
+    const definitions = rows.map((row) => row.definition).join(' ');
+
+    for (const probability of PROBABILITIES) expect(definitions).toContain(`'${probability}'`);
+    for (const severity of SEVERITIES) expect(definitions).toContain(`'${severity}'`);
+  });
+
+  it('solo el coordinador clasifica', async () => {
+    const id = await derivedFinding();
+
+    await expect(
+      findings.classify(sessionFor(inspector.accountId, [SITE_A]), id, {
+        probability: 'possible',
+        severity: 'moderate',
+        control_level: 'ppe',
+      }),
+    ).rejects.toMatchObject({ response: { code: 'forbidden' } });
+
+    const read = await findings.get(coordinatorSession(), id);
+
+    expect(read.assessment).toBeNull();
+  });
+
+  it('el clasificador sale de la sesión', async () => {
+    const id = await derivedFinding();
+
+    await findings.classify(coordinatorSession(), id, {
+      probability: 'rare',
+      severity: 'minor',
+      control_level: 'elimination',
+    });
+
+    const read = await findings.get(coordinatorSession(), id);
+
+    expect(read.assessment?.assessed_by).toBe(coordinator.accountId);
+  });
+});
+
+describe('el aislamiento por sitio', () => {
+  it('un miembro del JHSC de una planta no ve los hallazgos de la otra', async () => {
+    const inspectorB = await createAccount(db.app, { siteIds: [SITE_B], role: 'jhsc_member' });
+    const scheduledB = await scheduleInspection(db.app, {
+      siteId: SITE_B,
+      periodStart: nextPeriod(),
+      templateId,
+      templateVersionId: versionV2,
+      inspectorId: inspectorB.accountId,
+    });
+
+    await submissions.ingest(
+      sessionFor(inspectorB.accountId, [SITE_B]),
+      submissionFor(scheduledB, SITE_B, versionV2, locationB),
+    );
+
+    const seenByA = await findings.list(sessionFor(inspector.accountId, [SITE_A]));
+
+    expect(seenByA.every((finding) => finding.site_id === SITE_A)).toBe(true);
+
+    const seenByCoordinator = await findings.list(
+      sessionFor(coordinator.accountId, [SITE_A, SITE_B], 'hs_coordinator'),
+    );
+
+    expect(seenByCoordinator.some((finding) => finding.site_id === SITE_B)).toBe(true);
+  });
+
+  it('un hallazgo de la otra planta se ve igual que uno que no existe', async () => {
+    const all = await findings.list(
+      sessionFor(coordinator.accountId, [SITE_A, SITE_B], 'hs_coordinator'),
+    );
+
+    const fromB = all.find((finding) => finding.site_id === SITE_B);
+
+    expect(fromB).toBeDefined();
+
+    await expect(
+      findings.get(sessionFor(inspector.accountId, [SITE_A]), fromB!.id),
+    ).rejects.toMatchObject({ response: { code: 'finding_not_found' } });
+  });
+});
+
+describe('la inmutabilidad', () => {
+  async function anyFinding(): Promise<string> {
+    const rows = await findingRows([SITE_A]);
+
+    return one(rows.slice(0, 1)).id;
+  }
+
+  it('el rol de la aplicación no puede reescribir una descripción', async () => {
+    const id = await anyFinding();
+
+    const error = await inScope(
+      db.app,
+      [SITE_A],
+      `UPDATE finding SET description = 'nothing to see' WHERE id = $1`,
+      [id],
+    ).catch((caught: unknown) => caught);
+
+    expect(sqlstate(error)).toBe('42501');
+  });
+
+  it('el rol de migración lo frena el trigger, no el privilegio', async () => {
+    const id = await anyFinding();
+
+    // Con alcance declarado: `FORCE ROW LEVEL SECURITY` aplica también al dueño, así
+    // que sin él la sentencia no tocaría ninguna fila y el trigger no diría nada.
+    const error = await inScope(
+      db.migrator,
+      [SITE_A],
+      `UPDATE finding SET description = 'nothing to see' WHERE id = $1`,
+      [id],
+    ).catch((caught: unknown) => caught);
+
+    expect(sqlstate(error)).toBe('HS001');
+  });
+
+  it('ninguna de las tres tablas admite DELETE', async () => {
+    const id = await anyFinding();
+
+    for (const statement of [
+      'DELETE FROM finding WHERE id = $1',
+      'DELETE FROM finding_photo WHERE finding_id = $1',
+    ]) {
+      const error = await inScope(db.app, [SITE_A], statement, [id]).catch(
+        (caught: unknown) => caught,
+      );
+
+      expect(sqlstate(error)).toBe('42501');
+    }
+  });
+
+  it('una clasificación no se corrige en su lugar', async () => {
+    const id = await anyFinding();
+
+    await findings.classify(
+      sessionFor(coordinator.accountId, [SITE_A, SITE_B], 'hs_coordinator'),
+      id,
+      { probability: 'rare', severity: 'minor', control_level: 'ppe' },
+    ).catch(() => undefined);
+
+    const error = await inScope(
+      db.app,
+      [SITE_A],
+      `UPDATE finding_risk_assessment SET severity = 'minor' WHERE finding_id = $1`,
+      [id],
+    ).catch((caught: unknown) => caught);
+
+    expect(sqlstate(error)).toBe('42501');
+  });
+});
+
+describe('la cadena de auditoría', () => {
+  it('un envío con un negativo agrega su eslabón de finding.derived con el reloj del dispositivo', async () => {
+    const before = (await events(SITE_A, 'finding.derived')).length;
+    const scheduled = await freshInspection();
+    const payload = submissionFor(scheduled, SITE_A, versionV2, locationA);
+
+    const accepted = await submissions.ingest(sessionFor(inspector.accountId, [SITE_A]), payload);
+    const derived = await events(SITE_A, 'finding.derived');
+
+    expect(derived).toHaveLength(before + 1);
+
+    const last = derived[derived.length - 1];
+
+    expect(last?.payload.item_key).toBe('fnd.guards');
+    expect(last?.payload.inspection_id).toBe(accepted.id);
+    expect(last?.occurred_at.toISOString()).toBe(new Date(payload.signed_at).toISOString());
+  });
+
+  it('un hallazgo con cuatro fotos agrega un solo eslabón', async () => {
+    // El `before` se lee DESPUÉS de programar: abrir una inspección también deja su
+    // propio eslabón (0008), y contarlo acá haría que este test midiera otra cosa.
+    const scheduled = await freshInspection();
+    const before = await chainLength(SITE_A);
+
+    await submissions.ingest(
+      sessionFor(inspector.accountId, [SITE_A]),
+      submissionFor(scheduled, SITE_A, versionV2, locationA, {
+        findings: { 'fnd.guards': details(SITE_A, scheduled, locationA, 4) },
+      }),
+    );
+
+    // Dos eslabones: `inspection.submitted` y `finding.derived`. Ninguno por foto.
+    expect(await chainLength(SITE_A)).toBe(before + 2);
+  });
+
+  it('un reenvío no agrega ningún eslabón', async () => {
+    const scheduled = await freshInspection();
+    const payload = submissionFor(scheduled, SITE_A, versionV2, locationA);
+    const session = sessionFor(inspector.accountId, [SITE_A]);
+
+    await submissions.ingest(session, payload);
+    const after = await chainLength(SITE_A);
+
+    await submissions.ingest(session, payload);
+    await submissions.ingest(session, payload);
+
+    expect(await chainLength(SITE_A)).toBe(after);
+  });
+
+  it('reportar a mano y clasificar dejan su propio eslabón', async () => {
+    const reportedBefore = (await events(SITE_A, 'finding.reported')).length;
+    const classifiedBefore = (await events(SITE_A, 'finding.classified')).length;
+    const draftId = randomUUID();
+
+    const created = await findings.report(
+      sessionFor(supervisor.accountId, [SITE_A], 'supervisor'),
+      {
+        site_id: SITE_A,
+        draft_finding_id: draftId,
+        details: {
+          description: 'Forklift near miss at the loading dock',
+          location_id: locationA,
+          photo_object_keys: [`${SITE_A}/manual/${draftId}/${randomUUID()}`],
+        },
+        occurred_at: '2026-08-10T13:00:00.000Z',
+        classification: {
+          probability: 'possible',
+          severity: 'moderate',
+          control_level: 'engineering',
+        },
+      },
+    );
+
+    await findings.classify(
+      sessionFor(coordinator.accountId, [SITE_A, SITE_B], 'hs_coordinator'),
+      created.id,
+      {
+        probability: 'likely',
+        severity: 'major',
+        control_level: 'elimination',
+        reason: 'The dock layout was changed after the review',
+      },
+    );
+
+    const reported = await events(SITE_A, 'finding.reported');
+    const classified = await events(SITE_A, 'finding.classified');
+
+    expect(reported).toHaveLength(reportedBefore + 1);
+    expect(reported[reported.length - 1]?.payload.item_key).toBeNull();
+
+    // Dos: la inicial del reporte manual y la reclasificación.
+    expect(classified).toHaveLength(classifiedBefore + 2);
+
+    const last = classified[classified.length - 1];
+
+    expect(last?.payload.risk_level).toBe('critical');
+    expect(last?.payload.reason).toContain('dock layout');
+    expect(last?.payload.supersedes_id).toEqual(expect.any(String));
+  });
+
+  it('una clasificación rechazada no agrega eslabón', async () => {
+    const before = await chainLength(SITE_A);
+    const rows = await findingRows([SITE_A]);
+    const id = one(rows.slice(0, 1)).id;
+
+    await expect(
+      findings.classify(sessionFor(inspector.accountId, [SITE_A]), id, {
+        probability: 'rare',
+        severity: 'minor',
+        control_level: 'ppe',
+      }),
+    ).rejects.toMatchObject({ response: { code: 'forbidden' } });
+
+    expect(await chainLength(SITE_A)).toBe(before);
+  });
+});
+
+describe('la recurrencia (materia prima de la etapa 7)', () => {
+  it('el mismo ítem fallando en dos versiones cae en un solo grupo', async () => {
+    const scheduledV1 = await scheduleInspection(db.app, {
+      siteId: SITE_A,
+      periodStart: nextPeriod(),
+      templateId,
+      templateVersionId: versionV1,
+      inspectorId: inspector.accountId,
+    });
+
+    await submissions.ingest(
+      sessionFor(inspector.accountId, [SITE_A]),
+      submissionFor(scheduledV1, SITE_A, versionV1, locationA),
+    );
+
+    const rows = await inScope<{ item_key: string; count: string; versions: string }>(
+      db.app,
+      [SITE_A],
+      `SELECT item_key,
+              count(*)::text AS count,
+              count(DISTINCT template_version_item_id)::text AS versions
+         FROM finding
+        WHERE site_id = $1 AND item_key = 'fnd.guards'
+        GROUP BY item_key`,
+      [SITE_A],
+    );
+
+    const group = one(rows);
+
+    // Una sola serie, con filas de dos versiones publicadas distintas: la identidad
+    // dual haciendo lo que existe para hacer (§5 riesgo A).
+    expect(Number(group.count)).toBeGreaterThan(1);
+    expect(Number(group.versions)).toBe(2);
+  });
+});

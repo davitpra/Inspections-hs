@@ -6,7 +6,7 @@ import {
 
 import { sessionClient } from '../api/client';
 import type { SessionClient } from '../auth/session-client';
-import { db, photoBlob, type OfflineDatabase, type PhotoRow } from './db';
+import { db, photoBlob, type OfflineDatabase, type PhotoKind, type PhotoRow } from './db';
 
 /**
  * Las fotos: guardadas al tomarlas, subidas por separado y ANTES del envío.
@@ -21,6 +21,12 @@ export interface CapturePhotoInput {
   client_submission_id: string;
   item_key: string;
   blob: Blob;
+  /**
+   * De qué es la foto. `answer` por defecto: es lo que era todo hasta la etapa 4, y un
+   * default que no cambia el comportamiento existente es lo que hace que agregar el
+   * campo no sea una migración de código además de una de datos.
+   */
+  kind?: PhotoKind;
 }
 
 export interface UploadDeps {
@@ -47,6 +53,7 @@ export async function capturePhoto(
     item_key: input.item_key,
     bytes: await input.blob.arrayBuffer(),
     content_type: input.blob.type || 'image/jpeg',
+    kind: input.kind ?? 'answer',
     object_key: null,
     upload_state: 'pending',
     attempts: 0,
@@ -71,16 +78,24 @@ export async function photosOfDraft(
   return rows.sort((a, b) => a.captured_at.localeCompare(b.captured_at));
 }
 
-/** Las object keys por `item_key`, que es la forma que el envío lleva. */
+/**
+ * Las object keys por `item_key`, que es la forma que el envío lleva.
+ *
+ * `kind` decide en qué mitad del payload caen: las de `answer` van a `photos`, las de
+ * `finding` a `findings[item_key].photo_object_keys`. Mezclarlas haría que las fotos de
+ * un hallazgo aparezcan como la respuesta del ítem que lo derivó, y el servidor
+ * rechazaría el envío por colisión.
+ */
 export async function uploadedKeysByItem(
   clientSubmissionId: string,
+  kind: PhotoKind = 'answer',
   database: OfflineDatabase = db,
 ): Promise<Record<string, string[]>> {
   const photos = await photosOfDraft(clientSubmissionId, database);
   const byItem: Record<string, string[]> = {};
 
   for (const photo of photos) {
-    if (!photo.object_key) continue;
+    if (!photo.object_key || photo.kind !== kind) continue;
 
     byItem[photo.item_key] = [...(byItem[photo.item_key] ?? []), photo.object_key];
   }
