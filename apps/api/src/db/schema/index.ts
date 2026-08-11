@@ -2,6 +2,7 @@ export * from './actions';
 export * from './audit-log';
 export * from './auth';
 export * from './catalog';
+export * from './compliance';
 export * from './findings';
 export * from './identity';
 export * from './incidents';

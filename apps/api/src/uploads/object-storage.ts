@@ -1,13 +1,18 @@
 import { randomUUID } from 'node:crypto';
 
 import { Injectable } from '@nestjs/common';
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { UploadContentType } from '@hs/contracts';
 
 /**
- * ADR-006 — El almacenamiento de objetos, y la única operación que la aplicación
- * puede pedirle: subir.
+ * ADR-006 — El almacenamiento de objetos, y las únicas operaciones que la aplicación
+ * puede pedirle: escribir y leer. Nunca borrar.
+ *
+ * Desde la etapa 7 son tres verbos y no uno: firmar un PUT para el dispositivo, subir el
+ * PDF del reporte de cumplimiento desde el servidor, y firmar un GET para descargarlo.
+ * Los dos últimos existen porque los bytes del reporte nacen en este proceso —los produce
+ * Chromium— y no en un teléfono.
  *
  * **La credencial de esta aplicación no lleva `DeleteObject`, y eso es del bucket, no
  * de este archivo.** Acá no hay método para borrar porque no existe un camino de
@@ -22,6 +27,13 @@ import type { UploadContentType } from '@hs/contracts';
  */
 
 export interface PresignedUpload {
+  url: string;
+  object_key: string;
+  expires_at: string;
+}
+
+/** Lo mismo, del otro lado: una lectura firmada y corta (etapa 7). */
+export interface PresignedDownload {
   url: string;
   object_key: string;
   expires_at: string;
@@ -118,6 +130,52 @@ export class ObjectStorageService {
     );
   }
 
+  /**
+   * ETAPA 7 — El PDF del reporte de cumplimiento, escrito por el SERVIDOR.
+   *
+   * Es la primera vez que la aplicación sube un objeto por sí misma en vez de firmarle
+   * un PUT a un dispositivo, y el motivo es que acá los bytes nacen del lado del
+   * servidor: los produce Chromium dentro de este proceso, no hay ningún teléfono que
+   * pueda subirlos. La credencial gana `PutObject` por eso.
+   *
+   * **Sigue sin haber `DeleteObject`**, ni en la credencial ni en esta clase. El bucket
+   * tiene versioning, así que ni siquiera una sobreescritura pierde un documento — y de
+   * todos modos cada render escribe su propia key, así que no hay sobreescritura.
+   */
+  async putComplianceReport(objectKey: string, body: Uint8Array): Promise<void> {
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: objectKey,
+        Body: body,
+        ContentType: 'application/pdf',
+      }),
+    );
+  }
+
+  /**
+   * ETAPA 7 — La descarga del PDF, firmada y corta.
+   *
+   * POR QUÉ UNA URL FIRMADA Y NO STREAMING POR LA API: un PDF de cientos de kilobytes
+   * atravesando el proceso de Node no gana nada, y es el mismo mecanismo que ya se usa
+   * para subir, con el mismo TTL corto. Quién puede descargar lo decide el endpoint
+   * —alcance de sitio y render exitoso— antes de firmar; la URL firmada es el resultado
+   * de esa decisión, no un sustituto de ella.
+   */
+  async presignComplianceGet(objectKey: string): Promise<PresignedDownload> {
+    const url = await getSignedUrl(
+      this.client,
+      new GetObjectCommand({ Bucket: this.bucket, Key: objectKey }),
+      { expiresIn: this.ttlSeconds },
+    );
+
+    return {
+      url,
+      object_key: objectKey,
+      expires_at: new Date(Date.now() + this.ttlSeconds * 1000).toISOString(),
+    };
+  }
+
   private async sign(
     objectKey: string,
     contentType: UploadContentType,
@@ -183,6 +241,28 @@ export function deriveManualObjectKey(siteId: string, draftFindingId: string): s
  */
 export function deriveActionObjectKey(siteId: string, actionId: string): string {
   return `${siteId}/actions/${actionId}/${randomUUID()}`;
+}
+
+/**
+ * `{site_id}/reports/{report_id}/{render_id}.pdf` — el PDF de un reporte de cumplimiento
+ * (etapa 7, design D3).
+ *
+ * **La key incluye el INTENTO y no solo el reporte**, y esa es la diferencia con las tres
+ * de arriba. Regenerar el PDF de un reporte de julio es legítimo —el payload y su digest
+ * no cambian— y con la key por intento el segundo render escribe un objeto propio en vez
+ * de tapar el primero. Con versioning activo tapar tampoco perdería nada, pero dejaría el
+ * archivo anterior alcanzable solo por la API de versiones; así, cada fila de
+ * `compliance_report_render` apunta a un objeto que existe por sí mismo.
+ *
+ * La extensión va explícita porque este objeto se descarga por una URL firmada que el
+ * navegador abre: sin ella, el archivo llega sin nombre útil.
+ */
+export function deriveComplianceReportKey(
+  siteId: string,
+  reportId: string,
+  renderId: string,
+): string {
+  return `${siteId}/reports/${reportId}/${renderId}.pdf`;
 }
 
 interface ObjectStorageConfig {

@@ -17,6 +17,7 @@ import { OfflineRoute } from '../routes/OfflineRoute';
 import { OutboxRoute } from '../routes/OutboxRoute';
 import { PendingRoute } from '../routes/PendingRoute';
 import { PrepareRoute } from '../routes/PrepareRoute';
+import { ComplianceRoute } from '../routes/ComplianceRoute';
 import { RecurrenceRoute } from '../routes/RecurrenceRoute';
 import { ReportIncidentRoute } from '../routes/ReportIncidentRoute';
 import { ReviewRoute } from '../routes/ReviewRoute';
@@ -79,6 +80,7 @@ function Shell(): React.JSX.Element {
         <Link to="/">Inspections</Link>
         <Link to="/actions">Corrective actions</Link>
         <Link to="/recurrence">Recurring findings</Link>
+        <Link to="/compliance">Compliance</Link>
         <Link to="/inbox">Inbox</Link>
         <Link to="/outbox">Waiting to be sent</Link>
         <button type="button" className="shell__signout" onClick={() => void signOut()}>
@@ -164,6 +166,17 @@ const recurrenceRoute = createRoute({
   component: RecurrenceRoute,
 });
 
+/**
+ * El cumplimiento (etapa 7, §3 R5). ONLINE y fuera del precacheo del service worker, por
+ * lo mismo que la recurrencia: un reporte regulatorio se genera sentado y con conexión.
+ * Guardarlo offline guardaría además una copia de un payload cuyo digest nadie recomputó.
+ */
+const complianceRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/compliance',
+  component: ComplianceRoute,
+});
+
 const inboxRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/inbox',
@@ -189,6 +202,7 @@ const routeTree = rootRoute.addChildren([
   incidentRoute,
   form7Route,
   recurrenceRoute,
+  complianceRoute,
   inboxRoute,
 ]);
 

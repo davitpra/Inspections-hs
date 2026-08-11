@@ -7,7 +7,7 @@
 | **Supersede**               | —                                                  |
 | **Superada por**            | —                                                  |
 | **Referencias**             | `docs/requisitos-v1.2.md` R3; ADR-008              |
-| **Changes que la consumen** | `corrective-action-lifecycle`, `incident-reporting` |
+| **Changes que la consumen** | `corrective-action-lifecycle`, `incident-reporting`, `compliance-period-export` (el render del PDF: el primer trabajo disparado por una persona y no por un cron) |
 
 ## Contexto y decisión
 

@@ -7,7 +7,7 @@
 | **Supersede**               | —                                                                   |
 | **Superada por**            | —                                                                   |
 | **Referencias**             | `docs/requisitos-v1.2.md` §2, §4 (LogDeAuditoría, RegistroSuplementario), R5 |
-| **Changes que la consumen** | `bootstrap-immutable-persistence`, `corrective-action-lifecycle`, `recurrence-compliance-reporting` |
+| **Changes que la consumen** | `bootstrap-immutable-persistence`, `corrective-action-lifecycle`, `recurrence-compliance-reporting`, `compliance-period-export` (implementa el hash del payload canónico de R5) |
 
 ## Contexto
 

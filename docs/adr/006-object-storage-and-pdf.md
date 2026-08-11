@@ -7,7 +7,7 @@
 | **Supersede**               | —                                                          |
 | **Superada por**            | —                                                          |
 | **Referencias**             | `docs/requisitos-v1.2.md` R5; ADR-001, ADR-002, ADR-008    |
-| **Changes que la consumen** | `offline-inspection-capture`, `recurrence-compliance-reporting` |
+| **Changes que la consumen** | `offline-inspection-capture`, `recurrence-compliance-reporting`, `compliance-period-export` (PDF con Playwright, subida desde el servidor y descarga firmada) |
 
 ## Decisión
 

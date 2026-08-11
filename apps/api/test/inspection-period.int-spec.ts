@@ -412,10 +412,21 @@ describe('el ciclo de vida del planificador', () => {
     const previousUrl = process.env.DATABASE_URL;
     const previousSecret = process.env.BETTER_AUTH_SECRET;
     const previousEnabled = process.env.JOBS_ENABLED;
+    const previousBucket = process.env.S3_BUCKET;
+    const previousKeyId = process.env.S3_ACCESS_KEY_ID;
+    const previousSecretKey = process.env.S3_SECRET_ACCESS_KEY;
 
     process.env.DATABASE_URL = db.appUrl;
     process.env.BETTER_AUTH_SECRET = 'integration-test-secret-0123456789abcdef';
     process.env.JOBS_ENABLED = 'true';
+    // `AppModule` construye `ObjectStorageService`, que se niega a existir sin bucket ni
+    // credencial: un default acá sería un default en producción, y lo que se perdería es
+    // la foto que respalda un hallazgo. Este test no toca el bucket —solo verifica el
+    // orden de arranque del planificador— así que declara valores de mentira y no
+    // depende del `.env` de la máquina que lo corra.
+    process.env.S3_BUCKET = 'integration-test-bucket';
+    process.env.S3_ACCESS_KEY_ID = 'integration-test-key';
+    process.env.S3_SECRET_ACCESS_KEY = 'integration-test-secret';
 
     try {
       const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
@@ -438,6 +449,9 @@ describe('el ciclo de vida del planificador', () => {
       restore('DATABASE_URL', previousUrl);
       restore('BETTER_AUTH_SECRET', previousSecret);
       restore('JOBS_ENABLED', previousEnabled);
+      restore('S3_BUCKET', previousBucket);
+      restore('S3_ACCESS_KEY_ID', previousKeyId);
+      restore('S3_SECRET_ACCESS_KEY', previousSecretKey);
     }
   });
 });

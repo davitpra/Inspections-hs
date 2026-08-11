@@ -234,3 +234,70 @@ textarea {
 .onboarding__degraded {
   color: var(--warn-ink);
 }
+
+/* ---------------------------------------------------------------------------
+   Cumplimiento y recurrencia (etapa 7).
+
+   La grilla de períodos es de doce celdas y no una tabla: lo que se lee de un vistazo
+   es cuáles están en rojo, no una fila por mes con cinco columnas. El estado va también
+   en TEXTO dentro de la celda y no solo en el color — un documento de cumplimiento que
+   solo se pueda leer viendo colores no lo puede leer todo el mundo. */
+
+.fraction {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0.5rem 0;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+  gap: 0.5rem;
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 1rem;
+}
+
+.period {
+  border: 1px solid #ccc;
+  border-left-width: 4px;
+  border-radius: 4px;
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.period--completed { border-left-color: #2e7d32; }
+.period--missed { border-left-color: #c62828; }
+.period--cancelled { border-left-color: #757575; }
+.period--open { border-left-color: #1565c0; }
+
+.period__month { font-weight: 600; }
+.period__status { font-size: 0.9rem; }
+
+.period__note {
+  font-size: 0.8rem;
+  color: #555;
+}
+
+.note {
+  font-size: 0.9rem;
+  color: #555;
+}
+
+.report {
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+/* El digest ENTERO, y por eso `word-break`: 64 caracteres no entran en una línea de
+   teléfono y truncarlos lo volvería inverificable, que es lo único para lo que sirve. */
+.report__hash code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+  word-break: break-all;
+  user-select: all;
+}
