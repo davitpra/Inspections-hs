@@ -170,8 +170,13 @@ export class ComplianceService {
           summaries.push({
             id: row.id,
             site_id: row.site_id,
-            range_start: row.range_start,
-            range_end: row.range_end,
+            // Por `toDate` y no tal cual, igual que en `toReport`: `pg` devuelve un
+            // `Date` para una columna `date`, y serializado da un instante ISO que
+            // `complianceReportSummarySchema` —`z.iso.date()`— rechaza. El cliente
+            // parsea contra el contrato (`api/compliance.ts` lo dice con todas las
+            // letras), así que la lista entera se caía en cuanto había un reporte.
+            range_start: toDate(row.range_start),
+            range_end: toDate(row.range_end),
             payload_hash: row.payload_hash,
             generated_by: row.generated_by,
             generated_at: row.generated_at.toISOString(),
@@ -405,8 +410,12 @@ interface ActionRow {
 interface StoredReportRow {
   id: string;
   site_id: string;
-  range_start: string;
-  range_end: string;
+  // `Date | string` y no `string`: `pg` parsea una columna `date` a `Date`, y declararlo
+  // como cadena hacía que el compilador aceptara pasarlo derecho al contrato — que es
+  // exactamente lo que hacía `listReports`. Que el tipo diga la verdad es lo que obliga
+  // a pasar por `toDate`.
+  range_start: Date | string;
+  range_end: Date | string;
   payload: CompliancePayload;
   payload_hash: string;
   generated_by: string;
