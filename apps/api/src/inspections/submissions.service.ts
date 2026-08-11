@@ -7,6 +7,7 @@ import type { PoolClient } from 'pg';
 import { DbService } from '../db/db.service';
 import type { SessionScope } from '../db/site-scope';
 import { deriveFindings, type DerivedFinding } from '../findings/derive';
+import { insertRecurrenceMarks } from '../findings/recurrence';
 import { foreignObjectKeys, mergePhotoAnswers, objectKeysOf } from './submission';
 import {
   alreadySubmitted,
@@ -119,6 +120,15 @@ export class SubmissionsService {
       // excepción declarada de ADR-008. Lo que no puede pasar nunca es la inversa:
       // `findings` no llama a `inspections`.
       await this.insertFindings(client, created.row, derived.findings);
+
+      // LA MARCA DE RECURRENCIA (etapa 7). En la misma transacción y por el mismo motivo
+      // que la derivación: la marca dice qué se sabía cuando el hallazgo nació, y un
+      // trabajo posterior la calcularía con los datos de después — que ya no es lo que
+      // se sabía. Un envío que produce hallazgos produce sus marcas o no se comete.
+      //
+      // Después de `insertFindings` y no dentro: el conteo necesita que las filas de
+      // `finding` existan para poder mirarlas.
+      await insertRecurrenceMarks(client, created.row.id);
 
       return toAccepted(created.row, true);
     });

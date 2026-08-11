@@ -309,7 +309,9 @@ const FINDING_SELECT = `
          f.location_id, f.description, f.reported_by, f.occurred_at, f.recorded_at,
          COALESCE(p.keys, ARRAY[]::text[]) AS photo_object_keys,
          a.id AS assessment_id, a.probability, a.severity, a.risk_level, a.control_level,
-         a.reason, a.supersedes_id, a.assessed_by, a.assessed_at
+         a.reason, a.supersedes_id, a.assessed_by, a.assessed_at,
+         rec.prior_count, rec.prior_count_site_wide, rec.window_months,
+         rec.first_prior_occurred_at, rec.is_recurrent
     FROM finding f
     LEFT JOIN LATERAL (
       SELECT array_agg(fp.object_key ORDER BY fp.created_at, fp.id) AS keys
@@ -320,7 +322,12 @@ const FINDING_SELECT = `
        WHERE r.finding_id = f.id
          AND NOT EXISTS (
            SELECT 1 FROM finding_risk_assessment s WHERE s.supersedes_id = r.id)
-    ) a ON true`;
+    ) a ON true
+    -- La marca de recurrencia (etapa 7). LEFT y no INNER porque hay dos clases de
+    -- hallazgo sin marca que igual tienen que aparecer en el listado: los manuales, que
+    -- no tienen item_key y por lo tanto no tienen serie, y los anteriores a la
+    -- migración 0013, que nacieron antes de que el mecanismo existiera.
+    LEFT JOIN finding_recurrence rec ON rec.finding_id = f.id`;
 
 interface FindingRow {
   id: string;
@@ -344,6 +351,12 @@ interface FindingRow {
   supersedes_id: string | null;
   assessed_by: string | null;
   assessed_at: Date | null;
+  // Los cinco son null juntos: o hay fila de marca o no la hay.
+  prior_count: number | null;
+  prior_count_site_wide: number | null;
+  window_months: number | null;
+  first_prior_occurred_at: Date | null;
+  is_recurrent: boolean | null;
 }
 
 function toFinding(row: FindingRow): Finding {
@@ -374,6 +387,20 @@ function toFinding(row: FindingRow): Finding {
             supersedes_id: row.supersedes_id,
             assessed_by: row.assessed_by as string,
             assessed_at: (row.assessed_at as Date).toISOString(),
+          },
+    // La ausencia de fila y `is_recurrent: false` dicen cosas distintas y el contrato
+    // las separa (design D8): `null` es "hallazgo manual, NUNCA se lo comparó con la
+    // historia", y `false` es "se lo comparó, y es la primera vez".
+    recurrence:
+      row.prior_count === null
+        ? null
+        : {
+            prior_count: row.prior_count,
+            prior_count_site_wide: row.prior_count_site_wide as number,
+            window_months: row.window_months as number,
+            first_prior_occurred_at:
+              row.first_prior_occurred_at?.toISOString() ?? null,
+            is_recurrent: row.is_recurrent as boolean,
           },
   };
 }

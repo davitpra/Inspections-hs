@@ -17,6 +17,7 @@ import { OfflineRoute } from '../routes/OfflineRoute';
 import { OutboxRoute } from '../routes/OutboxRoute';
 import { PendingRoute } from '../routes/PendingRoute';
 import { PrepareRoute } from '../routes/PrepareRoute';
+import { RecurrenceRoute } from '../routes/RecurrenceRoute';
 import { ReportIncidentRoute } from '../routes/ReportIncidentRoute';
 import { ReviewRoute } from '../routes/ReviewRoute';
 import { SignInRoute } from '../routes/SignInRoute';
@@ -77,6 +78,7 @@ function Shell(): React.JSX.Element {
       <nav className="shell__nav">
         <Link to="/">Inspections</Link>
         <Link to="/actions">Corrective actions</Link>
+        <Link to="/recurrence">Recurring findings</Link>
         <Link to="/inbox">Inbox</Link>
         <Link to="/outbox">Waiting to be sent</Link>
         <button type="button" className="shell__signout" onClick={() => void signOut()}>
@@ -152,6 +154,16 @@ const form7Route = createRoute({
   component: Form7Route,
 });
 
+/**
+ * La recurrencia (etapa 7). ONLINE y de solo lectura: no entra al precacheo del service
+ * worker — se mira sentado, no en 48 acres sin cobertura.
+ */
+const recurrenceRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/recurrence',
+  component: RecurrenceRoute,
+});
+
 const inboxRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/inbox',
@@ -176,6 +188,7 @@ const routeTree = rootRoute.addChildren([
   reportIncidentRoute,
   incidentRoute,
   form7Route,
+  recurrenceRoute,
   inboxRoute,
 ]);
 

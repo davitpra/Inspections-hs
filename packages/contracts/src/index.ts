@@ -24,5 +24,6 @@ export * from './incidents.js';
 export * from './inspections.js';
 export * from './notifications.js';
 export * from './regulatory-clocks.js';
+export * from './reporting.js';
 export * from './submissions.js';
 export * from './template-document.js';

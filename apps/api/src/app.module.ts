@@ -9,6 +9,7 @@ import { FindingsModule } from './findings/findings.module';
 import { InspectionsModule } from './inspections/inspections.module';
 import { JobsModule } from './jobs/jobs.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { ReportingModule } from './reporting/reporting.module';
 import { UploadsModule } from './uploads/uploads.module';
 
 @Module({
@@ -17,6 +18,12 @@ import { UploadsModule } from './uploads/uploads.module';
     JobsModule,
     AuthModule,
     InspectionsModule,
+    // ANTES QUE `FindingsModule`, Y NO ES ESTILO. `ReportingController` declara
+    // `GET findings/recurrence` y `FindingsController` declara `GET findings/:id`:
+    // Nest resuelve por orden de registro, así que invertir estas dos líneas hace que
+    // el parámetro se coma el literal y que pedir la recurrencia termine buscando un
+    // hallazgo con id "recurrence". Un test de integración lo verifica.
+    ReportingModule,
     FindingsModule,
     ActionsModule,
     IncidentsModule,

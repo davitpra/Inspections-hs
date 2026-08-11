@@ -7,4 +7,5 @@ export * from './identity';
 export * from './incidents';
 export * from './inspections';
 export * from './notifications';
+export * from './recurrence';
 export * from './templates';

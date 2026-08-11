@@ -181,6 +181,52 @@ export const manualFindingRequestSchema = z.strictObject({
 export type ManualFindingRequest = z.infer<typeof manualFindingRequestSchema>;
 
 // ---------------------------------------------------------------------------
+// La marca de recurrencia
+
+/**
+ * Lo que el hallazgo sabía de su propia historia **en el momento de nacer**
+ * (etapa 7, design D1 y D2).
+ *
+ * Se calcula dentro de la misma transacción que inserta el hallazgo y no se vuelve
+ * a tocar nunca: es un hecho fechado, no un cálculo que se repite. Por eso lleva
+ * `window_months` — el que la lee tiene que saber con qué ventana se calculó, y
+ * puede no ser la del reporte que está mirando. Que `prior_count` diga 3 y la
+ * serie de la vista diga 6 es correcto y está previsto.
+ *
+ * **`is_recurrent` no viaja en ningún request**: es una columna generada por el
+ * motor a partir de `prior_count`, igual que `risk_level` (D5).
+ *
+ * LA DISTINCIÓN QUE ESTE ESQUEMA EXISTE PARA SOSTENER, y que se pierde si alguien
+ * decide "simplificar" el nulable:
+ *
+ *   `recurrence: null`            → hallazgo manual. NUNCA se comparó con la historia.
+ *   `is_recurrent: false`         → se comparó, y es la primera vez.
+ *
+ * Colapsar los dos a `false` afirmaría que el hallazgo manual pasó por la
+ * comparación, y no pasa: sin `item_key` no hay serie a la que pertenecer. Es el
+ * punto ciego que §6-bis pregunta 11 dejó escrito, y el contrato tiene que dejarlo
+ * visible en vez de taparlo (D8).
+ */
+export const findingRecurrenceSchema = z.strictObject({
+  /** Cuántos hallazgos previos de la misma `item_key` **y la misma ubicación**. */
+  prior_count: z.number().int().min(0),
+
+  /** Cuántos de la misma `item_key` en cualquier ubicación del sitio. */
+  prior_count_site_wide: z.number().int().min(0),
+
+  /** La ventana con la que se contaron los dos anteriores, en meses. */
+  window_months: z.number().int().min(1).max(60),
+
+  /** El `occurred_at` del más viejo de los previos. `null` cuando no hubo ninguno. */
+  first_prior_occurred_at: z.iso.datetime({ offset: true }).nullable(),
+
+  /** Calculado por el motor como `prior_count > 0`. Se lee, no se escribe. */
+  is_recurrent: z.boolean(),
+});
+
+export type FindingRecurrence = z.infer<typeof findingRecurrenceSchema>;
+
+// ---------------------------------------------------------------------------
 // Lo que se lee
 
 /**
@@ -208,6 +254,13 @@ export const findingSchema = z.strictObject({
   occurred_at: z.iso.datetime({ offset: true }),
   recorded_at: z.iso.datetime({ offset: true }),
   assessment: riskAssessmentSchema.nullable(),
+
+  /**
+   * `null` en un hallazgo manual —y en uno anterior a la migración 0013, que no
+   * tiene marca y no la va a tener—. Ver `findingRecurrenceSchema`: la ausencia y
+   * `is_recurrent: false` dicen cosas distintas.
+   */
+  recurrence: findingRecurrenceSchema.nullable(),
 });
 
 export type Finding = z.infer<typeof findingSchema>;
