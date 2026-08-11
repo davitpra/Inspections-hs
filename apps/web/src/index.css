@@ -1,14 +1,98 @@
+/* ---------------------------------------------------------------------------
+   Tokens.
+
+   Dos capas y no tres: primitivas (el valor crudo, sin opinión sobre dónde va) y
+   semánticas (para qué sirve). La tercera capa —un token por componente— es la que
+   paga cuando hay varios temas o una librería que terceros extienden; acá no hay ni
+   una cosa ni la otra, y agregarla sería una indirección que no resuelve nada.
+
+   La regla que sí importa: **fuera de este bloque no se escribe un color literal.**
+   Lo que se rompió antes fue exactamente eso —la etapa 7 inventó su propia paleta en
+   hex y quedaron dos sistemas conviviendo—, y se rompe de nuevo si el próximo estado
+   nuevo no encuentra acá el token que necesita.
+
+   Los contrastes anotados son sobre `--paper` y están medidos, no estimados. El piso
+   es 4.5:1 para texto (WCAG 1.4.3) y 3:1 para bordes que delimitan un control o
+   transportan estado (1.4.11) —esto se lee en una planta, con luz de más y una
+   pantalla de teléfono.
+   --------------------------------------------------------------------------- */
+
 :root {
   font-family: system-ui, sans-serif;
   line-height: 1.5;
 
-  --ink: #16211c;
-  --paper: #ffffff;
-  --brand: #0f3d2e;
-  --warn-bg: #fdf1dd;
-  --warn-ink: #7a4b06;
-  --muted: #5d6b64;
-  --line: #d8e0db;
+  /* Primitivas -------------------------------------------------------------- */
+
+  --green-900: #0f3d2e;
+  --green-800: #16211c;
+  --green-600: #1f6b3a;
+  --green-300: #849089;
+  --green-200: #d8e0db;
+  --green-50: #f1f4f2;
+  --grey-600: #63706a;
+  --grey-500: #5d6b64;
+  --red-700: #a32020;
+  --blue-800: #15558f;
+  --amber-800: #7a4b06;
+  --amber-100: #fdf1dd;
+  --white: #ffffff;
+
+  /* Semánticas -------------------------------------------------------------- */
+
+  --ink: var(--green-800); /* 16.56:1 */
+  --paper: var(--white);
+  --brand: var(--green-900); /* 12.16:1 en ambos sentidos */
+  --muted: var(--grey-500); /* 5.60:1 */
+  --warn-bg: var(--amber-100);
+  --warn-ink: var(--amber-800); /* 7.40:1; 6.63:1 sobre --warn-bg */
+
+  /*
+   * Dos pesos de línea, porque son dos cosas distintas y sólo una tiene piso legal.
+   * `--line` separa (divisorias de filas, cajas de aviso): es decorativa y 1.35:1
+   * alcanza. `--line-control` dibuja el borde de un input o un botón, que es lo que
+   * dice dónde se toca, y 1.4.11 le exige 3:1 —el valor viejo daba 1.35:1 y era el
+   * único incumplimiento real de la hoja.
+   */
+  --line: var(--green-200);
+  --line-control: var(--green-300); /* 3.32:1 */
+
+  /*
+   * Estado de un período de cumplimiento. El color es redundante por diseño: la celda
+   * dice el estado en palabras (ver la grilla más abajo) y esto sólo lo acompaña. Aun
+   * así cada uno pasa 4.5:1, porque un token de estado termina usándose como texto
+   * tarde o temprano y conviene que ya sirva cuando pase.
+   */
+  --state-ok: var(--green-600); /* 6.52:1 */
+  --state-danger: var(--red-700); /* 7.54:1 */
+  --state-neutral: var(--grey-600); /* 5.18:1 */
+  --state-info: var(--blue-800); /* 7.70:1 */
+
+  /*
+   * Un control inerte. 1.4.3 exime del contraste a lo deshabilitado, así que acá lo que
+   * se busca no es legibilidad sino que se distinga de un control vivo *sin* leerlo.
+   */
+  --disabled-bg: var(--green-50);
+  --disabled-ink: var(--grey-500);
+
+  /* Un solo radio, y el de la píldora. Antes había 8px arriba y 4px en la etapa 7 sin
+     que la diferencia significara nada. */
+  --radius: 8px;
+  --radius-pill: 999px;
+
+  /*
+   * Cuatro pasos. Los tamaños ya existían sueltos; esto los nombra antes de que la
+   * próxima etapa invente el quinto —que fue exactamente lo que pasó con el color.
+   *
+   * Había además un 0.85rem para el badge y un 0.9rem para todo lo demás: 0.8px de
+   * diferencia, un paso que no significaba nada. Colapsados en `--text-sm`.
+   *
+   * `--text-xs` es el piso y se usa sólo donde el tamaño es la razón de ser del dato
+   * (el digest de 64 caracteres, que truncado no sirve). No es un tamaño para poner
+   * información que haya que leer con guantes puestos.
+   */
+  --text-xs: 0.8rem;
+  --text-sm: 0.9rem;
+  --text-lg: 1.25rem;
 }
 
 body {
@@ -27,8 +111,8 @@ button,
   min-width: 48px;
   padding: 0.6rem 1rem;
   font: inherit;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  border: 1px solid var(--line-control);
+  border-radius: var(--radius);
   background: var(--paper);
   color: inherit;
 }
@@ -45,9 +129,52 @@ textarea {
   width: 100%;
   padding: 0.6rem;
   font: inherit;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  border: 1px solid var(--line-control);
+  border-radius: var(--radius);
   box-sizing: border-box;
+}
+
+/*
+ * `select` quedaba afuera de las dos reglas de arriba y se estaba dibujando con el
+ * default del navegador: alto de ~30px y tipografía de ~13px en Android. El piso de
+ * 48px no es negociable acá y uno de los nueve `select` de la app es el que elige la
+ * ubicación de un hallazgo, que es el momento de más consecuencia de la captura.
+ *
+ * Sin `width: 100%`, a diferencia de `input`: los `select` de filtro conviven en una
+ * fila con otros controles y estirarlos al ancho completo rompería esa fila. El
+ * objetivo de toque es el alto, y el alto ya está.
+ */
+select {
+  min-height: 48px;
+  padding: 0.6rem;
+  font: inherit;
+  border: 1px solid var(--line-control);
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: inherit;
+  box-sizing: border-box;
+}
+
+/*
+ * Un control deshabilitado tiene que verse deshabilitado.
+ *
+ * Las reglas de arriba fijan `background` y `color` sin variante, y un estilo de autor
+ * le gana al del navegador: eso estaba anulando el gris con que Android marca un
+ * control inerte, y el resultado era un botón muerto con cara de botón vivo. El caso
+ * que importa es "Sign and submit" en la revisión, que se apaga cuando la inspección
+ * está incompleta: sin esta regla se toca, no pasa nada, y la pantalla no dice por qué.
+ *
+ * Esto marca que el control no responde. NO explica la causa —eso es trabajo del texto
+ * de la pantalla, y donde ya está escrito (el "Sending…" del outbox) alcanza con eso.
+ */
+button:disabled,
+input:disabled,
+textarea:disabled,
+select:disabled {
+  background: var(--disabled-bg);
+  color: var(--disabled-ink);
+  border-color: var(--line);
+  cursor: not-allowed;
 }
 
 [aria-invalid='true'] {
@@ -65,7 +192,7 @@ textarea {
   margin-left: auto;
   min-height: auto;
   padding: 0.35rem 0.75rem;
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
 }
 
 .shell__main {
@@ -105,7 +232,7 @@ textarea {
 .notice {
   padding: 0.75rem;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius);
   color: var(--muted);
 }
 
@@ -131,9 +258,9 @@ textarea {
 }
 
 .badge {
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   padding: 0.15rem 0.5rem;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   border: 1px solid var(--line);
 }
 
@@ -210,12 +337,12 @@ textarea {
   width: 96px;
   height: 96px;
   object-fit: cover;
-  border-radius: 8px;
+  border-radius: var(--radius);
 }
 
 .photos__state {
   display: block;
-  font-size: 0.8rem;
+  font-size: var(--text-xs);
   color: var(--muted);
 }
 
@@ -227,7 +354,7 @@ textarea {
 .onboarding {
   padding: 0.75rem 1rem;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius);
   margin-bottom: 1rem;
 }
 
@@ -244,7 +371,7 @@ textarea {
    solo se pueda leer viendo colores no lo puede leer todo el mundo. */
 
 .fraction {
-  font-size: 1.25rem;
+  font-size: var(--text-lg);
   font-weight: 600;
   margin: 0.5rem 0;
 }
@@ -259,36 +386,36 @@ textarea {
 }
 
 .period {
-  border: 1px solid #ccc;
+  border: 1px solid var(--line);
   border-left-width: 4px;
-  border-radius: 4px;
+  border-radius: var(--radius);
   padding: 0.5rem;
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
 }
 
-.period--completed { border-left-color: #2e7d32; }
-.period--missed { border-left-color: #c62828; }
-.period--cancelled { border-left-color: #757575; }
-.period--open { border-left-color: #1565c0; }
+.period--completed { border-left-color: var(--state-ok); }
+.period--missed { border-left-color: var(--state-danger); }
+.period--cancelled { border-left-color: var(--state-neutral); }
+.period--open { border-left-color: var(--state-info); }
 
 .period__month { font-weight: 600; }
-.period__status { font-size: 0.9rem; }
+.period__status { font-size: var(--text-sm); }
 
 .period__note {
-  font-size: 0.8rem;
-  color: #555;
+  font-size: var(--text-xs);
+  color: var(--muted);
 }
 
 .note {
-  font-size: 0.9rem;
-  color: #555;
+  font-size: var(--text-sm);
+  color: var(--muted);
 }
 
 .report {
-  border: 1px solid #ddd;
-  border-radius: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
   padding: 0.75rem;
   margin-bottom: 0.5rem;
 }
@@ -297,7 +424,7 @@ textarea {
    teléfono y truncarlos lo volvería inverificable, que es lo único para lo que sirve. */
 .report__hash code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.8rem;
+  font-size: var(--text-xs);
   word-break: break-all;
   user-select: all;
 }
