@@ -33,7 +33,12 @@ const queryClient = new QueryClient({
   },
 });
 
-void registerServiceWorker();
+// Solo en producción. El service worker responde las rutas de captura únicamente desde
+// el precache (`sw.ts`), y ese precache se arma con `globDirectory: 'dist'`: en `dev` no
+// hay build, la lista queda vacía y toda navegación a `/` termina en `Response.error()`.
+// Registrarlo acá dejaría el dev server inalcanzable, y con `clientsClaim` el worker
+// sobrevive al reinicio, así que el fallo se arrastra hasta desregistrarlo a mano.
+if (import.meta.env.PROD) void registerServiceWorker();
 refreshOnReconnect(sessionClient);
 startOutbox();
 

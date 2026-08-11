@@ -15,6 +15,15 @@ import { defineConfig } from 'vitest/config';
  * campo.
  */
 export default defineConfig({
+  server: {
+    // Vite por defecto escucha solo en `127.0.0.1`. Bajo WSL2 el navegador de Windows
+    // resuelve `localhost` a `::1` primero y el reenvío no llega a esa escucha IPv4:
+    // el dev server queda inalcanzable. Escuchar en todas las interfaces también es lo
+    // que permite abrir la PWA desde un teléfono en la misma red, que es la única forma
+    // de probar de verdad la instalación y el modo offline.
+    host: true,
+    port: 5173,
+  },
   plugins: [
     react(),
     serwist({
