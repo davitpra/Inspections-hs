@@ -59,6 +59,42 @@ Para la primera credencial del coordinador —el arranque real, sin datos invent
 comando es `pnpm auth:bootstrap`, que emite una invitación y muestra su token una sola
 vez.
 
+### Historial: que todas las pantallas tengan algo que mostrar
+
+`demo:data` deja el entorno *usable* y ahí se detiene. Con eso `/` tiene una fila y el
+resto de la aplicación está en blanco: acciones correctivas, incidentes, recurrencia y
+cumplimiento son consecuencias de meses de trabajo que un entorno recién levantado no
+tuvo.
+
+```bash
+pnpm demo:content
+```
+
+Siembra cinco meses de historial en St. Thomas —tres inspecciones enviadas, una cancelada
+y un período omitido—, y con eso: hallazgos derivados y clasificados, una serie recurrente
+de tres ocurrencias, un hallazgo de entrada manual, acciones correctivas en los cuatro
+estados más una vencida, tres incidentes (cerrado, en investigación y recién reportado) y
+un reporte de cumplimiento congelado con su PDF.
+
+**Todo pasa por la API, con sesión**, salvo dos cosas que ningún endpoint puede hacer y no
+debería poder: las inspecciones programadas de los meses pasados —el planificador abre el
+período corriente y nada más— y una acción ya vencida, porque `due_at` lo calcula el
+servidor sobre su propio reloj. Esas dos van por SQL con los GRANT de `hs_app`, y están
+declaradas en la cabecera del script.
+
+Necesita `pnpm demo:data` corrido antes, la API arriba y MinIO arriba (sube fotos de
+verdad). Es idempotente.
+
+Usa las dos cuentas y hacen falta las dos: el coordinador clasifica, abre acciones,
+investiga y genera el reporte, y el `jhsc_member` es el único que ejecuta inspecciones.
+**No cambia ninguna contraseña.** La del inspector sale de `DEMO_PASSWORD` —es la cuenta
+que crea `demo:data`—; la del coordinador, de `DEMO_COORDINATOR_PASSWORD`, porque esa
+cuenta es real y puede tener ya la suya:
+
+```bash
+DEMO_COORDINATOR_PASSWORD='la que tenga' pnpm demo:content
+```
+
 ### Cuando te quedás afuera
 
 ```bash
@@ -89,6 +125,7 @@ espera, y la credencial la revoca el coordinador desde la aplicación
 | `pnpm db:jobs:install` | Instala/actualiza el esquema `pgboss`. Paso de despliegue, no de arranque. |
 | `pnpm db:seed` | Datos de referencia idempotentes. Sin credenciales. |
 | `pnpm demo:data` | Entorno de demo local usable. Solo a mano. |
+| `pnpm demo:content` | Historial de demo: hallazgos, acciones, incidentes, recurrencia y cumplimiento. |
 | `pnpm auth:bootstrap [userId]` | Emite la invitación de una cuenta sin credencial. |
 | `pnpm auth:reset-password <userId\|email>` | Contraseña nueva, o `--unlock` para destrabar. Solo fuera de producción. |
 | `pnpm roster:import <csv>` | Importa el roster de ADP. |

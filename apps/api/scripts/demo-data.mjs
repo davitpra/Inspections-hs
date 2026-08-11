@@ -1,3 +1,6 @@
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { PgBoss } from 'pg-boss';
 import pg from 'pg';
 
@@ -28,7 +31,12 @@ import { COORDINATOR_ID, issueInvitation } from './bootstrap-invitation.mjs';
 
 // Ids literales fijos, por el mismo motivo que `002_sites.sql` y `004`: los comandos y
 // las consultas a mano nombran la cuenta sin una subconsulta.
-const INSPECTOR = {
+//
+// Exportados —igual que `issueInvitation` en `bootstrap-invitation.mjs`— para que
+// `demo-content.mjs` construya su historial sobre ESTA cuenta y ESTA planta en vez de
+// repetir los literales. Dos copias del uuid del inspector es una copia que alguien
+// cambia sola.
+export const INSPECTOR = {
   personId: '7e150000-0000-4000-8000-0000000000d1',
   accountId: 'acc00000-0000-4000-8000-0000000000d1',
   employeeNumber: 'DEMO-0001',
@@ -37,8 +45,8 @@ const INSPECTOR = {
   email: 'demo.inspector@example.com',
 };
 
-const ST_THOMAS = '5717e900-0000-4000-8000-000000000001';
-const GLENCOE = '5717e900-0000-4000-8000-000000000002';
+export const ST_THOMAS = '5717e900-0000-4000-8000-000000000001';
+export const GLENCOE = '5717e900-0000-4000-8000-000000000002';
 
 /** El roster de demo: gente SIN cuenta, que es el caso normal (§4). */
 const ROSTER = [
@@ -50,9 +58,9 @@ const ROSTER = [
 ];
 
 /** Igual que `SITE_TIME_ZONE` en `src/jobs/job-registry.ts`. */
-const SITE_TIME_ZONE = 'America/Toronto';
+export const SITE_TIME_ZONE = 'America/Toronto';
 
-const DEFAULT_PASSWORD = 'demo-inspector-2026';
+export const DEFAULT_PASSWORD = 'demo-inspector-2026';
 const OPEN_PERIOD_JOB = 'inspections.open-period';
 const OPEN_PERIOD_TIMEOUT_MS = 15_000;
 
@@ -61,7 +69,7 @@ const OPEN_PERIOD_TIMEOUT_MS = 15_000;
  * `src/inspections/period.ts`: el período es una fecha civil, no un instante, y con
  * `Intl` porque el horario de verano mueve el offset dos veces al año.
  */
-function currentPeriodStart(instant) {
+export function currentPeriodStart(instant) {
   const civil = new Intl.DateTimeFormat('en-CA', {
     timeZone: SITE_TIME_ZONE,
     year: 'numeric',
@@ -422,7 +430,12 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  process.exitCode = 1;
-  process.stderr.write(`${error.message}\n`);
-});
+// Solo cuando se lo invoca como script, no cuando lo importa `demo-content.mjs`. Mismo
+// guard que `bootstrap-invitation.mjs` y por el mismo motivo: un import que además
+// siembra sería un import con efectos.
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    process.exitCode = 1;
+    process.stderr.write(`${error.message}\n`);
+  });
+}

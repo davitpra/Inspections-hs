@@ -21,6 +21,7 @@
     "roster:import": "pnpm --filter api roster:import",
     "auth:bootstrap": "pnpm --filter api auth:bootstrap",
     "demo:data": "pnpm --filter api demo:data",
+    "demo:content": "pnpm --filter api demo:content",
     "auth:reset-password": "pnpm --filter api auth:reset-password"
   },
   "devDependencies": {
