@@ -4,6 +4,7 @@ export * from './auth';
 export * from './catalog';
 export * from './findings';
 export * from './identity';
+export * from './incidents';
 export * from './inspections';
 export * from './notifications';
 export * from './templates';

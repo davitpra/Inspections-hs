@@ -9,11 +9,15 @@ import {
 import { ActionRoute } from '../routes/ActionRoute';
 import { ActionsRoute } from '../routes/ActionsRoute';
 import { CaptureRoute } from '../routes/CaptureRoute';
+import { Form7Route } from '../routes/Form7Route';
 import { InboxRoute } from '../routes/InboxRoute';
+import { IncidentRoute } from '../routes/IncidentRoute';
+import { IncidentsRoute } from '../routes/IncidentsRoute';
 import { OfflineRoute } from '../routes/OfflineRoute';
 import { OutboxRoute } from '../routes/OutboxRoute';
 import { PendingRoute } from '../routes/PendingRoute';
 import { PrepareRoute } from '../routes/PrepareRoute';
+import { ReportIncidentRoute } from '../routes/ReportIncidentRoute';
 import { ReviewRoute } from '../routes/ReviewRoute';
 import { SignInRoute } from '../routes/SignInRoute';
 import { SessionProvider, useAppSession } from './session-context';
@@ -28,6 +32,11 @@ import { SessionProvider, useAppSession } from './session-context';
  * Las rutas de la etapa 5 —acciones correctivas y bandeja— son ONLINE (design D15) y no
  * dependen del precacheo para funcionar: una acción se ejecuta con red. Están en el
  * mismo shell porque son la misma aplicación, no porque necesiten estar sin señal.
+ *
+ * Las de la etapa 6 —incidentes— también son online, y por un motivo propio (design D14):
+ * un accidente se reporta desde una oficina o un teléfono con señal, y un reporte
+ * esperando sincronización sería invisible para todos mientras los plazos del MLITSD ya
+ * corren desde el momento del evento.
  */
 
 const rootRoute = createRootRoute({
@@ -118,6 +127,31 @@ const actionRoute = createRoute({
   component: ActionRoute,
 });
 
+const incidentsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/incidents',
+  component: IncidentsRoute,
+});
+
+// Antes que `/incidents/$id`: si no, `report` se leería como un id.
+const reportIncidentRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/incidents/report',
+  component: ReportIncidentRoute,
+});
+
+const incidentRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/incidents/$id',
+  component: IncidentRoute,
+});
+
+const form7Route = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/incidents/$id/form7',
+  component: Form7Route,
+});
+
 const inboxRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/inbox',
@@ -138,6 +172,10 @@ const routeTree = rootRoute.addChildren([
   outboxRoute,
   actionsRoute,
   actionRoute,
+  incidentsRoute,
+  reportIncidentRoute,
+  incidentRoute,
+  form7Route,
   inboxRoute,
 ]);
 

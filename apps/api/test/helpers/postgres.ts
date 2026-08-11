@@ -135,6 +135,54 @@ export async function inScope<T extends Record<string, unknown>>(
   }
 }
 
+/**
+ * Como `inScope`, pero declarando también la CUENTA y el ROL.
+ *
+ * Existe desde 0012: la política `RESTRICTIVE` de `incident` no se puede evaluar solo
+ * con `app.site_ids`, y una transacción que declara sitio pero no rol no ve ningún
+ * incidente. Es lo que permite probar por SQL crudo —y no solo por el servicio— que un
+ * supervisor no ve el incidente de otro supervisor.
+ *
+ * `role` puede ir en `null` a propósito: ese es el caso que prueba el modo de falla
+ * cerrado.
+ */
+export async function inSession<T extends Record<string, unknown>>(
+  pool: Pool,
+  session: { siteIds: readonly string[]; userId?: string | null; role?: string | null },
+  sql: string,
+  params: unknown[] = [],
+): Promise<T[]> {
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    if (session.siteIds.length > 0) {
+      await client.query('SELECT set_config($1, $2, true)', [
+        'app.site_ids',
+        session.siteIds.join(','),
+      ]);
+    }
+
+    if (session.userId) {
+      await client.query('SELECT set_config($1, $2, true)', ['app.user_id', session.userId]);
+    }
+
+    if (session.role) {
+      await client.query('SELECT set_config($1, $2, true)', ['app.role', session.role]);
+    }
+
+    const result = await client.query<T>(sql, params);
+    await client.query('COMMIT');
+    return result.rows;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 /** La única fila del resultado. Falla ruidosamente si no hay ninguna. */
 export function one<T>(rows: readonly T[]): T {
   const [row] = rows;

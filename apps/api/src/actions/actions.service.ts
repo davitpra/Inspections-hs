@@ -6,6 +6,7 @@ import {
   type Action,
   type ActionState,
   type CreateActionRequest,
+  type CreateInvestigationActionRequest,
   type Severity,
   type TransitionRequest,
 } from '@hs/contracts';
@@ -88,6 +89,7 @@ export class ActionsService {
         insertAction(client, {
           siteId: finding.siteId,
           findingId,
+          investigationId: null,
           assigneePersonId: payload.assignee_person_id,
           description: payload.description,
           severity: finding.severity,
@@ -202,6 +204,67 @@ export class ActionsService {
     });
   }
 
+  /**
+   * Abrir una acción sobre una investigación (§4, etapa 6).
+   *
+   * **El mismo motor, la misma tabla de plazos, la misma evidencia, el mismo verificador
+   * distinto y el mismo escalamiento.** Lo único que cambia es de dónde sale la
+   * severidad: un hallazgo la tiene clasificada y una investigación no, así que acá la
+   * declara el coordinador y se congela igual en la fila (design D9).
+   *
+   * Que el resto del ciclo de vida no distinga el padre no es una coincidencia: es lo
+   * que hace que "el incidente usa el mismo motor que la acción correctiva" (§4) sea
+   * cierto en el código y no solo en el documento.
+   */
+  async createForInvestigation(
+    session: SessionScope,
+    investigationId: string,
+    payload: CreateInvestigationActionRequest,
+  ): Promise<Action> {
+    if (session.role !== 'hs_coordinator') {
+      throw actionForbidden('Only the HS coordinator opens a corrective action');
+    }
+
+    return this.db.withSessionClient(session, async (client) => {
+      const siteId = await this.requireInvestigationSite(client, investigationId);
+
+      await this.requireAssignablePerson(client, payload.assignee_person_id, siteId);
+
+      const now = new Date();
+
+      const actionId = await this.guarded(() =>
+        insertAction(client, {
+          siteId,
+          findingId: null,
+          investigationId,
+          assigneePersonId: payload.assignee_person_id,
+          description: payload.description,
+          severity: payload.severity,
+          dueAt: dueAt(payload.severity, now),
+          remediationGroupId: payload.remediation_group_id ?? null,
+          createdBy: session.userId,
+        }),
+      );
+
+      await this.guarded(() =>
+        insertEvent(client, {
+          actionId,
+          siteId,
+          fromState: null,
+          toState: 'open',
+          actorUserId: session.userId,
+          note: null,
+          reason: null,
+          occurredAt: now,
+        }),
+      );
+
+      await this.notifyAssignee(client, actionId);
+
+      return this.readOne(client, actionId);
+    });
+  }
+
   async list(session: SessionScope): Promise<Action[]> {
     return this.db.withSessionClient(session, (client) => listActions(client));
   }
@@ -244,6 +307,31 @@ export class ActionsService {
     if (row.severity === null) throw findingNotClassified();
 
     return { siteId: row.site_id, severity: row.severity };
+  }
+
+  /**
+   * La investigación existe dentro de lo que la sesión ve, y su planta es la de la
+   * acción.
+   *
+   * La política `RESTRICTIVE` de 0012 se aplica acá también: si el coordinador no
+   * pudiera ver el incidente, esta consulta no devolvería fila y la acción no se crearía.
+   * No hay `WHERE site_id` ni `WHERE reported_by`.
+   */
+  private async requireInvestigationSite(
+    client: PoolClient,
+    investigationId: string,
+  ): Promise<string> {
+    const { rows } = await client.query<{ site_id: string }>(
+      `SELECT site_id FROM investigation WHERE id = $1`,
+      [investigationId],
+    );
+
+    const row = rows[0];
+
+    // Una investigación que no se ve y una que no existe se responden igual.
+    if (!row) throw actionNotFound();
+
+    return row.site_id;
   }
 
   /**

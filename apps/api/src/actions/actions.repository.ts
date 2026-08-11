@@ -44,7 +44,9 @@ export async function currentState(
 
 export interface InsertActionInput {
   siteId: string;
-  findingId: string;
+  /** Exactamente uno de los dos; el `CHECK` de 0012 rechaza ninguno y rechaza los dos. */
+  findingId: string | null;
+  investigationId: string | null;
   assigneePersonId: string;
   description: string;
   severity: Severity;
@@ -59,13 +61,14 @@ export async function insertAction(
 ): Promise<string> {
   const { rows } = await client.query<{ id: string }>(
     `INSERT INTO corrective_action
-       (site_id, finding_id, assignee_person_id, description, severity, due_at,
-        remediation_group_id, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       (site_id, finding_id, investigation_id, assignee_person_id, description, severity,
+        due_at, remediation_group_id, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      RETURNING id`,
     [
       input.siteId,
       input.findingId,
+      input.investigationId,
       input.assigneePersonId,
       input.description,
       input.severity,
@@ -207,7 +210,8 @@ export async function lastExecutor(
  * existe— y `overdue` de comparar `due_at` con el reloj del servidor al leer.
  */
 const ACTION_SELECT = `
-  SELECT a.id, a.site_id, a.finding_id, a.assignee_person_id, a.description, a.severity,
+  SELECT a.id, a.site_id, a.finding_id, a.investigation_id, a.assignee_person_id,
+         a.description, a.severity,
          a.due_at, a.remediation_group_id, a.created_by, a.created_at,
          s.to_state AS state,
          (a.due_at < now()) AS overdue,
@@ -289,7 +293,8 @@ interface RawEscalation {
 interface ActionRow {
   id: string;
   site_id: string;
-  finding_id: string;
+  finding_id: string | null;
+  investigation_id: string | null;
   assignee_person_id: string;
   description: string;
   severity: Severity;
@@ -308,6 +313,7 @@ function toAction(row: ActionRow): Action {
     id: row.id,
     site_id: row.site_id,
     finding_id: row.finding_id,
+    investigation_id: row.investigation_id,
     assignee_person_id: row.assignee_person_id,
     description: row.description,
     severity: row.severity,

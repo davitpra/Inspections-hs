@@ -89,7 +89,9 @@ export async function withSiteScope<T>(
   scope: SiteScope,
   run: (client: PoolClient) => Promise<T>,
 ): Promise<T> {
-  return runScoped(pool, scope.siteIds, scope.userId ?? null, null, null, run);
+  // Sin rol: `SiteScope` es el camino de los seeds, las migraciones y los comandos de
+  // servidor, que no tienen una sesión detrás. Ver el comentario de `app.role` abajo.
+  return runScoped(pool, scope.siteIds, scope.userId ?? null, null, null, null, run);
 }
 
 /**
@@ -125,6 +127,7 @@ export async function withSessionScope<T>(
     pool,
     session.siteIds,
     session.userId,
+    session.role,
     isAuditor ? (session.recordsFrom ?? null) : null,
     isAuditor ? (session.recordsTo ?? null) : null,
     async (client) => {
@@ -186,6 +189,7 @@ async function runScoped<T>(
   pool: Pool,
   siteIds: readonly string[],
   userId: string | null,
+  role: string | null,
   recordsFrom: string | null,
   recordsTo: string | null,
   run: (client: PoolClient) => Promise<T>,
@@ -201,6 +205,22 @@ async function runScoped<T>(
 
     if (userId) {
       await client.query('SELECT set_config($1, $2, true)', ['app.user_id', userId]);
+    }
+
+    // El ROL en la conexión (0012, design D3). La política `RESTRICTIVE` de `incident`
+    // no alcanza con `site_id`: necesita distinguir al coordinador y a gerencia —que
+    // ven todos los incidentes de su alcance— de un supervisor, que ve solo los que
+    // cargó él.
+    //
+    // Con `true` como en las otras tres: muere con la transacción, así que una conexión
+    // devuelta al pool no arrastra el rol al request siguiente.
+    //
+    // SIN ROL NO SE VE NINGÚN INCIDENTE, y ese es el default correcto: un alcance
+    // explícito de seed o de migración no declara rol, y el modo de falla cerrado hace
+    // que un olvido se manifieste como "no veo nada" —que se investiga— y no como "veo
+    // de más", que no se nota.
+    if (role) {
+      await client.query('SELECT set_config($1, $2, true)', ['app.role', role]);
     }
 
     if (recordsFrom) {

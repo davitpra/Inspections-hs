@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ActionsModule } from './actions/actions.module';
+import { IncidentsModule } from './incidents/incidents.module';
 import { AuthModule } from './auth/auth.module';
 import { DbModule } from './db/db.module';
 import { FindingsModule } from './findings/findings.module';
@@ -18,6 +19,7 @@ import { UploadsModule } from './uploads/uploads.module';
     InspectionsModule,
     FindingsModule,
     ActionsModule,
+    IncidentsModule,
     NotificationsModule,
     UploadsModule,
   ],

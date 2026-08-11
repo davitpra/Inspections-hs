@@ -97,6 +97,11 @@ export class SessionService {
    * Ninguna de las tablas que toca lleva política RLS, y por eso corre fuera de
    * `withSession`: una política sobre el alcance que se lee para CONSTRUIR el alcance
    * es un arranque circular.
+   *
+   * **`role` se lee de `app_user` en CADA request, igual que `site_ids`**, y desde 0012
+   * eso dejó de ser solo un dato del guard: `withSessionScope` lo pone en `app.role` y
+   * la política de visibilidad de `incident` lo consulta. Un rol congelado en el token
+   * dejaría a una cuenta degradada leyendo incidentes hasta que el token expire.
    */
   async resolve(token: string): Promise<SessionContext> {
     const { rows } = await this.db.unscopedPool.query<ResolvedRow>(

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { severitySchema } from './findings.js';
+import { incidentClassificationSchema } from './incidents.js';
 
 /**
  * La bandeja in-app.
@@ -17,6 +18,7 @@ export const NOTIFICATION_KINDS = [
   'corrective_action_assigned',
   'corrective_action_overdue_supervisor',
   'corrective_action_overdue_management',
+  'incident_reported',
 ] as const;
 
 export const notificationKindSchema = z.enum(NOTIFICATION_KINDS);
@@ -78,10 +80,33 @@ export const correctiveActionOverduePayloadSchema = z.strictObject({
 export type CorrectiveActionOverduePayload = z.infer<typeof correctiveActionOverduePayloadSchema>;
 
 /**
+ * El payload de `incident_reported`: qué pasó, dónde y de qué gravedad. §3 R4 pide
+ * que el sistema notifique al coordinador de HS.
+ *
+ * **No lleva el nombre ni el número de empleado del sujeto, y esa ausencia es el
+ * requisito** (design D11). `notification` no tiene la política de visibilidad
+ * angosta del incidente —la lee su destinatario y punto—, así que un payload con la
+ * identidad de la persona accidentada saltearía por una tabla adyacente la regla RLS
+ * que 0012 acaba de escribir. Seguir el enlace vuelve a pasar por la política, y a
+ * quien no puede ver el incidente no le devuelve nada.
+ *
+ * Tampoco lleva narrativa, por lo mismo. Lleva la clasificación porque es lo que le
+ * dice al coordinador si tiene que dejar lo que está haciendo.
+ */
+export const incidentReportedPayloadSchema = z.strictObject({
+  incident_id: z.uuid(),
+  classification: incidentClassificationSchema,
+  occurred_at: z.iso.datetime({ offset: true }),
+  reported_at: z.iso.datetime({ offset: true }),
+});
+
+export type IncidentReportedPayload = z.infer<typeof incidentReportedPayloadSchema>;
+
+/**
  * **La notificación, discriminada por `kind`.**
  *
  * Hasta la etapa 5 hubo un solo `kind` y el `payload` tenía una sola forma. Ahora
- * son cuatro, y el comentario de arriba —"el consumidor tiene que saber leer el
+ * son cinco, y el comentario de arriba —"el consumidor tiene que saber leer el
  * payload"— se cobra acá: una unión discriminada hace que agregar un `kind` sin
  * decir cómo se lee sea un error de compilación en la UI, y que un `kind`
  * desconocido llegado de la base falle ruidoso al parsear en vez de renderizar una
@@ -117,6 +142,11 @@ export const notificationSchema = z.discriminatedUnion('kind', [
     ...notificationBase,
     kind: z.literal('corrective_action_overdue_management'),
     payload: correctiveActionOverduePayloadSchema,
+  }),
+  z.strictObject({
+    ...notificationBase,
+    kind: z.literal('incident_reported'),
+    payload: incidentReportedPayloadSchema,
   }),
 ]);
 

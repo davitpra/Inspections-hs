@@ -247,6 +247,30 @@ export const createActionRequestSchema = z.strictObject({
 
 export type CreateActionRequest = z.infer<typeof createActionRequestSchema>;
 
+/**
+ * Crear una acción cuyo padre es una **investigación** (§4, etapa 6).
+ *
+ * **Acá `severity` SÍ viaja, y es la única diferencia con el request de arriba.** Un
+ * hallazgo tiene clasificación vigente y de ahí sale la severidad; una investigación no
+ * tiene ninguna. Las opciones eran inventar un default —"las acciones de investigación
+ * son `major`"— o pedírsela al coordinador. Un default pondría un plazo legal en una
+ * constante escondida, así que se la pide.
+ *
+ * `due_at` sigue sin viajar: lo calcula `dueAt()` en el servidor a partir de esta
+ * severidad, con la misma tabla y la misma congelación en la fila.
+ *
+ * El padre va en la RUTA y no en el cuerpo, igual que el hallazgo: §4 fija que una
+ * acción pertenece a exactamente un padre, y un `investigation_id` opcional en el cuerpo
+ * dejaría esa relación como un campo más.
+ */
+export const createInvestigationActionRequestSchema = createActionRequestSchema.extend({
+  severity: severitySchema,
+});
+
+export type CreateInvestigationActionRequest = z.infer<
+  typeof createInvestigationActionRequestSchema
+>;
+
 /** De qué momento del trabajo es una evidencia. R3 pide antes/después. */
 export const EVIDENCE_KINDS = ['before', 'after'] as const;
 
@@ -350,12 +374,19 @@ export type ActionEscalation = z.infer<typeof actionEscalationSchema>;
  *
  * `severity` es la que tenía el hallazgo **el día que se creó la acción**, que es
  * de la que salió `due_at`. Reclasificar el hallazgo después no mueve ninguna de
- * las dos (design D5).
+ * las dos (design D5). Cuando el padre es una investigación no hay clasificación que
+ * leer y la severidad la declaró el coordinador, pero queda congelada igual.
+ *
+ * **`finding_id` e `investigation_id` son los dos nulables y exactamente uno es no
+ * nulo** (§4, etapa 6): una acción cuelga de un hallazgo o de una investigación, nunca
+ * de las dos ni de ninguna.
  */
 export const actionSchema = z.strictObject({
   id: z.uuid(),
   site_id: z.uuid(),
-  finding_id: z.uuid(),
+  /** Exactamente uno de los dos es no nulo; el `CHECK` de 0012 lo garantiza. */
+  finding_id: z.uuid().nullable(),
+  investigation_id: z.uuid().nullable(),
   assignee_person_id: z.uuid(),
   description: z.string(),
   severity: severitySchema,

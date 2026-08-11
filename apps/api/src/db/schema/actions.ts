@@ -14,6 +14,7 @@ import type { ActionState, EscalationLevel, EvidenceKind, Severity } from '@hs/c
 
 import { site } from './catalog';
 import { finding } from './findings';
+import { investigation } from './incidents';
 import { appUser, person } from './identity';
 
 /**
@@ -43,7 +44,9 @@ import { appUser, person } from './identity';
  * decidió no tener.
  *
  * `severity` y `dueAt` quedan congelados el día que la acción se crea: reclasificar
- * el hallazgo después no mueve ninguno de los dos.
+ * el hallazgo después no mueve ninguno de los dos. Cuando el padre es una
+ * investigación no hay clasificación que leer, así que la severidad la declara el
+ * coordinador al crear la acción y se congela igual.
  */
 export const correctiveAction = pgTable(
   'corrective_action',
@@ -54,12 +57,17 @@ export const correctiveAction = pgTable(
       .notNull()
       .references(() => site.id),
 
-    // Uno a muchos: un hallazgo puede tener varias acciones, una acción cubre un solo
-    // hallazgo (pregunta cerrada 9). La etapa 6 agrega `investigationId` como segundo
-    // padre posible y relaja este `notNull`.
-    findingId: uuid('finding_id')
-      .notNull()
-      .references(() => finding.id),
+    // EXACTAMENTE UN PADRE, que es un hallazgo O una investigación (§4, migración
+    // 0012). Las dos columnas son nulables y un `CHECK (num_nonnulls(...) = 1)` en el
+    // motor exige que haya una y solo una: ni ninguna —una obligación sin padre no se
+    // puede rastrear hasta el hecho que la originó— ni las dos, que dejaría sin
+    // respuesta de dónde salió la severidad del plazo.
+    //
+    // Uno a muchos hacia abajo: un padre puede tener varias acciones, una acción cubre
+    // un solo padre (pregunta cerrada 9).
+    findingId: uuid('finding_id').references(() => finding.id),
+
+    investigationId: uuid('investigation_id').references(() => investigation.id),
 
     // Una PERSONA del roster, no una cuenta (§3 R2). Sin par con el sitio: 0005
     // documenta por qué `person` no lleva `UNIQUE (site_id, id)` —`person.siteId` es
@@ -95,12 +103,17 @@ export const correctiveAction = pgTable(
       columns: [table.findingId, table.siteId],
       foreignColumns: [finding.id, finding.siteId],
     }),
+    foreignKey({
+      columns: [table.investigationId, table.siteId],
+      foreignColumns: [investigation.id, investigation.siteId],
+    }),
 
     // Destino de las FK compuestas de las otras tres tablas del módulo.
     unique('corrective_action_id_site_uq').on(table.id, table.siteId),
 
     index('corrective_action_due_idx').on(table.siteId, table.dueAt),
     index('corrective_action_finding_idx').on(table.findingId),
+    index('corrective_action_investigation_idx').on(table.investigationId),
     index('corrective_action_assignee_idx').on(table.siteId, table.assigneePersonId),
   ],
 );

@@ -1,28 +1,40 @@
 ## Purpose
 
-Turns a classified finding into an obligation with a named owner and a deadline derived from its
-severity, records every step of that obligation as an immutable event rather than a status column,
-requires evidence and a second person's verification to close it, and escalates it to the
-supervisor and then to management when it runs past its deadline unclosed.
+Turns a classified finding, or the investigation of an incident, into an obligation with a named
+owner and a deadline derived from its severity, records every step of that obligation as an
+immutable event rather than a status column, requires evidence and a second person's verification
+to close it, and escalates it to the supervisor and then to management when it runs past its
+deadline unclosed.
 
 ## Requirements
 
-### Requirement: A corrective action belongs to exactly one classified finding
+### Requirement: A corrective action belongs to exactly one parent, a finding or an investigation
 
 The system SHALL store every corrective action as a `corrective_action` row carrying `site_id`,
-`finding_id`, `assignee_person_id`, `description`, `due_at`, `severity` and `created_by`. A
-finding MAY have many corrective actions and a corrective action SHALL belong to exactly one
-finding, as §4 closed. The system SHALL refuse to create an action for a finding that has no
-current `finding_risk_assessment`, because the deadline is derived from severity and an action
-without a deadline can never be overdue and therefore never escalates. The action's `site_id`
-SHALL be the `site_id` of its finding, enforced by the engine and not by the endpoint.
+`assignee_person_id`, `description`, `due_at`, `severity`, `created_by` and exactly one of
+`finding_id` and `investigation_id`. A parent MAY have many corrective actions and a corrective
+action SHALL belong to exactly one parent, as §4 closed; the exactly-one rule SHALL be a check
+constraint in the database and not an application check. The system SHALL refuse to create an
+action for a finding that has no current `finding_risk_assessment`, because that finding cannot
+yield a severity and an action without a deadline can never be overdue and therefore never
+escalates. The action's `site_id` SHALL be the `site_id` of its parent, enforced by the engine
+through the composite foreign key of whichever parent it names.
 
 #### Scenario: An action is created for a classified finding
 
 - **WHEN** the HS coordinator creates an action for a finding classified `likely` × `major`, with
   an `assignee_person_id` and a `description`
 - **THEN** a `corrective_action` row is created referencing that `finding_id`
+- **AND** its `investigation_id` is null
 - **AND** its `site_id` is the finding's `site_id`
+
+#### Scenario: An action is created for an investigation
+
+- **WHEN** the HS coordinator creates an action for an investigation, with an
+  `assignee_person_id`, a `description` and a `severity`
+- **THEN** a `corrective_action` row is created referencing that `investigation_id`
+- **AND** its `finding_id` is null
+- **AND** its `site_id` is the investigation's `site_id`
 
 #### Scenario: An unclassified finding cannot receive an action
 
@@ -31,17 +43,34 @@ SHALL be the `site_id` of its finding, enforced by the engine and not by the end
 - **THEN** the request is rejected with the code `finding_not_classified`
 - **AND** no `corrective_action` row is created
 
-#### Scenario: One finding carries several actions
+#### Scenario: An action with no parent is refused
+
+- **WHEN** a `corrective_action` row is inserted with both `finding_id` and `investigation_id` null
+- **THEN** the insert fails on the check constraint
+
+#### Scenario: An action with two parents is refused
+
+- **WHEN** a `corrective_action` row is inserted carrying both a `finding_id` and an
+  `investigation_id`
+- **THEN** the insert fails on the check constraint
+
+#### Scenario: One parent carries several actions
 
 - **WHEN** three actions are created for the same finding
 - **THEN** three `corrective_action` rows reference that `finding_id`
 - **AND** each carries its own `assignee_person_id` and its own `due_at`
 
-#### Scenario: An action cannot name a site other than its finding's
+#### Scenario: An action cannot name a site other than its parent's
 
-- **WHEN** a `corrective_action` row is inserted whose `site_id` differs from the `site_id` of its
-  `finding_id`
-- **THEN** the insert fails on the `(finding_id, site_id)` foreign key
+- **WHEN** a `corrective_action` row is inserted whose `site_id` differs from the `site_id` of the
+  parent it names
+- **THEN** the insert fails on that parent's composite foreign key
+
+#### Scenario: Actions written before the second parent existed remain valid
+
+- **GIVEN** corrective actions created before this change, all carrying a `finding_id`
+- **WHEN** the exactly-one check constraint is added
+- **THEN** every existing row satisfies it and none is rewritten
 
 #### Scenario: A description of two characters is refused
 
@@ -89,16 +118,20 @@ audit chain has to be able to state.
 - **AND** the transitions recorded by the coordinator on their behalf name the coordinator's
   account as actor
 
-### Requirement: The deadline is derived from the finding's severity and frozen at creation
+### Requirement: The deadline is derived from the action's severity and frozen at creation
 
-The system SHALL compute `due_at` from the `severity` of the finding's current classification at
-the moment the action is created, through a fixed table: `catastrophic` 3 days, `major` 7 days,
-`moderate` 14 days, `minor` 30 days, `negligible` 60 days. The system SHALL ignore any `due_at` a
-caller supplies. The system SHALL derive the deadline from `severity` and NOT from `risk_level`,
-as §3 R2 states. The system SHALL store on the action the `severity` the deadline was derived
-from, so the record states what was promised and why. Reclassifying the finding afterwards SHALL
-NOT move the `due_at` of an action that already exists; a shorter deadline is obtained by opening
-a new action. The table is configuration written in code, not an authoritative legal rule.
+The system SHALL compute `due_at` from the action's `severity` through a fixed table:
+`catastrophic` 3 days, `major` 7 days, `moderate` 14 days, `minor` 30 days, `negligible` 60 days.
+When the parent is a finding, the system SHALL take that `severity` from the finding's current
+classification at the moment the action is created and SHALL ignore any severity the caller
+supplies, deriving it from `severity` and NOT from `risk_level` as §3 R2 states. When the parent
+is an investigation, there is no classification to read, so the system SHALL require the HS
+coordinator to state the `severity` and SHALL refuse the creation without it. The system SHALL
+ignore any `due_at` a caller supplies in either case, and SHALL store on the action the `severity`
+the deadline was derived from, so the record states what was promised and why. Reclassifying the
+finding afterwards SHALL NOT move the `due_at` of an action that already exists; a shorter
+deadline is obtained by opening a new action. The table is configuration written in code, not an
+authoritative legal rule.
 
 #### Scenario: A major finding gets seven days
 
@@ -106,6 +139,23 @@ a new action. The table is configuration written in code, not an authoritative l
 - **WHEN** an action is created for it on `2026-08-10T09:00:00-04:00`
 - **THEN** its `due_at` is `2026-08-17T09:00:00-04:00`
 - **AND** its `severity` is `major`
+
+#### Scenario: An action of an investigation takes the severity the coordinator states
+
+- **WHEN** the coordinator creates an action for an investigation stating `severity` `moderate` on
+  `2026-08-10T09:00:00-04:00`
+- **THEN** its `due_at` is `2026-08-24T09:00:00-04:00`
+- **AND** its `severity` is `moderate`
+
+#### Scenario: An action of an investigation without a severity is refused
+
+- **WHEN** an action is created for an investigation with no `severity`
+- **THEN** the request is rejected with the code `severity_required`
+
+#### Scenario: A severity supplied for a finding's action is ignored
+
+- **WHEN** an action is created for a `moderate` finding claiming `severity` `negligible`
+- **THEN** the stored `severity` is `moderate` and the deadline is 14 days out
 
 #### Scenario: The stored deadline is the table's, not the caller's
 
@@ -123,7 +173,6 @@ a new action. The table is configuration written in code, not an authoritative l
 - **WHEN** the coordinator reclassifies the finding as `catastrophic`
 - **THEN** the existing action's `due_at` is unchanged
 - **AND** its `severity` is still `moderate`
-
 ### Requirement: The state of an action is derived from its events and is never stored as a column
 
 The system SHALL record every step of an action as a `corrective_action_event` row and SHALL NOT

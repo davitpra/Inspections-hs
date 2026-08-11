@@ -4,6 +4,7 @@ import type { Notification } from '@hs/contracts';
 
 import { listNotifications } from '../api/actions';
 import { formatDate } from './action-permissions';
+import { CLASSIFICATION_LABELS } from './incident-presentation';
 
 /**
  * La bandeja in-app. ADR-011 D9: no hay correo, así que este es el canal.
@@ -74,6 +75,18 @@ function NotificationBody({
         <Link to="/actions/$id" params={{ id: notification.payload.action_id }}>
           Overdue by {notification.payload.days_overdue} days:{' '}
           {notification.payload.description}
+        </Link>
+      );
+
+    case 'incident_reported':
+      // El aviso NO lleva el nombre del sujeto y por eso esta tarjeta tampoco lo muestra
+      // (design D11): la bandeja se lee con otra regla de acceso que el incidente, y
+      // seguir el enlace vuelve a pasar por la política — a quien no puede verlo, no le
+      // devuelve nada.
+      return (
+        <Link to="/incidents/$id" params={{ id: notification.payload.incident_id }}>
+          An incident was reported: {CLASSIFICATION_LABELS[notification.payload.classification]}{' '}
+          — happened {formatDate(notification.payload.occurred_at)}
         </Link>
       );
 

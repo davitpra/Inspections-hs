@@ -71,6 +71,54 @@ const forbidImpurity = {
   },
 };
 
+/**
+ * ADR-008 — Las reglas de dominio son funciones puras sin base de datos.
+ *
+ * "El estado de una acción correctiva y los relojes regulatorios de un incidente no
+ * son columnas: se calculan a partir de eventos y de reglas. Esas reglas viven en
+ * funciones puras, sin base de datos... testeables en milisegundos, sin
+ * Testcontainers, con tabla de casos."
+ *
+ * Un `Date.now()` dentro de estos módulos rompe justamente eso: el plazo del Form 7
+ * dejaría de depender solo de la fila y el test tendría que mover el reloj del
+ * proceso para probarlo. `new Date(...)` con argumentos sí se permite —construir un
+ * instante a partir de otro es la operación del módulo—; leer el reloj ambiente, no.
+ *
+ * La lista de archivos es explícita: es una garantía sobre estos módulos, no una
+ * regla sobre todo `packages/contracts`.
+ */
+const pureRulesMessage =
+  'ADR-008: las reglas de dominio se calculan sin reloj ambiente, sin azar y sin Node. El instante entra por parámetro.';
+
+const forbidImpureDomainRules = {
+  files: [
+    'packages/contracts/src/regulatory-clocks.ts',
+    'packages/contracts/src/incidents.ts',
+    'packages/contracts/src/actions.ts',
+  ],
+  rules: {
+    'no-restricted-imports': [
+      'error',
+      {
+        paths: builtinModules.map((name) => ({ name, message: pureRulesMessage })),
+        patterns: [{ group: ['node:*'], message: pureRulesMessage }],
+      },
+    ],
+    'no-restricted-properties': [
+      'error',
+      { object: 'Math', property: 'random', message: pureRulesMessage },
+      { object: 'Date', property: 'now', message: pureRulesMessage },
+    ],
+    'no-restricted-syntax': [
+      'error',
+      {
+        selector: "NewExpression[callee.name='Date'][arguments.length=0]",
+        message: pureRulesMessage,
+      },
+    ],
+  },
+};
+
 export default tseslint.config(
   {
     ignores: [
@@ -135,6 +183,7 @@ export default tseslint.config(
 
   forbidNodeBuiltins,
   forbidImpurity,
+  forbidImpureDomainRules,
 
   // Los archivos de configuración de la raíz y de las apps sí corren en Node.
   {

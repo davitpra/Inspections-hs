@@ -1,5 +1,10 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
-import { createActionRequestSchema, transitionRequestSchema, type Action } from '@hs/contracts';
+import {
+  createActionRequestSchema,
+  createInvestigationActionRequestSchema,
+  transitionRequestSchema,
+  type Action,
+} from '@hs/contracts';
 
 import { CurrentSession } from '../auth/session.decorator';
 import type { SessionContext } from '../auth/session.service';
@@ -48,6 +53,28 @@ export class ActionsController {
     @Body() body: unknown,
   ): Promise<Action> {
     return this.actions.create(session, findingId, createActionRequestSchema.parse(body));
+  }
+
+  /**
+   * Abrir una acción sobre una investigación (§4, etapa 6). El segundo padre de §4,
+   * colgado de la ruta por lo mismo que el primero.
+   *
+   * A diferencia de la de arriba, esta SÍ acepta `severity` en el cuerpo: una
+   * investigación no tiene clasificación vigente de la que derivarla, y un default
+   * escondido pondría un plazo legal en una constante (design D9).
+   */
+  @Post('investigations/:id/actions')
+  @HttpCode(HttpStatus.CREATED)
+  async createForInvestigation(
+    @CurrentSession() session: SessionContext,
+    @Param('id') investigationId: string,
+    @Body() body: unknown,
+  ): Promise<Action> {
+    return this.actions.createForInvestigation(
+      session,
+      investigationId,
+      createInvestigationActionRequestSchema.parse(body),
+    );
   }
 
   /**
