@@ -17,8 +17,11 @@
     "db:reset": "docker compose down -v && docker compose up -d --wait",
     "db:migrate": "pnpm --filter api db:migrate",
     "db:seed": "pnpm --filter api db:seed",
+    "db:jobs:install": "pnpm --filter api db:jobs:install",
     "roster:import": "pnpm --filter api roster:import",
-    "auth:bootstrap": "pnpm --filter api auth:bootstrap"
+    "auth:bootstrap": "pnpm --filter api auth:bootstrap",
+    "demo:data": "pnpm --filter api demo:data",
+    "auth:reset-password": "pnpm --filter api auth:reset-password"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
