@@ -9,7 +9,6 @@ import { AuthService } from './auth.service';
 import { CredentialService } from './credential.service';
 import { InvitationService } from './invitation.service';
 import { SessionService } from './session.service';
-import { TwoFactorService } from './two-factor.service';
 
 /**
  * ADR-011 — La autenticación, montada dentro de `apps/api` sobre la misma Postgres.
@@ -36,7 +35,6 @@ import { TwoFactorService } from './two-factor.service';
     },
     SessionService,
     CredentialService,
-    TwoFactorService,
     InvitationService,
     AuthService,
     { provide: APP_GUARD, useClass: AuthGuard },

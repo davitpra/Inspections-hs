@@ -23,7 +23,6 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1106.0",
     "@aws-sdk/s3-request-presigner": "^3.1106.0",
-    "@better-auth/utils": "0.4.2",
     "@hs/contracts": "workspace:*",
     "@hs/forms": "workspace:*",
     "@nestjs/common": "^11.0.1",

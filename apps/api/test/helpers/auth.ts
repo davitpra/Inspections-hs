@@ -1,4 +1,3 @@
-import { createOTP } from '@better-auth/utils/otp';
 import type { Pool } from 'pg';
 
 import { DbService } from '../../src/db/db.service';
@@ -6,7 +5,6 @@ import { AuthService } from '../../src/auth/auth.service';
 import { CredentialService } from '../../src/auth/credential.service';
 import { InvitationService } from '../../src/auth/invitation.service';
 import { SessionService } from '../../src/auth/session.service';
-import { TwoFactorService } from '../../src/auth/two-factor.service';
 import { createBetterAuth } from '../../src/auth/better-auth';
 import { inScope } from './postgres';
 
@@ -21,7 +19,6 @@ export interface AuthStack {
   db: DbService;
   sessions: SessionService;
   credentials: CredentialService;
-  twoFactor: TwoFactorService;
   invitations: InvitationService;
   auth: AuthService;
   stop: () => Promise<void>;
@@ -45,40 +42,17 @@ export function createAuthStack(appUrl: string): AuthStack {
   });
 
   const credentials = new CredentialService(db, auth);
-  const twoFactor = new TwoFactorService(db);
   const invitations = new InvitationService(db, credentials);
-  const authService = new AuthService(db, credentials, sessions, twoFactor);
+  const authService = new AuthService(db, credentials, sessions);
 
   return {
     db,
     sessions,
     credentials,
-    twoFactor,
     invitations,
     auth: authService,
     stop: () => db.onModuleDestroy(),
   };
-}
-
-/** El código válido de ahora para un secreto TOTP. */
-export function totpFor(secret: string): Promise<string> {
-  return createOTP(secret, { digits: 6, period: 30 }).totp();
-}
-
-/** El secreto vigente de una cuenta, para poder generar su código en el test. */
-export async function activeSecret(pool: Pool, userId: string): Promise<string> {
-  const rows = await inScope<{ secret: string }>(
-    pool,
-    [],
-    `SELECT secret FROM app_two_factor
-      WHERE user_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC LIMIT 1`,
-    [userId],
-  );
-
-  const row = rows[0];
-  if (!row) throw new Error('La cuenta no tiene ningún secreto TOTP.');
-
-  return row.secret;
 }
 
 /**

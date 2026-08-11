@@ -44,15 +44,6 @@ export const AUTH_ERROR_CODES = [
   /** La cuenta está bloqueada por intentos fallidos. Es temporal. */
   'account_locked',
 
-  /** Falta el segundo factor, o el código es inválido. */
-  'two_factor_required',
-
-  /**
-   * La sesión es válida pero es de alcance limitado: el titular tiene que inscribir
-   * su segundo factor antes de que sirva para otra cosa (design D7).
-   */
-  'two_factor_enrolment_required',
-
   /** La sesión es válida y el rol o el alcance no alcanzan. Ni refresca ni reintenta. */
   'forbidden',
 
@@ -93,19 +84,12 @@ export const passwordSchema = z
 
 export const emailSchema = z.string().trim().toLowerCase().email().max(254);
 
-/** El código TOTP: seis dígitos. */
-export const totpCodeSchema = z
-  .string()
-  .regex(/^\d{6}$/, 'The code is six digits');
-
 // ---------------------------------------------------------------------------
 // Login
 
 export const signInRequestSchema = z.object({
   email: emailSchema,
   password: z.string().min(1).max(200),
-  /** Obligatorio para una cuenta con segundo factor confirmado; ignorado si no. */
-  code: totpCodeSchema.optional(),
 });
 
 export type SignInRequest = z.infer<typeof signInRequestSchema>;
@@ -113,8 +97,10 @@ export type SignInRequest = z.infer<typeof signInRequestSchema>;
 /**
  * La sesión resuelta, que es lo que ADR-011 pide que transporte: `user_id`,
  * `person_id` y `site_scope`. Va también el rol, porque el cliente decide qué
- * pantallas ofrecer, y `purpose`, porque una sesión limitada tiene que ser visible
- * para el cliente y no una sorpresa en el primer 403.
+ * pantallas ofrecer.
+ *
+ * Toda sesión resuelta es plena: no hay sesiones de segunda clase. La sesión de
+ * alcance limitado que existía para inscribir un segundo factor se fue con él.
  *
  * `siteScope` se resuelve en CADA request contra `user_site_scope` y no se congela
  * en el token (design D4): lo que este objeto muestra es el alcance de ahora.
@@ -124,7 +110,6 @@ export const sessionSchema = z.object({
   personId: z.uuid(),
   role: roleSchema,
   siteScope: z.array(z.uuid()),
-  purpose: z.enum(['full', 'enrol_two_factor']),
   /** Solo para `external_auditor`: la ventana de registros que puede leer. */
   recordsFrom: z.iso.date().nullable(),
   recordsTo: z.iso.date().nullable(),
@@ -220,33 +205,6 @@ export const revokeInvitationRequestSchema = z.object({
 export type RevokeInvitationRequest = z.infer<typeof revokeInvitationRequestSchema>;
 
 // ---------------------------------------------------------------------------
-// Segundo factor
-
-/**
- * `secret` y `uri` salen una sola vez, en la respuesta de inscripción, para que el
- * titular los cargue en su aplicación. Después de confirmar, ninguna ruta los
- * devuelve.
- */
-export const enrolTwoFactorResponseSchema = z.object({
-  secret: z.string().min(1),
-  uri: z.string().min(1),
-});
-
-export type EnrolTwoFactorResponse = z.infer<typeof enrolTwoFactorResponseSchema>;
-
-export const confirmTwoFactorRequestSchema = z.object({
-  code: totpCodeSchema,
-});
-
-export type ConfirmTwoFactorRequest = z.infer<typeof confirmTwoFactorRequestSchema>;
-
-export const resetTwoFactorRequestSchema = z.object({
-  userId: z.uuid(),
-});
-
-export type ResetTwoFactorRequest = z.infer<typeof resetTwoFactorRequestSchema>;
-
-// ---------------------------------------------------------------------------
 // Revocación
 
 export const revokeSessionsRequestSchema = z.object({
@@ -254,14 +212,3 @@ export const revokeSessionsRequestSchema = z.object({
 });
 
 export type RevokeSessionsRequest = z.infer<typeof revokeSessionsRequestSchema>;
-
-/**
- * Los roles para los que el segundo factor es OBLIGATORIO (ADR-011). Vive en el
- * contrato y no solo en el servidor porque el cliente tiene que poder explicarle al
- * titular por qué su sesión no sirve todavía, antes de recibir el primer 403.
- */
-export const ROLES_REQUIRING_TWO_FACTOR = ['hs_coordinator', 'management'] as const;
-
-export function requiresTwoFactor(role: z.infer<typeof roleSchema>): boolean {
-  return (ROLES_REQUIRING_TWO_FACTOR as readonly string[]).includes(role);
-}

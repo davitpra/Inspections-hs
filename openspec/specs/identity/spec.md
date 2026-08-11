@@ -711,78 +711,6 @@ and without any row being deleted. A successful sign-in SHALL reset the counter.
 - **WHEN** an account with failed attempts below the threshold signs in successfully
 - **THEN** the consecutive-failure count is zero
 
-### Requirement: A second factor is mandatory for the coordinator and for management
-
-The system SHALL require a TOTP second factor for every account whose `role` is `hs_coordinator`
-or `management`, and SHALL offer it as optional for `jhsc_member`, `supervisor` and
-`external_auditor`. The secret SHALL be stored in `app_two_factor` and SHALL never be returned
-after enrolment is confirmed.
-
-An account for which the second factor is mandatory and which has no confirmed `app_two_factor`
-row SHALL receive a session limited to enrolling it: that session SHALL NOT be accepted by any
-other route.
-
-#### Scenario: The coordinator cannot reach the system without a second factor
-
-- **WHEN** an `hs_coordinator` account with no confirmed `app_two_factor` row signs in
-- **AND** the resulting session is presented to any route other than second-factor enrolment
-- **THEN** the request is rejected
-
-#### Scenario: The coordinator enrols and then has a full session
-
-- **WHEN** that account completes enrolment by returning a valid code for the issued secret
-- **AND** signs in again presenting email, password and a valid code
-- **THEN** a full session is established
-
-#### Scenario: A member may sign in without a second factor
-
-- **WHEN** a `jhsc_member` account with no `app_two_factor` row presents email and correct
-  password
-- **THEN** a full session is established
-
-#### Scenario: A member may enrol a second factor by choice
-
-- **WHEN** a `supervisor` account enrols a second factor
-- **THEN** subsequent sign-ins for that account require a valid code
-
-#### Scenario: A wrong code does not establish a session
-
-- **WHEN** an account with a confirmed `app_two_factor` row presents email, correct password and
-  an invalid code
-- **THEN** no session is established
-
-#### Scenario: Promotion to a role that requires a second factor takes effect at once
-
-- **WHEN** an account's `role` is changed to `management` while it has no confirmed
-  `app_two_factor` row
-- **THEN** its existing sessions are no longer accepted by any route other than enrolment
-
-#### Scenario: The secret is not readable after enrolment
-
-- **WHEN** any route that returns an account or its session is called after enrolment
-- **THEN** the response contains no TOTP secret and no recovery material
-
-### Requirement: A second factor is reset by the coordinator, never by its holder
-
-The system SHALL allow only an `hs_coordinator` session to reset another account's second factor,
-by revoking the `app_two_factor` row so that the holder must enrol again. The holder SHALL NOT be
-able to remove or replace their own second factor when their `role` requires one.
-
-#### Scenario: The coordinator resets a lost second factor
-
-- **WHEN** an `hs_coordinator` session resets the second factor of another account
-- **THEN** that account's `app_two_factor` row is revoked and the account must enrol again
-
-#### Scenario: A holder cannot remove a mandatory second factor
-
-- **WHEN** a `management` account attempts to remove its own second factor
-- **THEN** the request is rejected and the `app_two_factor` row is unchanged
-
-#### Scenario: A second factor row is revoked, not deleted
-
-- **WHEN** a second factor is reset
-- **THEN** the previous `app_two_factor` row is still present with a non-null `revoked_at`
-
 ### Requirement: A session carries the user, the person and the site scope
 
 The system SHALL resolve every authenticated request into a session context carrying
@@ -872,7 +800,7 @@ connection returned and handed to another request carries none of them.
 The system SHALL issue, on a successful sign-in, an access token valid for minutes and a refresh
 token valid for at least the synchronisation window the platform tolerates, so that a device that
 captured work offline can still renew its access when it reconnects. Presenting a valid refresh
-token SHALL issue a new access token without asking for the password or the second factor again.
+token SHALL issue a new access token without asking for the password again.
 
 An expired access token SHALL be answered with a distinguishable, retryable condition, separate
 from the answer given to a token that names a revoked or deactivated account, so that a client can
@@ -882,7 +810,7 @@ tell "renew and retry" from "stop".
 
 - **WHEN** an access token has expired and its refresh token has not
 - **THEN** presenting the refresh token issues a new access token
-- **AND** neither the password nor a second-factor code is requested
+- **AND** the password is not requested
 
 #### Scenario: An expired access token is reported as retryable
 
@@ -961,7 +889,7 @@ acknowledged submission. Loss of authentication SHALL NOT be such an act.
 ### Requirement: A session ends when the account loses the right to hold it
 
 The system SHALL revoke every live `app_session` of an account when the account is deactivated,
-when its `expires_at` passes, when its credential is revoked, or when its second factor is reset.
+when its `expires_at` passes, or when its credential is revoked.
 Revocation SHALL be expressed by setting `app_session.revoked_at`, never by deleting the row, and
 a revoked session SHALL NOT be renewable.
 

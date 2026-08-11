@@ -8,24 +8,12 @@ import {
 import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
 
-import { sessionEnded, twoFactorEnrolmentRequired } from './auth.errors';
+import { sessionEnded } from './auth.errors';
 import { SessionService, type SessionContext } from './session.service';
 
 /** Rutas sin sesión: login, aceptación de invitación, y nada más. */
 export const PUBLIC = 'auth:public';
 export const Public = (): CustomDecorator => SetMetadata(PUBLIC, true);
-
-/**
- * Design D7 — La LISTA BLANCA de las dos rutas que acepta una sesión limitada.
- *
- * Es lista blanca y no lista negra a propósito: un guard con dos modos es un guard
- * donde se puede colar un bug, y la forma que lo evita es que agregar una ruta nueva
- * la deje excluida por default. Con lista negra, olvidarse de agregar una ruta la
- * dejaría abierta a una sesión que todavía no probó su segundo factor.
- */
-export const ALLOWS_ENROLMENT_SESSION = 'auth:allows-enrolment-session';
-export const AllowsEnrolmentSession = (): CustomDecorator =>
-  SetMetadata(ALLOWS_ENROLMENT_SESSION, true);
 
 export interface AuthenticatedRequest extends Request {
   session: SessionContext;
@@ -63,15 +51,6 @@ export class AuthGuard implements CanActivate {
     // en todo lo demás. La diferencia es el requisito offline (design D5): el cliente
     // que vacía el outbox necesita separar "refrescá y reintentá" de "pará".
     const session = await this.sessions.resolve(token);
-
-    if (session.purpose === 'enrol_two_factor') {
-      const allowed = this.reflector.getAllAndOverride<boolean>(ALLOWS_ENROLMENT_SESSION, [
-        context.getHandler(),
-        context.getClass(),
-      ]);
-
-      if (!allowed) throw twoFactorEnrolmentRequired();
-    }
 
     request.session = session;
 

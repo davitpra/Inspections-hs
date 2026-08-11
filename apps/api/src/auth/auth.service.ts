@@ -3,10 +3,9 @@ import { sql } from 'drizzle-orm';
 import type { Role, SignInRequest, SignInResponse } from '@hs/contracts';
 
 import { DbService } from '../db/db.service';
-import { accountLocked, invalidCredentials, twoFactorRequired } from './auth.errors';
+import { accountLocked, invalidCredentials } from './auth.errors';
 import { CredentialService } from './credential.service';
 import { SessionService } from './session.service';
-import { TwoFactorService } from './two-factor.service';
 
 interface AccountRow {
   id: string;
@@ -31,7 +30,6 @@ export class AuthService {
     private readonly db: DbService,
     private readonly credentials: CredentialService,
     private readonly sessions: SessionService,
-    private readonly twoFactor: TwoFactorService,
   ) {}
 
   async signIn(
@@ -77,31 +75,15 @@ export class AuthService {
       throw invalidCredentials();
     }
 
-    // El segundo factor, cuando la cuenta lo tiene confirmado. Un código inválido
-    // cuenta como intento fallido: si no, el bloqueo se saltearía probando el segundo
-    // factor en vez de la contraseña.
-    if (await this.twoFactor.hasConfirmed(account.id)) {
-      const codeValid = await this.twoFactor.verify(account.id, request.code);
-
-      if (!codeValid) {
-        await this.credentials.registerFailure(credential.id, account.id);
-        await this.record(account.id, 'auth.sign_in_failed', { reason: 'invalid_second_factor' });
-        throw twoFactorRequired();
-      }
-    }
-
     await this.credentials.clearFailures(credential.id);
 
-    // Design D7: un hs_coordinator o un management sin segundo factor confirmado
-    // recibe sesión, pero limitada a inscribirlo. Si devolviera un error no habría
-    // forma de que lo inscriba; si devolviera sesión plena, el requisito sería una
-    // promesa.
-    const purpose = await this.twoFactor.purposeFor(account.id, account.role);
-
-    const tokens = await this.sessions.issue(account.id, purpose, meta);
+    // La contraseña es lo único que se verifica. El segundo factor salió del alcance
+    // del MVP (change `remove-two-factor-for-mvp`), y con él la sesión de propósito
+    // limitado: toda sesión que se emite acá es plena.
+    const tokens = await this.sessions.issue(account.id, meta);
     const context = await this.sessions.resolve(tokens.accessToken);
 
-    await this.record(account.id, 'auth.signed_in', { purpose });
+    await this.record(account.id, 'auth.signed_in', {});
 
     return { session: this.sessions.toContractSession(context), tokens };
   }

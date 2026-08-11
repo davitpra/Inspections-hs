@@ -33,7 +33,6 @@ function session(role: Session['role']): { account: Session } {
       personId: PERSON,
       role,
       siteScope: [SITE],
-      purpose: 'full',
       recordsFrom: null,
       recordsTo: null,
     },

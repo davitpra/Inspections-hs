@@ -586,7 +586,7 @@ _(La pregunta sobre el detalle médico ya no aplica: no hay detalle médico en e
 | ------------------- | --------------------------------------------------------------------- |
 | Residencia de datos | Sin exigencia de territorio canadiense. Ver riesgo G-bis              |
 | Dispositivos        | Android. Sincronización dentro de los 7 días. Ver riesgo D            |
-| Autenticación       | Cuentas por invitación, TOTP para coordinador y gerencia. Ver ADR-008 |
+| Autenticación       | Cuentas por invitación, email y contraseña. Sin segundo factor en el MVP (ADR-011, nota de alcance). Ver ADR-008 |
 
 ---
 

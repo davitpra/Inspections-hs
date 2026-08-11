@@ -99,6 +99,13 @@
       "when": 1754524800013,
       "tag": "0014_compliance_reports",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1754524800014,
+      "tag": "0015_remove_two_factor",
+      "breakpoints": true
     }
   ]
 }

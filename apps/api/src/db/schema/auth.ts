@@ -1,4 +1,4 @@
-import { check, index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 import { appUser } from './identity';
@@ -12,10 +12,13 @@ import { appUser } from './identity';
  * ventana de fechas y los GRANT por columna — nada de eso lo sabe expresar un
  * esquema de ORM. Si el SQL cambia, este espejo se actualiza a mano.
  *
- * Cuatro de estas cinco tablas las escribe better-auth a través de su adaptador y no
+ * Tres de estas cuatro tablas las escribe better-auth a través de su adaptador y no
  * este esquema. Están declaradas igual porque el guard, la rotación del refresh y la
  * revocación en cascada sí las consultan desde acá, y porque un espejo incompleto es
  * peor que no tenerlo.
+ *
+ * `app_two_factor` fue la quinta hasta `remove-two-factor-for-mvp`, que la dropeó
+ * junto con `app_session.purpose` en `0015_remove_two_factor.sql`.
  */
 
 /**
@@ -109,39 +112,6 @@ export const userInvitation = pgTable(
 );
 
 /**
- * El segundo factor. La OBLIGATORIEDAD no vive acá: es una propiedad del par (rol,
- * fila confirmada) que resuelve el guard en cada request. Un CHECK que la expresara
- * tendría que mirar `app_user.role` desde otra tabla.
- */
-export const appTwoFactor = pgTable(
-  'app_two_factor',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => appUser.id),
-
-    // Sale de acá una sola vez, en la respuesta de inscripción.
-    secret: text('secret').notNull(),
-
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-
-    // Inscrito no es confirmado: una fila sin `confirmed_at` es un secreto emitido
-    // que todavía no probó nada.
-    confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
-
-    // Un reinicio es esto más una fila nueva, nunca un UPDATE del secreto.
-    revokedAt: timestamp('revoked_at', { withTimezone: true }),
-  },
-  (table) => [
-    uniqueIndex('app_two_factor_active_uq')
-      .on(table.userId)
-      .where(sql`${table.revokedAt} IS NULL`),
-  ],
-);
-
-/**
  * La sesión. La inserta better-auth con exactamente las columnas que conoce; todo lo
  * que le agregamos es anulable o trae default, porque su INSERT no lo nombra.
  *
@@ -167,22 +137,15 @@ export const appSession = pgTable(
     ipAddress: text('ip_address'),
     userAgent: text('user_agent'),
 
-    // 'enrol_two_factor' es la sesión limitada de un coordinador o un management que
-    // todavía no inscribió su segundo factor: el guard la acepta en dos rutas.
-    purpose: text('purpose').notNull().default('full').$type<SessionPurpose>(),
-
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
     revokedReason: text('revoked_reason'),
   },
   (table) => [
-    check('app_session_purpose_check', sql`${table.purpose} IN ('full', 'enrol_two_factor')`),
     index('app_session_live_idx')
       .on(table.userId)
       .where(sql`${table.revokedAt} IS NULL`),
   ],
 );
-
-export type SessionPurpose = 'full' | 'enrol_two_factor';
 
 /**
  * El refresh. Tabla propia y no columnas de `app_session` por dos motivos: la sesión

@@ -33,21 +33,17 @@ export const REFRESH_TTL_MS = 14 * 24 * 60 * 60 * 1000;
  */
 export const REFRESH_GRACE_MS = 60 * 1000;
 
-export type SessionPurpose = 'full' | 'enrol_two_factor';
-
 /** La sesión resuelta: lo que ADR-011 pide que transporte, más lo que el guard usa. */
 export interface SessionContext extends SessionScope {
   sessionId: string;
   personId: string;
   role: Role;
-  purpose: SessionPurpose;
   recordsFrom: string | null;
   recordsTo: string | null;
 }
 
 interface ResolvedRow {
   session_id: string;
-  purpose: SessionPurpose;
   session_expires_at: Date;
   session_revoked_at: Date | null;
   user_id: string;
@@ -106,7 +102,6 @@ export class SessionService {
   async resolve(token: string): Promise<SessionContext> {
     const { rows } = await this.db.unscopedPool.query<ResolvedRow>(
       `SELECT s.id            AS session_id,
-              s.purpose       AS purpose,
               s.expires_at    AS session_expires_at,
               s.revoked_at    AS session_revoked_at,
               u.id            AS user_id,
@@ -150,7 +145,6 @@ export class SessionService {
       userId: row.user_id,
       personId: row.person_id,
       role: row.role,
-      purpose: row.purpose,
       siteIds: row.site_ids,
       recordsFrom: row.records_from,
       recordsTo: row.records_to,
@@ -159,13 +153,12 @@ export class SessionService {
 
   /**
    * Crea la sesión y su primer refresh. La fila la insertamos nosotros y no
-   * better-auth (design D16), y eso es lo que permite que `purpose` esté puesto desde
-   * el INSERT — que a su vez es lo que permite que el guard de la migración lo trate
-   * como columna congelada en vez de una que se corrige después.
+   * better-auth (design D16), y eso es lo que permite que el guard de la migración
+   * trate sus columnas de identidad como congeladas desde el INSERT en vez de como
+   * columnas que se corrigen después.
    */
   async issue(
     userId: string,
-    purpose: SessionPurpose,
     meta: { ipAddress?: string | null; userAgent?: string | null } = {},
     client?: PoolClient,
   ): Promise<TokenPair> {
@@ -179,8 +172,8 @@ export class SessionService {
 
     await run(
       `INSERT INTO app_session
-         (id, token, user_id, expires_at, ip_address, user_agent, purpose)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+         (id, token, user_id, expires_at, ip_address, user_agent)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
       [
         sessionId,
         accessToken,
@@ -188,7 +181,6 @@ export class SessionService {
         accessExpiresAt,
         meta.ipAddress ?? null,
         meta.userAgent ?? null,
-        purpose,
       ],
     );
 
@@ -284,7 +276,7 @@ export class SessionService {
 
         // Dentro de la gracia: el cliente perdió la respuesta, no el token. Se
         // devuelve el mismo par que se emitió la primera vez.
-        const replayed = await this.replay(client, row.replaced_by_id, row.session_id);
+        const replayed = await this.replay(client, row.replaced_by_id);
         await client.query('COMMIT');
         return { tokens: replayed, userId: row.user_id };
       }
@@ -380,7 +372,6 @@ export class SessionService {
       personId: context.personId,
       role: context.role,
       siteScope: [...context.siteIds],
-      purpose: context.purpose,
       recordsFrom: context.recordsFrom,
       recordsTo: context.recordsTo,
     };
@@ -417,16 +408,15 @@ export class SessionService {
     const newSessionId = randomUUID();
 
     const { rows: previous } = await client.query<{
-      purpose: SessionPurpose;
       ip_address: string | null;
       user_agent: string | null;
-    }>(`SELECT purpose, ip_address, user_agent FROM app_session WHERE id = $1`, [
+    }>(`SELECT ip_address, user_agent FROM app_session WHERE id = $1`, [
       presented.session_id,
     ]);
 
     await client.query(
-      `INSERT INTO app_session (id, token, user_id, expires_at, ip_address, user_agent, purpose)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      `INSERT INTO app_session (id, token, user_id, expires_at, ip_address, user_agent)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
       [
         newSessionId,
         accessToken,
@@ -434,7 +424,6 @@ export class SessionService {
         accessExpiresAt,
         previous[0]?.ip_address ?? null,
         previous[0]?.user_agent ?? null,
-        previous[0]?.purpose ?? 'full',
       ],
     );
 
@@ -469,11 +458,7 @@ export class SessionService {
    * nuevo sobre la MISMA sesión que la primera rotación creó. El cliente termina con
    * credenciales válidas y sin haber perdido la cola, que es lo que el requisito pide.
    */
-  private async replay(
-    client: PoolClient,
-    replacementId: string,
-    previousSessionId: string,
-  ): Promise<TokenPair> {
+  private async replay(client: PoolClient, replacementId: string): Promise<TokenPair> {
     const { rows } = await client.query<{ session_id: string; user_id: string }>(
       `SELECT r.session_id, s.user_id
          FROM app_refresh_token r JOIN app_session s ON s.id = r.session_id
@@ -488,21 +473,10 @@ export class SessionService {
     const accessExpiresAt = new Date(Date.now() + ACCESS_TTL_MS);
     const newSessionId = randomUUID();
 
-    const { rows: previous } = await client.query<{ purpose: SessionPurpose }>(
-      `SELECT purpose FROM app_session WHERE id = $1`,
-      [previousSessionId],
-    );
-
     await client.query(
-      `INSERT INTO app_session (id, token, user_id, expires_at, purpose)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [
-        newSessionId,
-        accessToken,
-        target.user_id,
-        accessExpiresAt,
-        previous[0]?.purpose ?? 'full',
-      ],
+      `INSERT INTO app_session (id, token, user_id, expires_at)
+       VALUES ($1, $2, $3, $4)`,
+      [newSessionId, accessToken, target.user_id, accessExpiresAt],
     );
 
     const minted = await this.mintRefresh(newSessionId, replacementId, client);

@@ -53,21 +53,6 @@ export const accountLocked = (): AuthException =>
     HttpStatus.TOO_MANY_REQUESTS,
   );
 
-export const twoFactorRequired = (): AuthException =>
-  new AuthException(
-    'two_factor_required',
-    'A valid second-factor code is required',
-    HttpStatus.UNAUTHORIZED,
-  );
-
-/** La sesión limitada de design D7 usada fuera de sus dos rutas. */
-export const twoFactorEnrolmentRequired = (): AuthException =>
-  new AuthException(
-    'two_factor_enrolment_required',
-    'Enrol a second factor before using this account',
-    HttpStatus.FORBIDDEN,
-  );
-
 /** Sesión válida, rol o alcance insuficiente. Ni refresca ni reintenta. */
 export const forbidden = (message = 'Not allowed'): AuthException =>
   new AuthException('forbidden', message, HttpStatus.FORBIDDEN);

@@ -4,7 +4,6 @@ import {
   acceptInvitationRequestSchema,
   issueInvitationRequestSchema,
   refreshRequestSchema,
-  resetTwoFactorRequestSchema,
   revokeSessionsRequestSchema,
   signInRequestSchema,
 } from '@hs/contracts';
@@ -21,7 +20,6 @@ import {
   expireAccessToken,
   expireInvitation,
   grantCredential,
-  totpFor,
   type AuthStack,
 } from './helpers/auth';
 
@@ -338,114 +336,6 @@ describe('el bloqueo por intentos fallidos', () => {
   });
 });
 
-describe('el segundo factor', () => {
-  it('el coordinador sin segundo factor recibe una sesión limitada', async () => {
-    const created = await account({
-      role: 'hs_coordinator',
-      siteIds: [SITE_A, SITE_B],
-      email: 'coord-no-2fa@auth.test',
-    });
-
-    const result = await stack.auth.signIn({ email: created.email, password: PASSWORD });
-
-    expect(result.session.purpose).toBe('enrol_two_factor');
-  });
-
-  it('un jhsc_member entra pleno sin segundo factor', async () => {
-    const created = await account({ role: 'jhsc_member', email: 'member-no-2fa@auth.test' });
-
-    const result = await stack.auth.signIn({ email: created.email, password: PASSWORD });
-
-    expect(result.session.purpose).toBe('full');
-  });
-
-  it('inscribir y confirmar convierte la sesión siguiente en plena', async () => {
-    const created = await account({
-      role: 'management',
-      siteIds: [SITE_A, SITE_B],
-      email: 'management@auth.test',
-    });
-
-    const limited = await stack.auth.signIn({ email: created.email, password: PASSWORD });
-    expect(limited.session.purpose).toBe('enrol_two_factor');
-
-    const { secret } = await stack.twoFactor.enrol(created.accountId, created.email);
-    expect(await stack.twoFactor.confirm(created.accountId, await totpFor(secret))).toBe(true);
-
-    const full = await stack.auth.signIn({
-      email: created.email,
-      password: PASSWORD,
-      code: await totpFor(secret),
-    });
-
-    expect(full.session.purpose).toBe('full');
-  });
-
-  it('un código inválido no da sesión', async () => {
-    const created = await account({
-      role: 'supervisor',
-      email: 'supervisor-2fa@auth.test',
-    });
-
-    const { secret } = await stack.twoFactor.enrol(created.accountId, created.email);
-    await stack.twoFactor.confirm(created.accountId, await totpFor(secret));
-
-    expect(
-      await codeOf(() =>
-        stack.auth.signIn({ email: created.email, password: PASSWORD, code: '000000' }),
-      ),
-    ).toBe('two_factor_required');
-  });
-
-  it('ascender a management corta el acceso pleno en el request siguiente', async () => {
-    const created = await account({ role: 'supervisor', email: 'promoted@auth.test' });
-
-    const before = await stack.auth.signIn({ email: created.email, password: PASSWORD });
-    expect(before.session.purpose).toBe('full');
-
-    await stack.db.withSiteScope({ siteIds: [SITE_A], userId: coordinator.userId }, async (dbx) => {
-      await dbx.execute(
-        `UPDATE app_user SET role = 'management' WHERE id = '${created.accountId}'` as never,
-      );
-    });
-
-    // La sesión vieja sigue siendo 'full' porque `purpose` se fijó al emitirla; lo que
-    // cambia en el request siguiente es qué sesión le corresponde a esta cuenta.
-    expect(await stack.twoFactor.purposeFor(created.accountId, 'management')).toBe(
-      'enrol_two_factor',
-    );
-
-    const after = await stack.auth.signIn({ email: created.email, password: PASSWORD });
-    expect(after.session.purpose).toBe('enrol_two_factor');
-  });
-
-  it('solo el coordinador reinicia un segundo factor', async () => {
-    const created = await account({ role: 'management', email: 'reset-target@auth.test' });
-    const { secret } = await stack.twoFactor.enrol(created.accountId, created.email);
-    await stack.twoFactor.confirm(created.accountId, await totpFor(secret));
-
-    expect(await codeOf(() => stack.twoFactor.reset(created.accountId, { userId: created.accountId, role: 'management' }))).toBe(
-      'forbidden',
-    );
-
-    await stack.twoFactor.reset(created.accountId, coordinator);
-
-    expect(await stack.twoFactor.hasConfirmed(created.accountId)).toBe(false);
-
-    // La fila anterior sigue estando, revocada: el secreto viejo es un hecho del
-    // registro tanto como el nuevo.
-    const rows = await inScope<{ revoked_at: Date | null }>(
-      db.app,
-      [],
-      'SELECT revoked_at FROM app_two_factor WHERE user_id = $1',
-      [created.accountId],
-    );
-
-    expect(rows).toHaveLength(1);
-    expect(one(rows).revoked_at).not.toBeNull();
-  });
-});
-
 describe('el alcance sale de la sesión y de ningún otro lado', () => {
   it('la sesión resuelve user, person y alcance', async () => {
     const created = await account({ siteIds: [SITE_A], email: 'scope-one@auth.test' });
@@ -528,7 +418,7 @@ describe('el alcance sale de la sesión y de ningún otro lado', () => {
 });
 
 describe('el refresh', () => {
-  it('renueva sin contraseña ni segundo factor', async () => {
+  it('renueva sin contraseña', async () => {
     const created = await account({ email: 'refresh@auth.test' });
     const { tokens } = await stack.auth.signIn({ email: created.email, password: PASSWORD });
 
@@ -660,22 +550,6 @@ describe('la revocación', () => {
     ).rejects.toSatisfy((error) => sqlstate(error) === APPEND_ONLY);
   });
 
-  it('reiniciar el segundo factor termina las sesiones vivas', async () => {
-    const created = await account({ role: 'management', email: 'reset-sessions@auth.test' });
-    const { secret } = await stack.twoFactor.enrol(created.accountId, created.email);
-    await stack.twoFactor.confirm(created.accountId, await totpFor(secret));
-
-    const { tokens } = await stack.auth.signIn({
-      email: created.email,
-      password: PASSWORD,
-      code: await totpFor(secret),
-    });
-
-    await stack.twoFactor.reset(created.accountId, coordinator);
-    await stack.sessions.revokeAllForUser(created.accountId, 'two_factor_reset');
-
-    expect(await codeOf(() => stack.sessions.resolve(tokens.accessToken))).toBe('session_ended');
-  });
 });
 
 describe('el auditor externo', () => {
@@ -767,7 +641,6 @@ describe('ninguna ruta acepta un sitio, un alcance ni un actor', () => {
       refresh: refreshRequestSchema,
       issueInvitation: issueInvitationRequestSchema,
       acceptInvitation: acceptInvitationRequestSchema,
-      resetTwoFactor: resetTwoFactorRequestSchema,
       revokeSessions: revokeSessionsRequestSchema,
     };
 
@@ -807,9 +680,12 @@ describe('ninguna ruta acepta un sitio, un alcance ni un actor', () => {
     const victim = await account({ withCredential: false, email: 'auditor-victim@auth.test' });
     const actor = { userId: auditor.accountId, role: 'external_auditor' as const };
 
+    // Los dos verbos administrativos que quedan con chequeo de rol EN EL SERVICIO. El
+    // tercero era `twoFactor.reset`, y se fue con el segundo factor; los demás
+    // —revocar sesiones, revocar una credencial— se gatean en el controlador, que este
+    // spec no monta.
     expect(await codeOf(() => stack.invitations.issue(actor, victim.accountId))).toBe('forbidden');
     expect(await codeOf(() => stack.invitations.revoke(actor, victim.accountId))).toBe('forbidden');
-    expect(await codeOf(() => stack.twoFactor.reset(victim.accountId, actor))).toBe('forbidden');
   });
 });
 
@@ -885,25 +761,6 @@ describe('la auditoría de la autenticación', () => {
       beforeAccepted.length + 1,
     );
     expect((await auditEntries(db.app, SITE_A, 'credential.created')).length).toBeGreaterThan(0);
-  });
-
-  it('el segundo factor deja entrada al confirmarse y al reiniciarse', async () => {
-    const created = await account({ role: 'management', email: 'audited-2fa@auth.test' });
-
-    const beforeEnrolled = await auditEntries(db.app, SITE_A, 'two_factor.enrolled');
-    const { secret } = await stack.twoFactor.enrol(created.accountId, created.email);
-    await stack.twoFactor.confirm(created.accountId, await totpFor(secret));
-
-    expect((await auditEntries(db.app, SITE_A, 'two_factor.enrolled')).length).toBe(
-      beforeEnrolled.length + 1,
-    );
-
-    const beforeReset = await auditEntries(db.app, SITE_A, 'two_factor.reset');
-    await stack.twoFactor.reset(created.accountId, coordinator);
-
-    expect((await auditEntries(db.app, SITE_A, 'two_factor.reset')).length).toBe(
-      beforeReset.length + 1,
-    );
   });
 
   it('la cadena de cada planta sigue íntegra después de todo esto', async () => {

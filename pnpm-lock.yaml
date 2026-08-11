@@ -35,9 +35,6 @@ importers:
       '@aws-sdk/s3-request-presigner':
         specifier: ^3.1106.0
         version: 3.1106.0
-      '@better-auth/utils':
-        specifier: 0.4.2
-        version: 0.4.2
       '@hs/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts

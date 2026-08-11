@@ -8,7 +8,32 @@
 | **Supersede**               | —                                                   |
 | **Superada por**            | —                                                   |
 | **Referencias**             | `docs/requisitos-v1.2.md` §6 (Autenticación), riesgo I; ADR-001, ADR-009 |
-| **Changes que la consumen** | `identity-and-roster-import`, `authentication-and-sessions` (la implementa), `offline-inspection-capture` |
+| **Changes que la consumen** | `identity-and-roster-import`, `authentication-and-sessions` (la implementa), `offline-inspection-capture`, `remove-two-factor-for-mvp` (recorta el TOTP) |
+
+> **Nota de alcance — 2026-08-11, change `remove-two-factor-for-mvp`.**
+>
+> **El TOTP obligatorio queda fuera del MVP.** Lo que sigue abajo se mantiene como el
+> registro de lo que se decidió el 2026-08-06 y no se reescribe; esta nota dice qué de
+> eso no está vigente.
+>
+> El servidor implementó el TOTP completo —secreto en `app_two_factor`, sesión de
+> `purpose = 'enrol_two_factor'` para el coordinador y gerencia sin factor confirmado, y
+> un guard que solo la acepta en las rutas de inscripción—, pero **la pantalla de
+> inscripción nunca se construyó**. Sin ella la sesión limitada no tiene salida, y el
+> coordinador de bootstrap —la primera cuenta del sistema, la que crea todas las demás—
+> quedaba sin poder usar el sistema. Terminar la funcionalidad es trabajo sobre una
+> superficie que §2 no pidió para v1, así que se quita entera en vez de completarse.
+>
+> Deja de estar vigente: el segundo factor obligatorio por rol, `ROLES_REQUIRING_TWO_FACTOR`,
+> la tabla `app_two_factor`, la columna `app_session.purpose` y las rutas
+> `two-factor/enrol`, `/confirm` y `/reset`. **Todo lo demás de este ADR sigue en pie**:
+> better-auth dentro de `apps/api`, email y contraseña por invitación sin auto-registro,
+> el bloqueo por intentos fallidos, la sesión con alcance por sitio resuelto en cada
+> request, el refresh con rotación y detección de reuso, y la prohibición de cuentas
+> compartidas.
+>
+> No es una decisión de seguridad permanente. Si el segundo factor vuelve, vuelve con sus
+> dos mitades —servidor y pantalla— y con la propuesta que corresponda.
 
 ## Contexto
 
