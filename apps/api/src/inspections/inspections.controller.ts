@@ -1,4 +1,14 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import {
   assignInspectorSchema,
   cancelScheduledInspectionSchema,
@@ -6,12 +16,14 @@ import {
   createScheduledInspectionSchema,
   updateInspectionScheduleSchema,
   type InspectionSchedule,
+  type InspectorOption,
   type LocationPackage,
   type PendingInspection,
   type RosterPackage,
   type ScheduledInspection,
   type TemplateVersionPackage,
 } from '@hs/contracts';
+import { z } from 'zod';
 
 import { CurrentSession } from '../auth/session.decorator';
 import type { SessionContext } from '../auth/session.service';
@@ -140,6 +152,25 @@ export class InspectionsController {
   }
 
   // -------------------------------------------------------------------------
+
+  /**
+   * A quién se le puede asignar una inspección en esa planta.
+   *
+   * Vive acá y no en un módulo de identidad porque el predicado de elegibilidad vive
+   * acá, y todo el punto es que sea EL MISMO que valida la asignación.
+   *
+   * `site_id` por query y no por sesión: el coordinador tiene alcance a las dos plantas y
+   * la lista es distinta en cada una. A diferencia del resto de este controller, que ese
+   * sitio esté dentro de su alcance **sí lo comprueba el servicio**: `app_user` y
+   * `user_site_scope` no llevan política de aislamiento.
+   */
+  @Get('inspector-candidates')
+  async inspectorCandidates(
+    @CurrentSession() session: SessionContext,
+    @Query('site_id') siteId: unknown,
+  ): Promise<InspectorOption[]> {
+    return this.inspections.listInspectorCandidates(session, z.uuid().parse(siteId));
+  }
 
   /** La pantalla de inicio del miembro del JHSC: lo que todavía debe. */
   @Get('me/pending-inspections')

@@ -1,3 +1,5 @@
+import { periodStatusCase } from '../inspections/period-status.sql';
+
 /**
  * Requisitos §3 R5 y §1 — LA CONSULTA DE COBERTURA POR PERÍODO.
  *
@@ -88,16 +90,15 @@ export const COMPLIANCE_PERIODS_SQL = `
          -- finding; en la tabla inspection la columna se llama signed_at.
          i.signed_at                                             AS occurred_at,
          si.cancellation_reason,
-         CASE
-           -- El orden de las ramas es el requisito. Cancelado gana sobre todo: una
-           -- inspección cancelada no es ni cumplida ni omitida, y su motivo viaja al lado.
-           WHEN si.cancelled_at IS NOT NULL THEN 'cancelled'
-           WHEN i.id IS NOT NULL            THEN 'completed'
-           -- El período todavía no cerró en Ontario. NO cuenta como omitido.
-           WHEN o.period_end >= (COALESCE($4::timestamptz, now()) AT TIME ZONE 'America/Toronto')::date
-             THEN 'open'
-           ELSE 'missed'
-         END                                                     AS status
+         -- El orden de las ramas y la frontera civil de Ontario viven en
+         -- periodStatusCase(), compartida con el listado de inspecciones programadas
+         -- para que las dos lecturas no puedan discrepar sobre la misma fila.
+         ${periodStatusCase({
+           scheduled: 'si',
+           inspection: 'i',
+           periodEnd: 'o.period_end',
+           clock: 'COALESCE($4::timestamptz, now())',
+         })}                                                     AS status
     FROM owed o
     -- LATERAL con LIMIT 1 y no un JOIN a secas: 0008 permite volver a programar un
     -- período cuya inspección se canceló, así que un mes puede tener DOS filas. Se

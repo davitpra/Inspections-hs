@@ -5,6 +5,7 @@ import { DbService } from '../db/db.service';
 import { JobsService } from '../jobs/jobs.service';
 import { OPEN_PERIOD_CRON, OPEN_PERIOD_JOB, SITE_TIME_ZONE } from '../jobs/job-registry';
 import { currentPeriodStart } from './period';
+import { LATEST_PUBLISHED_VERSION_CTE } from '../templates/published-version.sql';
 
 /**
  * ADR-005 — La apertura mensual de las inspecciones del período, por planta.
@@ -93,9 +94,10 @@ interface OpenedRow extends Record<string, unknown> {
 /**
  * Una sola sentencia para todas las reglas activas de todas las plantas.
  *
- * La versión que se congela es `DISTINCT ON (template_id) ... ORDER BY version DESC`:
- * la más alta publicada EN ESTE INSTANTE. A partir del `INSERT` no se vuelve a mirar
- * — el trigger de guarda y el GRANT por columna hacen que no se pueda.
+ * La versión que se congela es la de `LATEST_PUBLISHED_VERSION_CTE`: la más alta
+ * publicada EN ESTE INSTANTE. A partir del `INSERT` no se vuelve a mirar — el trigger de
+ * guarda y el GRANT por columna hacen que no se pueda. La expresión es compartida a
+ * propósito: el listado de plantillas ofrece exactamente la versión que esto congela.
  *
  * Una regla cuya plantilla no tiene ninguna versión publicada simplemente no produce
  * fila: el `JOIN` no encuentra nada. No es un error del trabajo — el endpoint de alta
@@ -104,11 +106,7 @@ interface OpenedRow extends Record<string, unknown> {
  */
 async function openPeriod(client: PoolClient, periodStart: string): Promise<OpenedRow[]> {
   const { rows } = await client.query<OpenedRow>(
-    `WITH latest AS (
-       SELECT DISTINCT ON (tv.template_id) tv.template_id, tv.id AS version_id
-         FROM template_version tv
-        ORDER BY tv.template_id, tv.version DESC
-     ),
+    `WITH latest AS (${LATEST_PUBLISHED_VERSION_CTE}),
      inserted AS (
        INSERT INTO scheduled_inspection
          (site_id, period_start, template_id, template_version_id, inspector_id, scheduled_by)

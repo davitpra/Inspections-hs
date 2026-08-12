@@ -9,6 +9,7 @@ import { HttpException, HttpStatus } from '@nestjs/common';
 export type SchedulingErrorCode =
   | 'inspection_not_found'
   | 'inspector_invalid'
+  | 'schedule_already_active'
   | 'template_not_publishable';
 
 export class SchedulingException extends HttpException {
@@ -36,6 +37,23 @@ export const inspectionNotFound = (): SchedulingException =>
 /** El mensaje nombra qué falta: el rol, o el sitio. Es lo que el coordinador arregla. */
 export const inspectorInvalid = (message: string): SchedulingException =>
   new SchedulingException('inspector_invalid', message, HttpStatus.BAD_REQUEST);
+
+/**
+ * Ya hay una regla activa para esa planta y esa plantilla.
+ *
+ * El único parcial de 0008 es el que manda; esto solo traduce su `23505` a algo que se
+ * pueda mostrar. **No se comprueba antes del INSERT**, a propósito: dos altas
+ * concurrentes pasarían las dos comprobaciones y chocarían igual, así que el único es la
+ * respuesta y esta función es la traducción.
+ *
+ * `409` y no `400`: la petición es válida, es el estado del sistema el que la rechaza.
+ */
+export const scheduleAlreadyActive = (siteId: string, templateId: string): SchedulingException =>
+  new SchedulingException(
+    'schedule_already_active',
+    `Site ${siteId} already has an active schedule rule for template ${templateId}`,
+    HttpStatus.CONFLICT,
+  );
 
 export const templateNotPublishable = (templateId: string): SchedulingException =>
   new SchedulingException(

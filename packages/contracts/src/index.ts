@@ -29,3 +29,4 @@ export * from './regulatory-clocks.js';
 export * from './reporting.js';
 export * from './submissions.js';
 export * from './template-document.js';
+export * from './templates.js';

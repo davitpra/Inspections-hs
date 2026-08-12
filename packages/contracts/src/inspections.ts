@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { periodStatusSchema } from './compliance.js';
+
 /**
  * Requisitos §4 — InspecciónProgramada: la obligación de inspeccionar.
  *
@@ -14,6 +16,12 @@ import { z } from 'zod';
  * esa ausencia es el requisito entero del change: la versión se congela al programar y
  * publicar una nueva no mueve una inspección abierta. Un `PATCH` que la aceptara sería
  * una promesa que el motor rechaza con 42501.
+ *
+ * **El `status` se importa de `compliance.js` y no se redefine acá.** Los cuatro
+ * estados son uno solo en todo el sistema: si el listado tuviera su propio enum,
+ * tendríamos dos definiciones de lo mismo y la que lleva digest sería la que envejece.
+ * La dirección del import es la única acíclica —`compliance.ts` no conoce este archivo—
+ * y conviene que siga así.
  */
 
 const reasonSchema = z.string().trim().min(1).max(500);
@@ -34,6 +42,8 @@ export const inspectionScheduleSchema = z.strictObject({
   template_id: z.uuid(),
   template_name: z.string().min(1),
   default_inspector_id: z.uuid().nullable(),
+  /** Ver `inspector_name` en `scheduledInspectionSchema`: mismo criterio, mismo nulo. */
+  default_inspector_name: z.string().nullable(),
   deactivated_at: z.iso.datetime({ offset: true }).nullable(),
 });
 
@@ -80,11 +90,32 @@ export const scheduledInspectionSchema = z.strictObject({
   template_version_id: z.uuid(),
   template_version: z.int().positive(),
   inspector_id: z.uuid().nullable(),
+  /**
+   * El nombre del asignado, resuelto por el servidor.
+   *
+   * NULO POR DOS MOTIVOS DISTINTOS y conviene no confundirlos: o la inspección no tiene
+   * inspector —y entonces `inspector_id` también es nulo—, o lo tiene pero su fila de
+   * `person` no es visible para quien lee. `person` está aislada por sitio y su
+   * `site_id` es una columna propia y mutable, distinta del alcance de la cuenta, así
+   * que un asignado legítimo puede tener la persona en la otra planta. El nombre falta;
+   * la asignación no.
+   *
+   * SE RESUELVE EN EL SERVIDOR y no contra la lista de candidatos, porque una
+   * asignación es un hecho histórico: al asignado que se desactivó o perdió el alcance
+   * hay que seguir nombrándolo, y justamente ya no está entre los candidatos.
+   */
+  inspector_name: z.string().nullable(),
   scheduled_at: z.iso.datetime({ offset: true }),
   /** `null` es el trabajo automático: el calendario, no una persona. */
   scheduled_by: z.uuid().nullable(),
   cancelled_at: z.iso.datetime({ offset: true }).nullable(),
   cancellation_reason: z.string().nullable(),
+  /**
+   * El estado del período, derivado por el motor y nunca almacenado. Acompaña a la
+   * inspección donde sea que se liste — no solo dentro del reporte de cobertura, que
+   * exige un sitio y un rango de meses enteros.
+   */
+  status: periodStatusSchema,
 });
 
 export type ScheduledInspection = z.infer<typeof scheduledInspectionSchema>;
@@ -139,3 +170,32 @@ export const pendingInspectionSchema = z.strictObject({
 });
 
 export type PendingInspection = z.infer<typeof pendingInspectionSchema>;
+
+/**
+ * Una cuenta elegible para recibir una inspección en una planta: `jhsc_member`, no
+ * desactivada, con alcance vigente en ese sitio.
+ *
+ * **`id` es `app_user.id`, NO `person.id`.** Es lo que viaja como `inspector_id`, y es
+ * la razón entera de que este esquema exista al lado de `personOptionSchema`, que tiene
+ * los mismos cuatro campos: un selector armado sobre el id de persona daría 400 en cada
+ * asignación, y el error no diría por qué. Los dos esquemas se parecen; lo que
+ * identifican no.
+ *
+ * Sin `email` y sin `role`: el rol ya está implícito —si está en esta lista es
+ * `jhsc_member`— y el correo no hace falta para elegir a alguien. Mismo criterio de
+ * divulgación mínima que el roster del paquete de campo, que tampoco lleva perfil.
+ *
+ * Los tres campos de nombre son NULOS cuando la fila de `person` no es visible para
+ * quien lee. La elegibilidad se define sobre `user_site_scope` y el nombre vive en
+ * `person`, que está aislada por sitio: una cuenta elegible cuya persona está en la
+ * otra planta se sigue ofreciendo, sin nombre. Perder el nombre es un problema de
+ * presentación; perder la opción sería un problema de corrección.
+ */
+export const inspectorOptionSchema = z.strictObject({
+  id: z.uuid(),
+  employee_number: z.string().nullable(),
+  first_name: z.string().nullable(),
+  last_name: z.string().nullable(),
+});
+
+export type InspectorOption = z.infer<typeof inspectorOptionSchema>;

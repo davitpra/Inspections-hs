@@ -21,6 +21,7 @@ import { ComplianceRoute } from '../routes/ComplianceRoute';
 import { RecurrenceRoute } from '../routes/RecurrenceRoute';
 import { ReportIncidentRoute } from '../routes/ReportIncidentRoute';
 import { ReviewRoute } from '../routes/ReviewRoute';
+import { SchedulingRoute } from '../routes/SchedulingRoute';
 import { SignInRoute } from '../routes/SignInRoute';
 import { SessionProvider, useAppSession } from './session-context';
 
@@ -81,6 +82,14 @@ function Shell(): React.JSX.Element {
         <Link to="/actions">Corrective actions</Link>
         <Link to="/recurrence">Recurring findings</Link>
         <Link to="/compliance">Compliance</Link>
+        {/*
+          EL PRIMER LINK CONDICIONADO POR ROL de esta barra, y queda escrito para que se
+          lea como precedente y no como descuido. Solo el coordinador administra la
+          programación, así que ofrecérsela al resto sería ofrecer una pantalla sin
+          controles. La ruta sigue siendo alcanzable por URL y se renderiza de solo
+          lectura: los GET no comprueban rol y RLS ya recorta lo que se ve.
+        */}
+        {account.role === 'hs_coordinator' ? <Link to="/scheduling">Scheduling</Link> : null}
         <Link to="/inbox">Inbox</Link>
         <Link to="/outbox">Waiting to be sent</Link>
         <button type="button" className="shell__signout" onClick={() => void signOut()}>
@@ -177,6 +186,23 @@ const complianceRoute = createRoute({
   component: ComplianceRoute,
 });
 
+/**
+ * La consola de programación (§4). ONLINE y fuera del precacheo del service worker, por
+ * lo mismo que la recurrencia y el cumplimiento —se planifica sentado— y por una razón
+ * propia y más fuerte: una asignación en cola sería un inspector que no sabe que fue
+ * asignado. El offline existe para que no se pierda el trabajo de campo, no para diferir
+ * decisiones de coordinación.
+ *
+ * **`/scheduling` y no `/inspections/schedule`**: `CAPTURE_ROUTES` en `sw.ts` matchea
+ * `/^\/inspections\//`, así que colgarla de ese prefijo la metería sin querer en el shell
+ * precacheado y la haría "disponible" sin red, mostrando datos que no puede traer.
+ */
+const schedulingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/scheduling',
+  component: SchedulingRoute,
+});
+
 const inboxRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/inbox',
@@ -195,6 +221,7 @@ const routeTree = rootRoute.addChildren([
   captureRoute,
   reviewRoute,
   outboxRoute,
+  schedulingRoute,
   actionsRoute,
   actionRoute,
   incidentsRoute,

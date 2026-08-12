@@ -3,8 +3,10 @@ import type {
   CreateInspectionSchedule,
   CreateScheduledInspection,
   InspectionSchedule,
+  InspectorOption,
   LocationPackage,
   PendingInspection,
+  PeriodStatus,
   Role,
   RosterPackage,
   ScheduledInspection,
@@ -19,8 +21,16 @@ import { forbidden } from '../auth/auth.errors';
 import type { SessionScope } from '../db/site-scope';
 import { findActiveInspection, type ActiveInspection } from './active-inspection';
 import { SITE_TIME_ZONE } from '../jobs/job-registry';
+import { LATEST_PUBLISHED_VERSION_CTE } from '../templates/published-version.sql';
+import { ACCOUNT_IS_ACTIVE, isEligibleInspector, siteScopeIsActive } from './inspector-eligibility';
+import { periodStatusCase } from './period-status.sql';
 import { civilDate } from './period';
-import { inspectionNotFound, inspectorInvalid, templateNotPublishable } from './inspections.errors';
+import {
+  inspectionNotFound,
+  inspectorInvalid,
+  scheduleAlreadyActive,
+  templateNotPublishable,
+} from './inspections.errors';
 
 /**
  * Requisitos §4 — La obligación de inspeccionar: quién la crea, quién la reasigna,
@@ -71,12 +81,23 @@ export class InspectionsService {
         await this.requireInspector(client, input.default_inspector_id, input.site_id);
       }
 
-      const { rows } = await client.query<{ id: string }>(
-        `INSERT INTO inspection_schedule (site_id, template_id, default_inspector_id, created_by)
-         VALUES ($1, $2, $3, $4)
-         RETURNING id`,
-        [input.site_id, input.template_id, input.default_inspector_id ?? null, session.userId],
-      );
+      // El único parcial de 0008 es quien rechaza la segunda regla activa; acá solo se
+      // traduce. Comprobar antes del INSERT no serviría: dos altas concurrentes pasarían
+      // las dos comprobaciones y chocarían igual contra el índice.
+      const rows = await client
+        .query<{ id: string }>(
+          `INSERT INTO inspection_schedule (site_id, template_id, default_inspector_id, created_by)
+           VALUES ($1, $2, $3, $4)
+           RETURNING id`,
+          [input.site_id, input.template_id, input.default_inspector_id ?? null, session.userId],
+        )
+        .then((result) => result.rows)
+        .catch((caught: unknown) => {
+          if (isUniqueViolation(caught)) {
+            throw scheduleAlreadyActive(input.site_id, input.template_id);
+          }
+          throw caught;
+        });
 
       return this.scheduleById(client, requireRow(rows).id);
     });
@@ -116,6 +137,50 @@ export class InspectionsService {
       if (rowCount === 0) throw inspectionNotFound();
 
       return this.scheduleById(client, id);
+    });
+  }
+
+  /**
+   * Las cuentas que pueden recibir una inspección en esa planta.
+   *
+   * MISMO PREDICADO QUE LA ASIGNACIÓN, importado de `inspector-eligibility.ts`. La
+   * propiedad que sostiene: todo lo que esta lista ofrece, `assignInspector` lo acepta.
+   * Si fueran dos consultas parecidas, la pantalla ofrecería cuentas que el servidor
+   * rechaza con `inspector_invalid` — provocado por el coordinador haciendo lo único que
+   * la pantalla le pide hacer.
+   *
+   * DOS COMPROBACIONES EXPLÍCITAS, y la segunda es la incómoda:
+   *
+   *   - `requireCoordinator`: es la única lectura del sistema que proyecta la tabla de
+   *     cuentas, y existe solo para alimentar una operación que ya es del coordinador.
+   *   - Que el sitio esté en el alcance de la sesión. **Acá el endpoint SÍ es la
+   *     frontera**: a diferencia de todo lo demás en este servicio, `app_user` y
+   *     `user_site_scope` no llevan `hs_apply_site_isolation`, así que no hay motor
+   *     detrás y sin esta línea un coordinador de Glencoe podría enumerar el JHSC de
+   *     St. Thomas. Se dice en voz alta en vez de dejar creer que RLS cubre algo.
+   */
+  async listInspectorCandidates(
+    session: SessionScope,
+    siteId: string,
+  ): Promise<InspectorOption[]> {
+    this.requireCoordinator(session);
+
+    if (!session.siteIds.includes(siteId)) throw inspectionNotFound();
+
+    return this.db.withSessionClient(session, async (client) => {
+      const { rows } = await client.query<InspectorOption>(
+        `SELECT u.id,
+                p.employee_number,
+                p.first_name,
+                p.last_name
+           FROM app_user u
+           LEFT JOIN person p ON p.id = u.person_id
+          WHERE ${isEligibleInspector('$1')}
+          ORDER BY p.last_name NULLS LAST, p.first_name NULLS LAST, u.id`,
+        [siteId],
+      );
+
+      return rows;
     });
   }
 
@@ -379,28 +444,40 @@ export class InspectionsService {
 
   /**
    * La versión más alta publicada de una plantilla. Es lo que se congela al programar.
+   *
+   * La expresión sale de `LATEST_PUBLISHED_VERSION_CTE` y no está escrita acá, para que
+   * lo que el listado de plantillas OFRECE y lo que este método CONGELA no puedan
+   * discrepar.
    */
   private async requirePublishedTemplate(client: PoolClient, templateId: string): Promise<string> {
-    const { rows } = await client.query<{ id: string }>(
-      `SELECT id FROM template_version
-        WHERE template_id = $1
-        ORDER BY version DESC
-        LIMIT 1`,
+    const { rows } = await client.query<{ version_id: string }>(
+      `WITH latest AS (${LATEST_PUBLISHED_VERSION_CTE})
+       SELECT version_id FROM latest WHERE template_id = $1`,
       [templateId],
     );
 
     const row = rows[0];
     if (!row) throw templateNotPublishable(templateId);
 
-    return row.id;
+    return row.version_id;
   }
 
   /**
    * Un inspector válido es `jhsc_member` con alcance VIGENTE en esa planta.
    *
-   * §4, nota de vocabulario: los 7 miembros del JHSC son los únicos que ejecutan
-   * inspecciones, y "inspector" y "miembro del JHSC" son la misma cosa. Un gerente con
-   * las mejores intenciones no puede recibir una.
+   * Las condiciones salen de `inspector-eligibility.ts`, compartidas con el listado de
+   * candidatos, para que no pueda ofrecerse una cuenta que después se rechace acá.
+   *
+   * PERO LA FORMA SE CONSERVA: se proyectan el rol y el alcance por separado en vez de
+   * preguntar un booleano, porque los tres motivos de rechazo dan tres mensajes
+   * distintos y son ellos los que hacen accionable el error. `inspection-period.int-spec`
+   * los afirma. Un `WHERE isEligibleInspector(...)` devolvería cero filas y las tres
+   * causas colapsarían en «no existe».
+   *
+   * **Sin join a `person`**, y no es un olvido: la persona de una cuenta puede estar en
+   * otra planta que su alcance, `person` está aislada por sitio, y el join convertiría
+   * «no tiene alcance en el sitio» en «no existe» — perdiendo justo el mensaje que la
+   * spec exige.
    */
   private async requireInspector(
     client: PoolClient,
@@ -409,12 +486,9 @@ export class InspectionsService {
   ): Promise<void> {
     const { rows } = await client.query<{ role: Role; in_scope: boolean }>(
       `SELECT u.role,
-              EXISTS (
-                SELECT 1 FROM user_site_scope s
-                 WHERE s.user_id = u.id AND s.site_id = $2 AND s.revoked_at IS NULL
-              ) AS in_scope
+              ${siteScopeIsActive('$2')} AS in_scope
          FROM app_user u
-        WHERE u.id = $1 AND u.deactivated_at IS NULL`,
+        WHERE u.id = $1 AND ${ACCOUNT_IS_ACTIVE}`,
       [inspectorId, siteId],
     );
 
@@ -461,15 +535,42 @@ function sessionScope(session: SessionScope): { siteIds: readonly string[]; user
   return { siteIds: session.siteIds, userId: session.userId };
 }
 
+/**
+ * El nombre del asignado, y por qué se resuelve acá y no en el cliente.
+ *
+ * Una asignación es un HECHO HISTÓRICO. Si la cuenta se desactivó o perdió el alcance,
+ * correctamente ya no está entre los candidatos — así que un mapa armado en el cliente a
+ * partir de esa lista imprimiría un UUID crudo justo en las filas que el coordinador más
+ * necesita ver. El nombre del sitio sí se resuelve en el cliente: son dos filas fijas.
+ *
+ * `LEFT JOIN` EN LOS DOS SALTOS, y el segundo es el que importa: `person` lleva política
+ * de aislamiento por sitio y su `site_id` es una columna propia y mutable, distinta del
+ * alcance de la cuenta. Una cuenta asignada legítimamente puede tener su persona en la
+ * otra planta —alguien que cubre las dos, alguien que se mudó—, y un `INNER JOIN` haría
+ * desaparecer la fila entera de la lista. Se pierde el nombre, nunca la asignación.
+ */
+function INSPECTOR_NAME_JOIN(idColumn: string, userAlias: string, personAlias: string): string {
+  return `LEFT JOIN app_user ${userAlias} ON ${userAlias}.id = ${idColumn}
+    LEFT JOIN person ${personAlias} ON ${personAlias}.id = ${userAlias}.person_id`;
+}
+
+/** `NULL` cuando no hay asignado, y también cuando su persona no es visible. */
+function INSPECTOR_NAME_EXPR(personAlias: string): string {
+  return `NULLIF(TRIM(COALESCE(${personAlias}.first_name, '') || ' ' ||
+                       COALESCE(${personAlias}.last_name, '')), '')`;
+}
+
 const SCHEDULE_SELECT = `
   SELECT s.id,
          s.site_id,
          s.template_id,
          t.name AS template_name,
          s.default_inspector_id,
+         ${INSPECTOR_NAME_EXPR('dp')} AS default_inspector_name,
          s.deactivated_at
     FROM inspection_schedule s
     JOIN template t ON t.id = s.template_id
+    ${INSPECTOR_NAME_JOIN('s.default_inspector_id', 'du', 'dp')}
    WHERE true`;
 
 const SCHEDULED_SELECT = `
@@ -482,13 +583,21 @@ const SCHEDULED_SELECT = `
          si.template_version_id,
          tv.version AS template_version,
          si.inspector_id,
+         ${INSPECTOR_NAME_EXPR('ip')} AS inspector_name,
          si.scheduled_at,
          si.scheduled_by,
          si.cancelled_at,
-         si.cancellation_reason
+         si.cancellation_reason,
+         ${periodStatusCase({
+           scheduled: 'si',
+           inspection: 'insp',
+           periodEnd: 'si.period_end',
+         })} AS status
     FROM scheduled_inspection si
     JOIN template t ON t.id = si.template_id
     JOIN template_version tv ON tv.id = si.template_version_id
+    ${INSPECTOR_NAME_JOIN('si.inspector_id', 'iu', 'ip')}
+    LEFT JOIN inspection insp ON insp.scheduled_inspection_id = si.id
    WHERE true`;
 
 interface ScheduleRow extends Record<string, unknown> {
@@ -497,6 +606,7 @@ interface ScheduleRow extends Record<string, unknown> {
   template_id: string;
   template_name: string;
   default_inspector_id: string | null;
+  default_inspector_name: string | null;
   deactivated_at: Date | null;
 }
 
@@ -510,10 +620,12 @@ interface ScheduledRow extends Record<string, unknown> {
   template_version_id: string;
   template_version: number;
   inspector_id: string | null;
+  inspector_name: string | null;
   scheduled_at: Date;
   scheduled_by: string | null;
   cancelled_at: Date | null;
   cancellation_reason: string | null;
+  status: PeriodStatus;
 }
 
 interface PendingRow extends Record<string, unknown> {
@@ -533,6 +645,7 @@ function toSchedule(row: ScheduleRow): InspectionSchedule {
     template_id: row.template_id,
     template_name: row.template_name,
     default_inspector_id: row.default_inspector_id,
+    default_inspector_name: row.default_inspector_name,
     deactivated_at: row.deactivated_at?.toISOString() ?? null,
   };
 }
@@ -548,11 +661,23 @@ function toScheduled(row: ScheduledRow): ScheduledInspection {
     template_version_id: row.template_version_id,
     template_version: row.template_version,
     inspector_id: row.inspector_id,
+    inspector_name: row.inspector_name,
     scheduled_at: row.scheduled_at.toISOString(),
     scheduled_by: row.scheduled_by,
     cancelled_at: row.cancelled_at?.toISOString() ?? null,
     cancellation_reason: row.cancellation_reason,
+    status: row.status,
   };
+}
+
+/**
+ * `23505` — violación de único. Se mira el `code` de `pg` y no el texto del mensaje, que
+ * cambia con la versión del servidor y con el idioma del `lc_messages`.
+ */
+function isUniqueViolation(caught: unknown): boolean {
+  return typeof caught === 'object' && caught !== null && 'code' in caught
+    ? (caught as { code?: unknown }).code === '23505'
+    : false;
 }
 
 function requireRow<T>(rows: readonly T[]): T {

@@ -6,12 +6,14 @@ import { ZodExceptionFilter } from './common/zod-exception.filter';
 import { ActionsModule } from './actions/actions.module';
 import { IncidentsModule } from './incidents/incidents.module';
 import { AuthModule } from './auth/auth.module';
+import { CatalogModule } from './catalog/catalog.module';
 import { DbModule } from './db/db.module';
 import { FindingsModule } from './findings/findings.module';
 import { InspectionsModule } from './inspections/inspections.module';
 import { JobsModule } from './jobs/jobs.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ReportingModule } from './reporting/reporting.module';
+import { TemplatesModule } from './templates/templates.module';
 import { UploadsModule } from './uploads/uploads.module';
 
 @Module({
@@ -31,6 +33,11 @@ import { UploadsModule } from './uploads/uploads.module';
     IncidentsModule,
     NotificationsModule,
     UploadsModule,
+    // Los catálogos de solo lectura que la consola de programación necesita para
+    // ofrecer nombres en vez de identificadores. Ninguno declara un `:param` a nivel
+    // raíz, así que no hay riesgo de orden como el de `findings/recurrence`.
+    CatalogModule,
+    TemplatesModule,
   ],
   controllers: [AppController],
   providers: [
