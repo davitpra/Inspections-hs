@@ -1,4 +1,8 @@
-import type { LocationOption } from '@hs/contracts';
+import {
+  FINDING_DESCRIPTION_MAX,
+  FINDING_DESCRIPTION_MIN,
+  type LocationOption,
+} from '@hs/contracts';
 
 import type { FindingDraftRow, PhotoRow } from '../offline/db';
 import { PhotoField } from './PhotoField';
@@ -42,12 +46,23 @@ export function FindingFields({
       <p className="finding__title">This needs a finding</p>
 
       <label htmlFor={`finding-description-${itemKey}`}>What is wrong?</label>
+      {/*
+        El mínimo se DICE mientras se escribe, no al firmar. Es el mismo del contrato y
+        el mismo `CHECK` de la migración: descubrirlo en la pantalla de revisión obliga
+        al inspector a volver a un ítem que puede estar a media planta de distancia.
+      */}
+      <p className="finding__hint" id={`finding-description-hint-${itemKey}`}>
+        At least {FINDING_DESCRIPTION_MIN} characters — whoever reads this months from
+        now was not there.
+      </p>
       <textarea
         id={`finding-description-${itemKey}`}
+        aria-describedby={`finding-description-hint-${itemKey}`}
         value={description}
         disabled={disabled}
         rows={3}
-        maxLength={2000}
+        minLength={FINDING_DESCRIPTION_MIN}
+        maxLength={FINDING_DESCRIPTION_MAX}
         // Se escribe en cada tecla, igual que una respuesta y por el mismo motivo: un
         // debounce es una ventana en la que Android puede matar el proceso.
         onChange={(event) => onChange({ description: event.target.value })}

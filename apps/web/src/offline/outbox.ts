@@ -314,6 +314,10 @@ async function findingsBlock(
 const NON_RETRYABLE = new Set([
   'validation_failed',
   'invalid_submission',
+  // El cuerpo no tiene la forma del contrato: lo emite `ZodExceptionFilter` de la API.
+  // Un payload que ni siquiera parsea no lo arregla ningún reintento, y sin este código
+  // acá el `400` cae al default de `readError` —`session_ended`— y vuelve al retroceso.
+  'invalid_request',
   'forbidden',
   'inspection_not_found',
 ]);

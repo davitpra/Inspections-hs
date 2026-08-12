@@ -292,6 +292,39 @@ describe('sendEntry', () => {
     expect(again).toEqual({ kind: 'skipped' });
   });
 
+  /**
+   * El cuerpo que no es del contrato tampoco se reintenta.
+   *
+   * `ZodExceptionFilter` de la API lo devuelve como `400 invalid_request`. Antes de ese
+   * filtro salía como `500` sin código tipado, `readError` caía en `session_ended`, y la
+   * entrada quedaba reintentando con retroceso un payload que el servidor nunca iba a
+   * aceptar. Este test es esa regresión.
+   */
+  it('un cuerpo que no cumple el contrato detiene la entrada, no la reintenta', async () => {
+    database = freshDatabase();
+    const id = await readyDraft(database);
+
+    const rejecting = fakeSessionClient({
+      respond: (path) =>
+        path === '/inspection-submissions'
+          ? fail('invalid_request', 'findings.guarding.installed.description: too_small')
+          : ok({}),
+    });
+
+    const outcome = await sendEntry(id, { database, client: rejecting, put: bucketOk });
+
+    expect(outcome.kind).toBe('rejected');
+
+    const entry = await database.outbox.get(id);
+    expect(entry?.state).toBe('rejected');
+    expect(entry?.last_error).toContain('too_small');
+
+    // Y no se vuelve a intentar.
+    expect(await sendEntry(id, { database, client: rejecting, put: bucketOk })).toEqual({
+      kind: 'skipped',
+    });
+  });
+
   /** Spec: "Repeated failures back off rather than hammer the network". */
   it('los reintentos crecen y guardan attempts y last_error', async () => {
     database = freshDatabase();

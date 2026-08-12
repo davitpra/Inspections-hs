@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
+import { APP_FILTER } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { ZodExceptionFilter } from './common/zod-exception.filter';
 import { ActionsModule } from './actions/actions.module';
 import { IncidentsModule } from './incidents/incidents.module';
 import { AuthModule } from './auth/auth.module';
@@ -31,6 +33,12 @@ import { UploadsModule } from './uploads/uploads.module';
     UploadsModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    // Como proveedor y no como `app.useGlobalFilters()` en `main.ts`: los tests de
+    // integración levantan la app con `Test.createTestingModule`, que no pasa por
+    // `bootstrap`. Registrarlo acá es lo que hace que lo probado sea lo que corre.
+    { provide: APP_FILTER, useClass: ZodExceptionFilter },
+  ],
 })
 export class AppModule {}

@@ -188,12 +188,46 @@ describe('incompleteFindings', () => {
         ?.missing,
     ).toEqual(['description']);
   });
+
+  /**
+   * La regresión que motivó el arreglo: "ok" pasaba la compuerta, pasaba la firma, y el
+   * servidor lo rechazaba con un `ZodError` que salía como `500` y dejaba la entrada del
+   * outbox reintentando para siempre.
+   */
+  it('una descripción más corta que el mínimo del contrato tampoco alcanza', async () => {
+    database = freshDatabase();
+    const id = await draftWithNegative();
+
+    await complete(id);
+    await saveFinding(id, 'guarding.installed', { description: 'ok' }, database);
+
+    const loaded = await loadDraft(id, database);
+
+    expect(
+      incompleteFindings(TEST_DOCUMENT, loaded!.answers, loaded!.findings, loaded!.photos)[0]
+        ?.missing,
+    ).toEqual(['description_too_short']);
+  });
 });
 
 describe('signDraft con hallazgos', () => {
   it('se niega mientras un hallazgo esté incompleto, y nombra el ítem', async () => {
     database = freshDatabase();
     const id = await draftWithNegative();
+
+    await expect(signDraft(id, database)).rejects.toBeInstanceOf(IncompleteFindingsError);
+
+    const loaded = await loadDraft(id, database);
+
+    expect(loaded?.draft.status).toBe('capturing');
+  });
+
+  it('se niega con una descripción demasiado corta, aunque no esté vacía', async () => {
+    database = freshDatabase();
+    const id = await draftWithNegative();
+
+    await complete(id);
+    await saveFinding(id, 'guarding.installed', { description: 'ok' }, database);
 
     await expect(signDraft(id, database)).rejects.toBeInstanceOf(IncompleteFindingsError);
 

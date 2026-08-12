@@ -1,3 +1,4 @@
+import { FINDING_DESCRIPTION_MIN } from '@hs/contracts';
 import {
   evaluateVisibility,
   itemsInDocumentOrder,
@@ -318,7 +319,7 @@ export async function saveFinding(
  */
 export interface IncompleteFinding {
   item_key: string;
-  missing: ('description' | 'location' | 'photo')[];
+  missing: ('description' | 'description_too_short' | 'location' | 'photo')[];
 }
 
 export function incompleteFindings(
@@ -358,7 +359,22 @@ function missingOf(
 ): IncompleteFinding {
   const missing: IncompleteFinding['missing'] = [];
 
-  if (!row || row.description.trim().length === 0) missing.push('description');
+  /**
+   * El mínimo es el del contrato, no "no vacío".
+   *
+   * Con `length === 0` acá, un "ok" de dos letras pasaba la revisión, pasaba la firma,
+   * y recién lo paraba el servidor —que hasta el filtro de `ZodError` lo paraba con un
+   * `500`, dejando la entrada del outbox reintentando para siempre—. La compuerta tiene
+   * que ser la MISMA que la del contrato o no es una compuerta: es un aviso tardío.
+   *
+   * Vacío y demasiado corto se nombran distinto porque para el inspector no son lo
+   * mismo: uno no escribió nada, el otro escribió algo y necesita saber que no alcanza.
+   */
+  const description = row?.description.trim() ?? '';
+
+  if (description.length === 0) missing.push('description');
+  else if (description.length < FINDING_DESCRIPTION_MIN) missing.push('description_too_short');
+
   if (!row || row.location_id === null) missing.push('location');
   if (!photos.some((photo) => photo.kind === 'finding' && photo.item_key === itemKey)) {
     missing.push('photo');
