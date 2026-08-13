@@ -7,6 +7,8 @@
     "node": ">=22.12.0"
   },
   "scripts": {
+    "dev": "pnpm --filter contracts --filter forms build && pnpm --parallel --filter api --filter web dev",
+    "setup": "pnpm db:up && pnpm db:migrate && pnpm db:jobs:install && pnpm db:seed",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",

@@ -13,6 +13,13 @@ del JHSC, hallazgos, acciones correctivas, incidentes y el reporte de cumplimien
 ```bash
 cp .env.example .env          # revisá POSTGRES_PORT si ya tenés algo en 5432
 pnpm install
+pnpm setup                    # db:up + db:migrate + db:jobs:install + db:seed
+```
+
+`pnpm setup` es el atajo de los cuatro pasos de base; si algo falla conviene correrlos
+sueltos para ver cuál fue:
+
+```bash
 pnpm db:up                    # Postgres + MinIO
 pnpm db:migrate
 pnpm db:jobs:install          # el esquema `pgboss`; sin esto la API no arranca
@@ -22,7 +29,18 @@ pnpm db:seed                  # plantilla, plantas, ubicaciones, coordinador, re
 Con eso la base queda consistente **pero vacía de trabajo**, a propósito: los seeds no
 crean credenciales ni asignan inspecciones. Ver más abajo.
 
-Después, en dos terminales:
+Después, en una sola terminal:
+
+```bash
+pnpm dev                      # API en :3000 y PWA en :5173
+```
+
+Compila `contracts` y `forms` (los otros dos los consumen por su `dist`) y levanta los
+dos watchers en paralelo, prefijando cada línea con `apps/api dev:` / `apps/web dev:`.
+Ctrl-C corta ambos. No verifica que Postgres esté arriba: si la base no corre, la API
+falla al iniciar y hay que pasar por `pnpm setup` (o `pnpm db:up`).
+
+Para correrlos por separado, en dos terminales:
 
 ```bash
 pnpm --filter api start:dev   # http://localhost:3000
@@ -153,6 +171,8 @@ espera, y la credencial la revoca el coordinador desde la aplicación
 
 | Comando | Qué hace |
 | --- | --- |
+| `pnpm dev` | Compila `contracts` y `forms`, y levanta API (:3000) y PWA (:5173) en paralelo. |
+| `pnpm setup` | Los cuatro pasos de base: `db:up`, `db:migrate`, `db:jobs:install`, `db:seed`. |
 | `pnpm db:up` / `db:down` / `db:reset` | El compose: Postgres y MinIO. `reset` borra los volúmenes. |
 | `pnpm db:migrate` | Migraciones (`hs_migrator`). |
 | `pnpm db:jobs:install` | Instala/actualiza el esquema `pgboss`. Paso de despliegue, no de arranque. |
@@ -174,3 +194,12 @@ coordinador, pero no hay pantalla: hoy se emite con `pnpm auth:bootstrap` o con 
 
 Crear la cuenta y aceptar la invitación, en cambio, ya no están acá: son
 `pnpm auth:create-account` y `/accept-invitation` — ver "Dar de alta a alguien".
+
+**Elegir a una persona en el reporte de incidente.** El `PersonPicker` de
+`/incidents/report` sigue siendo un campo de id: falta una ruta que liste `PersonOption`
+—cuatro columnas, solo activas— para esa pantalla. **No sirve `GET /people`**, que es del
+coordinador y devuelve el perfil completo; colgar el selector de ahí rompería §4 R4.
+
+Administrar el roster, en cambio, ya no está acá: es `/roster` — leer la planta, corregir
+un nombre, transferir de planta, dar de baja y reactivar. El alta sigue siendo
+`pnpm roster:import`, y la próxima importación pisa nombres y estado.

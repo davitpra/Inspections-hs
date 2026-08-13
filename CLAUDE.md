@@ -11,9 +11,11 @@ escriben en inglés con sintaxis EARS.
 ## Comandos
 
 ```bash
-pnpm db:up && pnpm db:migrate && pnpm db:jobs:install && pnpm db:seed  # arranque local
-pnpm --filter api start:dev      # API en :3000
-pnpm --filter web dev            # PWA en :5173
+pnpm setup                       # db:up + db:migrate + db:jobs:install + db:seed
+pnpm dev                         # API en :3000 y PWA en :5173, en una sola terminal
+
+pnpm --filter api start:dev      # o cada uno por separado, en dos terminales
+pnpm --filter web dev
 
 pnpm lint                        # eslint sobre todo el repo
 pnpm -r build                    # SIEMPRE antes de typecheck (ver abajo)
@@ -28,7 +30,8 @@ integración `pnpm --filter api exec vitest run --config vitest.integration.conf
 
 **El build va antes del typecheck.** `apps/web` y `apps/api` consumen `@hs/forms` y
 `@hs/contracts` por sus `exports` → `dist`; sin compilar los paquetes, no tipan. CI hace
-exactamente eso (`.github/workflows/ci.yml`).
+exactamente eso (`.github/workflows/ci.yml`), y `pnpm dev` compila los dos paquetes antes
+de levantar los watchers por la misma razón.
 
 `db:jobs:install` instala el esquema `pgboss` — sin él la API no arranca. Es un paso de
 despliegue, no de arranque.
