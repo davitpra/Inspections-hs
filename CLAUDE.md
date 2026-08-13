@@ -1,0 +1,105 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Idioma
+
+Código, comentarios, ADRs y commits: **español**. UI y contenido de la aplicación:
+**solo inglés, sin i18n** (`openspec/config.yaml`). Los requisitos de las specs se
+escriben en inglés con sintaxis EARS.
+
+## Comandos
+
+```bash
+pnpm db:up && pnpm db:migrate && pnpm db:jobs:install && pnpm db:seed  # arranque local
+pnpm --filter api start:dev      # API en :3000
+pnpm --filter web dev            # PWA en :5173
+
+pnpm lint                        # eslint sobre todo el repo
+pnpm -r build                    # SIEMPRE antes de typecheck (ver abajo)
+pnpm typecheck
+pnpm test                        # unitarios (rápidos, sin Docker)
+pnpm --filter api test:int       # integración contra Postgres real (testcontainers)
+```
+
+Un solo test: `pnpm --filter api exec vitest run src/findings/risk.spec.ts`, o para
+integración `pnpm --filter api exec vitest run --config vitest.integration.config.mts test/findings.int-spec.ts`.
+`--filter web` y `--filter contracts` funcionan igual con `vitest run <archivo>`.
+
+**El build va antes del typecheck.** `apps/web` y `apps/api` consumen `@hs/forms` y
+`@hs/contracts` por sus `exports` → `dist`; sin compilar los paquetes, no tipan. CI hace
+exactamente eso (`.github/workflows/ci.yml`).
+
+`db:jobs:install` instala el esquema `pgboss` — sin él la API no arranca. Es un paso de
+despliegue, no de arranque.
+
+Para datos de demo (`pnpm demo:data`, `pnpm demo:content`), recuperar contraseñas
+(`pnpm auth:reset-password`) y el bootstrap de la primera credencial
+(`pnpm auth:bootstrap`), el README tiene el detalle y las precondiciones de cada uno.
+
+## Arquitectura
+
+Monorepo pnpm. `apps/api` (NestJS + Postgres/Drizzle + pg-boss), `apps/web` (Vite +
+React + TanStack Router/Query + Dexie + Serwist), `packages/contracts` (Zod compartido),
+`packages/forms` (motor de formularios isomórfico), `packages/config` (tsconfig).
+
+Las decisiones están en `docs/adr/` y **se citan por número, no se reescriben**. Las que
+más condicionan el código del día a día:
+
+- **ADR-001** — el offline no es sincronización. Un dueño, un dispositivo, un firmante;
+  el envío es el punto de no retorno; se acepta perder borradores. La corrección la
+  garantiza el servidor con `client_submission_id`, no el cliente.
+- **ADR-002 / ADR-004** — la inmutabilidad la fuerza el motor: `hs_app` no tiene
+  UPDATE/DELETE por default, se conceden tabla por tabla en la migración. Nunca DELETE:
+  `deactivated_at`. El aislamiento por sitio es RLS, nunca un `WHERE` en el endpoint.
+- **ADR-007** — `packages/forms` corre en el dispositivo y en el servidor sobre la misma
+  entrada, y viaja dentro del bundle del service worker: sin builtins de Node, sin
+  reloj, sin azar, sin red. El esquema Drizzle vive solo en `apps/api`.
+- **ADR-008** — monolito modular, dependencias en una sola dirección. `findings` no
+  puede llamar a `inspections` (la inversa sí, y está declarada como excepción).
+  `reporting` lee de todos y no lo llama nadie. Capas delgadas:
+  `controller → service → repository`, más un archivo de funciones puras donde haya
+  reglas reales.
+
+Las dos costuras que concentran el riesgo (ADR-008): la ingesta del envío
+(`POST /inspections/submissions`, una transacción idempotente) y la derivación de
+estado — el estado de una acción correctiva y los relojes regulatorios de un incidente
+**no son columnas**, se calculan de eventos y reglas puras.
+
+### Alcance de sitio
+
+Todo acceso a la base pasa por `DbService`, y por cuál método importa
+(`apps/api/src/db/db.service.ts`, `site-scope.ts`):
+
+- `withSession` / `withSessionClient` — el camino HTTP. El `SessionScope` lo produce el
+  guard; los `siteIds` salen de `user_site_scope` en cada request, no del token.
+- `withSiteScope` / `withSiteScopeClient` — alcance declarado a mano: seeds, comandos de
+  servidor, tests. Un endpoint que llame a estos está fabricando un alcance que no le
+  corresponde, y por eso son métodos distintos.
+
+## Invariantes que ningún change puede violar
+
+Están en `openspec/config.yaml` junto con las capabilities válidas y la lista de lo que
+está **fuera de alcance en v1** (i18n, canal anónimo, QR, scoring ponderado, segunda
+firma, sincronización multi-dispositivo, etc.). Leerla antes de proponer algo que parezca
+una mejora obvia.
+
+El flujo de trabajo es spec-driven con OpenSpec: `/opsx:propose`, `/opsx:apply`,
+`/opsx:archive`. Toda tarea que toque el esquema incluye su migración SQL con
+REVOKE/RLS.
+
+## Comprobaciones que son parte del build
+
+No son opcionales y fallan el `pnpm --filter web build`:
+
+- `scripts/check-service-worker.mjs` — verifica ADR-007 sobre el **artefacto**
+  construido (un builtin de Node que entra por una dependencia transitiva no lo ve el
+  lint) y compara el precache contra un presupuesto escrito en el archivo.
+- `scripts/check-tokens.mjs` — ningún color literal fuera del bloque de tokens de
+  `index.css`, todo `var(--x)` resuelve, las primitivas no se usan salteando la capa
+  semántica, y `index.html`/manifest coinciden con `--brand`.
+
+`eslint.config.js` no es configuración genérica: implementa las reglas de ADR-007 y
+ADR-008 (sin builtins ni impureza en `packages/forms`; sin reloj ambiente en
+`regulatory-clocks.ts`, `incidents.ts`, `actions.ts` de contracts). Si una regla molesta,
+la conversación es sobre la ADR, no sobre el lint.
