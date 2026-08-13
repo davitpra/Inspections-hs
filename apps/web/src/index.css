@@ -189,10 +189,43 @@ select:disabled {
 }
 
 .shell__signout {
-  margin-left: auto;
   min-height: auto;
   padding: 0.35rem 0.75rem;
   font-size: var(--text-sm);
+}
+
+/*
+ * Quién está adentro. El `margin-left: auto` vive acá y ya no en `.shell__signout`: el
+ * chip es el primero del par que se va a la derecha, y el botón lo sigue.
+ *
+ * Se lee, no se toca — es un `div` y no un control, así que el piso de 48px de la barra
+ * no le aplica. El nombre es el dato y el rol lo acompaña un paso más abajo en tamaño y
+ * en contraste; `--muted` cumple 4.5:1 sobre `--paper`, que es lo que hace que "H&S
+ * coordinator" siga siendo legible con luz de planta y no solo decorativo.
+ */
+.account-chip {
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  line-height: 1.2;
+  /* Un nombre largo se recorta antes de empujar los links fuera de la barra. */
+  min-width: 0;
+}
+
+.account-chip__name {
+  font-size: var(--text-sm);
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 14rem;
+}
+
+.account-chip__role {
+  font-size: var(--text-xs);
+  color: var(--muted);
 }
 
 .shell__main {

@@ -80,6 +80,8 @@ async function account(spec: {
   role?: string;
   siteIds?: readonly string[];
   email?: string;
+  firstName?: string;
+  lastName?: string;
   expiresAt?: Date | null;
   recordsFrom?: string | null;
   recordsTo?: string | null;
@@ -89,6 +91,8 @@ async function account(spec: {
     role: spec.role ?? 'jhsc_member',
     siteIds: spec.siteIds ?? [SITE_A],
     email: spec.email,
+    firstName: spec.firstName,
+    lastName: spec.lastName,
     expiresAt: spec.expiresAt ?? null,
     recordsFrom: spec.recordsFrom ?? null,
     recordsTo: spec.recordsTo ?? null,
@@ -345,6 +349,42 @@ describe('el alcance sale de la sesión y de ningún otro lado', () => {
     expect(session.userId).toBe(created.accountId);
     expect(session.personId).toBe(created.personId);
     expect(session.siteScope).toEqual([SITE_A]);
+  });
+
+  /**
+   * La sesión también dice QUIÉN, no solo qué puede. Sin esto la interfaz tenía ids y un
+   * rol, y en un dispositivo compartido nadie podía confirmar de quién era el borrador
+   * antes de firmarlo (ADR-001: un dueño, un dispositivo, un firmante).
+   *
+   * El email sale de `app_user` durante la resolución del token; el nombre sale de
+   * `person`, que está aislada por sitio, y por eso se lee aparte y bajo alcance. Este
+   * test existe para que esa segunda lectura no se pierda en un refactor —si se
+   * perdiera, la sesión seguiría siendo válida y el nombre simplemente desaparecería.
+   */
+  it('la sesión dice quién es la persona, no solo qué puede', async () => {
+    const created = await account({
+      email: 'identity@auth.test',
+      firstName: 'Ada',
+      lastName: 'Reid',
+    });
+
+    const { session, tokens } = await stack.auth.signIn({
+      email: created.email,
+      password: PASSWORD,
+    });
+
+    expect(session.email).toBe('identity@auth.test');
+    expect(session.firstName).toBe('Ada');
+    expect(session.lastName).toBe('Reid');
+
+    // Y por el mismo camino que usa `GET /auth/session` al reabrir la aplicación, no
+    // solo en la respuesta del login.
+    const resolved = await stack.sessions.toContractSession(
+      await stack.sessions.resolve(tokens.accessToken),
+    );
+
+    expect(resolved.firstName).toBe('Ada');
+    expect(resolved.email).toBe('identity@auth.test');
   });
 
   it('revocar un sitio lo saca del alcance con el MISMO token', async () => {

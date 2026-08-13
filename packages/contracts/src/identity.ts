@@ -40,6 +40,25 @@ export const roleSchema = z.enum(ROLES);
 export type Role = z.infer<typeof roleSchema>;
 
 /**
+ * Cómo se escribe cada rol cuando lo lee una persona.
+ *
+ * Vive acá y no en la web porque el vocabulario de §4 es uno solo: `jhsc_member` se
+ * muestra "JHSC member" y nunca "Inspector", que es lo que alguien escribiría si cada
+ * pantalla inventara su etiqueta. No es i18n —la UI es solo inglés
+ * (`openspec/config.yaml`)—, es la traducción del identificador al término del dominio.
+ *
+ * `Record<Role, string>` a propósito: agregar un rol a `ROLES` sin etiquetarlo no
+ * compila.
+ */
+export const ROLE_LABELS: Record<Role, string> = {
+  hs_coordinator: 'H&S coordinator',
+  jhsc_member: 'JHSC member',
+  supervisor: 'Supervisor',
+  management: 'Management',
+  external_auditor: 'External auditor',
+};
+
+/**
  * El número de empleado de ADP. Es la identidad de una persona (§4), así que se
  * valida con la misma forma que el `CHECK` de la migración: sin espacios y no
  * vacío. Deliberadamente permisivo con el resto — el formato lo fija ADP, no

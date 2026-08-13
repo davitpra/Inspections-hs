@@ -85,7 +85,7 @@ export class AuthService {
 
     await this.record(account.id, 'auth.signed_in', {});
 
-    return { session: this.sessions.toContractSession(context), tokens };
+    return { session: await this.sessions.toContractSession(context), tokens };
   }
 
   async signOut(sessionId: string): Promise<void> {

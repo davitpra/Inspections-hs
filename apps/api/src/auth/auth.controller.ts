@@ -74,10 +74,11 @@ export class AuthController {
 
   /**
    * Quién está adentro. Devuelve la sesión resuelta —`userId`, `personId`, `role`,
-   * `siteScope`— y nada más: ningún hash, ningún secreto, ningún token.
+   * `siteScope`, más el email y el nombre con los que la interfaz puede DECIR de quién
+   * es la sesión— y nada más: ningún hash, ningún secreto, ningún token.
    */
   @Get('session')
-  session(@CurrentSession() session: SessionContext): Session {
+  async session(@CurrentSession() session: SessionContext): Promise<Session> {
     return this.sessions.toContractSession(session);
   }
 

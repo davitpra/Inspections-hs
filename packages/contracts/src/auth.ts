@@ -84,6 +84,12 @@ export const passwordSchema = z
 
 export const emailSchema = z.string().trim().toLowerCase().email().max(254);
 
+/**
+ * El nombre de pila o el apellido de la persona detrás de la cuenta. Misma forma que
+ * `person.first_name`/`last_name` en `identity.ts`, porque de ahí salen.
+ */
+const nameSchema = z.string().trim().min(1).max(80);
+
 // ---------------------------------------------------------------------------
 // Login
 
@@ -104,6 +110,13 @@ export type SignInRequest = z.infer<typeof signInRequestSchema>;
  *
  * `siteScope` se resuelve en CADA request contra `user_site_scope` y no se congela
  * en el token (design D4): lo que este objeto muestra es el alcance de ahora.
+ *
+ * `email`, `firstName` y `lastName` no son permisos: son lo único con lo que la
+ * aplicación puede DECIR de quién es la sesión. Sin ellos la interfaz solo tenía ids y
+ * un rol, y en un dispositivo compartido —un dueño, un dispositivo, un firmante
+ * (ADR-001)— nadie podía confirmar de quién era el borrador antes de firmarlo. Nada de
+ * esto es un secreto nuevo: el email es con lo que la persona inicia sesión y el nombre
+ * ya circula en el roster.
  */
 export const sessionSchema = z.object({
   userId: z.uuid(),
@@ -113,6 +126,23 @@ export const sessionSchema = z.object({
   /** Solo para `external_auditor`: la ventana de registros que puede leer. */
   recordsFrom: z.iso.date().nullable(),
   recordsTo: z.iso.date().nullable(),
+
+  /*
+   * OPCIONALES, y el motivo NO es que el servidor pueda omitirlos —los manda siempre.
+   *
+   * El cliente guarda la sesión resuelta en Dexie y la vuelve a validar con este mismo
+   * esquema al arrancar sin red (`refreshAccount` en `apps/web/src/offline/account.ts`).
+   * Un dispositivo que guardó la suya con la versión anterior tiene una fila sin estas
+   * claves: si fueran requeridas, `parse` la rechazaría, la aplicación no vería cuenta y
+   * mandaría a login justo a quien quizás está en una planta sin señal para volver a
+   * entrar. Perder el recorrido por agregar un nombre en una barra no es un intercambio
+   * aceptable.
+   *
+   * Se pueden volver requeridas cuando ya no queden dispositivos con la caché vieja.
+   */
+  email: emailSchema.optional(),
+  firstName: nameSchema.optional(),
+  lastName: nameSchema.optional(),
 });
 
 export type Session = z.infer<typeof sessionSchema>;

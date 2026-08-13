@@ -8,6 +8,7 @@ import {
 } from '@tanstack/react-router';
 import { z } from 'zod';
 
+import { AccountChip } from '../components/AccountChip';
 import { AcceptInvitationRoute } from '../routes/AcceptInvitationRoute';
 import { ActionRoute } from '../routes/ActionRoute';
 import { ActionsRoute } from '../routes/ActionsRoute';
@@ -119,6 +120,11 @@ function Shell(): React.JSX.Element {
         {account.role === 'hs_coordinator' ? <Link to="/scheduling">Scheduling</Link> : null}
         <Link to="/inbox">Inbox</Link>
         <Link to="/outbox">Waiting to be sent</Link>
+        {/*
+          El chip y "Sign out" quedan juntos al final de la barra: el `margin-left: auto`
+          que empujaba al botón pasó al chip, que ahora es el primero del par.
+        */}
+        <AccountChip account={account} />
         <button type="button" className="shell__signout" onClick={() => void signOut()}>
           Sign out
         </button>

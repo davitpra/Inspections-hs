@@ -40,6 +40,11 @@ export interface SessionContext extends SessionScope {
   role: Role;
   recordsFrom: string | null;
   recordsTo: string | null;
+  /**
+   * El email de la cuenta. Sale de `app_user`, que no lleva RLS, así que viaja en la
+   * resolución misma. El nombre de la persona NO está acá — ver `toContractSession`.
+   */
+  email: string;
 }
 
 interface ResolvedRow {
@@ -53,6 +58,7 @@ interface ResolvedRow {
   expires_at: Date | null;
   records_from: string | null;
   records_to: string | null;
+  email: string;
   site_ids: string[];
 }
 
@@ -98,6 +104,13 @@ export class SessionService {
    * eso dejó de ser solo un dato del guard: `withSessionScope` lo pone en `app.role` y
    * la política de visibilidad de `incident` lo consulta. Un rol congelado en el token
    * dejaría a una cuenta degradada leyendo incidentes hasta que el token expire.
+   *
+   * `u.email` viaja acá y el NOMBRE no, y la asimetría no es un olvido: `app_user` no
+   * lleva política RLS y `person` sí (`hs_apply_site_isolation` en la migración 0005).
+   * Joinear `person` desde esta consulta la haría devolver cero filas —el alcance
+   * todavía no está declarado, que es exactamente el arranque circular que este método
+   * evita— y romper el login entero. El nombre se lee aparte y bajo alcance, en
+   * `toContractSession`.
    */
   async resolve(token: string): Promise<SessionContext> {
     const { rows } = await this.db.unscopedPool.query<ResolvedRow>(
@@ -111,6 +124,7 @@ export class SessionService {
               u.expires_at,
               u.records_from::text AS records_from,
               u.records_to::text   AS records_to,
+              u.email         AS email,
               coalesce(
                 (SELECT array_agg(sc.site_id ORDER BY sc.site_id)
                    FROM user_site_scope sc
@@ -148,6 +162,7 @@ export class SessionService {
       siteIds: row.site_ids,
       recordsFrom: row.records_from,
       recordsTo: row.records_to,
+      email: row.email,
     };
   }
 
@@ -366,7 +381,33 @@ export class SessionService {
     await this.revokeSession(sessionId, 'signed_out');
   }
 
-  toContractSession(context: SessionContext): Session {
+  /**
+   * La sesión que ve el cliente. Es async por el nombre de la persona, y vale la pena
+   * decir por qué se paga esa consulta acá y no en `resolve`.
+   *
+   * `resolve` corre en CADA request y corre sin alcance declarado; `person` está aislada
+   * por sitio, así que desde ahí no es legible. Este método, en cambio, solo lo llaman
+   * los dos lugares que le devuelven la sesión a alguien —`POST /auth/sign-in` y
+   * `GET /auth/session`—, y para entonces el alcance ya existe: se lee bajo
+   * `withSessionClient`, por la misma puerta que cualquier otra lectura del sistema.
+   *
+   * Sin `ReadDescriptor` a propósito: el registro de lecturas del auditor externo
+   * (design D10) es sobre los REGISTROS que mira, y el nombre propio no es uno.
+   *
+   * Si el nombre no aparece —la persona vive en una planta fuera del alcance de su
+   * cuenta— la sesión sale sin él y el cliente cae al email. Se degrada en vez de
+   * fallar: no poder escribir un nombre en una barra no puede impedir iniciar sesión.
+   */
+  async toContractSession(context: SessionContext): Promise<Session> {
+    const person = await this.db.withSessionClient(context, async (client) => {
+      const { rows } = await client.query<{ first_name: string; last_name: string }>(
+        'SELECT first_name, last_name FROM person WHERE id = $1',
+        [context.personId],
+      );
+
+      return rows[0] ?? null;
+    });
+
     return {
       userId: context.userId,
       personId: context.personId,
@@ -374,6 +415,9 @@ export class SessionService {
       siteScope: [...context.siteIds],
       recordsFrom: context.recordsFrom,
       recordsTo: context.recordsTo,
+      email: context.email,
+      firstName: person?.first_name,
+      lastName: person?.last_name,
     };
   }
 
