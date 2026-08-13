@@ -18,6 +18,7 @@
     "db:seed": "node --env-file-if-exists=../../.env scripts/seed.mjs",
     "db:jobs:install": "node --env-file-if-exists=../../.env scripts/jobs-install.mjs",
     "roster:import": "node --env-file-if-exists=../../.env scripts/roster-import.mjs",
+    "auth:create-account": "node --env-file-if-exists=../../.env scripts/create-account.mjs",
     "auth:bootstrap": "node --env-file-if-exists=../../.env scripts/bootstrap-invitation.mjs",
     "demo:data": "node --env-file-if-exists=../../.env scripts/demo-data.mjs",
     "demo:content": "node --env-file-if-exists=../../.env scripts/demo-content.mjs",

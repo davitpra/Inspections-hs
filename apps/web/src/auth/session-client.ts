@@ -1,5 +1,6 @@
 import {
   isRenewable,
+  type AcceptInvitationRequest,
   type AuthError,
   type AuthErrorCode,
   type RefreshResponse,
@@ -85,6 +86,30 @@ export class SessionClient {
     await this.options.store.write(body.tokens);
 
     return { ok: true, value: body.session };
+  }
+
+  /**
+   * Aceptar una invitación: el único momento en que se fija una contraseña sin presentar
+   * la anterior (ADR-011).
+   *
+   * Vive acá y no en `api/`, junto a `signIn` y por el mismo motivo: es una llamada SIN
+   * autenticar —quien acepta todavía no tiene sesión, su credencial es el token— y los
+   * helpers de `api/*.ts` convierten el fallo en `Error(message)`, perdiendo el `code`.
+   * Sin el código no hay forma de separar "esta invitación ya no sirve" de "no hubo red".
+   *
+   * No escribe nada en el `TokenStore`: el servidor responde 204 y aceptar no crea
+   * sesión. Después de esto hay que iniciar sesión como cualquier otro día.
+   */
+  async acceptInvitation(request: AcceptInvitationRequest): Promise<AuthedResult<void>> {
+    const response = await this.fetchImpl(`${this.options.baseUrl}/auth/invitations/accept`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(request),
+    });
+
+    if (!response.ok) return failure(await readError(response));
+
+    return { ok: true, value: undefined };
   }
 
   async signOut(): Promise<void> {

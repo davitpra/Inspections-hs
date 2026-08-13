@@ -59,6 +59,39 @@ Para la primera credencial del coordinador —el arranque real, sin datos invent
 comando es `pnpm auth:bootstrap`, que emite una invitación y muestra su token una sola
 vez.
 
+### Dar de alta a alguien
+
+Tres pasos, y los tres son actos distintos a propósito (ADR-011):
+
+1. **Crear la cuenta.** La persona ya está en el roster; falta el `app_user` con su
+   alcance:
+
+   ```bash
+   pnpm auth:create-account --employee ADP-1234 --email nombre@example.com \
+     --role jhsc_member --site st-thomas --actor coordinator@example.com
+   ```
+
+   `--actor` es la cuenta en cuyo nombre se da el alta: va a la cadena de auditoría de
+   cada planta del alcance, y por eso no tiene default. La cuenta nace **sin credencial**
+   —no puede iniciar sesión— y el comando imprime el paso 2 listo para copiar. Es
+   idempotente y no crea personas: si no está en el roster, entra por `roster:import`.
+
+   Es el **único `auth:*` que corre en producción**, y la razón es que no siembra ni
+   reemplaza ninguna credencial. Para `external_auditor` no sirve: ese rol necesita
+   `expires_at`, `records_from` y `records_to`, y va por SQL.
+
+2. **Emitir la invitación.** `pnpm auth:bootstrap <userId>`, o `POST /auth/invitations`
+   con sesión de coordinador. Devuelve el token **una sola vez**: del otro lado queda su
+   hash y no hay ruta que lo vuelva a mostrar. Si se pierde, se revoca y se emite otro.
+3. **Pasarle el link.** `https://<host>/accept-invitation?token=<token>`. Ahí elige su
+   contraseña (mínimo 12) y de ahí va a iniciar sesión. Vence a las 72 horas y se usa una
+   sola vez.
+
+El paso 3 es también el **reinicio de contraseña**: sin correo transaccional no hay a
+dónde mandar un link, así que el coordinador revoca la credencial
+(`POST /auth/credentials/revoke`), emite una invitación nueva y el titular vuelve por la
+misma pantalla.
+
 ### Historial: que todas las pantallas tengan algo que mostrar
 
 `demo:data` deja el entorno *usable* y ahí se detiene. Con eso `/` tiene una fila y el
@@ -126,6 +159,7 @@ espera, y la credencial la revoca el coordinador desde la aplicación
 | `pnpm db:seed` | Datos de referencia idempotentes. Sin credenciales. |
 | `pnpm demo:data` | Entorno de demo local usable. Solo a mano. |
 | `pnpm demo:content` | Historial de demo: hallazgos, acciones, incidentes, recurrencia y cumplimiento. |
+| `pnpm auth:create-account` | Crea la cuenta de una persona del roster. El único `auth:*` que corre en producción. |
 | `pnpm auth:bootstrap [userId]` | Emite la invitación de una cuenta sin credencial. |
 | `pnpm auth:reset-password <userId\|email>` | Contraseña nueva, o `--unlock` para destrabar. Solo fuera de producción. |
 | `pnpm roster:import <csv>` | Importa el roster de ADP. |
@@ -135,7 +169,8 @@ espera, y la credencial la revoca el coordinador desde la aplicación
 
 ## Lo que todavía no tiene UI
 
-Aceptar una invitación existe en la API (`POST /auth/invitations/accept`) pero no en el
-PWA: no hay ruta donde pegar el token y elegir contraseña. Toda cuenta nueva pasa hoy
-por curl. `pnpm demo:data` hace esa llamada por vos para la cuenta de demo; no reemplaza
-la pantalla que falta.
+**Emitir la invitación.** `POST /auth/invitations` existe y solo lo puede llamar el
+coordinador, pero no hay pantalla: hoy se emite con `pnpm auth:bootstrap` o con curl.
+
+Crear la cuenta y aceptar la invitación, en cambio, ya no están acá: son
+`pnpm auth:create-account` y `/accept-invitation` — ver "Dar de alta a alguien".

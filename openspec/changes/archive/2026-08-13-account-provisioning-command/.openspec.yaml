@@ -1,0 +1,6 @@
+schema: spec-driven
+created: 2026-08-13
+# El comando no agrega comportamiento: `identity` y `audit` ya especifican el alta
+# completa, incluida la entrada por cada planta del alcance. Ver "Capabilities" en
+# proposal.md.
+skip_specs: true

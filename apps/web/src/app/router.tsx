@@ -4,8 +4,11 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
+  useRouterState,
 } from '@tanstack/react-router';
+import { z } from 'zod';
 
+import { AcceptInvitationRoute } from '../routes/AcceptInvitationRoute';
 import { ActionRoute } from '../routes/ActionRoute';
 import { ActionsRoute } from '../routes/ActionsRoute';
 import { CaptureRoute } from '../routes/CaptureRoute';
@@ -53,6 +56,17 @@ const rootRoute = createRootRoute({
 });
 
 /**
+ * Las rutas que se renderizan SIN cuenta. Es una lista y no un `if` suelto porque
+ * `/accept-invitation` es la primera pero no va a ser la última, y porque lo que hay que
+ * poder leer de un vistazo es exactamente qué queda afuera de la puerta.
+ *
+ * Todo lo que entre acá tiene que poder justificarse igual que esta: quien la abre no
+ * puede tener sesión todavía —su credencial ES el token de la invitación—, así que
+ * pedirle login sería pedirle lo que viene a conseguir.
+ */
+const PUBLIC_ROUTES = ['/accept-invitation'];
+
+/**
  * El marco, y la única puerta: sin cuenta no se entra a ninguna pantalla de captura.
  *
  * **La comprobación es contra la cuenta GUARDADA, no contra la red.** El inspector
@@ -62,8 +76,21 @@ const rootRoute = createRootRoute({
  */
 function Shell(): React.JSX.Element {
   const { account, ready, signOut } = useAppSession();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
 
   if (!ready) return <div className="shell__main">Loading…</div>;
+
+  // Antes de la comprobación de cuenta, y sin barra de navegación: quien llega acá
+  // todavía no tiene a dónde navegar.
+  if (PUBLIC_ROUTES.includes(pathname)) {
+    return (
+      <div className="shell">
+        <main className="shell__main">
+          <Outlet />
+        </main>
+      </div>
+    );
+  }
 
   if (!account) {
     return (
@@ -203,6 +230,25 @@ const schedulingRoute = createRoute({
   component: SchedulingRoute,
 });
 
+/**
+ * Aceptar una invitación (ADR-011). La única ruta PÚBLICA del árbol — ver `PUBLIC_ROUTES`.
+ *
+ * ONLINE y fuera del precacheo: es la llamada que CREA la credencial, así que servirla sin
+ * red sería servir un formulario que no puede terminar. `CAPTURE_ROUTES` en `sw.ts` matchea
+ * `/`, `/inspections/…` y `/outbox`, y este path no cae en ninguno.
+ *
+ * **El token va en el search y no en el path**: no es el identificador de un recurso, es un
+ * secreto de un solo uso, y `validateSearch` deja que la pantalla lo reciba ya tipado en
+ * vez de leer `location.search` a mano. Es opcional a propósito — sin él la pantalla pide
+ * que se pegue.
+ */
+const acceptInvitationRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/accept-invitation',
+  validateSearch: z.object({ token: z.string().optional() }),
+  component: AcceptInvitationRoute,
+});
+
 const inboxRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/inbox',
@@ -231,6 +277,7 @@ const routeTree = rootRoute.addChildren([
   recurrenceRoute,
   complianceRoute,
   inboxRoute,
+  acceptInvitationRoute,
 ]);
 
 export const router = createRouter({ routeTree, defaultPreload: false });
