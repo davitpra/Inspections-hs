@@ -7,6 +7,7 @@ import {
   type RecurrenceSeries,
 } from '@hs/contracts';
 
+import { queryKeys } from '../api/query-keys';
 import { getRecurrence } from '../api/recurrence';
 import { formatDay } from './incident-presentation';
 
@@ -30,7 +31,7 @@ export function RecurrenceRoute(): React.JSX.Element {
   const [groupBy, setGroupBy] = useState<RecurrenceGrouping>(RECURRENCE_GROUPING_DEFAULT);
 
   const recurrence = useQuery({
-    queryKey: ['recurrence', windowMonths, groupBy],
+    queryKey: queryKeys.recurrence(windowMonths, groupBy),
     queryFn: () => getRecurrence({ windowMonths, groupBy }),
     retry: false,
   });

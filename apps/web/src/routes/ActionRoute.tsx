@@ -4,6 +4,7 @@ import { useParams } from '@tanstack/react-router';
 import { transitionsFrom, type ActionTransition, type EvidenceInput } from '@hs/contracts';
 
 import { getAction, transitionAction, uploadEvidence } from '../api/actions';
+import { queryKeys } from '../api/query-keys';
 import { useAppSession } from '../app/session-context';
 import { canAttempt, STATE_LABELS, formatDate, transitionLabel } from './action-permissions';
 import { StateBadge } from './ActionsRoute';
@@ -32,7 +33,7 @@ export function ActionRoute(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
 
   const action = useQuery({
-    queryKey: ['action', id],
+    queryKey: queryKeys.action(id),
     queryFn: () => getAction(id),
     retry: false,
   });
@@ -59,8 +60,8 @@ export function ActionRoute(): React.JSX.Element {
       setNote('');
       setFiles([]);
       setError(null);
-      void queryClient.invalidateQueries({ queryKey: ['action', id] });
-      void queryClient.invalidateQueries({ queryKey: ['actions'] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.action(id) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.actions() });
     },
     onError: (caught: Error) => setError(caught.message),
   });

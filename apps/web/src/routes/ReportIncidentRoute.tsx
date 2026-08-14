@@ -11,6 +11,7 @@ import {
 } from '@hs/contracts';
 
 import { reportIncident } from '../api/incidents';
+import { queryKeys } from '../api/query-keys';
 import {
   BODY_PART_LABELS,
   CLASSIFICATION_LABELS,
@@ -61,7 +62,7 @@ export function ReportIncidentRoute(): React.JSX.Element {
       return reportIncident(parsed);
     },
     onSuccess: (incident) => {
-      void queryClient.invalidateQueries({ queryKey: ['incidents'] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.incidents() });
       void navigate({ to: '/incidents/$id', params: { id: incident.id } });
     },
     onError: (caught: Error) => setError(caught.message),

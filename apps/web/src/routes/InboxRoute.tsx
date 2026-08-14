@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router';
 import type { Notification } from '@hs/contracts';
 
 import { listNotifications } from '../api/actions';
+import { queryKeys } from '../api/query-keys';
 import { formatDate } from './action-permissions';
 import { CLASSIFICATION_LABELS } from './incident-presentation';
 
@@ -16,7 +17,7 @@ import { CLASSIFICATION_LABELS } from './incident-presentation';
  */
 export function InboxRoute(): React.JSX.Element {
   const notifications = useQuery({
-    queryKey: ['notifications'],
+    queryKey: queryKeys.notifications(),
     queryFn: listNotifications,
     retry: false,
   });

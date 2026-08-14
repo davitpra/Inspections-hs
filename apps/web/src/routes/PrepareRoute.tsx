@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from '@tanstack/react-router';
 
+import { queryKeys } from '../api/query-keys';
 import { missingForField, prefetchInspection } from '../offline/prefetch';
 import { readableKind } from './PendingRoute';
 
@@ -16,13 +17,13 @@ export function PrepareRoute(): React.JSX.Element {
   const queryClient = useQueryClient();
 
   const missing = useQuery({
-    queryKey: ['field-ready', id],
+    queryKey: queryKeys.fieldReady(id),
     queryFn: () => missingForField(id),
   });
 
   const prepare = useMutation({
     mutationFn: () => prefetchInspection(id),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: ['field-ready', id] }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.fieldReady(id) }),
   });
 
   const ready = missing.data?.length === 0;

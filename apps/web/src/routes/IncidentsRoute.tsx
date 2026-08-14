@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 
 import { listIncidents } from '../api/incidents';
+import { queryKeys } from '../api/query-keys';
 import {
   CLASSIFICATION_LABELS,
   INCIDENT_STATE_LABELS,
@@ -20,7 +21,7 @@ import {
  */
 export function IncidentsRoute(): React.JSX.Element {
   const incidents = useQuery({
-    queryKey: ['incidents'],
+    queryKey: queryKeys.incidents(),
     queryFn: listIncidents,
     retry: false,
   });

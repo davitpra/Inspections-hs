@@ -3,6 +3,7 @@ import { useState } from 'react';
 import type { CompliancePeriod, ComplianceReportSummary, PeriodStatus } from '@hs/contracts';
 
 import { generateReport, getCoverage, getDownloadUrl, listReports } from '../api/compliance';
+import { queryKeys } from '../api/query-keys';
 import { useAppSession } from '../app/session-context';
 
 /**
@@ -33,14 +34,14 @@ export function ComplianceRoute(): React.JSX.Element {
   const [range, setRange] = useState(() => currentYear());
 
   const coverage = useQuery({
-    queryKey: ['compliance', 'coverage', siteId, range.rangeStart, range.rangeEnd],
+    queryKey: queryKeys.complianceCoverage(siteId, range.rangeStart, range.rangeEnd),
     queryFn: () => getCoverage({ siteId, ...range }),
     enabled: siteId !== '',
     retry: false,
   });
 
   const reports = useQuery({
-    queryKey: ['compliance', 'reports', siteId],
+    queryKey: queryKeys.complianceReports(siteId),
     queryFn: () => listReports(siteId),
     enabled: siteId !== '',
     retry: false,
@@ -48,7 +49,8 @@ export function ComplianceRoute(): React.JSX.Element {
 
   const generate = useMutation({
     mutationFn: () => generateReport({ siteId, ...range }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['compliance', 'reports', siteId] }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: queryKeys.complianceReports(siteId) }),
   });
 
   const canGenerate = account?.role === 'hs_coordinator';

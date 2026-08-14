@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useId, useState } from 'react';
 
 import { listSites } from '../../api/inspections';
+import { queryKeys } from '../../api/query-keys';
 import { listPeople, type RosterStatus } from '../../api/roster';
 import { useAppSession } from '../../app/session-context';
 import { SitePicker } from '../../components/SitePicker';
@@ -56,12 +57,12 @@ function RosterConsole({ siteScope }: { siteScope: readonly string[] }): React.J
   const [status, setStatus] = useState<RosterStatus>('active');
   const [search, setSearch] = useState('');
 
-  const sites = useQuery({ queryKey: ['sites'], queryFn: listSites, retry: false });
+  const sites = useQuery({ queryKey: queryKeys.sites(), queryFn: listSites, retry: false });
 
   const siteId = chosenSite ?? siteScope[0] ?? '';
 
   const roster = useQuery({
-    queryKey: ['roster', siteId, status],
+    queryKey: queryKeys.roster(siteId, status),
     queryFn: () => listPeople(siteId, status),
     enabled: siteId !== '',
     retry: false,

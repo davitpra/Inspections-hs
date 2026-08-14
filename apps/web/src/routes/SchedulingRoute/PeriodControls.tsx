@@ -3,6 +3,7 @@ import { useId, useState } from 'react';
 import type { ScheduledInspection } from '@hs/contracts';
 
 import { assignInspector, cancelScheduledInspection, listInspectorCandidates } from '../../api/inspections';
+import { queryKeys } from '../../api/query-keys';
 import { candidateLabel } from './presentation';
 
 /**
@@ -26,15 +27,15 @@ export function PeriodControls({
   const [reason, setReason] = useState('');
 
   const candidates = useQuery({
-    queryKey: ['inspector-candidates', siteId],
+    queryKey: queryKeys.inspectorCandidates(siteId),
     queryFn: () => listInspectorCandidates(siteId),
     enabled: siteId !== '',
     retry: false,
   });
 
   const invalidate = (): void => {
-    void queryClient.invalidateQueries({ queryKey: ['scheduled-inspections'] });
-    void queryClient.invalidateQueries({ queryKey: ['pending-inspections'] });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.scheduledInspections() });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.pendingInspections() });
   };
 
   const assign = useMutation({

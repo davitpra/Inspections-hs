@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { listScheduled, listSchedules, listSites } from '../../api/inspections';
+import { queryKeys } from '../../api/query-keys';
 import { useAppSession } from '../../app/session-context';
 import { SitePicker } from '../../components/SitePicker';
 import { PeriodsSection } from './PeriodsSection';
@@ -30,19 +31,19 @@ import { RulesSection } from './RulesSection';
 export function SchedulingRoute(): React.JSX.Element {
   const { account } = useAppSession();
 
-  const sites = useQuery({ queryKey: ['sites'], queryFn: listSites, retry: false });
+  const sites = useQuery({ queryKey: queryKeys.sites(), queryFn: listSites, retry: false });
   const [chosenSite, setChosenSite] = useState<string | null>(null);
 
   const siteId = chosenSite ?? account?.siteScope[0] ?? '';
 
   const schedules = useQuery({
-    queryKey: ['inspection-schedules'],
+    queryKey: queryKeys.inspectionSchedules(),
     queryFn: listSchedules,
     retry: false,
   });
 
   const scheduled = useQuery({
-    queryKey: ['scheduled-inspections'],
+    queryKey: queryKeys.scheduledInspections(),
     queryFn: listScheduled,
     retry: false,
   });

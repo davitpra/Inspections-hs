@@ -3,6 +3,7 @@ import { validateAnswers } from '@hs/forms';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
 
+import { queryKeys } from '../api/query-keys';
 import { useAppSession } from '../app/session-context';
 import { UnsyncedIndicator } from '../components/UnsyncedIndicator';
 import {
@@ -31,7 +32,7 @@ export function ReviewRoute(): React.JSX.Element {
   const queryClient = useQueryClient();
 
   const draft = useQuery({
-    queryKey: ['draft', id, account?.userId],
+    queryKey: queryKeys.draft(id, account?.userId),
     enabled: Boolean(account),
     queryFn: async () => {
       const row = account ? await findDraft(id, account.userId) : undefined;
@@ -41,7 +42,7 @@ export function ReviewRoute(): React.JSX.Element {
   });
 
   const document = useQuery({
-    queryKey: ['document', draft.data?.draft.client_submission_id],
+    queryKey: queryKeys.document(draft.data?.draft.client_submission_id),
     enabled: Boolean(draft.data),
     queryFn: async () => (draft.data ? documentForDraft(draft.data.draft) : null),
   });
@@ -60,7 +61,7 @@ export function ReviewRoute(): React.JSX.Element {
       await runOutbox();
     },
     onSettled: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['draft', id] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.draft(id) });
       await navigate({ to: '/outbox' });
     },
   });

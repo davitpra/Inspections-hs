@@ -3,6 +3,7 @@ import { useId, useState } from 'react';
 import type { InspectionSchedule } from '@hs/contracts';
 
 import { createSchedule, listTemplates } from '../../api/inspections';
+import { queryKeys } from '../../api/query-keys';
 
 /**
  * Alta de una regla.
@@ -24,7 +25,11 @@ export function NewRuleForm({
   const [templateId, setTemplateId] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const templates = useQuery({ queryKey: ['templates'], queryFn: listTemplates, retry: false });
+  const templates = useQuery({
+    queryKey: queryKeys.templates(),
+    queryFn: listTemplates,
+    retry: false,
+  });
 
   const taken = new Set(
     rules.filter((rule) => rule.deactivated_at === null).map((rule) => rule.template_id),
@@ -36,7 +41,7 @@ export function NewRuleForm({
     onSuccess: () => {
       setTemplateId('');
       setError(null);
-      void queryClient.invalidateQueries({ queryKey: ['inspection-schedules'] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.inspectionSchedules() });
     },
     onError: (caught: Error) => setError(caught.message),
   });

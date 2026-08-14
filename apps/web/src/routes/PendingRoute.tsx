@@ -4,6 +4,7 @@ import { Link } from '@tanstack/react-router';
 import { z } from 'zod';
 
 import { sessionClient } from '../api/client';
+import { queryKeys } from '../api/query-keys';
 import { InstallPrompt } from '../app/InstallPrompt';
 import { useAppSession } from '../app/session-context';
 import { listDrafts } from '../offline/drafts';
@@ -21,7 +22,7 @@ export function PendingRoute(): React.JSX.Element {
   const { account } = useAppSession();
 
   const pending = useQuery({
-    queryKey: ['pending-inspections'],
+    queryKey: queryKeys.pendingInspections(),
     queryFn: async (): Promise<PendingInspection[]> => {
       const result = await sessionClient.request<unknown>('/me/pending-inspections');
       if (!result.ok) throw new Error(result.message);
@@ -34,7 +35,7 @@ export function PendingRoute(): React.JSX.Element {
   });
 
   const drafts = useQuery({
-    queryKey: ['drafts', account?.userId],
+    queryKey: queryKeys.drafts(account?.userId),
     queryFn: async () => (account ? listDrafts(account.userId) : []),
     enabled: Boolean(account),
   });
@@ -76,7 +77,7 @@ export function PendingRoute(): React.JSX.Element {
 
 function PendingRow({ inspection }: { inspection: PendingInspection }): React.JSX.Element {
   const missing = useQuery({
-    queryKey: ['field-ready', inspection.id],
+    queryKey: queryKeys.fieldReady(inspection.id),
     queryFn: () => missingForField(inspection.id),
   });
 

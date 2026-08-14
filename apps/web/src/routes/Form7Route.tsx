@@ -4,6 +4,7 @@ import { useParams } from '@tanstack/react-router';
 import type { Form7Field, Incident } from '@hs/contracts';
 
 import { getForm7 } from '../api/incidents';
+import { queryKeys } from '../api/query-keys';
 import {
   BODY_PART_LABELS,
   CLASSIFICATION_LABELS,
@@ -33,7 +34,7 @@ export function Form7Route(): React.JSX.Element {
   const [copied, setCopied] = useState<string | null>(null);
 
   const form7 = useQuery({
-    queryKey: ['form7', id],
+    queryKey: queryKeys.form7(id),
     queryFn: () => getForm7(id),
     retry: false,
   });

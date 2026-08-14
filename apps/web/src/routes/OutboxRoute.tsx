@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 
+import { queryKeys } from '../api/query-keys';
 import { useAppSession } from '../app/session-context';
 import { UnsyncedIndicator } from '../components/UnsyncedIndicator';
 import { db } from '../offline/db';
@@ -19,7 +20,7 @@ export function OutboxRoute(): React.JSX.Element {
   const queryClient = useQueryClient();
 
   const entries = useQuery({
-    queryKey: ['outbox'],
+    queryKey: queryKeys.outbox(),
     queryFn: async () => {
       const rows = await db.outbox.toArray();
 
@@ -35,7 +36,7 @@ export function OutboxRoute(): React.JSX.Element {
 
   const send = useMutation({
     mutationFn: () => runOutbox(),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: ['outbox'] }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.outbox() }),
   });
 
   const rows = entries.data ?? [];

@@ -9,6 +9,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from '@tanstack/react-router';
 
+import { queryKeys } from '../api/query-keys';
 import { useAppSession } from '../app/session-context';
 import { FindingFields } from '../components/FindingFields';
 import { ItemInput } from '../components/ItemInput';
@@ -39,10 +40,13 @@ export function CaptureRoute(): React.JSX.Element {
   const { account, ready } = useAppSession();
   const queryClient = useQueryClient();
 
-  const missing = useQuery({ queryKey: ['field-ready', id], queryFn: () => missingForField(id) });
+  const missing = useQuery({
+    queryKey: queryKeys.fieldReady(id),
+    queryFn: () => missingForField(id),
+  });
 
   const draft = useQuery({
-    queryKey: ['draft', id, account?.userId],
+    queryKey: queryKeys.draft(id, account?.userId),
     enabled: Boolean(account) && missing.data?.length === 0,
     queryFn: async () => {
       const stored = await storedTemplateVersion(id);
@@ -60,7 +64,7 @@ export function CaptureRoute(): React.JSX.Element {
   });
 
   const document = useQuery({
-    queryKey: ['document', draft.data?.draft.client_submission_id],
+    queryKey: queryKeys.document(draft.data?.draft.client_submission_id),
     enabled: Boolean(draft.data),
     queryFn: async () => (draft.data ? documentForDraft(draft.data.draft) : null),
   });
@@ -79,7 +83,7 @@ export function CaptureRoute(): React.JSX.Element {
         input.document,
       );
     },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: ['draft', id] }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.draft(id) }),
   });
 
   const photo = useMutation({
@@ -93,11 +97,14 @@ export function CaptureRoute(): React.JSX.Element {
         kind: input.kind,
       });
     },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: ['draft', id] }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.draft(id) }),
   });
 
   /** La lista cerrada que bajó la descarga previa. Sin red y sin texto libre. */
-  const locations = useQuery({ queryKey: ['locations', id], queryFn: () => storedLocations(id) });
+  const locations = useQuery({
+    queryKey: queryKeys.locations(id),
+    queryFn: () => storedLocations(id),
+  });
 
   const finding = useMutation({
     mutationFn: async (input: {
@@ -108,12 +115,12 @@ export function CaptureRoute(): React.JSX.Element {
 
       await saveFinding(draft.data.draft.client_submission_id, input.itemKey, input.patch);
     },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: ['draft', id] }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.draft(id) }),
   });
 
   const removePhoto = useMutation({
     mutationFn: (photoId: string) => discardPhoto(photoId),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: ['draft', id] }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.draft(id) }),
   });
 
   if (!ready) return <p>Loading…</p>;

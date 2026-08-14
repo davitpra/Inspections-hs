@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router';
 import type { Action, ActionState } from '@hs/contracts';
 
 import { listActions } from '../api/actions';
+import { queryKeys } from '../api/query-keys';
 import { STATE_LABELS, formatDate } from './action-permissions';
 
 /**
@@ -17,7 +18,7 @@ import { STATE_LABELS, formatDate } from './action-permissions';
  */
 export function ActionsRoute(): React.JSX.Element {
   const actions = useQuery({
-    queryKey: ['actions'],
+    queryKey: queryKeys.actions(),
     queryFn: listActions,
     retry: false,
   });

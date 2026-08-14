@@ -4,6 +4,7 @@ import { Link, useParams } from '@tanstack/react-router';
 import type { IncidentTransition, RegulatoryClockDto } from '@hs/contracts';
 
 import { getIncident, recordCause, transitionIncident } from '../api/incidents';
+import { queryKeys } from '../api/query-keys';
 import { useAppSession } from '../app/session-context';
 import {
   BODY_PART_LABELS,
@@ -41,7 +42,7 @@ export function IncidentRoute(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
 
   const incident = useQuery({
-    queryKey: ['incident', id],
+    queryKey: queryKeys.incident(id),
     queryFn: () => getIncident(id),
     retry: false,
   });
@@ -61,8 +62,8 @@ export function IncidentRoute(): React.JSX.Element {
       setReason('');
       setSequence('');
       setError(null);
-      void queryClient.invalidateQueries({ queryKey: ['incident', id] });
-      void queryClient.invalidateQueries({ queryKey: ['incidents'] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.incident(id) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.incidents() });
     },
     onError: (caught: Error) => setError(caught.message),
   });
@@ -286,7 +287,7 @@ function Investigation({
     onSuccess: () => {
       setStatement('');
       setIsRoot(false);
-      void queryClient.invalidateQueries({ queryKey: ['incident', incidentId] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.incident(incidentId) });
     },
   });
 

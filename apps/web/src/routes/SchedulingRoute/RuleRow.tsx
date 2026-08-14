@@ -3,6 +3,7 @@ import { useState } from 'react';
 import type { InspectionSchedule } from '@hs/contracts';
 
 import { updateSchedule } from '../../api/inspections';
+import { queryKeys } from '../../api/query-keys';
 
 export function RuleRow({
   rule,
@@ -18,7 +19,7 @@ export function RuleRow({
     mutationFn: () => updateSchedule(rule.id, { deactivated: true }),
     onSuccess: () => {
       setError(null);
-      void queryClient.invalidateQueries({ queryKey: ['inspection-schedules'] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.inspectionSchedules() });
     },
     onError: (caught: Error) => setError(caught.message),
   });
