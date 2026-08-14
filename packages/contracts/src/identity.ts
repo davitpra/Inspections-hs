@@ -107,6 +107,29 @@ export const personOptionSchema = personSchema.pick({
 
 export type PersonOption = z.infer<typeof personOptionSchema>;
 
+/**
+ * Qué pedazo del roster de una planta pide la consola.
+ *
+ * **La consola es de solo lectura**: no hay ningún esquema de escritura acá porque no hay
+ * ninguna ruta que escriba. Corregir un nombre, transferir de planta y dar de baja siguen
+ * siendo del CSV (`pnpm roster:import`), que es la fuente de verdad del roster.
+ *
+ * `site_id` es obligatorio y eso acota la respuesta al roster de UNA planta, que es lo
+ * que sostiene la decisión de no paginar: doscientas filas entran en una pantalla de
+ * JSON. **No es el límite de seguridad** —ese es la política RLS sobre `person`—, es la
+ * selección entre las plantas del alcance.
+ *
+ * `status` con default `active` porque es lo que se mira el 90% de las veces, y explícito
+ * porque la consola es el único lugar del sistema donde ver a las personas dadas de baja
+ * es legítimo: todo selector las excluye siempre.
+ */
+export const rosterQuerySchema = z.strictObject({
+  site_id: z.uuid(),
+  status: z.enum(['active', 'inactive', 'all']).default('active'),
+});
+
+export type RosterQuery = z.infer<typeof rosterQuerySchema>;
+
 /** Una entrada del alcance de una cuenta. */
 export const siteScopeSchema = z.strictObject({
   site_id: z.uuid(),

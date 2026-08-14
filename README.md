@@ -200,6 +200,7 @@ Crear la cuenta y aceptar la invitación, en cambio, ya no están acá: son
 —cuatro columnas, solo activas— para esa pantalla. **No sirve `GET /people`**, que es del
 coordinador y devuelve el perfil completo; colgar el selector de ahí rompería §4 R4.
 
-Administrar el roster, en cambio, ya no está acá: es `/roster` — leer la planta, corregir
-un nombre, transferir de planta, dar de baja y reactivar. El alta sigue siendo
-`pnpm roster:import`, y la próxima importación pisa nombres y estado.
+**Corregir el roster.** `/roster` ya deja *ver* quién está en cada planta —con filtro de
+estado y búsqueda—, pero es de solo lectura: corregir un apellido, transferir de planta o
+dar de baja se siguen haciendo con `pnpm roster:import`, que es la fuente de verdad del
+roster.

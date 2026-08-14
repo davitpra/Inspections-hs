@@ -80,6 +80,27 @@ Todo acceso a la base pasa por `DbService`, y por cuál método importa
   servidor, tests. Un endpoint que llame a estos está fabricando un alcance que no le
   corresponde, y por eso son métodos distintos.
 
+### Rutas grandes
+
+Una ruta empieza como un solo archivo `src/routes/XRoute.tsx`. Cuando gana
+subcomponentes propios que ya no caben cómodos ahí —de referencia, más de 150-200 líneas
+o tres o más funciones locales con su propio estado o `useQuery`/`useMutation`—, se
+convierte en una carpeta `src/routes/XRoute/` **sin tocar el import en `router.tsx`**,
+que sigue resolviendo `../routes/XRoute` contra el `index.tsx` de la carpeta:
+
+- `index.tsx` — el componente de ruta y su composición: qué se arma con qué, no cómo se
+  dibuja cada pieza.
+- Un archivo por subcomponente con hooks, estado o `useQuery`/`useMutation`
+  (`PersonRow.tsx`, `NewRuleForm.tsx`…). Si un subcomponente casi idéntico aparece en dos
+  rutas, no se duplica: sube a `src/components/` (ver `SitePicker.tsx`).
+- `presentation.ts` + `presentation.test.ts` — la lógica pura (etiquetas, clases,
+  filtros, orden), como ya se hacía antes de este cambio, solo que ahora sin repetir el
+  nombre de la ruta en el nombre del archivo porque la carpeta ya lo da.
+- `index.test.tsx` — el test de integración de la ruta completa.
+
+`src/components/` sigue siendo solo lo que cruza rutas; un subcomponente que usa una sola
+ruta vive en su carpeta, no ahí.
+
 ## Invariantes que ningún change puede violar
 
 Están en `openspec/config.yaml` junto con las capabilities válidas y la lista de lo que

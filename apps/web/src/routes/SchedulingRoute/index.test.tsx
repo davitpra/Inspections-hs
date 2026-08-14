@@ -9,7 +9,7 @@ import type {
   Site,
 } from '@hs/contracts';
 
-import { SchedulingRoute } from './SchedulingRoute';
+import { SchedulingRoute } from './index';
 
 const SITE = '11111111-1111-4111-8111-111111111111';
 const USER = '22222222-2222-4222-8222-222222222222';
@@ -33,7 +33,7 @@ const assignInspector = vi.hoisted(() => vi.fn());
 const cancelScheduledInspection = vi.hoisted(() => vi.fn());
 const useAppSession = vi.hoisted(() => vi.fn());
 
-vi.mock('../api/inspections', () => ({
+vi.mock('../../api/inspections', () => ({
   listSites,
   listTemplates,
   listInspectorCandidates,
@@ -45,7 +45,7 @@ vi.mock('../api/inspections', () => ({
   cancelScheduledInspection,
 }));
 
-vi.mock('../app/session-context', () => ({ useAppSession }));
+vi.mock('../../app/session-context', () => ({ useAppSession }));
 
 function session(role: Session['role']): { account: Session } {
   return {

@@ -25,6 +25,7 @@ import { ComplianceRoute } from '../routes/ComplianceRoute';
 import { RecurrenceRoute } from '../routes/RecurrenceRoute';
 import { ReportIncidentRoute } from '../routes/ReportIncidentRoute';
 import { ReviewRoute } from '../routes/ReviewRoute';
+import { RosterRoute } from '../routes/RosterRoute';
 import { SchedulingRoute } from '../routes/SchedulingRoute';
 import { SignInRoute } from '../routes/SignInRoute';
 import { SessionProvider, useAppSession } from './session-context';
@@ -111,13 +112,24 @@ function Shell(): React.JSX.Element {
         <Link to="/recurrence">Recurring findings</Link>
         <Link to="/compliance">Compliance</Link>
         {/*
-          EL PRIMER LINK CONDICIONADO POR ROL de esta barra, y queda escrito para que se
-          lea como precedente y no como descuido. Solo el coordinador administra la
-          programación, así que ofrecérsela al resto sería ofrecer una pantalla sin
-          controles. La ruta sigue siendo alcanzable por URL y se renderiza de solo
-          lectura: los GET no comprueban rol y RLS ya recorta lo que se ve.
+          LOS DOS LINKS CONDICIONADOS POR ROL de esta barra. Solo el coordinador administra
+          la programación y el roster, así que ofrecérselas al resto sería ofrecer una
+          pantalla sin controles.
+
+          **Y no se condicionan igual por dentro**, que es lo que conviene leer acá:
+
+            - `/scheduling` sigue siendo alcanzable por URL y se renderiza de solo lectura;
+              sus GET no comprueban rol y RLS ya recorta lo que se ve. Que un miembro del
+              JHSC vea la programación de su planta es legítimo.
+            - `/roster` NO. Ahí el rol se comprueba también en la lectura, en el cliente y
+              en el servidor: §4 dice que se elige a una persona sin poder ver su perfil, y
+              un roster de solo lectura para un supervisor sería exactamente esa ficha.
+
+          O sea: el link ausente es una comodidad en los dos casos, pero la garantía solo
+          la hay en el segundo, y está del lado del servidor.
         */}
         {account.role === 'hs_coordinator' ? <Link to="/scheduling">Scheduling</Link> : null}
+        {account.role === 'hs_coordinator' ? <Link to="/roster">Roster</Link> : null}
         <Link to="/inbox">Inbox</Link>
         <Link to="/outbox">Waiting to be sent</Link>
         {/*
@@ -237,6 +249,22 @@ const schedulingRoute = createRoute({
 });
 
 /**
+ * La consola del roster (§6 — "el coordinador administra plantillas y roster"). ONLINE y
+ * fuera del precacheo, por las dos razones de siempre y una propia: **una baja en cola es
+ * una persona que sigue apareciendo en el selector del dispositivo de otro.**
+ *
+ * **`/roster` y no `/inspections/roster`**: `CAPTURE_ROUTES` en `sw.ts` matchea
+ * `/^\/inspections\//`, así que colgarla de ese prefijo la metería sin querer en el shell
+ * precacheado y la haría "disponible" sin red, mostrando datos que no puede traer. Es la
+ * misma trampa que documenta `schedulingRoute` acá arriba.
+ */
+const rosterRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/roster',
+  component: RosterRoute,
+});
+
+/**
  * Aceptar una invitación (ADR-011). La única ruta PÚBLICA del árbol — ver `PUBLIC_ROUTES`.
  *
  * ONLINE y fuera del precacheo: es la llamada que CREA la credencial, así que servirla sin
@@ -274,6 +302,7 @@ const routeTree = rootRoute.addChildren([
   reviewRoute,
   outboxRoute,
   schedulingRoute,
+  rosterRoute,
   actionsRoute,
   actionRoute,
   incidentsRoute,

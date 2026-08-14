@@ -10,6 +10,7 @@ import {
   roleSchema,
   rosterCsvRowSchema,
   rosterImportReportSchema,
+  rosterQuerySchema,
 } from './identity.js';
 
 const PERSON_ID = '11111111-1111-4111-8111-111111111111';
@@ -80,6 +81,32 @@ describe('personSchema', () => {
     });
 
     expect(one.success && other.success).toBe(true);
+  });
+});
+
+describe('rosterQuerySchema', () => {
+  it('mira las activas si nadie dice lo contrario', () => {
+    const result = rosterQuerySchema.safeParse({ site_id: SITE_ID });
+
+    expect(result.success && result.data.status).toBe('active');
+  });
+
+  it('deja pedir explícitamente a las dadas de baja', () => {
+    expect(rosterQuerySchema.safeParse({ site_id: SITE_ID, status: 'inactive' }).success).toBe(
+      true,
+    );
+    expect(rosterQuerySchema.safeParse({ site_id: SITE_ID, status: 'all' }).success).toBe(true);
+  });
+
+  it('rechaza un estado que no existe', () => {
+    expect(rosterQuerySchema.safeParse({ site_id: SITE_ID, status: 'retired' }).success).toBe(
+      false,
+    );
+  });
+
+  it('exige la planta — sin ella la respuesta no estaría acotada', () => {
+    expect(rosterQuerySchema.safeParse({}).success).toBe(false);
+    expect(rosterQuerySchema.safeParse({ site_id: 'st-thomas' }).success).toBe(false);
   });
 });
 

@@ -13,6 +13,7 @@ import { InspectionsModule } from './inspections/inspections.module';
 import { JobsModule } from './jobs/jobs.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ReportingModule } from './reporting/reporting.module';
+import { RosterModule } from './roster/roster.module';
 import { TemplatesModule } from './templates/templates.module';
 import { UploadsModule } from './uploads/uploads.module';
 
@@ -38,6 +39,9 @@ import { UploadsModule } from './uploads/uploads.module';
     // raíz, así que no hay riesgo de orden como el de `findings/recurrence`.
     CatalogModule,
     TemplatesModule,
+    // La consola del roster. Declara `people` y `people/:id` en la raíz; ningún otro
+    // controller declara un `:param` a ese nivel, así que tampoco hay riesgo de orden.
+    RosterModule,
   ],
   controllers: [AppController],
   providers: [
