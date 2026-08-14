@@ -1,27 +1,30 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from '@tanstack/react-router';
-import type { IncidentTransition, RegulatoryClockDto } from '@hs/contracts';
+import type { IncidentTransition } from '@hs/contracts';
 
-import { getIncident, recordCause, transitionIncident } from '../api/incidents';
-import { queryKeys } from '../api/query-keys';
-import { useAppSession } from '../app/session-context';
+import { getIncident, transitionIncident } from '../../api/incidents';
+import { queryKeys } from '../../api/query-keys';
+import { useAppSession } from '../../app/session-context';
 import {
   BODY_PART_LABELS,
   CLASSIFICATION_LABELS,
   INCIDENT_STATE_LABELS,
-  OBLIGATION_LABELS,
   TREATMENT_LABELS,
   availableTransitions,
-  clockOrigin,
-  clockStatus,
   formatInstant,
-  hadField,
   incidentTransitionLabel,
-} from './incident-presentation';
+} from '../incident-presentation';
+import { Clocks } from './Clocks';
+import { Field } from './Field';
+import { Investigation } from './Investigation';
 
 /**
  * El detalle de un incidente: qué pasó, qué relojes corren, y qué se puede hacer.
+ *
+ * `incident-presentation` se queda en `routes/` y no baja a esta carpeta: lo importan
+ * seis rutas —la lista, el Form 7, la bandeja, la recurrencia, el reporte y ésta—, así
+ * que es vocabulario compartido de incidentes y no la lógica de esta pantalla.
  *
  * **Los botones salen de `INCIDENT_TRANSITIONS`, no de un `if` escrito acá.** Es la
  * misma tabla que el servicio consulta y que la guarda de 0012 reproduce en SQL.
@@ -189,151 +192,5 @@ export function IncidentRoute(): React.JSX.Element {
 
       {error ? <p className="notice">{error}</p> : null}
     </>
-  );
-}
-
-/**
- * Los relojes regulatorios.
- *
- * **Se muestran, no se cumplen.** Cada uno dice qué hay que hacer, para cuándo, desde
- * cuándo cuenta y de qué artículo sale. El sistema no envía nada al MLITSD ni al WSIB:
- * presentar es un acto de una persona, y por eso la pantalla lo dice con todas las
- * letras en vez de dejarlo implícito.
- *
- * **Un reloj vencido se muestra vencido.** Esconderlo sería peor: quien tiene que
- * responder ante el organismo necesita saberlo hoy.
- */
-function Clocks({ clocks }: { clocks: readonly RegulatoryClockDto[] }): React.JSX.Element {
-  if (clocks.length === 0) {
-    return <p>This classification does not trigger a Ministry or WSIB obligation.</p>;
-  }
-
-  return (
-    <section>
-      <h2>Regulatory clocks</h2>
-
-      <ul className="list">
-        {clocks.map((clock) => (
-          <li key={clock.obligation} className="list__row">
-            <span>
-              {OBLIGATION_LABELS[clock.obligation as keyof typeof OBLIGATION_LABELS] ??
-                clock.obligation}
-            </span>
-            <p>
-              {clockStatus(clock)} — {clockOrigin(clock)}
-              {clock.overdue ? <span className="badge badge--overdue">Past due</span> : null}
-            </p>
-            <p>{clock.citation}</p>
-          </li>
-        ))}
-      </ul>
-
-      <p className="notice">
-        These deadlines are calculated and shown. The platform does not file anything with
-        the Ministry or the WSIB — a person does that, in the regulator&apos;s own portal.
-      </p>
-    </section>
-  );
-}
-
-/**
- * Un campo, o la constancia de que **no existía en la versión de este incidente**.
- *
- * Es la pregunta cerrada 10 llevada a la pantalla: sin esto, "vacío porque no aplicaba" y
- * "vacío porque el campo no existía" se ven idénticos, y en un registro inmutable esa
- * diferencia no se puede reconstruir después.
- */
-function Field({
-  incident,
-  name,
-  label,
-  children,
-}: {
-  incident: { fields_of_version: readonly string[] };
-  name: string;
-  label: string;
-  children: React.ReactNode;
-}): React.JSX.Element {
-  return (
-    <>
-      <dt>{label}</dt>
-      <dd>
-        {hadField(incident as never, name) ? (
-          children
-        ) : (
-          <em>This field did not exist when the incident was written.</em>
-        )}
-      </dd>
-    </>
-  );
-}
-
-/** La investigación: método, secuencia, causas y el formulario para agregar una más. */
-function Investigation({
-  incidentId,
-  investigation,
-}: {
-  incidentId: string;
-  investigation: NonNullable<
-    Awaited<ReturnType<typeof getIncident>>['investigation']
-  >;
-}): React.JSX.Element {
-  const queryClient = useQueryClient();
-  const [statement, setStatement] = useState('');
-  const [isRoot, setIsRoot] = useState(false);
-
-  const add = useMutation({
-    mutationFn: () => recordCause(incidentId, { statement: statement.trim(), is_root: isRoot }),
-    onSuccess: () => {
-      setStatement('');
-      setIsRoot(false);
-      void queryClient.invalidateQueries({ queryKey: queryKeys.incident(incidentId) });
-    },
-  });
-
-  return (
-    <section>
-      <h2>Investigation</h2>
-
-      <p>Method: {investigation.method === 'five_whys' ? 'Five whys' : 'Cause tree'}</p>
-
-      {investigation.sequence_of_events ? <p>{investigation.sequence_of_events}</p> : null}
-
-      <ol className="list">
-        {investigation.causes.map((cause) => (
-          <li key={cause.id} className="list__row">
-            <span>
-              {cause.statement}
-              {cause.is_root ? <strong> — root cause</strong> : null}
-            </span>
-          </li>
-        ))}
-      </ol>
-
-      {/* Append-only: corregir una causa es agregar otra. No hay botón de editar y su
-          ausencia es la decisión — 0012 no tiene un solo GRANT UPDATE sobre estas filas. */}
-      <label>
-        Add a cause
-        <textarea value={statement} onChange={(event) => setStatement(event.target.value)} />
-      </label>
-
-      <label>
-        <input
-          type="checkbox"
-          checked={isRoot}
-          onChange={(event) => setIsRoot(event.target.checked)}
-        />
-        This is the root cause
-      </label>
-
-      <button type="button" disabled={add.isPending} onClick={() => add.mutate()}>
-        Record the cause
-      </button>
-
-      <p>
-        Causes are append-only. To correct one, add another: nothing in this record is
-        rewritten.
-      </p>
-    </section>
   );
 }

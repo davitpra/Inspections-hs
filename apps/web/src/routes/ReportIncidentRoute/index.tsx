@@ -10,13 +10,15 @@ import {
   type ReportIncidentRequest,
 } from '@hs/contracts';
 
-import { reportIncident } from '../api/incidents';
-import { queryKeys } from '../api/query-keys';
+import { reportIncident } from '../../api/incidents';
+import { queryKeys } from '../../api/query-keys';
 import {
   BODY_PART_LABELS,
   CLASSIFICATION_LABELS,
   TREATMENT_LABELS,
-} from './incident-presentation';
+} from '../incident-presentation';
+import { LocationPicker } from './LocationPicker';
+import { PersonPicker } from './PersonPicker';
 
 /**
  * Cargar un incidente en tercera persona (§3 R4).
@@ -230,53 +232,5 @@ export function ReportIncidentRoute(): React.JSX.Element {
 
       {error ? <p className="notice">{error}</p> : null}
     </>
-  );
-}
-
-/**
- * El selector de Persona.
- *
- * Sigue siendo un campo de id, y ya no porque falte la pantalla de roster —`/roster`
- * existe—: lo que falta es un endpoint que liste `PersonOption` para ESTA pantalla.
- *
- * **No se conecta a `GET /people`**, que es el que alimenta la consola del roster. Ese
- * devuelve las seis columnas de `person` y solo lo puede llamar el coordinador,
- * justamente porque §4 dice que quien reporta elige a una persona **sin poder ver su
- * perfil**. Colgar este selector de ahí pondría esa superficie detrás de la pantalla de
- * un supervisor y rompería lo único que mantiene separadas a las dos.
- *
- * Lo que hace falta es una ruta con forma de `personOptionSchema` —cuatro columnas, solo
- * activas— como la que ya sirve el paquete de campo. **Lo que no cambia cuando exista es
- * qué muestra**: número de empleado y nombre, nunca un perfil.
- */
-function PersonPicker({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-}): React.JSX.Element {
-  return (
-    <input
-      value={value}
-      placeholder="Employee number or name"
-      onChange={(event) => onChange(event.target.value)}
-    />
-  );
-}
-
-function LocationPicker({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-}): React.JSX.Element {
-  return (
-    <input
-      value={value}
-      placeholder="Location"
-      onChange={(event) => onChange(event.target.value)}
-    />
   );
 }
