@@ -4,12 +4,12 @@ import {
   type RecurrenceReport,
 } from '@hs/contracts';
 
-import { sessionClient } from './client';
+import { get } from './request';
 
 /**
  * El cliente de recurrencia (etapa 7).
  *
- * **Lo que vuelve se parsea contra el contrato, no se castea.** Un modo de agrupación o
+ * Lo que vuelve se parsea contra el contrato (ver `request.ts`): un modo de agrupación o
  * un campo que el servidor tenga y el cliente no —una migración a medio desplegar— falla
  * donde alguien lo ve, y no como una serie que se renderiza a medias.
  *
@@ -28,9 +28,5 @@ export async function getRecurrence(options: {
     group_by: options.groupBy,
   });
 
-  const result = await sessionClient.request<unknown>(`/findings/recurrence?${query}`);
-
-  if (!result.ok) throw new Error(result.message);
-
-  return recurrenceReportSchema.parse(result.value);
+  return get(`/findings/recurrence?${query}`, (value) => recurrenceReportSchema.parse(value));
 }

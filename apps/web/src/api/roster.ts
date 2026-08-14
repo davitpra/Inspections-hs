@@ -1,14 +1,14 @@
 import { personSchema, type Person } from '@hs/contracts';
 import { z } from 'zod';
 
-import { sessionClient } from './client';
+import { get } from './request';
 
 /**
  * El cliente de la consola del roster.
  *
- * **Todo lo que vuelve se parsea contra el contrato, no se castea**: un campo que el
- * servidor tenga y el cliente no —un despliegue a medias— falla donde alguien lo ve, en
- * vez de pintar una fila incompleta.
+ * Lo que vuelve se parsea contra el contrato (ver `request.ts`): un campo que el servidor
+ * tenga y el cliente no —un despliegue a medias— falla donde alguien lo ve, en vez de
+ * pintar una fila incompleta.
  *
  * ONLINE, y fuera de Dexie y del outbox: es una consulta de administración, y servirla
  * desde caché mostraría un roster viejo sin decir que lo es. El offline existe para que no
@@ -17,14 +17,6 @@ import { sessionClient } from './client';
  * **Solo lectura.** No hay `updatePerson` ni nada que escriba: el roster lo mantiene
  * `pnpm roster:import`.
  */
-
-async function get<T>(path: string, parse: (value: unknown) => T): Promise<T> {
-  const result = await sessionClient.request<unknown>(path);
-
-  if (!result.ok) throw new Error(result.message);
-
-  return parse(result.value);
-}
 
 export type RosterStatus = 'active' | 'inactive' | 'all';
 

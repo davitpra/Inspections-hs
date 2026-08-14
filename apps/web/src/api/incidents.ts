@@ -9,14 +9,14 @@ import {
 } from '@hs/contracts';
 import { z } from 'zod';
 
-import { sessionClient } from './client';
+import { get, post } from './request';
 
 /**
  * El cliente de incidentes (etapa 6).
  *
- * **Todo lo que vuelve se parsea contra el contrato, no se castea**, igual que en
- * acciones: una clasificación o un `kind` que el servidor tenga y el cliente no —una
- * migración a medio desplegar— falla donde alguien lo ve.
+ * Lo que vuelve se parsea contra el contrato (ver `request.ts`): una clasificación o un
+ * `kind` que el servidor tenga y el cliente no —una migración a medio desplegar— falla
+ * donde alguien lo ve.
  *
  * **Esto es ONLINE, y sin Dexie ni outbox** (design D14). Un accidente se reporta desde
  * una oficina o un teléfono con señal; el offline existe porque una inspección ocurre en
@@ -29,26 +29,6 @@ import { sessionClient } from './client';
  * acepta adjuntos. La evidencia de la remediación vive en las acciones correctivas de la
  * investigación, que sí las tienen.
  */
-
-async function get<T>(path: string, parse: (value: unknown) => T): Promise<T> {
-  const result = await sessionClient.request<unknown>(path);
-
-  if (!result.ok) throw new Error(result.message);
-
-  return parse(result.value);
-}
-
-async function post<T>(path: string, body: unknown, parse: (value: unknown) => T): Promise<T> {
-  const result = await sessionClient.request<unknown>(path, {
-    method: 'POST',
-    body: JSON.stringify(body),
-    headers: { 'content-type': 'application/json' },
-  });
-
-  if (!result.ok) throw new Error(result.message);
-
-  return parse(result.value);
-}
 
 export async function listIncidents(): Promise<Incident[]> {
   return get('/incidents', (value) => incidentListSchema.parse(value));

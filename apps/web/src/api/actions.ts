@@ -11,40 +11,20 @@ import {
 } from '@hs/contracts';
 import { z } from 'zod';
 
-import { sessionClient } from './client';
+import { get, post } from './request';
 
 /**
  * El cliente de acciones correctivas (etapa 5).
  *
- * **Todo lo que vuelve se parsea contra el contrato, no se castea.** Es lo que hace que
- * un `kind` de notificación que el servidor tenga y el cliente no —una migración a medio
- * desplegar— falle donde alguien lo ve, en vez de renderizar una tarjeta vacía (D11).
+ * Lo que vuelve se parsea contra el contrato — la razón está en `request.ts`, y acá pesa
+ * así: un `kind` de notificación que el servidor tenga y el cliente no —una migración a
+ * medio desplegar— falla donde alguien lo ve, en vez de renderizar una tarjeta vacía (D11).
  *
  * A diferencia de la captura de inspecciones, esto es ONLINE (design D15): no hay
  * Dexie, no hay outbox y no hay cola. Una acción correctiva se ejecuta con red; el
  * offline existe porque una inspección ocurre en 48 acres sin señal, y ejecutar una
  * acción no tiene esa restricción.
  */
-
-async function get<T>(path: string, parse: (value: unknown) => T): Promise<T> {
-  const result = await sessionClient.request<unknown>(path);
-
-  if (!result.ok) throw new Error(result.message);
-
-  return parse(result.value);
-}
-
-async function post<T>(path: string, body: unknown, parse: (value: unknown) => T): Promise<T> {
-  const result = await sessionClient.request<unknown>(path, {
-    method: 'POST',
-    body: JSON.stringify(body),
-    headers: { 'content-type': 'application/json' },
-  });
-
-  if (!result.ok) throw new Error(result.message);
-
-  return parse(result.value);
-}
 
 export async function listActions(): Promise<Action[]> {
   return get('/actions', (value) => actionListSchema.parse(value));

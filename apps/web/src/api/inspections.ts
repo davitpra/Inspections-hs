@@ -12,14 +12,13 @@ import {
 } from '@hs/contracts';
 import { z } from 'zod';
 
-import { sessionClient } from './client';
+import { get, send } from './request';
 
 /**
  * El cliente de la consola de programación.
  *
- * **Todo lo que vuelve se parsea contra el contrato, no se castea**, por lo mismo que en
- * el resto: un campo que el servidor tenga y el cliente no —un despliegue a medias—
- * falla donde alguien lo ve, en vez de pintar una fila incompleta.
+ * Lo que vuelve se parsea contra el contrato, por lo mismo que en el resto (ver
+ * `request.ts`).
  *
  * ONLINE, y fuera de Dexie y del service worker. La razón general es la de siempre —se
  * planifica sentado y con conexión, no en 48 acres sin señal—, pero hay una propia y más
@@ -27,31 +26,6 @@ import { sessionClient } from './client';
  * offline existe para que el trabajo de campo no se pierda; encolar una decisión de
  * coordinación no protege nada y esconde el estado real.
  */
-
-async function get<T>(path: string, parse: (value: unknown) => T): Promise<T> {
-  const result = await sessionClient.request<unknown>(path);
-
-  if (!result.ok) throw new Error(result.message);
-
-  return parse(result.value);
-}
-
-async function send<T>(
-  method: 'POST' | 'PATCH',
-  path: string,
-  body: unknown,
-  parse: (value: unknown) => T,
-): Promise<T> {
-  const result = await sessionClient.request<unknown>(path, {
-    method,
-    body: JSON.stringify(body),
-    headers: { 'content-type': 'application/json' },
-  });
-
-  if (!result.ok) throw new Error(result.message);
-
-  return parse(result.value);
-}
 
 // ---------------------------------------------------------------------------
 // Las lecturas de apoyo: lo que convierte identificadores en nombres.

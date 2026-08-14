@@ -8,12 +8,12 @@ import {
 } from '@hs/contracts';
 import { z } from 'zod';
 
-import { sessionClient } from './client';
+import { get, send } from './request';
 
 /**
  * El cliente del reporte de cumplimiento (etapa 7, §3 R5).
  *
- * **Lo que vuelve se parsea contra el contrato, no se castea.** Acá importa más que en
+ * Lo que vuelve se parsea contra el contrato (ver `request.ts`). Acá importa más que en
  * ninguna otra pantalla: lo que se muestra es evidencia regulatoria, y un campo que el
  * servidor tenga y el cliente no —una migración a medio desplegar— tiene que fallar donde
  * alguien lo ve, y no como un documento que se renderiza a medias.
@@ -38,22 +38,16 @@ export async function getCoverage(range: ComplianceRange): Promise<ComplianceVie
     range_end: range.rangeEnd,
   });
 
-  const result = await sessionClient.request<unknown>(`/reports/compliance?${query}`);
-
-  if (!result.ok) throw new Error(result.message);
-
-  return complianceViewSchema.parse(result.value);
+  return get(`/reports/compliance?${query}`, (value) => complianceViewSchema.parse(value));
 }
 
 /** Los reportes ya generados de la planta, del más reciente al más viejo. */
 export async function listReports(siteId: string): Promise<ComplianceReportSummary[]> {
   const query = new URLSearchParams({ site_id: siteId });
 
-  const result = await sessionClient.request<unknown>(`/reports/compliance/list?${query}`);
-
-  if (!result.ok) throw new Error(result.message);
-
-  return z.array(complianceReportSummarySchema).parse(result.value);
+  return get(`/reports/compliance/list?${query}`, (value) =>
+    z.array(complianceReportSummarySchema).parse(value),
+  );
 }
 
 /**
@@ -62,20 +56,23 @@ export async function listReports(siteId: string): Promise<ComplianceReportSumma
  * Devuelve el reporte con su digest y SIN render: el PDF llega después, por el trabajo de
  * pg-boss. La pantalla tiene que poder mostrar esa espera en vez de fingir que el archivo
  * ya está.
+ *
+ * Esta llamada estaba escrita a mano y era la única sin `content-type`, así que el body
+ * viajaba como `text/plain`, Nest no lo parseaba y el servidor contestaba 400 con los tres
+ * campos en `undefined`: generar un reporte no funcionaba. Pasar por `send` es la
+ * corrección — ver `request.ts`.
  */
 export async function generateReport(range: ComplianceRange): Promise<ComplianceReport> {
-  const result = await sessionClient.request<unknown>('/reports/compliance', {
-    method: 'POST',
-    body: JSON.stringify({
+  return send(
+    'POST',
+    '/reports/compliance',
+    {
       site_id: range.siteId,
       range_start: range.rangeStart,
       range_end: range.rangeEnd,
-    }),
-  });
-
-  if (!result.ok) throw new Error(result.message);
-
-  return complianceReportSchema.parse(result.value);
+    },
+    (value) => complianceReportSchema.parse(value),
+  );
 }
 
 /**
@@ -90,11 +87,9 @@ export async function generateReport(range: ComplianceRange): Promise<Compliance
  * lista.
  */
 export async function getDownloadUrl(reportId: string): Promise<string> {
-  const result = await sessionClient.request<unknown>(`/reports/compliance/${reportId}/pdf`);
-
-  if (!result.ok) throw new Error(result.message);
-
-  return z.object({ url: z.url(), expires_at: z.iso.datetime({ offset: true }) }).parse(
-    result.value,
-  ).url;
+  return get(
+    `/reports/compliance/${reportId}/pdf`,
+    (value) =>
+      z.object({ url: z.url(), expires_at: z.iso.datetime({ offset: true }) }).parse(value).url,
+  );
 }
