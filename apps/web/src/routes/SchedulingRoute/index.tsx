@@ -5,6 +5,7 @@ import { listScheduled, listSchedules, listSites } from '../../api/inspections';
 import { queryKeys } from '../../api/query-keys';
 import { useAppSession } from '../../app/session-context';
 import { SitePicker } from '../../components/SitePicker';
+import { canAdministerScheduling } from '../permissions';
 import { PeriodsSection } from './PeriodsSection';
 import { unassignedNotice } from './presentation';
 import { RulesSection } from './RulesSection';
@@ -48,7 +49,7 @@ export function SchedulingRoute(): React.JSX.Element {
     retry: false,
   });
 
-  const canAdminister = account?.role === 'hs_coordinator';
+  const canAdminister = canAdministerScheduling(account);
 
   const siteName = (id: string): string =>
     sites.data?.find((site) => site.id === id)?.name ?? id;

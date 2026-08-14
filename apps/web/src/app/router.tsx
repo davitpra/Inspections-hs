@@ -28,6 +28,7 @@ import { ReviewRoute } from '../routes/ReviewRoute';
 import { RosterRoute } from '../routes/RosterRoute';
 import { SchedulingRoute } from '../routes/SchedulingRoute';
 import { SignInRoute } from '../routes/SignInRoute';
+import { canAdministerRoster, canAdministerScheduling } from '../routes/permissions';
 import { SessionProvider, useAppSession } from './session-context';
 
 /**
@@ -127,9 +128,13 @@ function Shell(): React.JSX.Element {
 
           O sea: el link ausente es una comodidad en los dos casos, pero la garantía solo
           la hay en el segundo, y está del lado del servidor.
+
+          Las dos condiciones son las MISMAS funciones que usan las dos pantallas, y por
+          eso son dos y no una: hoy preguntan lo mismo, pero un link que se ofrece y una
+          pantalla que se niega serían el peor de los desacuerdos posibles.
         */}
-        {account.role === 'hs_coordinator' ? <Link to="/scheduling">Scheduling</Link> : null}
-        {account.role === 'hs_coordinator' ? <Link to="/roster">Roster</Link> : null}
+        {canAdministerScheduling(account) ? <Link to="/scheduling">Scheduling</Link> : null}
+        {canAdministerRoster(account) ? <Link to="/roster">Roster</Link> : null}
         <Link to="/inbox">Inbox</Link>
         <Link to="/outbox">Waiting to be sent</Link>
         {/*

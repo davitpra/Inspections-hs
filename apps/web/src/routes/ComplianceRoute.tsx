@@ -5,6 +5,7 @@ import type { CompliancePeriod, ComplianceReportSummary, PeriodStatus } from '@h
 import { generateReport, getCoverage, getDownloadUrl, listReports } from '../api/compliance';
 import { queryKeys } from '../api/query-keys';
 import { useAppSession } from '../app/session-context';
+import { canGenerateComplianceReport } from './permissions';
 
 /**
  * §3 R5 — La cobertura de períodos por planta, y la evidencia que se exporta de ella.
@@ -53,7 +54,7 @@ export function ComplianceRoute(): React.JSX.Element {
       queryClient.invalidateQueries({ queryKey: queryKeys.complianceReports(siteId) }),
   });
 
-  const canGenerate = account?.role === 'hs_coordinator';
+  const canGenerate = canGenerateComplianceReport(account);
 
   return (
     <>

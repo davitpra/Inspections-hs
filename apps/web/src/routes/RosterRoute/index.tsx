@@ -6,6 +6,7 @@ import { queryKeys } from '../../api/query-keys';
 import { listPeople, type RosterStatus } from '../../api/roster';
 import { useAppSession } from '../../app/session-context';
 import { SitePicker } from '../../components/SitePicker';
+import { canAdministerRoster } from '../permissions';
 import { matchesSearch, personLabel, sortRoster, statusClass, statusLabel } from './presentation';
 
 /**
@@ -35,7 +36,7 @@ import { matchesSearch, personLabel, sortRoster, statusClass, statusLabel } from
 export function RosterRoute(): React.JSX.Element {
   const { account } = useAppSession();
 
-  if (account?.role !== 'hs_coordinator') {
+  if (!canAdministerRoster(account)) {
     // Y sin disparar ninguna consulta: pedir algo que el servidor va a negar solo sirve
     // para llenar el log de 403.
     return (
