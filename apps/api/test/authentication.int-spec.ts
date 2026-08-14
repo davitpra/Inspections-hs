@@ -162,6 +162,30 @@ describe('la invitación es la única puerta al sistema', () => {
     expect(code).toBe('invitation_invalid');
   });
 
+  it('reemitir revoca la pendiente: el token viejo deja de servir y el nuevo funciona', async () => {
+    const target = await account({ withCredential: false });
+
+    const first = await stack.invitations.issue(coordinator, target.accountId);
+    const second = await stack.invitations.issue(coordinator, target.accountId);
+
+    expect(second.token).not.toBe(first.token);
+
+    const rows = await inScope<{ revoked_at: Date | null }>(
+      db.app,
+      [],
+      'SELECT revoked_at FROM user_invitation WHERE id = $1',
+      [first.invitationId],
+    );
+    expect(one(rows).revoked_at).not.toBeNull();
+
+    const oldCode = await codeOf(() => stack.invitations.accept(first.token, PASSWORD));
+    expect(oldCode).toBe('invitation_invalid');
+    expect(await stack.credentials.hasActive(target.accountId)).toBe(false);
+
+    await stack.invitations.accept(second.token, PASSWORD);
+    expect(await stack.credentials.hasActive(target.accountId)).toBe(true);
+  });
+
   it('una invitación vencida no crea credencial', async () => {
     const target = await account({ withCredential: false });
     const invitation = await stack.invitations.issue(coordinator, target.accountId);

@@ -3,14 +3,20 @@ import { describe, expect, it } from 'vitest';
 import {
   AUDITOR_DEFAULT_DAYS,
   AUDITOR_MAX_DAYS,
+  accountDetailSchema,
   accountSchema,
+  createAccountRequestSchema,
+  createAccountResponseSchema,
   createAccountSchema,
+  personAccountSchema,
   personOptionSchema,
   personSchema,
+  personWithAccountSchema,
   roleSchema,
   rosterCsvRowSchema,
   rosterImportReportSchema,
   rosterQuerySchema,
+  updateAccountRequestSchema,
 } from './identity.js';
 
 const PERSON_ID = '11111111-1111-4111-8111-111111111111';
@@ -231,6 +237,87 @@ describe('createAccountSchema — ciclo de vida del auditor externo (§5 riesgo 
   });
 });
 
+describe('personWithAccountSchema', () => {
+  it('acepta una persona sin cuenta', () => {
+    const result = personWithAccountSchema.safeParse({ ...validPerson(), account: null });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('acepta una persona con cuenta', () => {
+    const result = personWithAccountSchema.safeParse({
+      ...validPerson(),
+      account: { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: false },
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rechaza una cuenta con email — es lo mínimo del design D2, no accountSchema entero', () => {
+    const result = personAccountSchema.safeParse({
+      id: ACCOUNT_ID,
+      role: 'jhsc_member',
+      active: true,
+      can_sign_in: false,
+      email: 'ada.reid@example.com',
+    });
+
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('createAccountRequestSchema — el alta desde el roster (design D4)', () => {
+  it('acepta el mismo alta que el comando, con invite por default en false', () => {
+    const result = createAccountRequestSchema.safeParse(validAccountInput());
+
+    expect(result.success).toBe(true);
+    expect(result.success && result.data.invite).toBe(false);
+  });
+
+  it('acepta invite: true', () => {
+    const result = createAccountRequestSchema.safeParse({ ...validAccountInput(), invite: true });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rechaza un external_auditor sin su ventana de fechas, igual que el comando', () => {
+    const result = createAccountRequestSchema.safeParse({
+      ...validAccountInput(),
+      role: 'external_auditor',
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rechaza site_ids vacío', () => {
+    const result = createAccountRequestSchema.safeParse({
+      ...validAccountInput(),
+      site_ids: [],
+    });
+
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('createAccountResponseSchema', () => {
+  it('el token es opcional — solo está cuando se invitó', () => {
+    const result = createAccountResponseSchema.safeParse({
+      account: { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: false },
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('acepta la invitación cuando se pidió', () => {
+    const result = createAccountResponseSchema.safeParse({
+      account: { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: false },
+      invitation: { token: 'a-one-time-token', expiresAt: '2026-08-17T12:00:00Z' },
+    });
+
+    expect(result.success).toBe(true);
+  });
+});
+
 describe('rosterCsvRowSchema', () => {
   it('acepta una fila del CSV', () => {
     const result = rosterCsvRowSchema.safeParse({
@@ -297,5 +384,92 @@ describe('rosterImportReportSchema', () => {
     });
 
     expect(result.success).toBe(true);
+  });
+});
+
+describe('accountDetailSchema — la lectura de una cuenta (reissue-invitation-link-from-roster, design D6)', () => {
+  it('acepta la cuenta con su email', () => {
+    const result = accountDetailSchema.safeParse({
+      id: ACCOUNT_ID,
+      role: 'jhsc_member',
+      active: true,
+      can_sign_in: false,
+      email: 'ada.reid@example.com',
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rechaza un campo que no es del roster reducido ni del email', () => {
+    const result = accountDetailSchema.safeParse({
+      id: ACCOUNT_ID,
+      role: 'jhsc_member',
+      active: true,
+      can_sign_in: false,
+      email: 'ada.reid@example.com',
+      scope: [],
+    });
+
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('updateAccountRequestSchema — el pedido de PATCH /accounts/:id (design D5)', () => {
+  it('rechaza el objeto vacío: un update tiene que cambiar algo', () => {
+    const result = updateAccountRequestSchema.safeParse({});
+
+    expect(result.success).toBe(false);
+  });
+
+  it('acepta reemitir sin corregir el email', () => {
+    const result = updateAccountRequestSchema.safeParse({ invite: true });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('acepta corregir el email sin reemitir', () => {
+    const result = updateAccountRequestSchema.safeParse({ email: 'ada.reid@example.com' });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('no expone role — por acá se administra el acceso, no se cambia de rol', () => {
+    const result = updateAccountRequestSchema.safeParse({ role: 'supervisor' });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('acepta dar de baja el acceso, solo', () => {
+    const result = updateAccountRequestSchema.safeParse({ deactivated: true });
+
+    expect(result.success).toBe(true);
+  });
+
+  /**
+   * Por esta ruta una cuenta solo se da de baja. Devolverle el acceso a alguien es
+   * invitarlo —`POST /accounts`, que revive la cuenta que ya tenía—, y un `false` acá sería
+   * un segundo camino a la misma intención.
+   */
+  it('rechaza deactivated: false — devolver el acceso no se pide por acá', () => {
+    const result = updateAccountRequestSchema.safeParse({ deactivated: false, invite: true });
+
+    expect(result.success).toBe(false);
+  });
+
+  // Un pedido que se contradice. Ver el comentario del esquema: aceptarlo obligaría al
+  // servicio a elegir cuál de los dos actos gana.
+  it('rechaza dar de baja y emitir un link a la vez', () => {
+    const result = updateAccountRequestSchema.safeParse({ deactivated: true, invite: true });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rechaza dar de baja y corregir el correo a la vez', () => {
+    const result = updateAccountRequestSchema.safeParse({
+      deactivated: true,
+      email: 'ada.reid@example.com',
+    });
+
+    expect(result.success).toBe(false);
   });
 });

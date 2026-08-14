@@ -1,5 +1,5 @@
 import { Controller, Get, Query } from '@nestjs/common';
-import { rosterQuerySchema, type Person } from '@hs/contracts';
+import { rosterQuerySchema, type PersonWithAccount } from '@hs/contracts';
 
 import { CurrentSession } from '../auth/session.decorator';
 import type { SessionContext } from '../auth/session.service';
@@ -28,7 +28,7 @@ export class RosterController {
   async list(
     @CurrentSession() session: SessionContext,
     @Query() query: unknown,
-  ): Promise<Person[]> {
+  ): Promise<PersonWithAccount[]> {
     return this.roster.list(session, rosterQuerySchema.parse(query));
   }
 }

@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import type { Person, RosterQuery } from '@hs/contracts';
+import type { PersonWithAccount, RosterQuery } from '@hs/contracts';
 
 import { DbService } from '../db/db.service';
 import type { SessionScope } from '../db/site-scope';
 import { rosterForbidden } from './roster.errors';
+import { findRoster } from './roster.repository';
 
 /**
  * La consola del roster: poder ver quién trabaja en cada planta sin abrir `psql`.
@@ -23,7 +24,8 @@ export class RosterService {
   constructor(private readonly db: DbService) {}
 
   /**
-   * El roster de UNA planta, con las seis columnas de `person`.
+   * El roster de UNA planta, con las seis columnas de `person` y la cuenta de cada una
+   * (proposal — "GET /people devuelve, junto a cada persona, la cuenta que la referencia").
    *
    * POR QUÉ ACÁ HAY UN `WHERE site_id` Y NO ES LA VIOLACIÓN QUE PARECE. `person` **sí**
    * lleva política de aislamiento (`hs_apply_site_isolation`), así que el límite ya está
@@ -36,46 +38,13 @@ export class RosterService {
    * `user_site_scope`, que **no llevan política**. Acá sobra, y agregarlo sugeriría que RLS
    * no alcanza — que es justo lo contrario de lo que garantiza ADR-004.
    */
-  async list(session: SessionScope, query: RosterQuery): Promise<Person[]> {
+  async list(session: SessionScope, query: RosterQuery): Promise<PersonWithAccount[]> {
     this.requireCoordinator(session);
 
-    return this.db.withSessionClient(session, async (client) => {
-      const { rows } = await client.query<PersonRow>(
-        `SELECT id, site_id, employee_number, first_name, last_name, deactivated_at
-           FROM person
-          WHERE site_id = $1
-            AND ($2 = 'all'
-                 OR ($2 = 'active' AND deactivated_at IS NULL)
-                 OR ($2 = 'inactive' AND deactivated_at IS NOT NULL))
-          ORDER BY last_name, first_name, employee_number`,
-        [query.site_id, query.status],
-      );
-
-      return rows.map(toPerson);
-    });
+    return this.db.withSessionClient(session, (client) => findRoster(client, query));
   }
 
   private requireCoordinator(session: { role: string }): void {
     if (session.role !== 'hs_coordinator') throw rosterForbidden();
   }
-}
-
-function toPerson(row: PersonRow): Person {
-  return {
-    id: row.id,
-    site_id: row.site_id,
-    employee_number: row.employee_number,
-    first_name: row.first_name,
-    last_name: row.last_name,
-    deactivated_at: row.deactivated_at?.toISOString() ?? null,
-  };
-}
-
-interface PersonRow extends Record<string, unknown> {
-  id: string;
-  site_id: string;
-  employee_number: string;
-  first_name: string;
-  last_name: string;
-  deactivated_at: Date | null;
 }

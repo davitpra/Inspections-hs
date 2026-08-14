@@ -3,11 +3,27 @@ import { useId, useState } from 'react';
 
 import { listSites } from '../../api/inspections';
 import { queryKeys } from '../../api/query-keys';
-import { listPeople, type RosterStatus } from '../../api/roster';
+import { listPeople } from '../../api/roster';
 import { useAppSession } from '../../app/session-context';
 import { SitePicker } from '../../components/SitePicker';
-import { canAdministerRoster } from '../permissions';
-import { matchesSearch, personLabel, sortRoster, statusClass, statusLabel } from './presentation';
+import { canAdministerRoster, canInviteFromRoster } from '../permissions';
+import { InviteDialog } from './InviteDialog';
+import { ReissueDialog } from './ReissueDialog';
+import { RemoveAccessDialog } from './RemoveAccessDialog';
+import {
+  canInvite,
+  canReissueInvitation,
+  canRemoveJhscAccess,
+  inviteButtonLabel,
+  matchesSearch,
+  personLabel,
+  personName,
+  reissueButtonLabel,
+  removeButtonLabel,
+  removeButtonText,
+  roleCellLabel,
+  sortRoster,
+} from './presentation';
 
 /**
  * §6 — La consola del roster: quién trabaja en esta planta.
@@ -47,24 +63,58 @@ export function RosterRoute(): React.JSX.Element {
     );
   }
 
-  return <RosterConsole siteScope={account.siteScope} />;
+  return <RosterConsole siteScope={account.siteScope} canInviteFromRoster={canInviteFromRoster(account)} />;
 }
 
-function RosterConsole({ siteScope }: { siteScope: readonly string[] }): React.JSX.Element {
+function RosterConsole({
+  siteScope,
+  canInviteFromRoster: mayInvite,
+}: {
+  siteScope: readonly string[];
+  canInviteFromRoster: boolean;
+}): React.JSX.Element {
   const searchId = useId();
-  const statusId = useId();
 
   const [chosenSite, setChosenSite] = useState<string | null>(null);
-  const [status, setStatus] = useState<RosterStatus>('active');
   const [search, setSearch] = useState('');
+
+  /**
+   * La persona que está siendo invitada, ACÁ y no en la fila que lo originó: invitar
+   * invalida el roster, el refetch devuelve a esa persona con cuenta y su celda deja de
+   * renderizar el botón. El modal —y el token que llega a guardar— sobrevive porque la
+   * consola lo monta fuera de la tabla. Ver `InviteDialog.tsx`.
+   */
+  const [inviting, setInviting] = useState<{ id: string; label: string } | null>(null);
+
+  /**
+   * La cuenta a la que se le está reemitiendo el link (`reissue-invitation-link-from-roster`
+   * design D4): mismo criterio que `inviting`, y por la misma razón — reemitir invalida
+   * el roster y el modal tiene que sobrevivir al refetch de la fila que lo abrió.
+   */
+  const [reissuing, setReissuing] = useState<{ userId: string; label: string } | null>(null);
+
+  /**
+   * La cuenta a la que se le está quitando el acceso (`remove-jhsc-access-from-roster`):
+   * mismo criterio que las dos de arriba. Quitar deja la fila sin ese botón, así que el
+   * modal tiene que sobrevivir al refetch de la fila que lo originó.
+   *
+   * `canSignIn` viaja con el estado y no se vuelve a leer de la fila: es lo que decide qué
+   * pregunta hace el diálogo, y si se leyera del roster ya invalidado la confirmación
+   * podría cambiar de texto debajo del cursor.
+   */
+  const [removing, setRemoving] = useState<{
+    userId: string;
+    label: string;
+    canSignIn: boolean;
+  } | null>(null);
 
   const sites = useQuery({ queryKey: queryKeys.sites(), queryFn: listSites, retry: false });
 
   const siteId = chosenSite ?? siteScope[0] ?? '';
 
   const roster = useQuery({
-    queryKey: queryKeys.roster(siteId, status),
-    queryFn: () => listPeople(siteId, status),
+    queryKey: queryKeys.roster(siteId),
+    queryFn: () => listPeople(siteId),
     enabled: siteId !== '',
     retry: false,
   });
@@ -96,17 +146,6 @@ function RosterConsole({ siteScope }: { siteScope: readonly string[] }): React.J
       />
 
       <div className="filters">
-        <label htmlFor={statusId}>Status</label>
-        <select
-          id={statusId}
-          value={status}
-          onChange={(event) => setStatus(event.target.value as RosterStatus)}
-        >
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-          <option value="all">All</option>
-        </select>
-
         <label htmlFor={searchId}>Search</label>
         <input
           id={searchId}
@@ -125,24 +164,141 @@ function RosterConsole({ siteScope }: { siteScope: readonly string[] }): React.J
         distintos: el primero es un roster sin importar, el segundo es un tipeo.
       */}
       {roster.isSuccess && all.length === 0 ? (
-        <p>No one is on the roster of {siteName(siteId)} with this status.</p>
+        <p>No one is on the roster of {siteName(siteId)}.</p>
       ) : null}
       {roster.isSuccess && all.length > 0 && visible.length === 0 ? (
         <p>No one matches “{search}”.</p>
       ) : null}
 
       {/*
+        Una tabla y no una lista: el roster es la única pantalla donde se comparan filas
+        entre sí —qué número tiene cada quien, qué rol— y comparar necesita columnas
+        alineadas con su encabezado. El `<caption>` no es adorno: es lo que le dice a un
+        lector de pantalla de qué planta es la tabla que va a recorrer.
+
         La fila va inline y no en su propio archivo: sin estado, sin hooks y sin mutación,
         no llega al umbral que `CLAUDE.md` pide para separarla.
       */}
-      <ul className="list">
-        {visible.map((person) => (
-          <li key={person.id} className="list__row">
-            <span>{personLabel(person)}</span>
-            <span className={statusClass(person)}>{statusLabel(person)}</span>
-          </li>
-        ))}
-      </ul>
+      {visible.length > 0 ? (
+        <table className="table">
+          <caption className="table__caption">Roster of {siteName(siteId)}</caption>
+          <thead>
+            <tr>
+              <th scope="col">Name</th>
+              <th scope="col">Employee #</th>
+              <th scope="col">Role</th>
+              <th scope="col">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visible.map((person) => (
+              <tr key={person.id}>
+                <th scope="row">{personName(person)}</th>
+                <td>{person.employee_number}</td>
+                {/*
+                  "Worker" cuando no hay cuenta: la ausencia de acceso se nombra, no se deja
+                  en blanco. No es un rol de `ROLES` — ver `roleCellLabel`.
+                */}
+                <td>{roleCellLabel(person)}</td>
+                <td>
+                  {/*
+                    La acción tiene columna propia, separada del rol: el rol es un dato que
+                    se compara hacia abajo —quién tiene acceso hoy— y el botón es un acto.
+                    Mezclados en una celda, la columna cambiaba de ancho fila por fila y el
+                    ojo perdía la lectura vertical del rol, que es para lo que la tabla
+                    existe.
+
+                    Cada fila ofrece SOLO el acto que su estado admite:
+
+                    - sin acceso y activa → invitar. Cuenta acá tanto quien nunca tuvo
+                      cuenta como aquel a quien se le quitó: las dos filas se dibujan
+                      igual, porque son la misma pregunta;
+                    - con cuenta que todavía no puede entrar → reemitir el link, y
+                      cancelar la invitación;
+                    - con cuenta que ya entra → quitar del JHSC.
+
+                    Nada para quien no tiene acceso y está dado de baja — invitar a esa
+                    fila es exactamente lo que 4.5 no ofrece. Esa celda queda vacía, y
+                    vacía está bien: la columna existe porque OTRAS filas tienen un acto.
+                  */}
+                  <div className="table__actions">
+                    {mayInvite && canInvite(person) ? (
+                      <button
+                        type="button"
+                        aria-label={inviteButtonLabel(person)}
+                        onClick={() =>
+                          setInviting({ id: person.id, label: personLabel(person) })
+                        }
+                      >
+                        Invite to JHSC
+                      </button>
+                    ) : null}
+                    {mayInvite && canReissueInvitation(person) ? (
+                      <button
+                        type="button"
+                        aria-label={reissueButtonLabel(person)}
+                        onClick={() =>
+                          setReissuing({ userId: person.account!.id, label: personLabel(person) })
+                        }
+                      >
+                        New link
+                      </button>
+                    ) : null}
+                    {mayInvite && canRemoveJhscAccess(person) ? (
+                      <button
+                        type="button"
+                        aria-label={removeButtonLabel(person)}
+                        onClick={() =>
+                          setRemoving({
+                            userId: person.account!.id,
+                            label: personLabel(person),
+                            canSignIn: person.account!.can_sign_in,
+                          })
+                        }
+                      >
+                        {removeButtonText(person)}
+                      </button>
+                    ) : null}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : null}
+
+      {/*
+        Montaje condicional: cada apertura crea el modal de nuevo, así que `showModal()`
+        corre una sola vez por invitación y el email/token nacen limpios cada vez.
+      */}
+      {inviting ? (
+        <InviteDialog
+          personId={inviting.id}
+          personLabel={inviting.label}
+          siteId={siteId}
+          onClose={() => setInviting(null)}
+        />
+      ) : null}
+
+      {reissuing ? (
+        <ReissueDialog
+          userId={reissuing.userId}
+          personLabel={reissuing.label}
+          siteId={siteId}
+          onClose={() => setReissuing(null)}
+        />
+      ) : null}
+
+      {removing ? (
+        <RemoveAccessDialog
+          userId={removing.userId}
+          personLabel={removing.label}
+          canSignIn={removing.canSignIn}
+          siteId={siteId}
+          onClose={() => setRemoving(null)}
+        />
+      ) : null}
+
     </>
   );
 }

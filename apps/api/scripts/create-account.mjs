@@ -1,3 +1,5 @@
+import { fileURLToPath } from 'node:url';
+
 import pg from 'pg';
 
 /**
@@ -12,6 +14,14 @@ import pg from 'pg';
  * funciona igual pero NO escribe auditoría; con una planta fuera del alcance declarado
  * frena con HS002 sin decir de quién ni de qué planta habla. Ese orden es toda la
  * corrección de este comando, y por eso vive acá y no en el README.
+ *
+ * EL `INSERT` EN SÍ —`insertAccount`— SE IMPORTA DE `dist/auth/account.repository.js`
+ * (design D6) y no se reescribe acá: es el mismo orden que usa `POST /accounts`, y dos
+ * implementaciones de ese orden es exactamente cómo una de las dos deja de escribir
+ * auditoría sin que nadie se entere. Es la única razón por la que este script —que por
+ * lo demás no tiene build ni runtime de TypeScript— depende de `pnpm --filter api build`
+ * antes de correr. Lo que SÍ se queda acá, sin compartir: el chequeo de rol, el de
+ * conflicto y sus mensajes, porque responden a una terminal y no a una respuesta HTTP.
  *
  * CORRE EN PRODUCCIÓN, y es el único `auth:*` que lo hace. La regla detrás de la negativa
  * de `auth:bootstrap` y `auth:reset-password` no es "los comandos no corren en
@@ -55,6 +65,26 @@ const USAGE = [
 
 const isUuid = (value) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+
+/**
+ * `insertAccount` compilado: el mismo orden de INSERT que usa `POST /accounts` (ver la
+ * cabecera). Se importa perezosamente y no arriba del archivo para poder dar un mensaje
+ * legible cuando falta el build, en vez del `ERR_MODULE_NOT_FOUND` crudo de Node.
+ */
+async function loadInsertAccount() {
+  const distPath = fileURLToPath(new URL('../dist/auth/account.repository.js', import.meta.url));
+
+  try {
+    return (await import(distPath)).insertAccount;
+  } catch (error) {
+    throw new Error(
+      `No se encontró ${distPath}. Este comando reusa el INSERT de POST /accounts (design D6) ` +
+        'compilado en dist/, así que hace falta compilar la API primero:\n\n' +
+        '  pnpm --filter api build\n\n' +
+        `(${error.message})`,
+    );
+  }
+}
 
 /**
  * `process.argv` a mano, como el resto de los comandos del repo. `--site` es el único
@@ -268,31 +298,6 @@ async function checkConflicts(client, person, email) {
   }
 }
 
-/**
- * El alta. Los dos INSERT en LA MISMA transacción, y este orden no es opcional — ver la
- * cabecera: el fanout de auditoría está diferido a COMMIT para encontrar el alcance ya
- * otorgado, y separarlos produce un alta sin auditoría.
- */
-async function createAccount(client, { person, email, role, sites }) {
-  const { rows } = await client.query(
-    `INSERT INTO app_user (person_id, email, role)
-     VALUES ($1, $2, $3)
-     RETURNING id`,
-    [person.id, email, role],
-  );
-
-  const userId = rows[0].id;
-
-  for (const site of sites) {
-    await client.query('INSERT INTO user_site_scope (user_id, site_id) VALUES ($1, $2)', [
-      userId,
-      site.id,
-    ]);
-  }
-
-  return userId;
-}
-
 async function main() {
   const args = parseArgs(process.argv.slice(2));
 
@@ -305,6 +310,7 @@ async function main() {
     throw new Error('Falta DATABASE_URL. Ver .env.example.');
   }
 
+  const insertAccount = await loadInsertAccount();
   const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 
   try {
@@ -350,11 +356,14 @@ async function main() {
         );
       }
 
-      const userId = await createAccount(client, {
-        person,
+      const userId = await insertAccount(client, {
+        personId: person.id,
         email: args.email,
         role: args.role,
-        sites,
+        expiresAt: null,
+        recordsFrom: null,
+        recordsTo: null,
+        siteIds: sites.map((site) => site.id),
       });
 
       return { person, userId };

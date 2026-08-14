@@ -1,7 +1,5 @@
 import type { RecurrenceGrouping } from '@hs/contracts';
 
-import type { RosterStatus } from './roster';
-
 /**
  * Las claves de caché de TanStack Query, en un solo lugar.
  *
@@ -73,7 +71,8 @@ export const queryKeys = {
   form7: (incidentId?: string) => key('form7', incidentId),
 
   // Roster.
-  roster: (siteId?: string, status?: RosterStatus) => key('roster', siteId, status),
+  roster: (siteId?: string) => key('roster', siteId),
+  account: (userId?: string) => key('account', userId),
 
   // Reportes.
   recurrence: (windowMonths?: number, groupBy?: RecurrenceGrouping) =>

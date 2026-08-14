@@ -79,7 +79,18 @@ vez.
 
 ### Dar de alta a alguien
 
-Tres pasos, y los tres son actos distintos a propósito (ADR-011):
+**Un miembro del JHSC, por la pantalla.** `/roster` —solo coordinador— muestra, junto a
+cada persona sin cuenta, un botón "Invite as JHSC member". Pide el email, y con eso crea
+la cuenta y emite la invitación en un solo `POST /accounts` (design D4 del change que lo
+agregó): el sitio es el que la pantalla está mirando, no una elección aparte. El link de
+un solo uso se muestra ahí mismo para copiar —`https://<host>/accept-invitation?token=…`—
+y no se vuelve a mostrar. Con cuenta, la fila muestra el rol en vez del botón.
+
+**Los otros cuatro roles, y el arranque sin coordinador, siguen siendo el comando.** Un
+supervisor, un management o un auditor externo se dan de alta una vez cada varios meses y
+traen decisiones que no caben en un botón de una fila —alcance multi-planta, ventana de
+fechas—, y la primera cuenta del sistema no tiene, todavía, un coordinador con sesión que
+apriete ningún botón. Tres pasos, y los tres son actos distintos a propósito (ADR-011):
 
 1. **Crear la cuenta.** La persona ya está en el roster; falta el `app_user` con su
    alcance:
@@ -97,6 +108,10 @@ Tres pasos, y los tres son actos distintos a propósito (ADR-011):
    Es el **único `auth:*` que corre en producción**, y la razón es que no siembra ni
    reemplaza ninguna credencial. Para `external_auditor` no sirve: ese rol necesita
    `expires_at`, `records_from` y `records_to`, y va por SQL.
+
+   Reusa el mismo `INSERT` que `POST /accounts` —`account.repository.ts`— compilado desde
+   `dist/`, así que necesita `pnpm --filter api build` corrido antes; si falta, el comando
+   lo dice.
 
 2. **Emitir la invitación.** `pnpm auth:bootstrap <userId>`, o `POST /auth/invitations`
    con sesión de coordinador. Devuelve el token **una sola vez**: del otro lado queda su
@@ -189,11 +204,14 @@ espera, y la credencial la revoca el coordinador desde la aplicación
 
 ## Lo que todavía no tiene UI
 
-**Emitir la invitación.** `POST /auth/invitations` existe y solo lo puede llamar el
-coordinador, pero no hay pantalla: hoy se emite con `pnpm auth:bootstrap` o con curl.
+**Emitir la invitación de un rol que no sea `jhsc_member`.** `POST /auth/invitations`
+existe y solo lo puede llamar el coordinador, pero fuera del botón de `/roster` —que
+crea la cuenta e invita en un solo acto, y solo para `jhsc_member`— no hay pantalla para
+los otros cuatro roles: se emite con `pnpm auth:bootstrap` o con curl.
 
-Crear la cuenta y aceptar la invitación, en cambio, ya no están acá: son
-`pnpm auth:create-account` y `/accept-invitation` — ver "Dar de alta a alguien".
+Crear una cuenta de `jhsc_member` y aceptar la invitación, en cambio, ya no están acá: son
+el botón de `/roster` (o `pnpm auth:create-account` para los otros roles) y
+`/accept-invitation` — ver "Dar de alta a alguien".
 
 **Elegir a una persona en el reporte de incidente.** El `PersonPicker` de
 `/incidents/report` sigue siendo un campo de id: falta una ruta que liste `PersonOption`

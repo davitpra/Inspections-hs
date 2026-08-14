@@ -3,6 +3,8 @@ import { APP_GUARD } from '@nestjs/core';
 
 import { DbService } from '../db/db.service';
 import { AUTH_INSTANCE, createBetterAuth, type AuthInstance } from './better-auth';
+import { AccountController } from './account.controller';
+import { AccountService } from './account.service';
 import { AuthController } from './auth.controller';
 import { AuthGuard } from './auth.guard';
 import { AuthService } from './auth.service';
@@ -19,7 +21,7 @@ import { SessionService } from './session.service';
  * decorador, el sistema no se lo dice.
  */
 @Module({
-  controllers: [AuthController],
+  controllers: [AuthController, AccountController],
   providers: [
     {
       provide: AUTH_INSTANCE,
@@ -36,10 +38,11 @@ import { SessionService } from './session.service';
     SessionService,
     CredentialService,
     InvitationService,
+    AccountService,
     AuthService,
     { provide: APP_GUARD, useClass: AuthGuard },
   ],
-  exports: [SessionService, CredentialService, InvitationService],
+  exports: [SessionService, CredentialService, InvitationService, AccountService],
 })
 export class AuthModule {}
 

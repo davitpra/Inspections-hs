@@ -94,13 +94,7 @@ export class CredentialService {
   }
 
   async revoke(userId: string, actorUserId: string): Promise<void> {
-    await asAdministrator(this.db, actorUserId, async (client) => {
-      await client.query(
-        `UPDATE app_credential SET revoked_at = now()
-          WHERE user_id = $1 AND revoked_at IS NULL`,
-        [userId],
-      );
-    });
+    await asAdministrator(this.db, actorUserId, (client) => revokeCredentials(client, userId));
   }
 
   /**
@@ -137,4 +131,24 @@ export class CredentialService {
       [credentialId],
     );
   }
+}
+
+/**
+ * Revocar la credencial de una cuenta, dentro de la transacción que le pase el llamador.
+ *
+ * Exportada y no un método, por la misma razón que `revokePending`
+ * (`invitation.service.ts`): quitarle el acceso a una cuenta
+ * (`remove-jhsc-access-from-roster`) revoca su credencial, su invitación pendiente y pone
+ * `deactivated_at` en un solo COMMIT, y una cuenta que quedara con la credencial viva
+ * porque la revocación abrió su propia transacción y falló sería exactamente el estado a
+ * medias que el acto único existe para evitar.
+ *
+ * Nunca DELETE (ADR-002): una credencial revocada es un hecho del registro.
+ */
+export async function revokeCredentials(client: PoolClient, userId: string): Promise<void> {
+  await client.query(
+    `UPDATE app_credential SET revoked_at = now()
+      WHERE user_id = $1 AND revoked_at IS NULL`,
+    [userId],
+  );
 }

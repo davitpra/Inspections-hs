@@ -1,15 +1,25 @@
-import type { Person } from '@hs/contracts';
+import { ROLE_LABELS, type Person, type PersonWithAccount } from '@hs/contracts';
 import { describe, expect, it } from 'vitest';
 
 import {
+  accountRoleLabel,
+  canInvite,
+  canReissueInvitation,
+  canRemoveJhscAccess,
+  inviteButtonLabel,
   matchesSearch,
   personLabel,
+  personName,
+  reissueButtonLabel,
+  removeButtonLabel,
+  removeButtonText,
+  roleCellLabel,
+  showsAccountRole,
   sortRoster,
-  statusClass,
-  statusLabel,
 } from './presentation';
 
 const SITE_A = '11111111-1111-4111-8111-111111111111';
+const ACCOUNT_ID = '55555555-5555-4555-8555-555555555555';
 
 function person(overrides: Partial<Person> = {}): Person {
   return {
@@ -22,6 +32,19 @@ function person(overrides: Partial<Person> = {}): Person {
     ...overrides,
   };
 }
+
+function withAccount(
+  overrides: Partial<Person> = {},
+  account: PersonWithAccount['account'] = null,
+): PersonWithAccount {
+  return { ...person(overrides), account };
+}
+
+describe('personName', () => {
+  it('apellido primero, sin el número: en la tabla el número tiene su columna', () => {
+    expect(personName(person())).toBe('Reid, Ada');
+  });
+});
 
 describe('personLabel', () => {
   it('siempre lleva el número de empleado — el nombre no identifica', () => {
@@ -36,17 +59,9 @@ describe('personLabel', () => {
   });
 });
 
-describe('el estado', () => {
-  it('nombra activa e inactiva', () => {
-    expect(statusLabel(person())).toBe('Active');
-    expect(statusLabel(person({ deactivated_at: '2026-01-01T00:00:00.000Z' }))).toBe('Inactive');
-  });
-
-  it('no inventa colores: solo clases de la capa semántica', () => {
-    expect(statusClass(person())).toBe('badge');
-    expect(statusClass(person({ deactivated_at: '2026-01-01T00:00:00.000Z' }))).toContain(
-      'badge--',
-    );
+describe('inviteButtonLabel', () => {
+  it('identifica a la persona, no solo "Invite"', () => {
+    expect(inviteButtonLabel(person())).toBe('Invite Reid, Ada (10472) to JHSC');
   });
 });
 
@@ -75,6 +90,273 @@ describe('matchesSearch', () => {
   it('una búsqueda vacía no filtra nada', () => {
     expect(matchesSearch(person(), '')).toBe(true);
     expect(matchesSearch(person(), '   ')).toBe(true);
+  });
+});
+
+describe('accountRoleLabel', () => {
+  it('usa ROLE_LABELS de contracts, nunca el identificador crudo', () => {
+    const label = accountRoleLabel({
+      id: ACCOUNT_ID,
+      role: 'jhsc_member',
+      active: true,
+      can_sign_in: true,
+    });
+
+    expect(label).toBe('JHSC member');
+    expect(label).not.toContain('jhsc_member');
+  });
+
+  it('marca "(invited)" cuando todavía no puede iniciar sesión', () => {
+    const label = accountRoleLabel({
+      id: ACCOUNT_ID,
+      role: 'jhsc_member',
+      active: true,
+      can_sign_in: false,
+    });
+
+    expect(label).toBe('JHSC member (invited)');
+  });
+
+});
+
+describe('showsAccountRole', () => {
+  it('muestra el rol de una cuenta activa', () => {
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true });
+
+    expect(showsAccountRole(row)).toBe(true);
+  });
+
+  /**
+   * Para el roster, una cuenta a la que se le quitó el acceso no existe: esa fila se
+   * dibuja igual que la de quien nunca tuvo cuenta. Que la tuvo, y cuándo terminó, vive en
+   * la cadena de auditoría.
+   */
+  it('no muestra ningún rol para una cuenta dada de baja', () => {
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: false, can_sign_in: false });
+
+    expect(showsAccountRole(row)).toBe(false);
+  });
+
+  it('no muestra ningún rol para quien no tiene cuenta', () => {
+    expect(showsAccountRole(withAccount())).toBe(false);
+  });
+});
+
+describe('roleCellLabel', () => {
+  it('dice el rol de la cuenta cuando la hay', () => {
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'supervisor', active: true, can_sign_in: true });
+
+    expect(roleCellLabel(row)).toBe('Supervisor');
+  });
+
+  it('dice "Worker" para quien no tiene cuenta', () => {
+    expect(roleCellLabel(withAccount())).toBe('Worker');
+  });
+
+  /**
+   * La fila de quien perdió el acceso vuelve a decir "Worker", igual que la de quien nunca
+   * tuvo cuenta: es la misma invariante que ya sostienen las afordancias, ahora también en
+   * el texto de la celda.
+   */
+  it('vuelve a "Worker" cuando se le quitó el acceso a la cuenta', () => {
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: false, can_sign_in: false });
+
+    expect(roleCellLabel(row)).toBe('Worker');
+  });
+
+  /**
+   * "Worker" no es un rol asignable: no está en `ROLES`, así que nadie puede ser invitado
+   * como worker ni el servidor lo aceptaría. Si alguien lo agrega al enum, este test cae y
+   * la conversación pasa a ser sobre §4, que es donde tiene que darse.
+   */
+  it('"Worker" no es ninguno de los roles del dominio', () => {
+    expect(Object.values(ROLE_LABELS)).not.toContain('Worker');
+  });
+});
+
+describe('canInvite', () => {
+  it('ofrece invitar a una persona activa sin cuenta', () => {
+    expect(canInvite(withAccount())).toBe(true);
+  });
+
+  it('no ofrece invitar a quien ya tiene cuenta activa', () => {
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true });
+
+    expect(canInvite(row)).toBe(false);
+  });
+
+  it('no ofrece invitar a quien tiene una invitación pendiente', () => {
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: false });
+
+    expect(canInvite(row)).toBe(false);
+  });
+
+  it('no ofrece invitar a una persona dada de baja', () => {
+    const row = withAccount({ deactivated_at: '2026-01-01T00:00:00.000Z' });
+
+    expect(canInvite(row)).toBe(false);
+  });
+
+  /**
+   * El caso que este change agrega: a quien se le quitó el acceso se le ofrece invitar
+   * igual que a quien nunca tuvo cuenta. Que del otro lado eso reviva la cuenta que ya
+   * existía es cosa del servidor — `person_id` es único y no hay segunda cuenta posible.
+   */
+  it('ofrece invitar de nuevo a quien se le quitó el acceso', () => {
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: false, can_sign_in: false });
+
+    expect(canInvite(row)).toBe(true);
+  });
+
+  it('no ofrece invitar si la cuenta dada de baja no era de jhsc_member', () => {
+    for (const role of ['hs_coordinator', 'supervisor', 'management', 'external_auditor'] as const) {
+      const row = withAccount({}, { id: ACCOUNT_ID, role, active: false, can_sign_in: false });
+
+      expect(canInvite(row)).toBe(false);
+    }
+  });
+
+  it('no ofrece invitar de nuevo a quien además dejó la planta', () => {
+    const row = withAccount(
+      { deactivated_at: '2026-01-01T00:00:00.000Z' },
+      { id: ACCOUNT_ID, role: 'jhsc_member', active: false, can_sign_in: false },
+    );
+
+    expect(canInvite(row)).toBe(false);
+  });
+});
+
+describe('canReissueInvitation', () => {
+  it('ofrece reemitir cuando la cuenta está activa y todavía no puede entrar', () => {
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: false });
+
+    expect(canReissueInvitation(row)).toBe(true);
+  });
+
+  it('no ofrece reemitir a quien ya puede entrar', () => {
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true });
+
+    expect(canReissueInvitation(row)).toBe(false);
+  });
+
+  it('no ofrece reemitir a una cuenta inactiva', () => {
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: false, can_sign_in: false });
+
+    expect(canReissueInvitation(row)).toBe(false);
+  });
+
+  it('no ofrece reemitir a quien no tiene cuenta', () => {
+    expect(canReissueInvitation(withAccount())).toBe(false);
+  });
+});
+
+describe('reissueButtonLabel', () => {
+  it('identifica a la persona, no solo "New link"', () => {
+    expect(reissueButtonLabel(withAccount())).toBe('New invitation link for Reid, Ada (10472)');
+  });
+});
+
+describe('canRemoveJhscAccess', () => {
+  it('ofrece quitar el acceso a un miembro que ya entra', () => {
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true });
+
+    expect(canRemoveJhscAccess(row)).toBe(true);
+  });
+
+  // El mismo acto para los dos: cancelar una invitación ES dar de baja la cuenta.
+  it('ofrece quitar el acceso a una invitación que nadie aceptó', () => {
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: false });
+
+    expect(canRemoveJhscAccess(row)).toBe(true);
+  });
+
+  it('no ofrece quitar el acceso dos veces a la misma cuenta', () => {
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: false, can_sign_in: false });
+
+    expect(canRemoveJhscAccess(row)).toBe(false);
+  });
+
+  it('no ofrece quitar el acceso a quien no tiene cuenta', () => {
+    expect(canRemoveJhscAccess(withAccount())).toBe(false);
+  });
+
+  // El roster administra el acceso que el roster otorga, y eso es jhsc_member.
+  it('no ofrece quitar el acceso a un rol que no es jhsc_member', () => {
+    for (const role of ['hs_coordinator', 'supervisor', 'management', 'external_auditor'] as const) {
+      const row = withAccount({}, { id: ACCOUNT_ID, role, active: true, can_sign_in: true });
+
+      expect(canRemoveJhscAccess(row)).toBe(false);
+    }
+  });
+});
+
+describe('removeButtonLabel / removeButtonText', () => {
+  it('habla de cancelar la invitación cuando la persona todavía no entró', () => {
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: false });
+
+    expect(removeButtonLabel(row)).toBe('Cancel the invitation of Reid, Ada (10472)');
+    expect(removeButtonText(row)).toBe('Cancel invitation');
+  });
+
+  it('habla de quitar del JHSC cuando la persona ya entra', () => {
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true });
+
+    expect(removeButtonLabel(row)).toBe('Remove Reid, Ada (10472) from JHSC');
+    expect(removeButtonText(row)).toBe('Remove');
+  });
+});
+
+/**
+ * La invariante de la celda Actions: una fila ofrece UN acto, nunca dos. Es lo que el
+ * spec pide ("the act that its state admits and no other"), y es exactamente lo que se
+ * rompe cuando alguien agrega una acción nueva sin mirar las condiciones de las otras.
+ */
+describe('las afordancias de una fila son mutuamente excluyentes', () => {
+  const rows: PersonWithAccount[] = [
+    withAccount(),
+    withAccount({ deactivated_at: '2026-01-01T00:00:00.000Z' }),
+    withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: false }),
+    withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true }),
+    withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: false, can_sign_in: false }),
+    withAccount({}, { id: ACCOUNT_ID, role: 'supervisor', active: true, can_sign_in: true }),
+  ];
+
+  it('nunca ofrece invitar junto con quitar ni con reemitir', () => {
+    for (const row of rows) {
+      expect(canInvite(row) && canRemoveJhscAccess(row)).toBe(false);
+      expect(canInvite(row) && canReissueInvitation(row)).toBe(false);
+    }
+  });
+
+  /**
+   * La fila de alguien a quien se le quitó el acceso queda idéntica a la de quien nunca
+   * tuvo cuenta: sin rol que mostrar y con el botón de invitar. Es todo el objetivo de
+   * este ajuste, y se prueba comparando las dos filas entre sí.
+   */
+  it('la fila sin acceso se comporta igual haya tenido cuenta o no', () => {
+    const never = withAccount();
+    const withdrawn = withAccount(
+      {},
+      { id: ACCOUNT_ID, role: 'jhsc_member', active: false, can_sign_in: false },
+    );
+
+    for (const affordance of [showsAccountRole, canInvite, canReissueInvitation, canRemoveJhscAccess]) {
+      expect(affordance(withdrawn)).toBe(affordance(never));
+    }
+  });
+
+  /**
+   * La única pareja que SÍ convive, y a propósito: una invitación pendiente admite las
+   * dos salidas —emitir otro link, o cancelarla—, y ofrecer solo una dejaría al
+   * coordinador sin la que necesita.
+   */
+  it('ofrece reemitir y cancelar juntos, y solo sobre una invitación pendiente', () => {
+    const pending = withAccount(
+      {},
+      { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: false },
+    );
+
+    expect(canReissueInvitation(pending) && canRemoveJhscAccess(pending)).toBe(true);
   });
 });
 

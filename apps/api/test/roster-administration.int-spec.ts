@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DbService } from '../src/db/db.service';
 import { RosterService } from '../src/roster/roster.service';
 import { registerSite } from './helpers/catalog';
+import { createAuthStack, grantCredential, type AuthStack } from './helpers/auth';
 import { createAccount, createPerson, selectablePeople } from './helpers/identity';
 import { inScope, startTestDatabase, type TestDatabase } from './helpers/postgres';
 
@@ -27,6 +28,7 @@ const SITE_B = 'a5000000-0000-4000-8000-000000000002';
 let db: TestDatabase;
 let dbService: DbService;
 let roster: RosterService;
+let auth: AuthStack;
 
 let retired: string;
 
@@ -56,6 +58,7 @@ beforeAll(async () => {
   process.env.DATABASE_URL = previous;
 
   roster = new RosterService(dbService);
+  auth = createAuthStack(db.appUrl);
 
   await registerSite(db.migrator, SITE_A, 'roster-a', 'Roster A');
   await registerSite(db.migrator, SITE_B, 'roster-b', 'Roster B');
@@ -108,6 +111,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await dbService.onModuleDestroy();
+  await auth.stop();
   await db.stop();
 });
 
@@ -181,5 +185,69 @@ describe('el filtro de estado', () => {
     const selectable = await selectablePeople(db.app, [SITE_A]);
 
     expect(selectable.map((row) => row.id)).not.toContain(retired);
+  });
+});
+
+describe('la cuenta que viaja junto a cada persona (design D1/D2)', () => {
+  it('una persona con cuenta vuelve con su rol', async () => {
+    const withAccount = await createAccount(db.app, {
+      role: 'jhsc_member',
+      siteIds: [SITE_A],
+      firstName: 'Fatima',
+      lastName: 'Bello',
+    });
+
+    const rows = await roster.list(asCoordinator(), { site_id: SITE_A, status: 'active' });
+    const row = rows.find((entry) => entry.id === withAccount.personId);
+
+    expect(row?.account).toMatchObject({ id: withAccount.accountId, role: 'jhsc_member' });
+  });
+
+  it('una persona sin cuenta vuelve con null, sin error', async () => {
+    const person = await createPerson(db.app, SITE_A, { lastName: 'SinCuenta' });
+
+    const rows = await roster.list(asCoordinator(), { site_id: SITE_A, status: 'active' });
+    const row = rows.find((entry) => entry.id === person);
+
+    expect(row?.account).toBeNull();
+  });
+
+  it('ninguna respuesta trae email, alcance ni token', async () => {
+    await createAccount(db.app, { role: 'supervisor', siteIds: [SITE_A], lastName: 'Privado' });
+
+    const rows = await roster.list(asCoordinator(), { site_id: SITE_A, status: 'active' });
+    const withAccounts = rows.filter((row) => row.account !== null);
+
+    expect(withAccounts.length).toBeGreaterThan(0);
+    for (const row of withAccounts) {
+      expect(row.account).not.toHaveProperty('email');
+      expect(row.account).not.toHaveProperty('scope');
+      expect(row.account).not.toHaveProperty('token');
+    }
+  });
+
+  it('una cuenta invitada y no aceptada vuelve con can_sign_in en falso, y en verdadero después de aceptar', async () => {
+    const invited = await createAccount(db.app, {
+      role: 'jhsc_member',
+      siteIds: [SITE_A],
+      lastName: 'Pendiente',
+    });
+
+    const before = await roster.list(asCoordinator(), { site_id: SITE_A, status: 'active' });
+    expect(before.find((row) => row.id === invited.personId)?.account).toMatchObject({
+      can_sign_in: false,
+    });
+
+    await grantCredential(
+      auth,
+      { userId: coordinatorId, role: 'hs_coordinator' },
+      invited.accountId,
+      'a-long-enough-password',
+    );
+
+    const after = await roster.list(asCoordinator(), { site_id: SITE_A, status: 'active' });
+    expect(after.find((row) => row.id === invited.personId)?.account).toMatchObject({
+      can_sign_in: true,
+    });
   });
 });

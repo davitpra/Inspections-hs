@@ -5,6 +5,7 @@ import {
   canAdministerRoster,
   canAdministerScheduling,
   canGenerateComplianceReport,
+  canInviteFromRoster,
 } from './permissions';
 
 const SITE = '11111111-1111-4111-8111-111111111111';
@@ -24,6 +25,7 @@ const permissions = [
   ['canAdministerRoster', canAdministerRoster],
   ['canAdministerScheduling', canAdministerScheduling],
   ['canGenerateComplianceReport', canGenerateComplianceReport],
+  ['canInviteFromRoster', canInviteFromRoster],
 ] as const;
 
 describe.each(permissions)('%s', (_name, allows) => {

@@ -130,6 +130,32 @@ export const rosterQuerySchema = z.strictObject({
 
 export type RosterQuery = z.infer<typeof rosterQuerySchema>;
 
+/**
+ * La cuenta que referencia a una persona del roster, reducida a lo que decide si el
+ * coordinador puede invitarla y como qué (design D2).
+ *
+ * Ni email, ni alcance, ni credencial, ni token: eso es `accountSchema` entero, y
+ * colgarlo de cada fila del roster convertiría una lectura de 200 personas en una
+ * lectura de 200 cuentas. `active` sigue el mismo predicado que `hs_account_is_active`
+ * —`deactivated_at` nulo y `expires_at` futuro o nulo— y `can_sign_in` es si existe una
+ * `app_credential` activa: la pregunta que distingue "invitada" de "entrando".
+ */
+export const personAccountSchema = z.strictObject({
+  id: z.uuid(),
+  role: roleSchema,
+  active: z.boolean(),
+  can_sign_in: z.boolean(),
+});
+
+export type PersonAccount = z.infer<typeof personAccountSchema>;
+
+/** Una fila del roster con la cuenta que la referencia, o `null` cuando no tiene. */
+export const personWithAccountSchema = personSchema.extend({
+  account: personAccountSchema.nullable(),
+});
+
+export type PersonWithAccount = z.infer<typeof personWithAccountSchema>;
+
 /** Una entrada del alcance de una cuenta. */
 export const siteScopeSchema = z.strictObject({
   site_id: z.uuid(),
@@ -175,37 +201,78 @@ export const AUDITOR_DEFAULT_DAYS = 30;
 export const AUDITOR_MAX_DAYS = 90;
 
 /**
- * Alta de una cuenta. El alcance va aparte —es una lista de sitios— y la persona se
- * referencia, nunca se crea desde acá: dar de alta a alguien en el roster es una
- * importación, no un efecto colateral de crearle una cuenta.
+ * Los campos del alta de una cuenta, compartidos entre el comando (`createAccountSchema`)
+ * y la ruta HTTP (`createAccountRequestSchema`, design D4) para no repetir las dos reglas
+ * del auditor externo en dos lugares. El alcance va aparte —es una lista de sitios— y la
+ * persona se referencia, nunca se crea desde acá: dar de alta a alguien en el roster es
+ * una importación, no un efecto colateral de crearle una cuenta.
  */
-export const createAccountSchema = z
-  .strictObject({
-    person_id: z.uuid(),
-    email: emailSchema,
-    role: roleSchema,
-    site_ids: z.array(z.uuid()).min(1),
+const createAccountFields = z.strictObject({
+  person_id: z.uuid(),
+  email: emailSchema,
+  role: roleSchema,
+  site_ids: z.array(z.uuid()).min(1),
 
-    /** Solo para `external_auditor`. Días de vigencia, 1 a 90. */
-    expires_in_days: z.int().min(1).max(AUDITOR_MAX_DAYS).default(AUDITOR_DEFAULT_DAYS),
-    records_from: z.iso.date().optional(),
-    records_to: z.iso.date().optional(),
-  })
-  .refine(
-    (value) =>
-      value.role !== 'external_auditor' ||
-      (value.records_from !== undefined && value.records_to !== undefined),
-    'un auditor externo necesita la ventana de fechas de los registros que puede leer',
-  )
-  .refine(
-    (value) =>
-      value.records_from === undefined ||
-      value.records_to === undefined ||
-      value.records_from <= value.records_to,
-    'records_from no puede ser posterior a records_to',
-  );
+  /** Solo para `external_auditor`. Días de vigencia, 1 a 90. */
+  expires_in_days: z.int().min(1).max(AUDITOR_MAX_DAYS).default(AUDITOR_DEFAULT_DAYS),
+  records_from: z.iso.date().optional(),
+  records_to: z.iso.date().optional(),
+});
+
+/** Las dos reglas del auditor externo, iguales para el comando y para la ruta HTTP. */
+function withAuditorWindow<Schema extends z.ZodType<{
+  role: Role;
+  records_from?: string | undefined;
+  records_to?: string | undefined;
+}>>(schema: Schema) {
+  return schema
+    .refine(
+      (value) =>
+        value.role !== 'external_auditor' ||
+        (value.records_from !== undefined && value.records_to !== undefined),
+      'un auditor externo necesita la ventana de fechas de los registros que puede leer',
+    )
+    .refine(
+      (value) =>
+        value.records_from === undefined ||
+        value.records_to === undefined ||
+        value.records_from <= value.records_to,
+      'records_from no puede ser posterior a records_to',
+    );
+}
+
+export const createAccountSchema = withAuditorWindow(createAccountFields);
 
 export type CreateAccount = z.infer<typeof createAccountSchema>;
+
+/**
+ * El alta desde la pantalla del roster (design D4): los mismos campos, más el flag que
+ * pide la invitación en el mismo acto. `invite` con default `false` porque el comando de
+ * línea de órdenes —que reusa el mismo servicio— nunca lo pide: emitir la invitación ahí
+ * sigue siendo `pnpm auth:bootstrap`.
+ */
+export const createAccountRequestSchema = withAuditorWindow(
+  createAccountFields.extend({ invite: z.boolean().default(false) }),
+);
+
+export type CreateAccountRequest = z.infer<typeof createAccountRequestSchema>;
+
+/**
+ * La respuesta del alta. `invitation` solo está cuando `invite` fue `true` —el token de
+ * un solo uso, la misma forma que ya devuelve `POST /auth/invitations`— y no está nunca
+ * más: es la regla de una sola vez de `issueInvitationResponseSchema`, compartida.
+ */
+export const createAccountResponseSchema = z.strictObject({
+  account: personAccountSchema,
+  invitation: z
+    .strictObject({
+      token: z.string().min(1),
+      expiresAt: z.iso.datetime(),
+    })
+    .optional(),
+});
+
+export type CreateAccountResponse = z.infer<typeof createAccountResponseSchema>;
 
 /**
  * Lo que se puede cambiar de una cuenta. `person_id` no está, y no es una omisión:
@@ -223,6 +290,57 @@ export const updateAccountSchema = z
   );
 
 export type UpdateAccount = z.infer<typeof updateAccountSchema>;
+
+/**
+ * `personAccountSchema` más el `email` (`reissue-invitation-link-from-roster`, design
+ * D6). El roster NUNCA lo devuelve —ver `personAccountSchema`—, así que esta es la única
+ * forma de leerlo: una cuenta a la vez, no doscientas, y todavía sin alcance, ventanas de
+ * auditor externo ni nada que la pantalla de reemisión no necesite mostrar.
+ */
+export const accountDetailSchema = personAccountSchema.extend({
+  email: emailSchema,
+});
+
+export type AccountDetail = z.infer<typeof accountDetailSchema>;
+
+/**
+ * El pedido de `PATCH /accounts/:id` (design D5, ampliado por
+ * `remove-jhsc-access-from-roster`). Sigue aparte de `updateAccountSchema` y sigue sin
+ * exponer `role`: por acá no se cambia de rol, se administra el ACCESO de una cuenta que
+ * ya tiene el suyo.
+ *
+ * Dos actos, y el contrato dice que no se piden juntos:
+ *
+ * - corregir el `email` y reemitir el link (`invite`), que van juntos o sueltos;
+ * - `deactivated: true` — quitar el acceso, que es lo que cancela una invitación pendiente
+ *   y lo que saca del JHSC a quien ya entra: la misma escritura para los dos.
+ *
+ * **`z.literal(true)` y no un booleano**, y eso es lo que el tipo dice de más: por esta ruta
+ * una cuenta solo se da de baja. Devolverle el acceso a alguien no es un `deactivated:
+ * false` — es invitarlo, y eso es `POST /accounts`, que revive la cuenta que la persona ya
+ * tenía. Un booleano acá abriría un segundo camino a la misma intención.
+ *
+ * `deactivated: true` con `email` o con `invite` NO es una combinación a resolver del lado
+ * del servidor: emitir un link para una cuenta que se está dando de baja es un pedido que
+ * se contradice, y aceptarlo obligaría al servicio a elegir cuál de los dos gana. El
+ * `refine` lo rechaza acá, donde el cliente lo ve.
+ */
+export const updateAccountRequestSchema = z
+  .strictObject({
+    email: emailSchema.optional(),
+    invite: z.boolean().optional(),
+    deactivated: z.literal(true).optional(),
+  })
+  .refine(
+    (value) => Object.values(value).some((entry) => entry !== undefined),
+    'un update tiene que cambiar algo',
+  )
+  .refine(
+    (value) => !(value.deactivated === true && (value.email !== undefined || value.invite)),
+    'dar de baja una cuenta no se combina con corregir su correo ni con emitir un link',
+  );
+
+export type UpdateAccountRequest = z.infer<typeof updateAccountRequestSchema>;
 
 /**
  * Los dos estados que puede traer una fila del CSV. `inactive` da de baja; la

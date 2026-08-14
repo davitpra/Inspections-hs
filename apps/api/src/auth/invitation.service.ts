@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { PoolClient } from 'pg';
 import {
   INVITATION_DEFAULT_HOURS,
   type IssueInvitationResponse,
@@ -57,23 +58,44 @@ export class InvitationService {
       throw invitationInvalid();
     }
 
-    const token = generateToken();
-    const expiresAt = new Date(Date.now() + expiresInHours * 60 * 60 * 1000);
-
     // Bajo el alcance del actor: el trigger de auditoría escribe en la cadena de cada
     // planta que la cuenta invitada alcanza, y frena con HS002 si alguna está fuera.
     // Eso hace que "el coordinador no puede administrar a alguien de una planta que no
     // tiene" sea una regla del motor y no un `if` que se puede olvidar.
-    const created = await asAdministrator(this.db, actor.userId, async (client) => {
-      const { rows } = await client.query<{ id: string; expires_at: Date }>(
-        `INSERT INTO user_invitation (user_id, issued_by_user_id, token_hash, expires_at)
-         VALUES ($1, $2, $3, $4)
-         RETURNING id, expires_at`,
-        [targetUserId, actor.userId, hashToken(token), expiresAt],
-      );
+    return asAdministrator(this.db, actor.userId, async (client) => {
+      await revokePending(client, targetUserId);
 
-      return rows[0]!;
+      return this.writeInvitation(client, actor.userId, targetUserId, expiresInHours);
     });
+  }
+
+  /**
+   * La escritura de la invitación, sola: el `INSERT`, dentro de la transacción que le
+   * pase el llamador en vez de abrir la suya (design D4, tasks 3.1/3.2).
+   *
+   * `POST /accounts` (`account.service.ts`) la llama desde DENTRO de su propia
+   * `asAdministrator`, así que el alta y la invitación comparten `COMMIT`: no existe el
+   * estado intermedio "cuenta creada, sin invitar" que dejaría dos llamadas del cliente.
+   * `issue()` de arriba sigue siendo el único camino cuando la invitación es un acto
+   * aparte —revocar y reemitir, por ejemplo— y abre su propia transacción para eso.
+   */
+  async writeInvitation(
+    client: PoolClient,
+    actorUserId: string,
+    targetUserId: string,
+    expiresInHours = INVITATION_DEFAULT_HOURS,
+  ): Promise<IssueInvitationResponse> {
+    const token = generateToken();
+    const expiresAt = new Date(Date.now() + expiresInHours * 60 * 60 * 1000);
+
+    const { rows } = await client.query<{ id: string; expires_at: Date }>(
+      `INSERT INTO user_invitation (user_id, issued_by_user_id, token_hash, expires_at)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, expires_at`,
+      [targetUserId, actorUserId, hashToken(token), expiresAt],
+    );
+
+    const created = rows[0]!;
 
     return {
       invitationId: created.id,
@@ -176,4 +198,23 @@ export class InvitationService {
       client.release();
     }
   }
+}
+
+/**
+ * A lo sumo un token vivo por cuenta (design D1 de
+ * `reissue-invitation-link-from-roster`): revoca lo pendiente antes de que el llamador
+ * inserte la nueva, dentro de la misma transacción, así nunca hay un instante sin
+ * invitación válida ni uno con dos. Nunca DELETE (ADR-002): la que se reemplaza queda
+ * leíble como revocada.
+ *
+ * Exportada y no un método de `InvitationService`: `AccountService.update()` (design D5)
+ * la comparte para que corregir el correo y reemitir el link, cuando van juntos, lo hagan
+ * en la misma `asAdministrator` sin escribir la regla dos veces.
+ */
+export async function revokePending(client: PoolClient, targetUserId: string): Promise<void> {
+  await client.query(
+    `UPDATE user_invitation SET revoked_at = now()
+      WHERE user_id = $1 AND accepted_at IS NULL AND revoked_at IS NULL`,
+    [targetUserId],
+  );
 }

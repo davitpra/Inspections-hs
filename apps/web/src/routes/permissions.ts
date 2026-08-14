@@ -37,6 +37,18 @@ export function canAdministerRoster(account: Session | null): account is Session
   return account?.role === 'hs_coordinator';
 }
 
+/**
+ * Quién ve el botón de invitar en la fila del roster (proposal — "el rol de la
+ * invitación desde el roster es `jhsc_member` y solo ese"). Hoy coincide con
+ * `canAdministerRoster` porque los dos preguntan lo mismo con los cinco roles
+ * actuales, pero es la pregunta de invitar y no la de administrar el roster: el día
+ * que la consola se abra de lectura a otro rol sin darle el botón, esta es la que
+ * cambia y `canAdministerRoster` no.
+ */
+export function canInviteFromRoster(account: Session | null): account is Session {
+  return account?.role === 'hs_coordinator';
+}
+
 export function canAdministerScheduling(account: Session | null): account is Session {
   return account?.role === 'hs_coordinator';
 }

@@ -36,6 +36,7 @@
   --amber-800: #7a4b06;
   --amber-100: #fdf1dd;
   --white: #ffffff;
+  --black-a50: rgb(0 0 0 / 50%);
 
   /* Semánticas -------------------------------------------------------------- */
 
@@ -45,6 +46,9 @@
   --muted: var(--grey-500); /* 5.60:1 */
   --warn-bg: var(--amber-100);
   --warn-ink: var(--amber-800); /* 7.40:1; 6.63:1 sobre --warn-bg */
+
+  /* El fondo detrás de un `<dialog>` en el top layer — lo pinta `::backdrop`. */
+  --scrim: var(--black-a50);
 
   /*
    * Dos pesos de línea, porque son dos cosas distintas y sólo una tiene piso legal.
@@ -287,6 +291,20 @@ select:disabled {
   border-color: var(--warn-ink);
 }
 
+.modal {
+  width: min(28rem, 92vw);
+  max-width: 100%;
+  padding: 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.modal::backdrop {
+  background: var(--scrim);
+}
+
 .list {
   list-style: none;
   margin: 0 0 1.5rem;
@@ -300,6 +318,61 @@ select:disabled {
   align-items: center;
   padding: 0.75rem 0;
   border-bottom: 1px solid var(--line);
+}
+
+/*
+ * La tabla del roster. `table-layout: auto` a propósito: los apellidos varían mucho más
+ * que el número de empleado, y fijar las columnas dejaría la mitad de la fila vacía.
+ * Cuatro columnas cortas más la de acciones entran en el ancho de un teléfono (ADR-010)
+ * porque la de acciones envuelve sus botones en vez de estirarse.
+ */
+.table {
+  width: 100%;
+  margin: 0 0 1.5rem;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+/*
+ * Los botones de la celda de acciones, en un contenedor y no sobre el `<td>`: `display:
+ * flex` en una celda la saca del algoritmo de la tabla y la columna deja de alinearse con
+ * su encabezado.
+ *
+ * `wrap` porque una fila puede ofrecer dos botones ("New link" y "Cancel invitation") y en
+ * un teléfono no caben lado a lado. El `gap` es lo que impide que dos objetivos de toque de
+ * 48px queden pegados y se toque el equivocado — con guantes, esa separación es la
+ * diferencia entre reemitir un link y cancelar la invitación.
+ */
+.table__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.table__caption {
+  text-align: left;
+  padding-bottom: 0.5rem;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.table th,
+.table td {
+  padding: 0.75rem 0.5rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+/* El encabezado se distingue del cuerpo por peso, no por un fondo que compita con los badges. */
+.table thead th {
+  font-weight: 600;
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+/* La celda de nombre es `<th scope="row">`: encabezado de su fila, pero no se lee como título. */
+.table tbody th {
+  font-weight: 400;
 }
 
 .badge {

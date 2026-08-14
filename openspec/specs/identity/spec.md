@@ -149,6 +149,13 @@ The system SHALL expose the roster of one site as a list of `person` rows carryi
 SHALL be limited to the sites of the session's scope by the row-level security policy on
 `person`, never by a filter written into the endpoint.
 
+Each row SHALL also carry the account that references that person, or `null` when no
+`app_user` row does. The account SHALL be reduced to what tells the coordinator whether this
+person can reach the system and as what: its `id`, its `role`, whether it is active, and
+whether it can already sign in. It SHALL NOT carry the account's email, its scope, its
+credential or any invitation token; reading the roster SHALL NOT become a way to read the
+account table.
+
 The listing SHALL be available only to an account whose `role` is `hs_coordinator`, and SHALL
 be able to include people whose `deactivated_at` is non-null, which is what distinguishes it
 from the subject selection list.
@@ -195,6 +202,259 @@ SHALL NOT become a way to write it.
 
 - **WHEN** a deactivated person appears in the roster listing
 - **THEN** the subject selection list for their site still does not offer them
+
+#### Scenario: A person who holds an account is returned with its role
+
+- **WHEN** the roster of `st-thomas` is read
+- **AND** one of its people is referenced by an `app_user` row whose `role` is `jhsc_member`
+- **THEN** that row carries an account whose `role` is `jhsc_member`
+
+#### Scenario: A person without an account is returned with none
+
+- **WHEN** the roster of `st-thomas` is read
+- **AND** one of its people is referenced by no `app_user` row
+- **THEN** that row carries a null account
+- **AND** no error is raised
+
+#### Scenario: The roster does not disclose the account's email or scope
+
+- **WHEN** the roster of a site is read
+- **THEN** no account in the result carries an `email`, a site scope, a credential or an
+  invitation token
+
+#### Scenario: An account that cannot yet sign in is distinguishable from one that can
+
+- **WHEN** the roster is read after an account has been created for a person and before its
+  invitation has been accepted
+- **THEN** that account is reported as unable to sign in
+- **AND** once the invitation is accepted, the same account is reported as able to sign in
+
+### Requirement: The H&S coordinator can create an account over HTTP
+
+The system SHALL expose a request that creates an `app_user` row and its `user_site_scope`
+rows for a person who already exists on the roster, available only to a session whose `role`
+is `hs_coordinator`. It SHALL be refused for every other role, and refusing it SHALL create
+neither the account nor any scope row.
+
+The request SHALL name the person by `id`, the account's email, its role and the sites of its
+scope. The account and its scope rows SHALL be created in a single transaction under the
+declared audit actor, so that the audit entry for the new account exists in the chain of every
+site in its scope or the account is not created at all.
+
+Creating an account SHALL NOT create a person, SHALL NOT create a credential, and SHALL NOT
+create an invitation: the account is born unable to sign in.
+
+The request SHALL be refused when the person does not exist, when the person already holds an
+account, when the email belongs to another account, or when a site of the requested scope is
+outside the scope of the requesting coordinator.
+
+#### Scenario: The coordinator creates an account for a person on the roster
+
+- **WHEN** an `hs_coordinator` whose scope contains `st-thomas` requests an account for a
+  person of `st-thomas` with a role and that site
+- **THEN** an `app_user` row and one `user_site_scope` row are created
+- **AND** an audit entry naming the new account exists in the chain of `st-thomas`
+- **AND** the account cannot sign in
+
+#### Scenario: Any other role is refused
+
+- **WHEN** an account whose `role` is `jhsc_member`, `supervisor`, `management` or
+  `external_auditor` requests the creation of an account
+- **THEN** the request is refused
+- **AND** no `app_user` row is created
+
+#### Scenario: A second account for the same person is refused
+
+- **WHEN** an account is requested for a person that an `app_user` row already references
+- **THEN** the request is refused with an error naming that cause
+- **AND** the existing account is unchanged
+
+#### Scenario: An email that belongs to another account is refused
+
+- **WHEN** an account is requested with an email that another account already carries
+- **THEN** the request is refused
+- **AND** no `app_user` row is created
+
+#### Scenario: A site outside the coordinator's own scope is refused
+
+- **WHEN** an `hs_coordinator` whose scope is `st-thomas` only requests an account scoped to
+  `glencoe`
+- **THEN** the request is refused
+- **AND** neither the account nor its scope row is created
+
+#### Scenario: Creating an account creates no credential
+
+- **WHEN** an account is created
+- **THEN** no `app_credential` row exists for it
+- **AND** signing in with any password is refused until an invitation is accepted
+
+### Requirement: A person on the roster can be invited as a JHSC member in one act
+
+The system SHALL let the H&S coordinator turn a person of the roster who holds no account
+into an invited `jhsc_member` in a single act: the account is created with role
+`jhsc_member`, scoped to the site whose roster is being read, and an invitation is issued for
+it. The one-time invitation token SHALL be returned to the coordinator exactly once and SHALL
+NOT be readable afterwards, which is the same rule the invitation already carries.
+
+The act SHALL be atomic: the account, its scope and the invitation SHALL all exist or none of
+them SHALL. A failure SHALL leave the person without an account, so that pressing the button
+again is a valid retry and not a request the system refuses for a state it created itself.
+
+Only `jhsc_member` SHALL be reachable this way. Every other role SHALL remain outside this act,
+because the scope and the validity window they need are not expressible in it.
+
+#### Scenario: Inviting a person without an account
+
+- **WHEN** an `hs_coordinator` invites a person of `st-thomas` who holds no account
+- **THEN** an account with role `jhsc_member` scoped to `st-thomas` is created for that person
+- **AND** an invitation is issued for it and its one-time token is returned once
+- **AND** reading the roster again reports that person as holding a `jhsc_member` account that
+  cannot yet sign in
+
+#### Scenario: Inviting a person who already holds an account is refused
+
+- **WHEN** an `hs_coordinator` invites a person that an `app_user` row already references
+- **THEN** the request is refused
+- **AND** no second account and no invitation are created
+
+#### Scenario: A failure leaves nothing behind
+
+- **WHEN** the invitation cannot be issued while inviting a person who held no account
+- **THEN** no `app_user`, no `user_site_scope` and no `user_invitation` row exists for that
+  person
+- **AND** inviting the same person again is accepted
+
+#### Scenario: A retry after the response was lost is refused, naming the account
+
+- **WHEN** the invitation succeeded but its response never reached the coordinator
+- **AND** the same person is invited again
+- **THEN** the request is refused because that person already holds an account
+- **AND** no second account and no second invitation are created
+
+#### Scenario: The token is shown once
+
+- **WHEN** the invitation has been issued and its token returned
+- **THEN** no later request returns that token again
+
+### Requirement: A coordinator can read the administrable detail of an account in their scope
+
+The system SHALL let the H&S coordinator read one account of a person in their site scope,
+reduced to what administering it requires: its `id`, `role`, whether it is active, whether it
+can sign in, and its `email`. This SHALL NOT be the roster listing: the roster SHALL continue
+to omit every account's `email`, scope and credential, and this reading exists precisely
+because correcting an email needs to show the coordinator what is registered today.
+
+#### Scenario: The coordinator reads an account in scope
+
+- **WHEN** an `hs_coordinator` reads the account of a person in a site of their scope
+- **THEN** the account is returned with its `id`, `role`, `active`, `can_sign_in` and `email`
+
+#### Scenario: An account outside the coordinator's scope is not readable
+
+- **WHEN** an `hs_coordinator` reads an account of a person outside every site of their scope
+- **THEN** no account is returned
+
+#### Scenario: Only the coordinator can read this detail
+
+- **WHEN** an account whose role is not `hs_coordinator` reads another account's detail
+- **THEN** the request is refused
+
+### Requirement: A coordinator can reissue the invitation of an account that never signed in
+
+The system SHALL let the H&S coordinator issue a new invitation, from the roster of the site
+the account is scoped to, for an account that is active and holds no credential — the state
+the roster reports as holding a role it cannot yet sign in with. The new one-time token SHALL
+be returned exactly once, under the same rule as the first one.
+
+This SHALL be the recovery path for a token that was lost, never delivered, or expired: no
+route SHALL return a token that was already issued, so a link that was not copied is
+unrecoverable and a replacement is the only remedy.
+
+Reissuing MAY correct the account's `email` in the same act, because the most common reason to
+reissue is that the email was mistyped and the first link never arrived. When it does, the
+change SHALL be an audited event under the same rule that already governs correcting an
+account's email, and the new invitation SHALL be sent to the corrected address. A corrected
+email that already belongs to another account SHALL be refused, and refusing it SHALL leave
+the account's `email` and its invitations exactly as they were before the request.
+
+The system SHALL refuse to reissue — and to correct the email in that same act — for an
+account that already holds a credential. Restoring access to an account that can already sign
+in is the credential reset, a separate act, and merging them would let a mistaken press take
+away the access of someone who is working, or change the address that controls their account
+without their own credential in the loop.
+
+An account that is deactivated or expired SHALL NOT be reissued an invitation.
+
+The roster SHALL offer, on each row, the act that its state admits and no other: inviting the
+person when they hold no account, reissuing when they hold an account that is active and
+cannot yet sign in, and neither when the account can already sign in. The reissue SHALL be
+confirmed before it is issued, because it makes the previous link stop working.
+
+#### Scenario: The coordinator reissues a link that was never copied
+
+- **WHEN** an `hs_coordinator` reissues the invitation of an account that holds no
+  `app_credential` and whose `deactivated_at` is null
+- **THEN** a new `user_invitation` row is created for that account and its one-time token is
+  returned once
+- **AND** the account still reports that it cannot sign in until the new invitation is accepted
+
+#### Scenario: Reissuing corrects a mistyped email in the same act
+
+- **WHEN** an `hs_coordinator` reissues the invitation of an account that holds no
+  `app_credential`, supplying an `email` different from the one on file and not used by any
+  other account
+- **THEN** the account's `email` is updated to the supplied value
+- **AND** a new invitation is issued for that account
+- **AND** an audit entry carrying the previous and the new `email` exists for every site in
+  the account's scope
+
+#### Scenario: Correcting the email to one already taken is refused
+
+- **WHEN** an `hs_coordinator` reissues the invitation of an account, supplying an `email`
+  that already belongs to another account
+- **THEN** the request is refused
+- **AND** the account's `email` is unchanged
+- **AND** no new `user_invitation` row is created and the existing one, if any, is unchanged
+
+#### Scenario: Reissuing for an account that can already sign in is refused
+
+- **WHEN** an `hs_coordinator` reissues the invitation of an account that holds an
+  `app_credential` whose `revoked_at` is null
+- **THEN** the request is refused and no `user_invitation` row is created
+- **AND** the existing `app_credential` is unchanged
+
+#### Scenario: Correcting the email of an account that can already sign in is refused
+
+- **WHEN** an `hs_coordinator` attempts to reissue and correct the `email` of an account that
+  holds an `app_credential` whose `revoked_at` is null
+- **THEN** the request is refused and the account's `email` is unchanged
+
+#### Scenario: Reissuing for a deactivated account is refused
+
+- **WHEN** an `hs_coordinator` reissues the invitation of an account whose `deactivated_at` is
+  set
+- **THEN** the request is refused and no `user_invitation` row is created
+
+#### Scenario: Only the coordinator can reissue
+
+- **WHEN** an account whose role is not `hs_coordinator` reissues an invitation
+- **THEN** the request is refused and no `user_invitation` row is created
+
+#### Scenario: The reissued token is shown once
+
+- **WHEN** the new invitation has been issued and its token returned
+- **THEN** no later request returns that token again
+
+#### Scenario: A row of an invited account offers a new link
+
+- **WHEN** the roster reports a person whose account is active and cannot sign in
+- **THEN** the row offers reissuing the invitation
+- **AND** the row does not offer inviting that person again
+
+#### Scenario: A row of an account in use offers nothing
+
+- **WHEN** the roster reports a person whose account can sign in
+- **THEN** the row offers neither inviting nor reissuing
 
 ### Requirement: An account always belongs to a person, and a person has at most one account
 
@@ -665,6 +925,12 @@ non-null, or whose `revoked_at` is non-null. Accepting an invitation SHALL set `
 SHALL be the moment the account's `app_credential` row is created. An invitation SHALL NOT be
 deleted: it is revoked by setting `revoked_at`.
 
+Issuing an invitation for an account SHALL revoke, in the same act, every invitation of that
+account that is neither accepted nor already revoked. An account SHALL therefore have at most
+one usable invitation at a time: the last one issued. A token that was replaced SHALL stop
+being accepted from the moment its replacement exists, and SHALL remain readable as a revoked
+row, because who tried to give access to whom is part of the record.
+
 Accepting an invitation SHALL be the only way a password is set without presenting the current
 one. A coordinator MAY revoke an unused invitation and issue a new one; that SHALL be the reset
 path, and the system SHALL NOT offer self-service password recovery.
@@ -694,6 +960,14 @@ path, and the system SHALL NOT offer self-service password recovery.
 
 - **WHEN** any role attempts to delete a `user_invitation` row
 - **THEN** the attempt fails and the row is still present when read back
+
+#### Scenario: Issuing a new invitation revokes the pending one
+
+- **WHEN** an invitation is issued for an account that already has a `user_invitation` row
+  whose `accepted_at` and `revoked_at` are both null
+- **THEN** the earlier row has its `revoked_at` set
+- **AND** accepting the earlier token is rejected and no `app_credential` row is created
+- **AND** accepting the newly issued token creates the credential
 
 #### Scenario: A forgotten password is reset by the coordinator, not by the holder
 
