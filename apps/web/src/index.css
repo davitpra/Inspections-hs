@@ -334,6 +334,25 @@ select:disabled {
 }
 
 /*
+ * La acción de una fila cuando es un link y no un `button` —empezar una inspección lo
+ * es, porque navega—. Repite el chrome del `button` a propósito: en la misma fila
+ * conviven "Download for the field" (un `button`) y esto, y dos objetivos de toque con
+ * distinta cara en la misma fila se tocan mal. El piso de 48px es el de siempre
+ * (ADR-010), y sin el `width: 100%` de `button--primary`, que partiría la fila.
+ */
+.list__action {
+  min-height: 48px;
+  padding: 0.6rem 1rem;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--brand);
+  border-radius: var(--radius);
+  color: var(--brand);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+/*
  * La tabla del roster. `table-layout: auto` a propósito: los apellidos varían mucho más
  * que el número de empleado, y fijar las columnas dejaría la mitad de la fila vacía.
  * Cuatro columnas cortas más la de acciones entran en el ancho de un teléfono (ADR-010)

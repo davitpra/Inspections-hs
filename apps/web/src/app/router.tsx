@@ -20,7 +20,6 @@ import { IncidentsRoute } from '../routes/IncidentsRoute';
 import { OfflineRoute } from '../routes/OfflineRoute';
 import { OutboxRoute } from '../routes/OutboxRoute';
 import { PendingRoute } from '../routes/PendingRoute';
-import { PrepareRoute } from '../routes/PrepareRoute';
 import { ComplianceRoute } from '../routes/ComplianceRoute';
 import { RecurrenceRoute } from '../routes/RecurrenceRoute';
 import { ReportIncidentRoute } from '../routes/ReportIncidentRoute';
@@ -177,12 +176,6 @@ const pendingRoute = createRoute({
   component: PendingRoute,
 });
 
-const prepareRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/inspections/$id/prepare',
-  component: PrepareRoute,
-});
-
 const captureRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/inspections/$id/capture',
@@ -319,7 +312,6 @@ const outboxRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   pendingRoute,
-  prepareRoute,
   captureRoute,
   reviewRoute,
   outboxRoute,

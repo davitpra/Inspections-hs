@@ -11,6 +11,7 @@ import { Link, useParams } from '@tanstack/react-router';
 
 import { queryKeys } from '../api/query-keys';
 import { useAppSession } from '../app/session-context';
+import { DownloadForField, readableKind } from '../components/FieldPackage';
 import { FindingFields } from '../components/FindingFields';
 import { ItemInput } from '../components/ItemInput';
 import { UnsyncedIndicator } from '../components/UnsyncedIndicator';
@@ -25,7 +26,6 @@ import {
 import type { FindingDraftRow } from '../offline/db';
 import { capturePhoto, discardPhoto } from '../offline/photos';
 import { missingForField, storedLocations, storedTemplateVersion } from '../offline/prefetch';
-import { readableKind } from './PendingRoute';
 
 /**
  * La captura. Todo lo que pasa acá pasa sin red.
@@ -128,6 +128,10 @@ export function CaptureRoute(): React.JSX.Element {
   /**
    * Spec: "Capture on a device that is not field-ready is refused". No se empieza a
    * capturar a medias: se nombra qué falta y que hace falta conexión.
+   *
+   * La descarga se ofrece acá mismo. Esta URL se alcanza por marcador o desde el shell
+   * precacheado sin pasar por la lista, así que la pantalla tiene que poder resolverse
+   * sola en vez de mandar a otra a hacer lo mismo.
    */
   if (missing.isSuccess && missing.data.length > 0) {
     return (
@@ -137,11 +141,7 @@ export function CaptureRoute(): React.JSX.Element {
           This inspection is missing {missing.data.map(readableKind).join(', ')}. Capture cannot
           start until it is downloaded, and downloading needs a connection.
         </p>
-        <p>
-          <Link to="/inspections/$id/prepare" params={{ id }}>
-            Prepare this inspection
-          </Link>
-        </p>
+        <DownloadForField id={id} />
       </>
     );
   }

@@ -7,16 +7,18 @@ import { sessionClient } from '../api/client';
 import { queryKeys } from '../api/query-keys';
 import { InstallPrompt } from '../app/InstallPrompt';
 import { useAppSession } from '../app/session-context';
+import { DownloadForField, readableKind } from '../components/FieldPackage';
 import { listDrafts } from '../offline/drafts';
 import { missingForField } from '../offline/prefetch';
 
 /**
- * La pantalla de inicio del miembro del JHSC: lo que todavía debe, y —lo que este
- * change agrega— si cada cosa está lista para el campo.
+ * La pantalla de inicio del miembro del JHSC: lo que todavía debe, si cada cosa está
+ * lista para el campo, y la acción que corresponde.
  *
  * El estado de "lista para el campo" se muestra ACÁ, con red todavía disponible, porque
  * es el único momento en que se puede arreglar. Descubrirlo en la planta es descubrirlo
- * tarde.
+ * tarde. Y se arregla ACÁ también: la fila que dice que falta el roster es la misma que
+ * lo baja.
  */
 export function PendingRoute(): React.JSX.Element {
   const { account } = useAppSession();
@@ -85,36 +87,43 @@ function PendingRow({ inspection }: { inspection: PendingInspection }): React.JS
 
   return (
     <li className="list__row">
-      <Link to="/inspections/$id/prepare" params={{ id: inspection.id }}>
+      <span>
         {inspection.template_name} — {inspection.period_start.slice(0, 7)}
-      </Link>
+      </span>
 
       {inspection.overdue ? <span className="badge badge--overdue">Overdue</span> : null}
 
+      {/*
+       * Una sola acción por fila, y es la que corresponde al estado: bajar el paquete, o
+       * empezar. Mientras la consulta no resolvió no se ofrece ninguna — un botón de
+       * empezar que aparece antes de saber si hay documento manda al inspector a una
+       * pantalla que lo va a rechazar.
+       */}
       {missing.isSuccess ? (
         ready ? (
-          <span className="badge badge--ready">Ready for the field</span>
+          <>
+            <span className="badge badge--ready">Ready for the field</span>
+            <Link
+              to="/inspections/$id/capture"
+              params={{ id: inspection.id }}
+              className="list__action"
+            >
+              Start inspection
+            </Link>
+          </>
         ) : (
-          // Lo que falta se NOMBRA. Un booleano en rojo no le dice al inspector qué
-          // hacer; "roster" sí.
-          <span className="badge badge--missing">
-            Not ready — missing {missing.data.map(readableKind).join(', ')}
-          </span>
+          <>
+            {/*
+             * Lo que falta se NOMBRA. Un booleano en rojo no le dice al inspector qué
+             * hacer; "roster" sí.
+             */}
+            <span className="badge badge--missing">
+              Not ready — missing {missing.data.map(readableKind).join(', ')}
+            </span>
+            <DownloadForField id={inspection.id} />
+          </>
         )
       ) : null}
     </li>
   );
-}
-
-export function readableKind(kind: string): string {
-  switch (kind) {
-    case 'template_version':
-      return 'the inspection form';
-    case 'locations':
-      return 'the location list';
-    case 'roster':
-      return 'the roster';
-    default:
-      return kind;
-  }
 }
