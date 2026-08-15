@@ -404,6 +404,24 @@ export async function outboxFor(
 }
 
 /**
+ * ¿ESTA inspección sigue esperando?
+ *
+ * La respuesta sale de la ausencia de la fila y no de un `SendOutcome`, y es a propósito:
+ * `runOutbox` intenta TODAS las entradas de la cuenta y devuelve sus resultados en un
+ * arreglo sin identificar cuál es cuál. Quien acaba de firmar pregunta por la suya.
+ *
+ * Y la ausencia es una respuesta confiable: `accept` es el único lugar de este archivo
+ * que borra una fila, y solo corre después de que el servidor la aceptó. Sin fila,
+ * aceptada; con fila —en cola o rechazada— todavía hay algo que mirar.
+ */
+export async function isQueued(
+  clientSubmissionId: string,
+  database: OfflineDatabase = db,
+): Promise<boolean> {
+  return (await database.outbox.get(clientSubmissionId)) !== undefined;
+}
+
+/**
  * Una corrida de la cola: intenta todas las entrada que ya tienen turno.
  *
  * En serie y no en paralelo: la red de una planta con dos envíos compitiendo es peor

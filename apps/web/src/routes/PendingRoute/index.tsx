@@ -1,5 +1,6 @@
 import { pendingInspectionSchema, type PendingInspection } from '@hs/contracts';
 import { useQuery } from '@tanstack/react-query';
+import { useSearch } from '@tanstack/react-router';
 import { useState } from 'react';
 import { z } from 'zod';
 
@@ -12,6 +13,7 @@ import { listDrafts } from '../../offline/drafts';
 import { DiscardDraftDialog } from './DiscardDraftDialog';
 import { DraftRow } from './DraftRow';
 import { PendingRow } from './PendingRow';
+import { pendingWork, submittedFromDevice } from './presentation';
 
 /**
  * La pantalla de inicio del miembro del JHSC: lo que todavía debe, si cada cosa está
@@ -24,6 +26,13 @@ import { PendingRow } from './PendingRow';
  */
 export function PendingRoute(): React.JSX.Element {
   const { account } = useAppSession();
+
+  /**
+   * El acuse de la firma anterior, si viene de ahí. Se muestra ACÁ —y no en el outbox—
+   * porque una inspección aceptada no está esperando nada: la lista de la que salió es
+   * el lugar donde su ausencia se entiende.
+   */
+  const { submitted } = useSearch({ from: '/' });
 
   /**
    * El borrador que se está por descartar, ACÁ y no en la fila: descartar invalida la
@@ -52,11 +61,20 @@ export function PendingRoute(): React.JSX.Element {
     enabled: Boolean(account),
   });
 
+  const working = pendingWork(drafts.data ?? []);
+  const sent = submittedFromDevice(drafts.data ?? []);
+
   return (
     <>
       <InstallPrompt />
 
       <h1>Inspections due</h1>
+
+      {submitted === 'accepted' ? (
+        <p className="notice">
+          Your signed inspection was sent and accepted. It is no longer waiting on this device.
+        </p>
+      ) : null}
 
       {pending.isError ? (
         <p className="notice">
@@ -73,8 +91,10 @@ export function PendingRoute(): React.JSX.Element {
 
       <h2>Drafts on this device</h2>
 
+      {working.length === 0 ? <p>No drafts in progress on this device.</p> : null}
+
       <ul className="list">
-        {(drafts.data ?? []).map((draft) => (
+        {working.map((draft) => (
           <DraftRow
             key={draft.client_submission_id}
             draft={draft}
@@ -82,6 +102,27 @@ export function PendingRoute(): React.JSX.Element {
           />
         ))}
       </ul>
+
+      {/*
+        Lo ya enviado, aparte y después: no espera nada y no se puede tocar. Sigue en la
+        pantalla porque abrirlo de solo lectura es el único acceso del inspector a lo que
+        mandó cuando no hay red.
+      */}
+      {sent.length > 0 ? (
+        <>
+          <h2>Submitted from this device</h2>
+
+          <ul className="list">
+            {sent.map((draft) => (
+              <DraftRow
+                key={draft.client_submission_id}
+                draft={draft}
+                onDiscard={setDiscarding}
+              />
+            ))}
+          </ul>
+        </>
+      ) : null}
 
       {discarding && account ? (
         <DiscardDraftDialog

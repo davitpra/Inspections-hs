@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ReviewRoute } from './index';
 
@@ -10,6 +10,7 @@ const documentForDraft = vi.hoisted(() => vi.fn());
 const signDraft = vi.hoisted(() => vi.fn());
 const enqueue = vi.hoisted(() => vi.fn());
 const runOutbox = vi.hoisted(() => vi.fn());
+const isQueued = vi.hoisted(() => vi.fn());
 const storedTemplateVersion = vi.hoisted(() => vi.fn());
 const useAppSession = vi.hoisted(() => vi.fn());
 const navigate = vi.hoisted(() => vi.fn());
@@ -25,7 +26,7 @@ vi.mock('../../offline/drafts', async (importOriginal) => ({
   documentForDraft,
   signDraft,
 }));
-vi.mock('../../offline/outbox', () => ({ enqueue, runOutbox }));
+vi.mock('../../offline/outbox', () => ({ enqueue, runOutbox, isQueued }));
 vi.mock('../../offline/prefetch', () => ({ storedTemplateVersion }));
 vi.mock('../../app/session-context', () => ({ useAppSession }));
 
@@ -139,5 +140,87 @@ describe('elegibilidad para firmar', () => {
       const button = screen.getByRole('button', { name: 'Sign and submit' });
       expect(button.hasAttribute('disabled')).toBe(false);
     });
+  });
+});
+
+/**
+ * A dónde va el inspector después de firmar.
+ *
+ * La cola es el destino solo cuando quedó algo en ella. Con red, el envío sale en el
+ * acto y la entrada se borra al aceptarse: mandarlo igual al outbox le mostraba una
+ * lista vacía —"nothing is waiting"— justo cuando su única pregunta era qué pasó con la
+ * inspección que acababa de firmar.
+ */
+describe('destino después de firmar', () => {
+  beforeEach(() => {
+    useAppSession.mockReturnValue({ account: { userId: ACCOUNT } });
+    findDraft.mockResolvedValue({ client_submission_id: 'draft-1' });
+    loadDraft.mockResolvedValue(loadedDraft());
+    documentForDraft.mockResolvedValue({ sections: [] });
+    storedTemplateVersion.mockResolvedValue({ inspector_id: ACCOUNT });
+    signDraft.mockResolvedValue(undefined);
+    enqueue.mockResolvedValue(undefined);
+    runOutbox.mockResolvedValue([]);
+  });
+
+  async function sign(): Promise<void> {
+    renderRoute();
+
+    await waitFor(() => {
+      const button = screen.getByRole('button', { name: 'Sign and submit' });
+      expect(button.hasAttribute('disabled')).toBe(false);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sign and submit' }));
+  }
+
+  /** La fila desapareció de la cola: `accept` es el único que la borra. */
+  it('lleva a la lista con el acuse cuando el servidor ya la aceptó', async () => {
+    isQueued.mockResolvedValue(false);
+
+    await sign();
+
+    await waitFor(() => {
+      expect(navigate).toHaveBeenCalledWith({ to: '/', search: { submitted: 'accepted' } });
+    });
+  });
+
+  it('lleva a la cola cuando la entrada quedó esperando', async () => {
+    isQueued.mockResolvedValue(true);
+
+    await sign();
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/outbox' }));
+  });
+
+  /**
+   * `signDraft` vuelve a comprobar los hallazgos y lanza si algo cambió. No se firmó
+   * nada: sacar al inspector de esta pantalla le esconde el único lugar donde arreglarlo.
+   */
+  it('se queda en la pantalla cuando la firma falla', async () => {
+    signDraft.mockRejectedValue(new Error('incomplete finding'));
+
+    await sign();
+
+    await waitFor(() => expect(signDraft).toHaveBeenCalled());
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Y LO DICE. Quedarse callado en el punto de no retorno se lee como "no pasó nada",
+   * que es lo contrario de lo que hay que entender: el botón se rehabilita solo, y sin
+   * aviso el inspector no tiene forma de distinguir un error de un clic que no registró.
+   */
+  it('muestra que no se firmó cuando la firma falla', async () => {
+    signDraft.mockRejectedValue(new Error('incomplete finding'));
+
+    await sign();
+
+    await waitFor(() => {
+      expect(screen.getByText(/This inspection was not signed/)).toBeTruthy();
+    });
+
+    // El mensaje interno del error no llega a la pantalla.
+    expect(screen.queryByText(/incomplete finding/)).toBeNull();
   });
 });

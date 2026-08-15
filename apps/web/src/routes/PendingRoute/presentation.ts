@@ -15,6 +15,26 @@ export function draftLabel(draft: Pick<DraftRow, 'status' | 'created_at'>): stri
 }
 
 /**
+ * La lista se parte en dos por el estado, y el corte es "¿queda algo por hacer acá?".
+ *
+ * `accepted` no es un borrador: el servidor ya lo tiene, no se puede editar, no se puede
+ * descartar y no espera nada. Listarlo bajo "Drafts on this device" hacía que el título
+ * mintiera sobre la mayoría de sus filas —una pantalla con ocho "Submitted" bajo el
+ * encabezado de borradores— y enterraba las dos que sí pedían trabajo.
+ *
+ * Y no desaparece: sigue abriéndose de solo lectura, que es el único acceso que el
+ * inspector tiene a lo que envió cuando no hay red. Por eso son dos secciones y no un
+ * filtro: esconderlo resolvería el título rompiendo esa lectura.
+ */
+export function pendingWork(drafts: DraftRow[]): DraftRow[] {
+  return drafts.filter((draft) => draft.status !== 'accepted');
+}
+
+export function submittedFromDevice(drafts: DraftRow[]): DraftRow[] {
+  return drafts.filter((draft) => draft.status === 'accepted');
+}
+
+/**
  * Por qué no se pudo descartar, en inglés y diciendo dónde quedó el borrador.
  *
  * Cada motivo termina en lo mismo: la inspección sigue en el dispositivo. Es lo único

@@ -60,7 +60,7 @@ export function CaptureRoute(): React.JSX.Element {
    * proteja ya, y le borraría al inspector el trabajo que puede seguir viendo.
    */
   const draft = useQuery({
-    queryKey: queryKeys.draft(id, account?.userId),
+    queryKey: queryKeys.captureDraft(id, account?.userId),
     enabled: Boolean(account) && missing.data?.length === 0,
     queryFn: async (): Promise<
       { kind: 'loaded'; loaded: LoadedDraft } | { kind: 'refused'; reason: CaptureEligibility } | null

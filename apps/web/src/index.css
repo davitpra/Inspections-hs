@@ -334,6 +334,29 @@ select:disabled {
 }
 
 /*
+ * La fila que se LEE de arriba abajo, no de izquierda a derecha.
+ *
+ * `.list__row` alinea en fila porque casi todas sus filas son "un dato y su acción". La
+ * de un ítem que bloquea la firma es otra cosa: la pregunta, dónde estaba, y qué hacer
+ * —tres renglones que se leen en ese orden—. En fila, las tres frases se mezclan en un
+ * párrafo que no se puede escanear con el teléfono en una mano.
+ */
+.list__row--stacked {
+  display: block;
+}
+
+.list__row--stacked p {
+  margin: 0 0 0.25rem;
+}
+
+/* El dato secundario de una fila apilada: la sección que ubica al ítem, un paso por
+ * debajo en contraste. `--muted` cumple 4.5:1 sobre `--paper`. */
+.list__aside {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/*
  * La acción de una fila cuando es un link y no un `button` —empezar una inspección lo
  * es, porque navega—. Repite el chrome del `button` a propósito: en la misma fila
  * conviven "Download for the field" (un `button`) y esto, y dos objetivos de toque con

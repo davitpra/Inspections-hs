@@ -170,9 +170,18 @@ function Shell(): React.JSX.Element {
   );
 }
 
+/**
+ * La pantalla de inicio, y el destino de una inspección que el servidor YA aceptó.
+ *
+ * `submitted` es opcional y no identifica nada: es el acuse de la acción anterior, no un
+ * recurso. Va en el search y no en el path por eso mismo —igual que el token de
+ * `/accept-invitation`— y `validateSearch` deja que la pantalla lo reciba tipado. Una URL
+ * pegada a mano con el parámetro puesto muestra un aviso de más y nada peor.
+ */
 const pendingRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
+  validateSearch: z.object({ submitted: z.literal('accepted').optional() }),
   component: PendingRoute,
 });
 

@@ -11,6 +11,7 @@ const discardDraft = vi.hoisted(() => vi.fn());
 const missingForField = vi.hoisted(() => vi.fn());
 const prefetchInspection = vi.hoisted(() => vi.fn());
 const useAppSession = vi.hoisted(() => vi.fn());
+const search = vi.hoisted(() => vi.fn(() => ({}) as { submitted?: 'accepted' }));
 
 vi.mock('../../api/client', () => ({ sessionClient: { request } }));
 /**
@@ -28,6 +29,7 @@ vi.mock('../../app/session-context', () => ({ useAppSession }));
 vi.mock('../../app/InstallPrompt', () => ({ InstallPrompt: () => null }));
 
 vi.mock('@tanstack/react-router', () => ({
+  useSearch: () => search(),
   Link: ({
     to,
     params,
@@ -84,11 +86,34 @@ describe('PendingRoute', () => {
     listDrafts.mockResolvedValue([]);
     discardDraft.mockResolvedValue(true);
     useAppSession.mockReturnValue({ account: { userId: USER } });
+    search.mockReturnValue({});
   });
 
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+  });
+
+  /**
+   * El acuse de la firma. Sin él, quien acaba de firmar con red aterrizaba en una cola
+   * vacía que decía "nothing is waiting" y no mencionaba su inspección por ningún lado.
+   */
+  it('confirma la inspección aceptada cuando se llega desde la firma', async () => {
+    missingForField.mockResolvedValue([]);
+    search.mockReturnValue({ submitted: 'accepted' });
+
+    renderRoute();
+
+    expect(await screen.findByText(/sent and accepted/)).toBeTruthy();
+  });
+
+  it('no confirma nada cuando se entra a la pantalla por su cuenta', async () => {
+    missingForField.mockResolvedValue([]);
+
+    renderRoute();
+
+    await screen.findByText('Inspections due');
+    expect(screen.queryByText(/sent and accepted/)).toBeNull();
   });
 
   it('ofrece descargar, y no empezar, cuando falta el paquete', async () => {
@@ -183,6 +208,7 @@ describe('PendingRoute — descartar un borrador', () => {
     missingForField.mockResolvedValue([]);
     discardDraft.mockResolvedValue(true);
     useAppSession.mockReturnValue({ account: { userId: USER } });
+    search.mockReturnValue({});
   });
 
   afterEach(() => {
@@ -247,5 +273,61 @@ describe('PendingRoute — descartar un borrador', () => {
 
     expect(await screen.findByText(/signed and waiting to be sent/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Discard the draft' })).toBeTruthy();
+  });
+});
+
+/**
+ * Las dos listas del dispositivo. El encabezado "Drafts on this device" tiene que ser
+ * cierto: lo aceptado ya está en el servidor y no es un borrador de nadie.
+ */
+describe('PendingRoute — lo enviado no se lista como borrador', () => {
+  function draft(overrides: Record<string, unknown> = {}) {
+    return {
+      client_submission_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      scheduled_inspection_id: INSPECTION,
+      account_id: USER,
+      site_id: SITE,
+      template_version_id: VERSION,
+      created_at: '2026-08-01T10:00:00.000Z',
+      updated_at: '2026-08-01T10:00:00.000Z',
+      current_item_key: null,
+      status: 'capturing',
+      signed_at: null,
+      ...overrides,
+    };
+  }
+
+  beforeEach(() => {
+    request.mockResolvedValue({ ok: true, value: pending() });
+    missingForField.mockResolvedValue([]);
+    useAppSession.mockReturnValue({ account: { userId: USER } });
+    search.mockReturnValue({});
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it('separa lo aceptado en su propia sección y no lo ofrece descartar', async () => {
+    listDrafts.mockResolvedValue([
+      draft({ status: 'accepted', client_submission_id: 'accepted-1' }),
+    ]);
+
+    renderRoute();
+
+    expect(await screen.findByText('Submitted from this device')).toBeTruthy();
+    expect(screen.getByText('No drafts in progress on this device.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Discard/ })).toBeNull();
+  });
+
+  it('sin nada enviado no aparece la segunda sección', async () => {
+    listDrafts.mockResolvedValue([draft()]);
+
+    renderRoute();
+
+    await screen.findByText(/Draft — started 2026-08-01/);
+    expect(screen.queryByText('Submitted from this device')).toBeNull();
+    expect(screen.queryByText('No drafts in progress on this device.')).toBeNull();
   });
 });

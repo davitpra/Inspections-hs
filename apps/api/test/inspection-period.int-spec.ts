@@ -1,7 +1,11 @@
-import type { TemplateDocument } from '@hs/contracts';
+import { randomUUID } from 'node:crypto';
+
+import type { InspectionSubmission, TemplateDocument } from '@hs/contracts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { Test } from '@nestjs/testing';
+
+import { SubmissionsService } from '../src/inspections/submissions.service';
 
 import { AppModule } from '../src/app.module';
 import {
@@ -370,6 +374,48 @@ describe('el pendiente de cada inspector', () => {
     });
 
     expect(after.map((row) => row.id)).not.toContain(target.id);
+  });
+
+  /**
+   * El filtro que define la lista: lo que ya se hizo no se debe.
+   *
+   * Sin él, el inspector veía el mes cumplido bajo "Inspections due" con su botón de
+   * empezar, al lado del borrador que su propio dispositivo marcaba como enviado. Es la
+   * misma condición que `periodStatusCase` llama `completed` —la EXISTENCIA de la
+   * inspección— y por eso se prueba contra un envío real y no contra un INSERT a mano.
+   */
+  it('una inspección ya enviada desaparece del pendiente', async () => {
+    const submissions = new SubmissionsService(stack.db);
+
+    const scheduled = await stack.inspections.schedule(
+      { userId: coordinator.accountId, role: 'hs_coordinator', siteIds: [SITE_A] },
+      {
+        site_id: SITE_A,
+        template_id: templateId,
+        period_start: '2021-01-01',
+        inspector_id: other.accountId,
+      },
+    );
+
+    const session = { userId: other.accountId, role: 'jhsc_member', siteIds: [SITE_A] };
+
+    expect((await stack.inspections.pendingFor(session)).map((row) => row.id)).toContain(
+      scheduled.id,
+    );
+
+    await submissions.ingest(session, {
+      client_submission_id: randomUUID(),
+      scheduled_inspection_id: scheduled.id,
+      template_version_id: scheduled.template_version_id,
+      answers: { 'p.guard': true } as InspectionSubmission['answers'],
+      photos: {},
+      findings: {},
+      signed_at: '2021-01-15T14:20:00-05:00',
+    });
+
+    expect((await stack.inspections.pendingFor(session)).map((row) => row.id)).not.toContain(
+      scheduled.id,
+    );
   });
 
   it('no devuelve nada sin alcance de sitio', async () => {

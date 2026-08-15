@@ -59,6 +59,21 @@ export const queryKeys = {
    */
   draft: (scheduledInspectionId: string, userId?: string) =>
     key('draft', scheduledInspectionId, userId),
+  /**
+   * EL MISMO BORRADOR, PERO NO LA MISMA CONSULTA. `CaptureRoute` no lee el borrador: lo
+   * ABRE —`openDraft` es un efecto— y puede negarse, así que su dato es un envoltorio
+   * (`{ kind: 'loaded' | 'refused' }`) y no el borrador pelado que devuelve `loadDraft`.
+   *
+   * Compartir clave con `draft()` hacía que al pasar de la captura a la revisión la
+   * segunda pantalla recibiera el envoltorio de la primera y leyera `.draft` de algo que
+   * no lo tiene. Dos formas de dato distintas no pueden vivir en la misma entrada de
+   * caché, aunque describan la misma fila.
+   *
+   * El marcador va DESPUÉS del identificador para no romper el prefijo: `draft(id)`
+   * sigue invalidando esta consulta y la otra de una sola vez.
+   */
+  captureDraft: (scheduledInspectionId: string, userId?: string) =>
+    key('draft', scheduledInspectionId, 'capture', userId),
   drafts: (userId?: string) => key('drafts', userId),
   document: (clientSubmissionId?: string) => key('document', clientSubmissionId),
   /** La cola es del dueño de sus borradores, y por eso la cuenta va en la clave. */

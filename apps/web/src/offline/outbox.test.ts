@@ -9,6 +9,7 @@ import {
   BACKOFF_CAP_MS,
   backoffMs,
   enqueue,
+  isQueued,
   outboxFor,
   runOutbox,
   sendEntry,
@@ -578,6 +579,31 @@ describe('outboxFor', () => {
 
     expect(await outboxFor(ACCOUNT, database)).toEqual([]);
     expect(await database.outbox.get(id)).toBeDefined();
+  });
+});
+
+/**
+ * La pregunta que hace la pantalla de firma para saber a dónde mandar al inspector.
+ */
+describe('isQueued', () => {
+  it('deja de estar en cola solo cuando el servidor la aceptó', async () => {
+    database = freshDatabase();
+    const id = await readyDraft(database);
+
+    expect(await isQueued(id, database)).toBe(true);
+
+    await sendEntry(id, { database, client: acceptingServer(), put: bucketOk });
+
+    expect(await isQueued(id, database)).toBe(false);
+  });
+
+  /** Rechazada sigue en cola: hay algo que mirar, y por eso el destino sigue siendo la cola. */
+  it('una entrada rechazada sigue contando como en cola', async () => {
+    database = freshDatabase();
+    const id = await readyDraft(database);
+    await database.outbox.update(id, { state: 'rejected', last_error: 'validation_failed' });
+
+    expect(await isQueued(id, database)).toBe(true);
   });
 });
 

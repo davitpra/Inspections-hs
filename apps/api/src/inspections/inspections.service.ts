@@ -289,7 +289,16 @@ export class InspectionsService {
    * Lo que el solicitante todavía debe.
    *
    * Sin `WHERE site_id`: recorta la política. Lo único que agrega el endpoint es "es
-   * mío" y "no está cancelada", que no son alcance sino filtro de la pantalla.
+   * mío", "no está cancelada" y "todavía no se hizo", que no son alcance sino filtro de
+   * la pantalla.
+   *
+   * **`insp.id IS NULL` es el filtro que define la lista.** Sin él, una inspección
+   * enviada y aceptada seguía apareciendo bajo "Inspections due" con su botón de
+   * empezar, al lado del borrador que decía "Submitted": la pantalla se contradecía a sí
+   * misma, y el mes cumplido se leía como pendiente. Es la misma condición que
+   * `periodStatusCase` llama `completed` —la EXISTENCIA de la inspección, sin mirar
+   * `received_at`— y por eso el criterio de esta lista no puede alejarse del que usan la
+   * consola de programación y el reporte de cumplimiento.
    */
   async pendingFor(session: SessionScope): Promise<PendingInspection[]> {
     const today = civilDate(new Date(), SITE_TIME_ZONE);
@@ -305,8 +314,10 @@ export class InspectionsService {
                 (si.period_end < $2::date) AS overdue
            FROM scheduled_inspection si
            JOIN template t ON t.id = si.template_id
+           LEFT JOIN inspection insp ON insp.scheduled_inspection_id = si.id
           WHERE si.inspector_id = $1
             AND si.cancelled_at IS NULL
+            AND insp.id IS NULL
           ORDER BY si.period_end`,
         [session.userId, today],
       );

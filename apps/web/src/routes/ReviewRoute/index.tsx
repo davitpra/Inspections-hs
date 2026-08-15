@@ -14,9 +14,9 @@ import {
   signDraft,
 } from '../../offline/drafts';
 import { countPending } from '../../offline/photos';
-import { enqueue, runOutbox } from '../../offline/outbox';
+import { enqueue, isQueued, runOutbox } from '../../offline/outbox';
 import { storedTemplateVersion } from '../../offline/prefetch';
-import { readableMissing } from './presentation';
+import { blockers, signFailure } from './presentation';
 
 /**
  * Revisar y firmar. Es el momento en que un borrador deja de ser un borrador.
@@ -64,10 +64,19 @@ export function ReviewRoute(): React.JSX.Element {
     ? captureEligibility(stored.data?.inspector_id, account.userId)
     : 'ok';
 
+  /**
+   * Firmar, encolar, intentar, y **contar lo que efectivamente pasó**.
+   *
+   * El destino depende del resultado y no es fijo. Mandar siempre al outbox convertía el
+   * caso feliz —hay red, el envío salió en el acto, `accept` borró la fila— en una cola
+   * vacía que no menciona la inspección que se acaba de firmar: la pantalla decía
+   * "nothing is waiting" cuando la única pregunta del inspector era qué pasó con lo suyo.
+   * La cola es el destino correcto solo cuando quedó algo en ella.
+   */
   const submit = useMutation({
-    mutationFn: async () => {
-      if (!draft.data) return;
-      if (eligibility !== 'ok') return;
+    mutationFn: async (): Promise<'accepted' | 'queued' | null> => {
+      if (!draft.data) return null;
+      if (eligibility !== 'ok') return null;
 
       const { client_submission_id } = draft.data.draft;
 
@@ -80,10 +89,25 @@ export function ReviewRoute(): React.JSX.Element {
       // La cuenta va explícita: la cola manda solo lo de su dueño, y acá el dueño es
       // quien acaba de firmar.
       await runOutbox({ accountId: account?.userId ?? null });
+
+      return (await isQueued(client_submission_id)) ? 'queued' : 'accepted';
     },
-    onSettled: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.draft(id) });
-      await navigate({ to: '/outbox' });
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.draft(id) }),
+    /**
+     * Se navega en `onSuccess` y no en `onSettled`: si `signDraft` lanzó —un hallazgo
+     * que quedó incompleto entre esta pantalla y el clic—, no se firmó nada, y sacar al
+     * inspector de acá le esconde el único lugar donde puede arreglarlo. Se queda, y el
+     * botón vuelve a estar disponible.
+     */
+    onSuccess: async (outcome) => {
+      if (outcome === null) return;
+
+      if (outcome === 'queued') {
+        await navigate({ to: '/outbox' });
+        return;
+      }
+
+      await navigate({ to: '/', search: { submitted: 'accepted' } });
     },
   });
 
@@ -107,6 +131,13 @@ export function ReviewRoute(): React.JSX.Element {
     draft.data.photos,
   );
 
+  /**
+   * Las dos comprobaciones, una sola lista y en orden de recorrido: para el inspector no
+   * son "violaciones de validación" y "hallazgos incompletos", son las paradas que le
+   * quedan. El texto lo arma `presentation.ts`; acá solo se pinta.
+   */
+  const blocking = blockers(document.data, validation.ok ? [] : validation.violations, incomplete);
+
   return (
     <>
       <UnsyncedIndicator accountId={account?.userId ?? null} />
@@ -122,35 +153,36 @@ export function ReviewRoute(): React.JSX.Element {
         </p>
       ) : null}
 
-      {validation.ok ? (
+      {blocking.length === 0 ? (
         <p>Everything required has been answered.</p>
       ) : (
         <>
-          <p className="notice notice--warn">This inspection is not complete yet:</p>
+          <p className="notice notice--warn">
+            {blocking.length} item{blocking.length === 1 ? '' : 's'} still need
+            {blocking.length === 1 ? 's' : ''} your attention before you can sign:
+          </p>
+
+          {/*
+            La pregunta primero y en negrita, la sección debajo, y qué hacer al final: es
+            el orden en que el inspector la busca —"¿cuál pregunta?", "¿dónde estaba?",
+            "¿qué hago?"—. La `item_key` no aparece salvo que el documento no traiga la
+            pregunta, en cuyo caso es lo único que hay para nombrar el ítem.
+          */}
           <ul className="list">
-            {validation.violations.map((violation) => (
-              <li key={`${violation.item_key}-${violation.code}`} className="list__row">
-                {violation.item_key}: {violation.code}
+            {blocking.map((entry) => (
+              <li key={entry.item_key} className="list__row list__row--stacked">
+                <p>
+                  <strong>{entry.label}</strong>
+                </p>
+                {entry.section ? <p className="list__aside">{entry.section}</p> : null}
+                {entry.reasons.map((reason) => (
+                  <p key={reason}>{reason}</p>
+                ))}
               </li>
             ))}
           </ul>
         </>
       )}
-
-      {incomplete.length > 0 ? (
-        <>
-          <p className="notice notice--warn">
-            These findings still need details before you can sign:
-          </p>
-          <ul className="list">
-            {incomplete.map((entry) => (
-              <li key={entry.item_key} className="list__row">
-                {entry.item_key}: {entry.missing.map(readableMissing).join(', ')}
-              </li>
-            ))}
-          </ul>
-        </>
-      ) : null}
 
       {pendingPhotos > 0 ? (
         <p className="notice">
@@ -184,16 +216,32 @@ export function ReviewRoute(): React.JSX.Element {
         </p>
       ) : null}
 
+      {/*
+       * QUE FALLE FIRMAR TENÍA QUE VERSE, Y NO SE VEÍA.
+       *
+       * `signDraft` lanza si un hallazgo quedó incompleto entre esta pantalla y el clic
+       * —la comprobación que corre de nuevo contra las filas, no contra el documento—.
+       * La mutación se quedaba acá a propósito, pero sin decir nada: el inspector tocaba
+       * "Sign and submit", el botón se rehabilitaba, y la pantalla quedaba igual. Un
+       * error silencioso en el punto de no retorno se lee como "no pasó nada", que es
+       * exactamente lo contrario de lo que hay que entender.
+       *
+       * `submit.reset()` en el botón limpia el aviso al reintentar, para que un mensaje
+       * viejo no se lea como el resultado del intento nuevo.
+       */}
+      {submit.isError ? (
+        <p className="notice notice--warn">
+          This inspection was not signed. {signFailure(submit.error)}
+        </p>
+      ) : null}
+
       <button
         type="button"
-        disabled={
-          !validation.ok ||
-          incomplete.length > 0 ||
-          submitted ||
-          submit.isPending ||
-          eligibility !== 'ok'
-        }
-        onClick={() => submit.mutate()}
+        disabled={blocking.length > 0 || submitted || submit.isPending || eligibility !== 'ok'}
+        onClick={() => {
+          submit.reset();
+          submit.mutate();
+        }}
       >
         {submitted ? 'Signed' : 'Sign and submit'}
       </button>
