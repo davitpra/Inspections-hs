@@ -12,6 +12,7 @@ const PERSON = '44444444-4444-4444-8444-444444444444';
 const ADA = '55555555-5555-4555-8555-555555555555';
 const BRUNO = '66666666-6666-4666-8666-666666666666';
 const ACCOUNT = '77777777-7777-4777-8777-777777777777';
+const EMAIL = 'ada.reid@example.com';
 
 const listSites = vi.hoisted(() => vi.fn());
 const listPeople = vi.hoisted(() => vi.fn());
@@ -175,7 +176,7 @@ describe('la lista', () => {
     renderRoute();
     await screen.findByRole('rowheader', { name: 'Reid, Ada' });
 
-    for (const name of ['Name', 'Employee #', 'Role', 'Actions']) {
+    for (const name of ['Name', 'Employee #', 'Role', 'Email', 'Actions']) {
       expect(screen.getByRole('columnheader', { name })).toBeTruthy();
     }
 
@@ -223,7 +224,7 @@ describe('la pantalla no filtra identificadores', () => {
 describe('las columnas Role y Actions (proposal)', () => {
   it('el rol se muestra con su etiqueta de dominio, nunca el identificador crudo', async () => {
     listPeople.mockResolvedValue([
-      person({ account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: true } }),
+      person({ account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: true, email: EMAIL } }),
     ]);
 
     renderRoute();
@@ -245,6 +246,48 @@ describe('las columnas Role y Actions (proposal)', () => {
     expect(await screen.findByText('Worker')).toBeTruthy();
   });
 
+  /**
+   * La columna Email: a qué dirección se invitó a cada quien, sin abrir el diálogo de
+   * reemisión cuenta por cuenta.
+   */
+  it('la fila con cuenta muestra su correo y la que no tiene deja la celda vacía', async () => {
+    listPeople.mockResolvedValue([
+      person({
+        id: ADA,
+        account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: true, email: EMAIL },
+      }),
+      person({
+        id: BRUNO,
+        first_name: 'Bruno',
+        last_name: 'Alvarez',
+        employee_number: '10473',
+        account: null,
+      }),
+    ]);
+
+    renderRoute();
+
+    expect(await screen.findByText(EMAIL)).toBeTruthy();
+    expect(screen.getByText('—')).toBeTruthy();
+  });
+
+  /**
+   * Misma regla que la celda Role: para el roster, la cuenta a la que se le quitó el acceso
+   * no existe. Mostrar su correo diría que esa dirección todavía tiene acceso.
+   */
+  it('la cuenta inactiva no muestra correo', async () => {
+    listPeople.mockResolvedValue([
+      person({
+        account: { id: ACCOUNT, role: 'jhsc_member', active: false, can_sign_in: false, email: EMAIL },
+      }),
+    ]);
+
+    renderRoute();
+
+    await screen.findByText('Worker');
+    expect(screen.queryByText(EMAIL)).toBeNull();
+  });
+
   it('una persona sin cuenta ofrece el botón y una con cuenta no', async () => {
     listPeople.mockResolvedValue([
       person({ id: ADA, account: null }),
@@ -253,7 +296,7 @@ describe('las columnas Role y Actions (proposal)', () => {
         first_name: 'Bruno',
         last_name: 'Alvarez',
         employee_number: '10473',
-        account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: true },
+        account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: true, email: EMAIL },
       }),
     ]);
 
@@ -265,7 +308,7 @@ describe('las columnas Role y Actions (proposal)', () => {
 
   it('invitar vuelve a pedir el roster', async () => {
     inviteAsJhscMember.mockResolvedValue({
-      account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: false },
+      account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: false, email: EMAIL },
       invitation: { token: 'a-one-time-token', expiresAt: '2026-08-17T12:00:00Z' },
     });
 
@@ -303,14 +346,14 @@ describe('las columnas Role y Actions (proposal)', () => {
    */
   it('el link sobrevive a que la fila pase a mostrar el rol', async () => {
     inviteAsJhscMember.mockResolvedValue({
-      account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: false },
+      account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: false, email: EMAIL },
       invitation: { token: 'a-one-time-token', expiresAt: '2026-08-17T12:00:00Z' },
     });
     listPeople
       .mockResolvedValueOnce([person()])
       .mockResolvedValue([
         person({
-          account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: false },
+          account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: false, email: EMAIL },
         }),
       ]);
 
@@ -332,14 +375,14 @@ describe('las columnas Role y Actions (proposal)', () => {
 
   it('el token se muestra una vez y no queda en la caché', async () => {
     inviteAsJhscMember.mockResolvedValue({
-      account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: false },
+      account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: false, email: EMAIL },
       invitation: { token: 'a-one-time-token', expiresAt: '2026-08-17T12:00:00Z' },
     });
     listPeople
       .mockResolvedValueOnce([person()])
       .mockResolvedValue([
         person({
-          account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: false },
+          account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: false, email: EMAIL },
         }),
       ]);
     Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
@@ -393,14 +436,14 @@ describe('reemitir el link (reissue-invitation-link-from-roster)', () => {
     listPeople.mockResolvedValue([
       person({
         id: ADA,
-        account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: false },
+        account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: false, email: EMAIL },
       }),
       person({
         id: BRUNO,
         first_name: 'Bruno',
         last_name: 'Alvarez',
         employee_number: '10473',
-        account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: true },
+        account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: true, email: EMAIL },
       }),
     ]);
 
@@ -424,7 +467,7 @@ describe('reemitir el link (reissue-invitation-link-from-roster)', () => {
   it('precarga el email registrado y no deja emitir mientras carga', async () => {
     listPeople.mockResolvedValue([
       person({
-        account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: false },
+        account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: false, email: EMAIL },
       }),
     ]);
     getAccount.mockResolvedValue({
@@ -459,7 +502,7 @@ describe('reemitir el link (reissue-invitation-link-from-roster)', () => {
   it('reemitir sin tocar el correo lo manda sin cambios; el banner de copiar es el mismo de siempre', async () => {
     listPeople.mockResolvedValue([
       person({
-        account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: false },
+        account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: false, email: EMAIL },
       }),
     ]);
     getAccount.mockResolvedValue({
@@ -470,7 +513,7 @@ describe('reemitir el link (reissue-invitation-link-from-roster)', () => {
       email: 'ada.reid@example.com',
     });
     reissueInvitation.mockResolvedValue({
-      account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: false },
+      account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: false, email: EMAIL },
       invitation: { token: 'a-fresh-token', expiresAt: '2026-08-17T12:00:00Z' },
     });
 
@@ -499,7 +542,7 @@ describe('reemitir el link (reissue-invitation-link-from-roster)', () => {
   it('corregir el correo antes de emitir lo manda con el request', async () => {
     listPeople.mockResolvedValue([
       person({
-        account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: false },
+        account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: false, email: EMAIL },
       }),
     ]);
     getAccount.mockResolvedValue({
@@ -510,7 +553,7 @@ describe('reemitir el link (reissue-invitation-link-from-roster)', () => {
       email: 'ada.reidd@example.com',
     });
     reissueInvitation.mockResolvedValue({
-      account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: false },
+      account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: false, email: EMAIL },
       invitation: { token: 'a-fresh-token', expiresAt: '2026-08-17T12:00:00Z' },
     });
 
@@ -541,9 +584,10 @@ describe('reemitir el link (reissue-invitation-link-from-roster)', () => {
 });
 
 describe('quitar el acceso (remove-jhsc-access-from-roster)', () => {
-  const invited = { id: ACCOUNT, role: 'jhsc_member' as const, active: true, can_sign_in: false };
-  const member = { id: ACCOUNT, role: 'jhsc_member' as const, active: true, can_sign_in: true };
-  const removed = { id: ACCOUNT, role: 'jhsc_member' as const, active: false, can_sign_in: false };
+  const base = { id: ACCOUNT, role: 'jhsc_member' as const, email: EMAIL };
+  const invited = { ...base, active: true, can_sign_in: false };
+  const member = { ...base, active: true, can_sign_in: true };
+  const removed = { ...base, active: false, can_sign_in: false };
 
   it('la invitación pendiente ofrece cancelar; el miembro que ya entra ofrece quitar', async () => {
     listPeople.mockResolvedValue([

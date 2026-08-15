@@ -247,19 +247,37 @@ describe('personWithAccountSchema', () => {
   it('acepta una persona con cuenta', () => {
     const result = personWithAccountSchema.safeParse({
       ...validPerson(),
-      account: { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: false },
+      account: {
+        id: ACCOUNT_ID,
+        role: 'jhsc_member',
+        active: true,
+        can_sign_in: false,
+        email: 'ada.reid@example.com',
+      },
     });
 
     expect(result.success).toBe(true);
   });
 
-  it('rechaza una cuenta con email — es lo mínimo del design D2, no accountSchema entero', () => {
+  it('rechaza una cuenta sin email — la fila del roster dice a qué dirección se invitó', () => {
+    const result = personAccountSchema.safeParse({
+      id: ACCOUNT_ID,
+      role: 'jhsc_member',
+      active: true,
+      can_sign_in: false,
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('sigue rechazando lo que NO es el mínimo del design D2: alcance, credencial, token', () => {
     const result = personAccountSchema.safeParse({
       id: ACCOUNT_ID,
       role: 'jhsc_member',
       active: true,
       can_sign_in: false,
       email: 'ada.reid@example.com',
+      scope: [],
     });
 
     expect(result.success).toBe(false);
@@ -302,7 +320,13 @@ describe('createAccountRequestSchema — el alta desde el roster (design D4)', (
 describe('createAccountResponseSchema', () => {
   it('el token es opcional — solo está cuando se invitó', () => {
     const result = createAccountResponseSchema.safeParse({
-      account: { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: false },
+      account: {
+        id: ACCOUNT_ID,
+        role: 'jhsc_member',
+        active: true,
+        can_sign_in: false,
+        email: 'ada.reid@example.com',
+      },
     });
 
     expect(result.success).toBe(true);
@@ -310,7 +334,13 @@ describe('createAccountResponseSchema', () => {
 
   it('acepta la invitación cuando se pidió', () => {
     const result = createAccountResponseSchema.safeParse({
-      account: { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: false },
+      account: {
+        id: ACCOUNT_ID,
+        role: 'jhsc_member',
+        active: true,
+        can_sign_in: false,
+        email: 'ada.reid@example.com',
+      },
       invitation: { token: 'a-one-time-token', expiresAt: '2026-08-17T12:00:00Z' },
     });
 

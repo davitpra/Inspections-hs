@@ -209,3 +209,21 @@ export function showsAccountRole(person: PersonWithAccount): boolean {
 export function roleCellLabel(person: PersonWithAccount): string {
   return showsAccountRole(person) ? accountRoleLabel(person.account!) : 'Worker';
 }
+
+/**
+ * Lo que dice la celda Email: la dirección a la que se invitó a esta persona, o nada.
+ *
+ * **Es el email de la CUENTA, no de la persona.** El roster que mantiene el CSV de ADP no
+ * tiene correos —`personSchema` no lo tiene—, así que la columna está vacía exactamente
+ * para quien no tiene acceso, que es la mayoría de las filas. Por eso la pregunta la
+ * contesta `showsAccountRole` y no un `person.account !== null`: es la misma condición que
+ * ya decide la celda Role, y las dos columnas tienen que contar la misma historia. Una
+ * cuenta a la que se le quitó el acceso dice "Worker" y no muestra correo — para el roster
+ * esa persona no tiene cuenta.
+ *
+ * La cadena vacía y no un guión: el guión lo pone la celda si quiere, y así el llamador
+ * puede preguntar por el vacío sin comparar contra un carácter decorativo.
+ */
+export function emailCellLabel(person: PersonWithAccount): string {
+  return showsAccountRole(person) ? person.account!.email : '';
+}

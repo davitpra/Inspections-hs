@@ -132,19 +132,28 @@ export type RosterQuery = z.infer<typeof rosterQuerySchema>;
 
 /**
  * La cuenta que referencia a una persona del roster, reducida a lo que decide si el
- * coordinador puede invitarla y como qué (design D2).
+ * coordinador puede invitarla y como qué (design D2), **más el email al que se le
+ * invitó**.
  *
- * Ni email, ni alcance, ni credencial, ni token: eso es `accountSchema` entero, y
+ * Sigue sin alcance, sin credencial y sin token: eso es `accountSchema` entero, y
  * colgarlo de cada fila del roster convertiría una lectura de 200 personas en una
  * lectura de 200 cuentas. `active` sigue el mismo predicado que `hs_account_is_active`
  * —`deactivated_at` nulo y `expires_at` futuro o nulo— y `can_sign_in` es si existe una
  * `app_credential` activa: la pregunta que distingue "invitada" de "entrando".
+ *
+ * **El email SÍ viaja, y eso cambia lo que el design D2 decía.** La razón por la que
+ * antes no viajaba era el tamaño de la lectura, no el secreto: `app_user.email` es la
+ * dirección corporativa a la que el coordinador —el único rol que lee esta ruta— acaba
+ * de mandar la invitación, y es una columna de la misma fila que ya se está trayendo.
+ * Sin ella, "a qué dirección le llegó el link" obligaba a abrir el diálogo de reemisión
+ * cuenta por cuenta para leer un dato que la tabla podía comparar hacia abajo.
  */
 export const personAccountSchema = z.strictObject({
   id: z.uuid(),
   role: roleSchema,
   active: z.boolean(),
   can_sign_in: z.boolean(),
+  email: emailSchema,
 });
 
 export type PersonAccount = z.infer<typeof personAccountSchema>;
@@ -292,14 +301,16 @@ export const updateAccountSchema = z
 export type UpdateAccount = z.infer<typeof updateAccountSchema>;
 
 /**
- * `personAccountSchema` más el `email` (`reissue-invitation-link-from-roster`, design
- * D6). El roster NUNCA lo devuelve —ver `personAccountSchema`—, así que esta es la única
- * forma de leerlo: una cuenta a la vez, no doscientas, y todavía sin alcance, ventanas de
- * auditor externo ni nada que la pantalla de reemisión no necesite mostrar.
+ * La cuenta que devuelve `GET /accounts/:id` (`reissue-invitation-link-from-roster`,
+ * design D6): lo que la pantalla de reemisión necesita para precargar el diálogo.
+ *
+ * Hoy es exactamente `personAccountSchema` —el email dejó de ser lo que las separaba— y
+ * por eso es un alias y no una copia. Conserva el nombre porque conserva el propósito:
+ * esta lectura es de UNA cuenta y puede crecer con lo que solo tenga sentido de a una
+ * (alcance, ventana del auditor externo), sin que eso se cuelgue de las doscientas filas
+ * del roster.
  */
-export const accountDetailSchema = personAccountSchema.extend({
-  email: emailSchema,
-});
+export const accountDetailSchema = personAccountSchema;
 
 export type AccountDetail = z.infer<typeof accountDetailSchema>;
 

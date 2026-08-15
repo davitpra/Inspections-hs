@@ -212,7 +212,7 @@ describe('la cuenta que viaja junto a cada persona (design D1/D2)', () => {
     expect(row?.account).toBeNull();
   });
 
-  it('ninguna respuesta trae email, alcance ni token', async () => {
+  it('cada cuenta trae su email, y ninguna trae alcance ni token', async () => {
     await createAccount(db.app, { role: 'supervisor', siteIds: [SITE_A], lastName: 'Privado' });
 
     const rows = await roster.list(asCoordinator(), { site_id: SITE_A, status: 'active' });
@@ -220,7 +220,7 @@ describe('la cuenta que viaja junto a cada persona (design D1/D2)', () => {
 
     expect(withAccounts.length).toBeGreaterThan(0);
     for (const row of withAccounts) {
-      expect(row.account).not.toHaveProperty('email');
+      expect(row.account?.email).toMatch(/@/);
       expect(row.account).not.toHaveProperty('scope');
       expect(row.account).not.toHaveProperty('token');
     }

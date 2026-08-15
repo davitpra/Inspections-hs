@@ -102,6 +102,7 @@ export class AccountService {
         role: request.role,
         active: true,
         can_sign_in: false,
+        email: request.email,
       };
 
       if (!request.invite) return { account };
@@ -194,6 +195,9 @@ export class AccountService {
         role: existing.role as CreateAccountResponse['account']['role'],
         active: existing.active,
         can_sign_in: existing.can_sign_in,
+        // El email que la cuenta tiene DESPUÉS de este PATCH: `existing` se leyó antes
+        // del UPDATE de arriba, así que devolverlo tal cual reportaría el viejo.
+        email: request.email ?? existing.email,
       };
 
       if (!request.invite) return { response: { account }, withdrawn: false };
@@ -251,7 +255,7 @@ export class AccountService {
  */
 async function withdraw(
   client: PoolClient,
-  existing: { id: string; role: string; active: boolean },
+  existing: { id: string; role: string; active: boolean; email: string },
 ): Promise<{ response: CreateAccountResponse; withdrawn: boolean }> {
   if (existing.role !== 'jhsc_member') throw accountRoleNotRemovable();
   if (!existing.active) throw accountAlreadyInactive();
@@ -268,6 +272,7 @@ async function withdraw(
         role: existing.role as CreateAccountResponse['account']['role'],
         active: false,
         can_sign_in: false,
+        email: existing.email,
       },
     },
     withdrawn: true,

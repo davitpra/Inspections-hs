@@ -20,7 +20,7 @@ export async function findRoster(
 ): Promise<PersonWithAccount[]> {
   const { rows } = await client.query<RosterRow>(
     `SELECT p.id, p.site_id, p.employee_number, p.first_name, p.last_name, p.deactivated_at,
-            u.id AS account_id, u.role AS account_role,
+            u.id AS account_id, u.role AS account_role, u.email AS account_email,
             CASE WHEN u.id IS NULL THEN NULL ELSE hs_account_is_active(u) END AS account_active,
             EXISTS (
               SELECT 1 FROM app_credential c WHERE c.user_id = u.id AND c.revoked_at IS NULL
@@ -47,6 +47,7 @@ interface RosterRow extends Record<string, unknown> {
   deactivated_at: Date | null;
   account_id: string | null;
   account_role: string | null;
+  account_email: string | null;
   account_active: boolean | null;
   can_sign_in: boolean;
 }
@@ -67,6 +68,9 @@ function toPersonWithAccount(row: RosterRow): PersonWithAccount {
             role: row.account_role as NonNullable<PersonWithAccount['account']>['role'],
             active: row.account_active ?? false,
             can_sign_in: row.can_sign_in,
+            // `app_user.email` es NOT NULL (0005): si hay `account_id`, hay email. El
+            // `?? ''` es para el tipo del LEFT JOIN, no un caso real.
+            email: row.account_email ?? '',
           },
   };
 }

@@ -6,6 +6,7 @@ import {
   canInvite,
   canReissueInvitation,
   canRemoveJhscAccess,
+  emailCellLabel,
   inviteButtonLabel,
   matchesSearch,
   personLabel,
@@ -20,6 +21,7 @@ import {
 
 const SITE_A = '11111111-1111-4111-8111-111111111111';
 const ACCOUNT_ID = '55555555-5555-4555-8555-555555555555';
+const EMAIL = 'ada.reid@example.com';
 
 function person(overrides: Partial<Person> = {}): Person {
   return {
@@ -33,11 +35,19 @@ function person(overrides: Partial<Person> = {}): Person {
   };
 }
 
+/**
+ * El email lo pone el helper y no cada caso: de las reglas de esta pantalla, la única que
+ * mira esa columna es `emailCellLabel`. Repetirlo en las treinta filas de abajo escondería
+ * los pocos casos donde el correo es el asunto.
+ */
 function withAccount(
   overrides: Partial<Person> = {},
-  account: PersonWithAccount['account'] = null,
+  account: Omit<NonNullable<PersonWithAccount['account']>, 'email'> | null = null,
 ): PersonWithAccount {
-  return { ...person(overrides), account };
+  return {
+    ...person(overrides),
+    account: account === null ? null : { ...account, email: EMAIL },
+  };
 }
 
 describe('personName', () => {
@@ -100,6 +110,7 @@ describe('accountRoleLabel', () => {
       role: 'jhsc_member',
       active: true,
       can_sign_in: true,
+      email: EMAIL,
     });
 
     expect(label).toBe('JHSC member');
@@ -112,6 +123,7 @@ describe('accountRoleLabel', () => {
       role: 'jhsc_member',
       active: true,
       can_sign_in: false,
+      email: EMAIL,
     });
 
     expect(label).toBe('JHSC member (invited)');
@@ -171,6 +183,30 @@ describe('roleCellLabel', () => {
    */
   it('"Worker" no es ninguno de los roles del dominio', () => {
     expect(Object.values(ROLE_LABELS)).not.toContain('Worker');
+  });
+});
+
+describe('emailCellLabel', () => {
+  it('dice el correo de la cuenta cuando la hay', () => {
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true });
+
+    expect(emailCellLabel(row)).toBe(EMAIL);
+  });
+
+  it('no dice nada de quien no tiene cuenta — el roster del CSV no trae correos', () => {
+    expect(emailCellLabel(withAccount())).toBe('');
+  });
+
+  /**
+   * La misma condición que `roleCellLabel`: la cuenta a la que se le quitó el acceso no
+   * existe para el roster, y las dos columnas tienen que contar la misma historia. Mostrar
+   * el correo de una fila que dice "Worker" diría que esa dirección todavía tiene acceso.
+   */
+  it('no dice nada cuando se le quitó el acceso a la cuenta', () => {
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: false, can_sign_in: false });
+
+    expect(emailCellLabel(row)).toBe('');
+    expect(roleCellLabel(row)).toBe('Worker');
   });
 });
 

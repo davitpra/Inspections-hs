@@ -15,6 +15,7 @@ import {
   canReissueInvitation,
   canRemoveJhscAccess,
   inviteButtonLabel,
+  emailCellLabel,
   matchesSearch,
   personLabel,
   personName,
@@ -187,6 +188,7 @@ function RosterConsole({
               <th scope="col">Name</th>
               <th scope="col">Employee #</th>
               <th scope="col">Role</th>
+              <th scope="col">Email</th>
               <th scope="col">Actions</th>
             </tr>
           </thead>
@@ -200,6 +202,19 @@ function RosterConsole({
                   en blanco. No es un rol de `ROLES` — ver `roleCellLabel`.
                 */}
                 <td>{roleCellLabel(person)}</td>
+                {/*
+                  El correo al que se invitó a esta persona, y solo el de quien tiene
+                  cuenta: el roster del CSV no trae correos. Va pegado a Role porque las dos
+                  columnas responden a la misma pregunta —qué acceso tiene esta fila— y
+                  antes de Actions porque es dato, no acto.
+
+                  El guión y no el vacío: en una tabla donde la mayoría de las filas no tiene
+                  cuenta, la columna en blanco se lee como una columna rota. Acá no hace falta
+                  nombrar la ausencia como sí lo hace `roleCellLabel` con "Worker" —la celda
+                  Role de esa misma fila ya lo dijo—, solo mostrar que el lugar existe y está
+                  vacío a propósito.
+                */}
+                <td>{emailCellLabel(person) || '—'}</td>
                 <td>
                   {/*
                     La acción tiene columna propia, separada del rol: el rol es un dato que
