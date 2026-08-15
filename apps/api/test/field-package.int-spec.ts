@@ -133,6 +133,7 @@ describe('el paquete de campo completo', () => {
     expect(version.site_id).toBe(SITE_A);
     expect(version.template_version_id).toBe(versionV2);
     expect(version.version).toBe(2);
+    expect(version.inspector_id).toBe(inspector.accountId);
 
     // Y el documento es el que el motor de formularios acepta como entrada.
     expect(templateDocumentSchema.safeParse(version.document).success).toBe(true);
@@ -214,6 +215,29 @@ describe('el aislamiento', () => {
     expect(locationsA.map((row) => row.code)).toEqual(['line-3']);
     expect(rosterA.map((row) => row.last_name)).toContain('Okafor');
     expect(rosterA.map((row) => row.last_name)).not.toContain('Bright');
+  });
+
+  /**
+   * `inspector_id` es un dato que viaja en el paquete, no un recorte de quién puede
+   * leerlo (proposal `device-refuses-unassigned-capture`). El coordinador no es el
+   * inspector asignado a `inspectionA` y aun así la lectura tiene que devolverle quién
+   * lo es — la comprobación que le importa a esta ruta sigue siendo el alcance de sitio.
+   */
+  it('una cuenta que no es la asignada igual lee el paquete, con el inspector que corresponde', async () => {
+    const session = sessionFor(coordinator.accountId, [SITE_A, SITE_B], 'hs_coordinator');
+
+    const version = await stack.inspections.templateVersionPackage(session, inspectionA);
+
+    expect(version.inspector_id).toBe(inspector.accountId);
+  });
+
+  /** `inspectionB` se programó sin inspector (línea de arriba: sin `inspectorId`). */
+  it('una inspección sin inspector sirve inspector_id en null', async () => {
+    const session = sessionFor(coordinator.accountId, [SITE_A, SITE_B], 'hs_coordinator');
+
+    const version = await stack.inspections.templateVersionPackage(session, inspectionB);
+
+    expect(version.inspector_id).toBeNull();
   });
 });
 

@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RecurrenceReport } from '@hs/contracts';
 
-import { RecurrenceRoute } from './RecurrenceRoute';
+import { RecurrenceRoute } from './index';
 
 const SITE = '11111111-1111-4111-8111-111111111111';
 const LOCATION = '22222222-2222-4222-8222-222222222222';
@@ -12,7 +12,7 @@ const FINDING_B = '44444444-4444-4444-8444-444444444444';
 
 const getRecurrence = vi.hoisted(() => vi.fn());
 
-vi.mock('../api/recurrence', () => ({ getRecurrence }));
+vi.mock('../../api/recurrence', () => ({ getRecurrence }));
 
 function report(overrides: Partial<RecurrenceReport> = {}): RecurrenceReport {
   return {

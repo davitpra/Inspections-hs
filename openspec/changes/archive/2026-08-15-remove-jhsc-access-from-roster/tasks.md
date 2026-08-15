@@ -19,14 +19,14 @@
       entra, que es el caso principal.
 - [x] 2.4 `withdraw(client, existing)`: rechaza rol distinto de `jhsc_member` y cuenta ya
       inactiva; `revokePending`, `revokeCredentials`, `UPDATE app_user SET deactivated_at =
-      now()`. **NO toca `user_site_scope`** (design D2).
+    now()`. **NO toca `user_site_scope`** (design D2).
 - [x] 2.5 `revive(client, existing, request)` en `create()`: `checkNoExistingAccount` pasa a
       ser `findAccountOfPerson`, y una cuenta inactiva **del mismo rol** se reactiva
       (`deactivated_at = NULL`, el correo del alta, el alcance que falte) en vez de rechazar
       con `account_already_exists` (design D4). `update()` NO restituye: `PATCH` solo da de
       baja, y el contrato lo dice con `z.literal(true)`.
 - [x] 2.6 Revocar sesiones con `sessions.revokeAllForUser(accountId,
-      'account_deactivated')` **después** del COMMIT y sin pasarle cliente (design D3).
+    'account_deactivated')` **después** del COMMIT y sin pasarle cliente (design D3).
       Inyectar `SessionService` en `AccountService`.
 
 ## 3. Integración (API)
@@ -79,6 +79,6 @@
 ## 6. Cierre
 
 - [x] 6.1 `pnpm lint`, `pnpm -r build`, `pnpm typecheck`, `pnpm test`.
-- [ ] 6.2 Prueba manual con `pnpm dev`: invitar, cancelar, comprobar que el link viejo ya no
+- [x] 6.2 Prueba manual con `pnpm dev`: invitar, cancelar, comprobar que el link viejo ya no
       abre `/accept-invitation`, restituir y aceptar con el nuevo.
-- [ ] 6.3 `/opsx:archive` — sincronizar el delta a `openspec/specs/identity/spec.md`.
+- [x] 6.3 `/opsx:archive` — sincronizar el delta a `openspec/specs/identity/spec.md`.

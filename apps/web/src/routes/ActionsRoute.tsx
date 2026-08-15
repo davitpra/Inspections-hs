@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import type { Action, ActionState } from '@hs/contracts';
 
 import { listActions } from '../api/actions';
 import { queryKeys } from '../api/query-keys';
-import { STATE_LABELS, formatDate } from './action-permissions';
+import { StateBadge } from '../components/StateBadge';
+import { formatDate } from './action-permissions';
 
 /**
  * Las acciones correctivas de las plantas del alcance (§3 R3).
@@ -63,15 +63,3 @@ export function ActionsRoute(): React.JSX.Element {
     </>
   );
 }
-
-/**
- * El estado, en palabras y no en un color.
- *
- * Sale del stream de eventos del servidor —no hay columna de estado que leer— y se
- * muestra tal cual: la UI no deriva ni reinterpreta nada.
- */
-export function StateBadge({ state }: { state: ActionState }): React.JSX.Element {
-  return <span className={`badge badge--${state}`}>{STATE_LABELS[state]}</span>;
-}
-
-export type { Action };

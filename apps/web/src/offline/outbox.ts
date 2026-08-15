@@ -2,7 +2,8 @@ import { acceptedSubmissionSchema, type InspectionSubmission } from '@hs/contrac
 
 import { sessionClient } from '../api/client';
 import type { SessionClient } from '../auth/session-client';
-import { db, type OfflineDatabase, type OutboxRow } from './db';
+import { readAccount } from './account';
+import { db, type DraftRow, type OfflineDatabase, type OutboxRow } from './db';
 import { toAnswerSet } from './drafts';
 import { uploadPendingPhotos, uploadedKeysByItem, type UploadDeps } from './photos';
 
@@ -53,6 +54,11 @@ export interface OutboxDeps extends UploadDeps {
   now?: () => number;
   /** Solo para los tests: sin jitter el backoff no se puede afirmar. */
   jitter?: () => number;
+  /**
+   * En nombre de quién corre la cola. Sin él se resuelve con `readAccount`, que es la
+   * cuenta que la aplicación tiene abierta ahora mismo.
+   */
+  accountId?: string | null;
 }
 
 /**
@@ -361,20 +367,64 @@ async function accept(clientSubmissionId: string, database: OfflineDatabase): Pr
   });
 }
 
+/** Una entrada de la cola con el borrador del que salió. */
+export interface OutboxEntry {
+  row: OutboxRow;
+  draft: DraftRow;
+}
+
+/**
+ * LAS ENTRADAS DE UNA CUENTA, Y NINGUNA OTRA.
+ *
+ * El dispositivo es compartido y la cola no tiene dueño propio: el dueño es el del
+ * borrador (`drafts.account_id`), que es el mismo criterio que `listDrafts` y
+ * `unsyncedStatus` ya aplican. Sin este filtro, la cuenta que está abierta manda con SU
+ * sesión el envío firmado por otra, y el servidor lo rechaza con `forbidden` porque el
+ * actor sale de la sesión y nunca del cuerpo — un rechazo permanente sobre trabajo que
+ * no tenía nada malo.
+ *
+ * Una entrada sin borrador no se le atribuye a nadie: no se puede armar su payload, así
+ * que tampoco se puede enviar. Queda en la tabla —de acá no sale ningún `delete`— pero
+ * fuera de la corrida y fuera de la pantalla.
+ */
+export async function outboxFor(
+  accountId: string,
+  database: OfflineDatabase = db,
+): Promise<OutboxEntry[]> {
+  const rows = await database.outbox.toArray();
+  const entries: OutboxEntry[] = [];
+
+  for (const row of rows) {
+    const draft = await database.drafts.get(row.client_submission_id);
+
+    if (draft?.account_id === accountId) entries.push({ row, draft });
+  }
+
+  return entries;
+}
+
 /**
  * Una corrida de la cola: intenta todas las entrada que ya tienen turno.
  *
  * En serie y no en paralelo: la red de una planta con dos envíos compitiendo es peor
  * que con uno, y el requisito de "un solo envío en vuelo" ya lo garantiza el lock —
  * esto solo evita provocarlo.
+ *
+ * Sin cuenta abierta no se manda nada. No es un caso degradado: un envío necesita una
+ * sesión, y la única sesión que puede firmar por esta cola es la de su dueño.
  */
 export async function runOutbox(deps: OutboxDeps = {}): Promise<SendOutcome[]> {
   const database = deps.database ?? db;
-  const entries = await database.outbox.toArray();
+  const accountId =
+    deps.accountId === undefined ? (await readAccount(database))?.userId ?? null : deps.accountId;
+
+  if (!accountId) return [];
+
+  const entries = await outboxFor(accountId, database);
   const outcomes: SendOutcome[] = [];
 
   for (const entry of entries) {
-    outcomes.push(await sendEntry(entry.client_submission_id, deps));
+    outcomes.push(await sendEntry(entry.row.client_submission_id, deps));
   }
 
   return outcomes;
@@ -387,6 +437,10 @@ export async function runOutbox(deps: OutboxDeps = {}): Promise<SendOutcome[]> {
  * Sin Background Sync (Non-Goal de `design.md`): soporte desigual y aporta poco con un
  * supuesto de 7 días. Es también por eso que el indicador permanente es obligatorio —
  * un envío requiere que el inspector abra la aplicación, y tiene que saberlo.
+ *
+ * No recibe la cuenta: se arranca desde `main.tsx` antes de que haya sesión resuelta, y
+ * cada corrida la vuelve a leer de Dexie. Así, la que cambia de cuenta cambia también
+ * qué manda la próxima corrida, sin que nadie tenga que reiniciar nada.
  */
 export function startOutbox(deps: OutboxDeps = {}): () => void {
   const run = (): void => {

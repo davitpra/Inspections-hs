@@ -28,6 +28,7 @@ export interface ActiveInspection {
   id: string;
   site_id: string;
   template_version_id: string;
+  inspector_id: string | null;
 }
 
 export async function findActiveInspection(
@@ -35,7 +36,7 @@ export async function findActiveInspection(
   id: string,
 ): Promise<ActiveInspection | null> {
   const { rows } = await client.query<ActiveInspection>(
-    `SELECT id, site_id, template_version_id
+    `SELECT id, site_id, template_version_id, inspector_id
        FROM scheduled_inspection
       WHERE id = $1
         AND cancelled_at IS NULL`,

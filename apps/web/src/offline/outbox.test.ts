@@ -9,6 +9,7 @@ import {
   BACKOFF_CAP_MS,
   backoffMs,
   enqueue,
+  outboxFor,
   runOutbox,
   sendEntry,
   type OutboxDeps,
@@ -514,10 +515,69 @@ describe('runOutbox', () => {
     await readyDraft(database);
     const client = acceptingServer();
 
-    const outcomes = await runOutbox({ database, client, put: bucketOk });
+    const outcomes = await runOutbox({ database, client, put: bucketOk, accountId: ACCOUNT });
 
     expect(outcomes).toEqual([{ kind: 'accepted' }]);
     expect(await database.outbox.count()).toBe(0);
+  });
+
+  /**
+   * El dispositivo es compartido. Mandar la entrada de otra cuenta con la sesión de
+   * esta le pone al envío un firmante que no es el suyo, y el servidor lo rechaza con
+   * `forbidden` para siempre: trabajo bueno, perdido por quién tenía la aplicación
+   * abierta.
+   */
+  it('no manda la entrada de otra cuenta, y la deja en la cola', async () => {
+    database = freshDatabase();
+    const foreign = await readyDraft(database);
+    const client = acceptingServer();
+
+    const outcomes = await runOutbox({
+      database,
+      client,
+      put: bucketOk,
+      accountId: 'account-b',
+    });
+
+    expect(outcomes).toEqual([]);
+    expect(submissions(client.calls)).toHaveLength(0);
+    expect(await database.outbox.get(foreign)).toBeDefined();
+  });
+
+  /** Sin cuenta abierta no hay sesión que pueda firmar por nadie. */
+  it('sin cuenta no manda nada', async () => {
+    database = freshDatabase();
+    await readyDraft(database);
+    const client = acceptingServer();
+
+    const outcomes = await runOutbox({ database, client, put: bucketOk, accountId: null });
+
+    expect(outcomes).toEqual([]);
+    expect(await database.outbox.count()).toBe(1);
+  });
+});
+
+describe('outboxFor', () => {
+  it('devuelve la entrada con su borrador, solo la de la cuenta', async () => {
+    database = freshDatabase();
+    const id = await readyDraft(database);
+
+    const mine = await outboxFor(ACCOUNT, database);
+    const theirs = await outboxFor('account-b', database);
+
+    expect(mine.map((entry) => entry.row.client_submission_id)).toEqual([id]);
+    expect(mine[0]?.draft.scheduled_inspection_id).toBe(INSPECTION_ID);
+    expect(theirs).toEqual([]);
+  });
+
+  /** Sin borrador no hay payload que armar, así que no se le atribuye a nadie. */
+  it('descarta la entrada huérfana sin borrarla', async () => {
+    database = freshDatabase();
+    const id = await readyDraft(database);
+    await database.drafts.delete(id);
+
+    expect(await outboxFor(ACCOUNT, database)).toEqual([]);
+    expect(await database.outbox.get(id)).toBeDefined();
   });
 });
 

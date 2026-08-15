@@ -1,6 +1,5 @@
 import {
   evaluateVisibility,
-  itemsInDocumentOrder,
   negativeAnswers,
   sectionsInDocumentOrder,
   validateAnswers,
@@ -9,23 +8,27 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from '@tanstack/react-router';
 
-import { queryKeys } from '../api/query-keys';
-import { useAppSession } from '../app/session-context';
-import { DownloadForField, readableKind } from '../components/FieldPackage';
-import { FindingFields } from '../components/FindingFields';
-import { ItemInput } from '../components/ItemInput';
-import { UnsyncedIndicator } from '../components/UnsyncedIndicator';
+import { queryKeys } from '../../api/query-keys';
+import { useAppSession } from '../../app/session-context';
+import { DownloadForField, readableKind } from '../../components/FieldPackage';
+import { UnsyncedIndicator } from '../../components/UnsyncedIndicator';
 import {
+  captureEligibility,
   documentForDraft,
+  findDraft,
   loadDraft,
   openDraft,
   saveAnswer,
   saveFinding,
   setCurrentItem,
-} from '../offline/drafts';
-import type { FindingDraftRow } from '../offline/db';
-import { capturePhoto, discardPhoto } from '../offline/photos';
-import { missingForField, storedLocations, storedTemplateVersion } from '../offline/prefetch';
+  type CaptureEligibility,
+  type LoadedDraft,
+} from '../../offline/drafts';
+import type { FindingDraftRow } from '../../offline/db';
+import { capturePhoto, discardPhoto } from '../../offline/photos';
+import { missingForField, storedLocations, storedTemplateVersion } from '../../offline/prefetch';
+import { ItemRow } from './ItemRow';
+import { countAnswered } from './presentation';
 
 /**
  * La captura. Todo lo que pasa acá pasa sin red.
@@ -45,12 +48,32 @@ export function CaptureRoute(): React.JSX.Element {
     queryFn: () => missingForField(id),
   });
 
+  /**
+   * `refused` cubre spec offline-capture "Capture does not start for an inspection the
+   * account is not assigned": una inspección que nunca se abrió en este dispositivo con
+   * esta cuenta y cuyo `inspector_id` guardado no coincide.
+   *
+   * Un borrador que YA EXISTE se sigue abriendo aunque la inspección haya sido
+   * reasignada mientras tanto — el que se niega a partir de acá es firmar, en
+   * `ReviewRoute`, con la misma `captureEligibility` (design D5). No se niega seguir
+   * editando lo que ya se empezó: negar la EDICIÓN no protege nada que negar la firma no
+   * proteja ya, y le borraría al inspector el trabajo que puede seguir viendo.
+   */
   const draft = useQuery({
     queryKey: queryKeys.draft(id, account?.userId),
     enabled: Boolean(account) && missing.data?.length === 0,
-    queryFn: async () => {
+    queryFn: async (): Promise<
+      { kind: 'loaded'; loaded: LoadedDraft } | { kind: 'refused'; reason: CaptureEligibility } | null
+    > => {
       const stored = await storedTemplateVersion(id);
       if (!stored || !account) return null;
+
+      const existing = await findDraft(id, account.userId);
+
+      if (!existing) {
+        const eligibility = captureEligibility(stored.inspector_id, account.userId);
+        if (eligibility !== 'ok') return { kind: 'refused', reason: eligibility };
+      }
 
       const row = await openDraft({
         scheduled_inspection_id: id,
@@ -59,25 +82,29 @@ export function CaptureRoute(): React.JSX.Element {
         template_version_id: stored.template_version_id,
       });
 
-      return loadDraft(row.client_submission_id);
+      const loaded = await loadDraft(row.client_submission_id);
+
+      return loaded ? { kind: 'loaded', loaded } : null;
     },
   });
 
+  const loadedDraft = draft.data?.kind === 'loaded' ? draft.data.loaded : undefined;
+
   const document = useQuery({
-    queryKey: queryKeys.document(draft.data?.draft.client_submission_id),
-    enabled: Boolean(draft.data),
-    queryFn: async () => (draft.data ? documentForDraft(draft.data.draft) : null),
+    queryKey: queryKeys.document(loadedDraft?.draft.client_submission_id),
+    enabled: Boolean(loadedDraft),
+    queryFn: async () => (loadedDraft ? documentForDraft(loadedDraft.draft) : null),
   });
 
   const answer = useMutation({
     mutationFn: async (input: { itemKey: string; value: unknown; document: TemplateDocument }) => {
-      if (!draft.data) return;
+      if (!loadedDraft) return;
 
       // Se escribe ACÁ, antes de que la pantalla siguiente se pinte. Sin debounce: la
       // ventana que un debounce abre es exactamente la ventana en la que Android mata
       // el proceso.
       await saveAnswer(
-        draft.data.draft.client_submission_id,
+        loadedDraft.draft.client_submission_id,
         input.itemKey,
         input.value,
         input.document,
@@ -88,10 +115,10 @@ export function CaptureRoute(): React.JSX.Element {
 
   const photo = useMutation({
     mutationFn: async (input: { itemKey: string; blob: Blob; kind?: 'answer' | 'finding' }) => {
-      if (!draft.data) return;
+      if (!loadedDraft) return;
 
       await capturePhoto({
-        client_submission_id: draft.data.draft.client_submission_id,
+        client_submission_id: loadedDraft.draft.client_submission_id,
         item_key: input.itemKey,
         blob: input.blob,
         kind: input.kind,
@@ -111,9 +138,9 @@ export function CaptureRoute(): React.JSX.Element {
       itemKey: string;
       patch: Partial<Pick<FindingDraftRow, 'description' | 'location_id'>>;
     }) => {
-      if (!draft.data) return;
+      if (!loadedDraft) return;
 
-      await saveFinding(draft.data.draft.client_submission_id, input.itemKey, input.patch);
+      await saveFinding(loadedDraft.draft.client_submission_id, input.itemKey, input.patch);
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.draft(id) }),
   });
@@ -146,10 +173,31 @@ export function CaptureRoute(): React.JSX.Element {
     );
   }
 
-  if (!draft.data || !document.data) return <p>Loading the inspection…</p>;
+  /**
+   * Spec: "Capture does not start for an inspection the account is not assigned". Se
+   * resuelve enteramente con lo que ya está en el dispositivo (design D1) — sin pedir
+   * nada, sin importar si hay red o no.
+   */
+  if (draft.data?.kind === 'refused') {
+    return (
+      <>
+        <h1>Not your inspection</h1>
+        <p className="notice notice--warn">
+          {draft.data.reason === 'unassigned'
+            ? 'This inspection has no inspector assigned.'
+            : 'This inspection is assigned to someone else.'}
+        </p>
+        <p>
+          <Link to="/">Back to pending inspections</Link>
+        </p>
+      </>
+    );
+  }
 
-  const { answers, photos, findings } = draft.data;
-  const readOnly = draft.data.draft.status === 'accepted';
+  if (!loadedDraft || !document.data) return <p>Loading the inspection…</p>;
+
+  const { draft: row, answers, photos, findings } = loadedDraft;
+  const readOnly = row.status === 'accepted';
   const visibility = evaluateVisibility(document.data, answers);
   // La MISMA función que corre en el servidor (ADR-007). Si el dispositivo pidiera
   // detalles para un conjunto de ítems y el servidor esperara otro, el inspector
@@ -180,49 +228,31 @@ export function CaptureRoute(): React.JSX.Element {
             <h2>{section.section_title}</h2>
 
             {visibleItems.map((item) => (
-              <div
+              <ItemRow
                 key={item.item_key}
-                className="item"
-                onFocus={() => void setCurrentItem(draft.data!.draft.client_submission_id, item.item_key)}
-              >
-                <label htmlFor={`item-${item.item_key}`}>
-                  {item.prompt}
-                  {item.required ? <span aria-hidden="true"> *</span> : null}
-                </label>
-
-                <fieldset disabled={readOnly}>
-                  <ItemInput
-                    item={item}
-                    value={answers[item.item_key]}
-                    invalid={violations.some((violation) => violation.item_key === item.item_key)}
-                    photos={photos.filter(
-                      (row) => row.item_key === item.item_key && row.kind === 'answer',
-                    )}
-                    onChange={(value) =>
-                      answer.mutate({ itemKey: item.item_key, value, document: document.data! })
-                    }
-                    onCapturePhoto={(blob) => photo.mutate({ itemKey: item.item_key, blob })}
-                    onDiscardPhoto={(photoId) => removePhoto.mutate(photoId)}
-                  />
-
-                  {negative.has(item.item_key) ? (
-                    <FindingFields
-                      itemKey={item.item_key}
-                      finding={findings.find((row) => row.item_key === item.item_key)}
-                      photos={photos.filter(
-                        (row) => row.item_key === item.item_key && row.kind === 'finding',
-                      )}
-                      locations={locations.data ?? []}
-                      disabled={readOnly}
-                      onChange={(patch) => finding.mutate({ itemKey: item.item_key, patch })}
-                      onCapturePhoto={(blob) =>
-                        photo.mutate({ itemKey: item.item_key, blob, kind: 'finding' })
-                      }
-                      onDiscardPhoto={(photoId) => removePhoto.mutate(photoId)}
-                    />
-                  ) : null}
-                </fieldset>
-              </div>
+                item={item}
+                value={answers[item.item_key]}
+                invalid={violations.some((violation) => violation.item_key === item.item_key)}
+                negative={negative.has(item.item_key)}
+                answerPhotos={photos.filter(
+                  (photoRow) => photoRow.item_key === item.item_key && photoRow.kind === 'answer',
+                )}
+                findingPhotos={photos.filter(
+                  (photoRow) => photoRow.item_key === item.item_key && photoRow.kind === 'finding',
+                )}
+                finding={findings.find((findingRow) => findingRow.item_key === item.item_key)}
+                locations={locations.data ?? []}
+                readOnly={readOnly}
+                onFocus={() => void setCurrentItem(row.client_submission_id, item.item_key)}
+                onChange={(value) =>
+                  answer.mutate({ itemKey: item.item_key, value, document: document.data! })
+                }
+                onFindingChange={(patch) => finding.mutate({ itemKey: item.item_key, patch })}
+                onCapturePhoto={(blob, kind) =>
+                  photo.mutate({ itemKey: item.item_key, blob, kind })
+                }
+                onDiscardPhoto={(photoId) => removePhoto.mutate(photoId)}
+              />
             ))}
           </section>
         );
@@ -235,12 +265,4 @@ export function CaptureRoute(): React.JSX.Element {
       </p>
     </>
   );
-}
-
-function countAnswered(document: TemplateDocument, answers: Record<string, unknown>): number {
-  const visibility = evaluateVisibility(document, answers);
-
-  return itemsInDocumentOrder(document).filter(
-    (item) => visibility[item.item_key] && answers[item.item_key] !== undefined,
-  ).length;
 }

@@ -3,11 +3,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from '@tanstack/react-router';
 import { transitionsFrom, type ActionTransition, type EvidenceInput } from '@hs/contracts';
 
-import { getAction, transitionAction, uploadEvidence } from '../api/actions';
-import { queryKeys } from '../api/query-keys';
-import { useAppSession } from '../app/session-context';
-import { canAttempt, STATE_LABELS, formatDate, transitionLabel } from './action-permissions';
-import { StateBadge } from './ActionsRoute';
+import { getAction, transitionAction, uploadEvidence } from '../../api/actions';
+import { queryKeys } from '../../api/query-keys';
+import { useAppSession } from '../../app/session-context';
+import { StateBadge } from '../../components/StateBadge';
+import { canAttempt, STATE_LABELS, formatDate, transitionLabel } from '../action-permissions';
+import { EvidencePicker } from './EvidencePicker';
 
 /**
  * El detalle de una acción correctiva: su historia y lo que se puede hacer con ella.
@@ -159,41 +160,5 @@ export function ActionRoute(): React.JSX.Element {
 
       {error ? <p className="notice">{error}</p> : null}
     </>
-  );
-}
-
-function EvidencePicker({
-  files,
-  onChange,
-}: {
-  files: { kind: EvidenceInput['kind']; file: File }[];
-  onChange: (next: { kind: EvidenceInput['kind']; file: File }[]) => void;
-}): React.JSX.Element {
-  return (
-    <fieldset>
-      <legend>Evidence</legend>
-
-      {(['before', 'after'] as const).map((kind) => (
-        <label key={kind}>
-          {kind === 'after' ? 'After (required)' : 'Before (optional)'}
-          <input
-            type="file"
-            accept="image/jpeg,image/png"
-            multiple
-            onChange={(event) =>
-              onChange([
-                ...files.filter((item) => item.kind !== kind),
-                ...Array.from(event.target.files ?? []).map((file) => ({ kind, file })),
-              ])
-            }
-          />
-        </label>
-      ))}
-
-      <p>
-        {files.filter((item) => item.kind === 'after').length} after,{' '}
-        {files.filter((item) => item.kind === 'before').length} before
-      </p>
-    </fieldset>
   );
 }

@@ -4,8 +4,7 @@ import { Link } from '@tanstack/react-router';
 import { queryKeys } from '../api/query-keys';
 import { useAppSession } from '../app/session-context';
 import { UnsyncedIndicator } from '../components/UnsyncedIndicator';
-import { db } from '../offline/db';
-import { runOutbox } from '../offline/outbox';
+import { outboxFor, runOutbox } from '../offline/outbox';
 
 /**
  * La cola de salida, a la vista.
@@ -19,24 +18,19 @@ export function OutboxRoute(): React.JSX.Element {
   const { account } = useAppSession();
   const queryClient = useQueryClient();
 
+  // Solo la cola de esta cuenta. Lo que otra cuenta dejó sin enviar en este dispositivo
+  // no es información de esta —el mismo criterio que la lista de borradores— y además
+  // no se puede enviar desde acá: el servidor toma el firmante de la sesión.
   const entries = useQuery({
-    queryKey: queryKeys.outbox(),
-    queryFn: async () => {
-      const rows = await db.outbox.toArray();
-
-      return Promise.all(
-        rows.map(async (row) => ({
-          row,
-          draft: await db.drafts.get(row.client_submission_id),
-        })),
-      );
-    },
+    queryKey: queryKeys.outbox(account?.userId),
+    enabled: Boolean(account),
+    queryFn: async () => (account ? outboxFor(account.userId) : []),
     refetchInterval: 5_000,
   });
 
   const send = useMutation({
-    mutationFn: () => runOutbox(),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.outbox() }),
+    mutationFn: () => runOutbox({ accountId: account?.userId ?? null }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.outbox(account?.userId) }),
   });
 
   const rows = entries.data ?? [];
@@ -48,7 +42,7 @@ export function OutboxRoute(): React.JSX.Element {
       <h1>Waiting to be sent</h1>
 
       {rows.length === 0 ? (
-        <p>Nothing is waiting. Everything on this device has been accepted by the server.</p>
+        <p>Nothing is waiting. Everything you signed on this device has been accepted.</p>
       ) : null}
 
       <ul className="list">
@@ -61,13 +55,14 @@ export function OutboxRoute(): React.JSX.Element {
 
             {row.last_error ? <p className="notice notice--warn">{row.last_error}</p> : null}
 
-            {draft ? (
-              // El borrador sigue legible en el dispositivo, incluso rechazado. Es
-              // trabajo que hay que arreglar, no trabajo que se tira.
-              <Link to="/inspections/$id/capture" params={{ id: draft.scheduled_inspection_id }}>
-                Open the inspection
-              </Link>
-            ) : null}
+            {/*
+              El borrador sigue legible en el dispositivo, incluso rechazado. Es trabajo
+              que hay que arreglar, no trabajo que se tira. Existe siempre: `outboxFor`
+              solo devuelve entradas que tienen el suyo.
+            */}
+            <Link to="/inspections/$id/capture" params={{ id: draft.scheduled_inspection_id }}>
+              Open the inspection
+            </Link>
           </li>
         ))}
       </ul>

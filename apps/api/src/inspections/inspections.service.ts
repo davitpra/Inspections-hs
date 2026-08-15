@@ -368,6 +368,7 @@ export class InspectionsService {
         template_version_id: inspection.template_version_id,
         version: row.version,
         document: row.document,
+        inspector_id: inspection.inspector_id,
       };
     });
   }

@@ -10,6 +10,7 @@ const SITE_ID = '11111111-1111-4111-8111-111111111111';
 const VERSION_ID = '22222222-2222-4222-8222-222222222222';
 const LOCATION_ID = '33333333-3333-4333-8333-333333333333';
 const PERSON_ID = '44444444-4444-4444-8444-444444444444';
+const INSPECTOR_ID = '55555555-5555-4555-8555-555555555555';
 
 function validDocument() {
   return {
@@ -38,6 +39,7 @@ function validTemplateVersion() {
     template_version_id: VERSION_ID,
     version: 2,
     document: validDocument(),
+    inspector_id: INSPECTOR_ID,
   };
 }
 
@@ -85,6 +87,23 @@ describe('templateVersionPackageSchema', () => {
     const { site_id: _omitted, ...withoutSite } = validTemplateVersion();
 
     expect(templateVersionPackageSchema.safeParse(withoutSite).success).toBe(false);
+  });
+
+  /** `null` es un estado real —sin inspector asignado— y no un dato ausente. */
+  it('acepta inspector_id en null', () => {
+    const result = templateVersionPackageSchema.safeParse({
+      ...validTemplateVersion(),
+      inspector_id: null,
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  /** El servidor lo manda siempre: ausente no es lo mismo que `null`. */
+  it('rechaza una respuesta sin inspector_id', () => {
+    const { inspector_id: _omitted, ...withoutInspector } = validTemplateVersion();
+
+    expect(templateVersionPackageSchema.safeParse(withoutInspector).success).toBe(false);
   });
 });
 

@@ -178,6 +178,7 @@ export function templateVersionPackage(
     template_version_id: '22222222-2222-4222-8222-222222222222',
     version: 2,
     document: TEST_DOCUMENT,
+    inspector_id: null,
     ...overrides,
   };
 }

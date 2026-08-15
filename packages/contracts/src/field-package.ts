@@ -32,12 +32,19 @@ import { personOptionSchema } from './identity.js';
  * `site_id` viaja acá porque es la primera de las tres lecturas y porque el dispositivo
  * necesita saber de qué planta es la inspección **sin red**: es lo que marca al dueño
  * del borrador. Es un dato de la inspección, no de la versión.
+ *
+ * `inspector_id` viaja por el mismo motivo que `site_id`: el dispositivo necesita saber
+ * de quién es la inspección sin red, antes de abrir un borrador que después el servidor
+ * rechazaría al firmar. `null` significa "sin inspector asignado", un estado real y no
+ * un dato ausente — el envío se rechaza igual. Servirlo NO recorta quién puede leer esta
+ * ruta: sigue siendo cualquier cuenta cuyo alcance de sesión llegue a la inspección.
  */
 export const templateVersionPackageSchema = z.strictObject({
   site_id: z.uuid(),
   template_version_id: z.uuid(),
   version: z.int().positive(),
   document: templateDocumentSchema,
+  inspector_id: z.uuid().nullable(),
 });
 
 export type TemplateVersionPackage = z.infer<typeof templateVersionPackageSchema>;

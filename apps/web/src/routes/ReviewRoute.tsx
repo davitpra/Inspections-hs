@@ -7,6 +7,7 @@ import { queryKeys } from '../api/query-keys';
 import { useAppSession } from '../app/session-context';
 import { UnsyncedIndicator } from '../components/UnsyncedIndicator';
 import {
+  captureEligibility,
   documentForDraft,
   findDraft,
   incompleteFindings,
@@ -16,6 +17,7 @@ import {
 } from '../offline/drafts';
 import { countPending } from '../offline/photos';
 import { enqueue, runOutbox } from '../offline/outbox';
+import { storedTemplateVersion } from '../offline/prefetch';
 
 /**
  * Revisar y firmar. Es el momento en que un borrador deja de ser un borrador.
@@ -47,9 +49,26 @@ export function ReviewRoute(): React.JSX.Element {
     queryFn: async () => (draft.data ? documentForDraft(draft.data.draft) : null),
   });
 
+  /**
+   * Spec offline-capture: "A draft whose inspection is no longer the account's cannot
+   * be signed". Se compara contra lo mismo que `CaptureRoute` usa para decidir si
+   * abrir (design D5): el `inspector_id` del payload guardado, nunca una lectura
+   * fresca — si hubiera red para eso, ya la habría para descargar de nuevo. Un
+   * dispositivo sin la descarga —`stored` en `undefined`— no bloquea (design D4).
+   */
+  const stored = useQuery({
+    queryKey: queryKeys.storedTemplateVersion(id),
+    queryFn: () => storedTemplateVersion(id),
+  });
+
+  const eligibility = account
+    ? captureEligibility(stored.data?.inspector_id, account.userId)
+    : 'ok';
+
   const submit = useMutation({
     mutationFn: async () => {
       if (!draft.data) return;
+      if (eligibility !== 'ok') return;
 
       const { client_submission_id } = draft.data.draft;
 
@@ -58,7 +77,10 @@ export function ReviewRoute(): React.JSX.Element {
 
       // Uno de los tres disparadores del outbox (7.7): al terminar una inspección. Si no
       // hay red, la entrada queda en cola y sale al volver — no se pierde.
-      await runOutbox();
+      //
+      // La cuenta va explícita: la cola manda solo lo de su dueño, y acá el dueño es
+      // quien acaba de firmar.
+      await runOutbox({ accountId: account?.userId ?? null });
     },
     onSettled: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.draft(id) });
@@ -91,6 +113,15 @@ export function ReviewRoute(): React.JSX.Element {
       <UnsyncedIndicator accountId={account?.userId ?? null} />
 
       <h1>Review and sign</h1>
+
+      {eligibility !== 'ok' ? (
+        <p className="notice notice--warn">
+          {eligibility === 'unassigned'
+            ? 'This inspection no longer has an inspector assigned.'
+            : 'This inspection is now assigned to someone else.'}{' '}
+          Your answers stay on this device, but they can no longer be submitted.
+        </p>
+      ) : null}
 
       {validation.ok ? (
         <p>Everything required has been answered.</p>
@@ -136,9 +167,33 @@ export function ReviewRoute(): React.JSX.Element {
         </Link>
       </p>
 
+      {/*
+       * Firmar es el punto de no retorno (ADR-001), y el aviso va ACÁ —pegado al botón y
+       * antes de tocarlo— porque es el último momento en que la advertencia sirve de
+       * algo. Dicho después, en la pantalla del outbox, sería una explicación de por qué
+       * ya no se puede hacer nada.
+       *
+       * Nombra la salida que todavía existe, no solo la que se cierra: descartar el
+       * borrador desde la pantalla de inicio. Un aviso que solo dice "esto es
+       * irreversible" deja al inspector sin saber cuál era la alternativa.
+       */}
+      {!submitted ? (
+        <p className="notice">
+          Signing is the point of no return. Until you sign, you can discard this draft from
+          the list on the home screen. Once signed, the inspection is queued to be sent and can
+          no longer be deleted from this device.
+        </p>
+      ) : null}
+
       <button
         type="button"
-        disabled={!validation.ok || incomplete.length > 0 || submitted || submit.isPending}
+        disabled={
+          !validation.ok ||
+          incomplete.length > 0 ||
+          submitted ||
+          submit.isPending ||
+          eligibility !== 'ok'
+        }
         onClick={() => submit.mutate()}
       >
         {submitted ? 'Signed' : 'Sign and submit'}

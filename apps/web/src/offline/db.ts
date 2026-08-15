@@ -135,6 +135,13 @@ export type PrefetchPayload =
       template_version_id: string;
       version: number;
       document: TemplateDocument;
+      /**
+       * Opcional a propósito, y NO por descuido: el contrato lo manda siempre, pero un
+       * dispositivo que descargó antes de que este campo existiera tiene el payload
+       * guardado sin él. Ese caso se trata como "no se sabe" y no como "sin inspector" —
+       * ver `captureEligibility` en `drafts.ts`.
+       */
+      inspector_id?: string | null;
     }
   | { kind: 'locations'; locations: LocationOption[] }
   | { kind: 'roster'; people: PersonOption[] };

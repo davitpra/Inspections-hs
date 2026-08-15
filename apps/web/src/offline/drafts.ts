@@ -118,6 +118,89 @@ export async function listDrafts(
 }
 
 /**
+ * Se puede descartar lo que todavía no salió del dispositivo, y nada más.
+ *
+ * ADR-001 — **el envío es el punto de no retorno**. Firmar encola, y una entrada del
+ * outbox nunca se descarta: desde ahí el borrador ya no es del inspector, es trabajo que
+ * el servidor tiene que recibir. Descartar existe para lo de antes de eso: la inspección
+ * que se abrió en la fila equivocada, o la que se empezó y no se va a terminar.
+ */
+export function isDiscardable(draft: DraftRow): boolean {
+  return draft.status === 'capturing';
+}
+
+/**
+ * Por qué la base se negó a descartar. Lleva el motivo y no un mensaje: el texto que ve
+ * el inspector es inglés y se arma en la pantalla (`presentation.ts`), como el resto de
+ * la UI. El `message` es para el desarrollador que lea la consola.
+ */
+export type DiscardRefusal = 'not_owner' | 'already_signed' | 'already_queued';
+
+export class DiscardRefusedError extends Error {
+  constructor(readonly reason: DiscardRefusal) {
+    super(`El borrador no se puede descartar: ${reason}`);
+    this.name = 'DiscardRefusedError';
+  }
+}
+
+/**
+ * Descarta un borrador con todo lo que cuelga de él: respuestas, hallazgos y fotos.
+ *
+ * Se borra de verdad y no se marca — no es el servidor, donde nunca hay DELETE
+ * (ADR-002). Acá el borrador ES el dato que ADR-001 acepta perder, y dejar la fila
+ * "descartada" en el dispositivo la seguiría contando en el indicador de trabajo sin
+ * enviar, que es la única mitigación verificable del supuesto de los 7 días (ADR-010).
+ *
+ * Las tres comprobaciones van ADENTRO de la transacción, no en la pantalla:
+ *
+ * 1. **El dueño.** Igual que `findDraft`: el dispositivo es compartido y acá no hay RLS
+ *    que ayude, así que el `account_id` se comprueba en cada escritura.
+ * 2. **El estado.** Firmado o aceptado no se descarta.
+ * 3. **El outbox.** Es la comprobación que de verdad protege, porque no depende de que
+ *    la columna `status` esté sincronizada con la cola: si hay entrada, el envío ya
+ *    empezó y borrar el borrador dejaría a `sendEntry` sin qué mandar.
+ *
+ * Devuelve `false` si no había nada que borrar; lanza si lo había y no se podía.
+ */
+export async function discardDraft(
+  clientSubmissionId: string,
+  accountId: string,
+  database: OfflineDatabase = db,
+): Promise<boolean> {
+  return database.transaction(
+    'rw',
+    database.drafts,
+    database.answers,
+    database.photos,
+    database.findings,
+    database.outbox,
+    async () => {
+      const draft = await database.drafts.get(clientSubmissionId);
+
+      // Descartar dos veces no es un error: la segunda no tiene nada que hacer.
+      if (!draft) return false;
+
+      if (draft.account_id !== accountId) throw new DiscardRefusedError('not_owner');
+      if (!isDiscardable(draft)) throw new DiscardRefusedError('already_signed');
+
+      if (await database.outbox.get(clientSubmissionId)) {
+        throw new DiscardRefusedError('already_queued');
+      }
+
+      await Promise.all([
+        database.answers.where('client_submission_id').equals(clientSubmissionId).delete(),
+        database.photos.where('client_submission_id').equals(clientSubmissionId).delete(),
+        database.findings.where('client_submission_id').equals(clientSubmissionId).delete(),
+      ]);
+
+      await database.drafts.delete(clientSubmissionId);
+
+      return true;
+    },
+  );
+}
+
+/**
  * Reabrir: respuestas, el ítem en el que estaba y sus fotos. Sin una sola petición de
  * red — todo esto ya está en el dispositivo.
  */
@@ -459,6 +542,32 @@ export async function signDraft(
       return (await database.drafts.get(clientSubmissionId)) as DraftRow;
     },
   );
+}
+
+/**
+ * Si esta cuenta puede capturar o firmar esta inspección, según lo que el dispositivo
+ * tiene guardado — nunca una pregunta al servidor.
+ *
+ * `'ok'` cubre dos casos a propósito: la cuenta ES la asignada, y el dispositivo no
+ * sabe todavía porque descargó el paquete antes de que `inspector_id` existiera
+ * (design D4). Bloquear el segundo caso le negaría el recorrido a un inspector
+ * legítimo por una descarga vieja; el que de verdad se equivoque choca igual con el
+ * rechazo del servidor al enviar, que es la garantía real y no esto.
+ *
+ * La MISMA función decide si se abre la captura y si se puede firmar (design D5):
+ * las dos preguntas son "¿esta inspección es de esta cuenta, según lo último que se
+ * supo sin red?", y una sola respuesta evita que diverjan.
+ */
+export type CaptureEligibility = 'ok' | 'not_assigned' | 'unassigned';
+
+export function captureEligibility(
+  storedInspectorId: string | null | undefined,
+  accountId: string,
+): CaptureEligibility {
+  if (storedInspectorId === undefined) return 'ok';
+  if (storedInspectorId === null) return 'unassigned';
+
+  return storedInspectorId === accountId ? 'ok' : 'not_assigned';
 }
 
 /**

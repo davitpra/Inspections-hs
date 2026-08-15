@@ -4,6 +4,8 @@ import { TEST_DOCUMENT } from '../test/fixtures';
 import { freshDatabase, reopen } from '../test/database';
 import type { OfflineDatabase } from './db';
 import {
+  captureEligibility,
+  discardDraft,
   documentForDraft,
   findDraft,
   listDrafts,
@@ -33,6 +35,25 @@ function input(accountId = ACCOUNT_A) {
     template_version_id: VERSION_ID,
   };
 }
+
+describe('captureEligibility', () => {
+  it('la cuenta asignada puede capturar', () => {
+    expect(captureEligibility(ACCOUNT_A, ACCOUNT_A)).toBe('ok');
+  });
+
+  it('otra cuenta no puede', () => {
+    expect(captureEligibility(ACCOUNT_A, ACCOUNT_B)).toBe('not_assigned');
+  });
+
+  it('sin inspector asignado, nadie puede', () => {
+    expect(captureEligibility(null, ACCOUNT_A)).toBe('unassigned');
+  });
+
+  /** design D4 — descarga vieja, sin el campo guardado: no bloquea. */
+  it('sin dato guardado (descarga previa al campo), se permite', () => {
+    expect(captureEligibility(undefined, ACCOUNT_A)).toBe('ok');
+  });
+});
 
 describe('openDraft', () => {
   it('genera el client_submission_id como clave primaria de la fila', async () => {
@@ -261,6 +282,128 @@ describe('signDraft', () => {
     await database.drafts.update(draft.client_submission_id, { status: 'accepted' });
     const again = await signDraft(draft.client_submission_id, database);
     expect(again.status).toBe('accepted');
+  });
+});
+
+/**
+ * Descartar es la única salida que un borrador tiene sin pasar por el servidor, y por
+ * eso la línea de dónde deja de estar permitida es lo que estos tests fijan: ADR-001
+ * dice que el envío es el punto de no retorno, no la firma "más o menos".
+ */
+describe('discardDraft', () => {
+  it('borra el borrador con sus respuestas, hallazgos y fotos', async () => {
+    database = freshDatabase();
+    const draft = await openDraft(input(), database);
+    const id = draft.client_submission_id;
+
+    // Una respuesta negativa: crea la fila del hallazgo sin que el test la fabrique.
+    await saveAnswer(id, 'guarding.installed', false, TEST_DOCUMENT, database);
+    await database.photos.add({
+      id: 'photo-1',
+      client_submission_id: id,
+      item_key: 'guarding.installed',
+      bytes: new ArrayBuffer(4),
+      content_type: 'image/jpeg',
+      kind: 'finding',
+      object_key: null,
+      upload_state: 'pending',
+      attempts: 0,
+      last_error: null,
+      captured_at: '2026-08-01T10:00:00.000Z',
+    });
+
+    expect(await database.findings.count()).toBe(1);
+
+    expect(await discardDraft(id, ACCOUNT_A, database)).toBe(true);
+
+    database = await reopen(database);
+
+    expect(await database.drafts.count()).toBe(0);
+    expect(await database.answers.count()).toBe(0);
+    expect(await database.findings.count()).toBe(0);
+    expect(await database.photos.count()).toBe(0);
+  });
+
+  it('no toca lo que cuelga de otro borrador', async () => {
+    database = freshDatabase();
+    const mine = await openDraft(input(), database);
+    const other = await openDraft(
+      { ...input(), scheduled_inspection_id: '55555555-5555-4555-8555-555555555555' },
+      database,
+    );
+
+    await saveAnswer(mine.client_submission_id, 'guarding.installed', true, TEST_DOCUMENT, database);
+    await saveAnswer(
+      other.client_submission_id,
+      'guarding.installed',
+      true,
+      TEST_DOCUMENT,
+      database,
+    );
+
+    await discardDraft(mine.client_submission_id, ACCOUNT_A, database);
+
+    expect(await database.drafts.count()).toBe(1);
+    expect((await loadDraft(other.client_submission_id, database))?.answers).toEqual({
+      'guarding.installed': true,
+    });
+  });
+
+  /** El dispositivo es compartido: acá no hay RLS, la regla vive en la escritura. */
+  it('se niega a borrar el borrador de otra cuenta', async () => {
+    database = freshDatabase();
+    const draft = await openDraft(input(ACCOUNT_A), database);
+
+    await expect(
+      discardDraft(draft.client_submission_id, ACCOUNT_B, database),
+    ).rejects.toMatchObject({ reason: 'not_owner' });
+
+    expect(await database.drafts.count()).toBe(1);
+  });
+
+  it('se niega a borrar una inspección firmada', async () => {
+    database = freshDatabase();
+    const draft = await openDraft(input(), database);
+    await signDraft(draft.client_submission_id, database);
+
+    await expect(
+      discardDraft(draft.client_submission_id, ACCOUNT_A, database),
+    ).rejects.toMatchObject({ reason: 'already_signed' });
+
+    expect(await database.drafts.count()).toBe(1);
+  });
+
+  /**
+   * La comprobación que no depende de la columna: si hay entrada en el outbox, el envío
+   * ya empezó, y borrar el borrador dejaría a `sendEntry` sin qué mandar.
+   */
+  it('se niega a borrar lo que ya está en la cola de envío', async () => {
+    database = freshDatabase();
+    const draft = await openDraft(input(), database);
+
+    await database.outbox.add({
+      client_submission_id: draft.client_submission_id,
+      state: 'queued',
+      attempts: 0,
+      next_attempt_at: 0,
+      last_error: null,
+      sending_since: null,
+      lock_owner: null,
+    });
+
+    await expect(
+      discardDraft(draft.client_submission_id, ACCOUNT_A, database),
+    ).rejects.toMatchObject({ reason: 'already_queued' });
+
+    expect(await database.drafts.count()).toBe(1);
+  });
+
+  it('descartar dos veces no es un error', async () => {
+    database = freshDatabase();
+    const draft = await openDraft(input(), database);
+
+    expect(await discardDraft(draft.client_submission_id, ACCOUNT_A, database)).toBe(true);
+    expect(await discardDraft(draft.client_submission_id, ACCOUNT_A, database)).toBe(false);
   });
 });
 

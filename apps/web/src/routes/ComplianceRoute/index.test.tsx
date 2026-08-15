@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ComplianceReportSummary, ComplianceView, Session } from '@hs/contracts';
 
-import { ComplianceRoute } from './ComplianceRoute';
+import { ComplianceRoute } from './index';
 
 const SITE = '11111111-1111-4111-8111-111111111111';
 const USER = '22222222-2222-4222-8222-222222222222';
@@ -17,14 +17,14 @@ const generateReport = vi.hoisted(() => vi.fn());
 const getDownloadUrl = vi.hoisted(() => vi.fn());
 const useAppSession = vi.hoisted(() => vi.fn());
 
-vi.mock('../api/compliance', () => ({
+vi.mock('../../api/compliance', () => ({
   getCoverage,
   listReports,
   generateReport,
   getDownloadUrl,
 }));
 
-vi.mock('../app/session-context', () => ({ useAppSession }));
+vi.mock('../../app/session-context', () => ({ useAppSession }));
 
 function session(role: Session['role']): { account: Session } {
   return {

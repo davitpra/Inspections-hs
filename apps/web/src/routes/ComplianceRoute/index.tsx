@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import type { CompliancePeriod, ComplianceReportSummary, PeriodStatus } from '@hs/contracts';
 
-import { generateReport, getCoverage, getDownloadUrl, listReports } from '../api/compliance';
-import { queryKeys } from '../api/query-keys';
-import { useAppSession } from '../app/session-context';
-import { canGenerateComplianceReport } from './permissions';
+import { generateReport, getCoverage, listReports } from '../../api/compliance';
+import { queryKeys } from '../../api/query-keys';
+import { useAppSession } from '../../app/session-context';
+import { canGenerateComplianceReport } from '../permissions';
+import { PeriodCell } from './PeriodCell';
+import { ReportRow } from './ReportRow';
+import { yearChoices, yearOf } from './presentation';
 
 /**
  * §3 R5 — La cobertura de períodos por planta, y la evidencia que se exporta de ella.
@@ -32,7 +34,7 @@ export function ComplianceRoute(): React.JSX.Element {
   const queryClient = useQueryClient();
 
   const siteId = account?.siteScope[0] ?? '';
-  const [range, setRange] = useState(() => currentYear());
+  const [range, setRange] = useState(() => yearOf(new Date().getFullYear()));
 
   const coverage = useQuery({
     queryKey: queryKeys.complianceCoverage(siteId, range.rangeStart, range.rangeEnd),
@@ -67,7 +69,7 @@ export function ComplianceRoute(): React.JSX.Element {
             value={range.rangeStart.slice(0, 4)}
             onChange={(event) => setRange(yearOf(Number(event.target.value)))}
           >
-            {yearChoices().map((year) => (
+            {yearChoices(new Date().getFullYear()).map((year) => (
               <option key={year} value={year}>
                 {year}
               </option>
@@ -124,105 +126,4 @@ export function ComplianceRoute(): React.JSX.Element {
       </ul>
     </>
   );
-}
-
-/**
- * Un período de la grilla.
- *
- * LOS DOS `missed` SE DISTINGUEN EN EL TEXTO Y NO CON UN QUINTO ESTADO. Para el regulador
- * «se planificó y no se hizo» y «nunca se planificó» son los dos un mes sin inspección; el
- * empleador necesita saber cuál de los dos, porque uno es un problema de ejecución y el
- * otro del planificador.
- */
-function PeriodCell({ period }: { period: CompliancePeriod }): React.JSX.Element {
-  return (
-    <li className={`period period--${period.status}`}>
-      <span className="period__month">{monthLabel(period.period_start)}</span>
-      <span className="period__status">{STATUS_LABELS[period.status]}</span>
-
-      {period.status === 'missed' && period.scheduled_inspection_id === null ? (
-        <span className="period__note">never scheduled</span>
-      ) : null}
-
-      {period.status === 'cancelled' && period.cancellation_reason ? (
-        <span className="period__note">{period.cancellation_reason}</span>
-      ) : null}
-    </li>
-  );
-}
-
-/**
- * Un reporte ya generado.
- *
- * Los tres estados posibles del archivo se muestran los tres: descargable, todavía sin
- * archivo, o fallido con su error. El tercero es el que no se puede esconder — un
- * coordinador que ve «sin archivo» durante tres días tiene que poder saber que falló.
- */
-function ReportRow({ report }: { report: ComplianceReportSummary }): React.JSX.Element {
-  const [error, setError] = useState<string | null>(null);
-
-  const open = async () => {
-    try {
-      // La URL firmada se pide EN EL CLIC y no al pintar la lista: expira en minutos.
-      window.open(await getDownloadUrl(report.id), '_blank', 'noopener');
-    } catch {
-      setError('The download link could not be obtained.');
-    }
-  };
-
-  return (
-    <li className="report">
-      <p>
-        {report.range_start} to {report.range_end} &middot; generated {report.generated_at}
-      </p>
-
-      {/* Entero y copiable. Un digest truncado no verifica nada. */}
-      <p className="report__hash">
-        <code>{report.payload_hash}</code>
-      </p>
-
-      {report.latest_render?.outcome === 'succeeded' ? (
-        <button type="button" onClick={() => void open()}>
-          Download PDF
-        </button>
-      ) : null}
-
-      {report.latest_render?.outcome === 'failed' ? (
-        <p className="notice">
-          The PDF could not be rendered: {report.latest_render.error}. The report and its digest
-          are unaffected; rendering can be retried.
-        </p>
-      ) : null}
-
-      {report.latest_render === null ? <p className="note">The PDF is not ready yet.</p> : null}
-
-      {error ? <p className="notice">{error}</p> : null}
-    </li>
-  );
-}
-
-const STATUS_LABELS: Readonly<Record<PeriodStatus, string>> = {
-  completed: 'Completed',
-  missed: 'Missed',
-  cancelled: 'Cancelled',
-  open: 'Still open',
-};
-
-/** `2026-04-01` → `2026-04`. La grilla es de meses, no de días. */
-function monthLabel(periodStart: string): string {
-  return periodStart.slice(0, 7);
-}
-
-function yearOf(year: number): { rangeStart: string; rangeEnd: string } {
-  return { rangeStart: `${year}-01-01`, rangeEnd: `${year}-12-31` };
-}
-
-function currentYear(): { rangeStart: string; rangeEnd: string } {
-  return yearOf(new Date().getFullYear());
-}
-
-/** El año en curso y los cuatro anteriores: el sistema no tiene datos más viejos. */
-function yearChoices(): number[] {
-  const current = new Date().getFullYear();
-  return [0, 1, 2, 3, 4].map((offset) => current - offset);
 }

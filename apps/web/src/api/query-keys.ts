@@ -48,6 +48,9 @@ export const queryKeys = {
   inspectorCandidates: (siteId?: string) => key('inspector-candidates', siteId),
   fieldReady: (scheduledInspectionId?: string) => key('field-ready', scheduledInspectionId),
   locations: (scheduledInspectionId?: string) => key('locations', scheduledInspectionId),
+  /** El paquete de campo guardado localmente, solo para leer su `inspector_id`. */
+  storedTemplateVersion: (scheduledInspectionId?: string) =>
+    key('stored-template-version', scheduledInspectionId),
 
   /**
    * El borrador de ESTE dispositivo y ESTA cuenta (ADR-001: un dueño, un dispositivo).
@@ -58,7 +61,8 @@ export const queryKeys = {
     key('draft', scheduledInspectionId, userId),
   drafts: (userId?: string) => key('drafts', userId),
   document: (clientSubmissionId?: string) => key('document', clientSubmissionId),
-  outbox: () => key('outbox'),
+  /** La cola es del dueño de sus borradores, y por eso la cuenta va en la clave. */
+  outbox: (userId?: string) => key('outbox', userId),
 
   // Acciones correctivas y bandeja.
   actions: () => key('actions'),

@@ -4,12 +4,13 @@ import {
   RECURRENCE_GROUPING_DEFAULT,
   WINDOW_MONTHS_DEFAULT,
   type RecurrenceGrouping,
-  type RecurrenceSeries,
 } from '@hs/contracts';
 
-import { queryKeys } from '../api/query-keys';
-import { getRecurrence } from '../api/recurrence';
-import { formatDay } from './incident-presentation';
+import { queryKeys } from '../../api/query-keys';
+import { getRecurrence } from '../../api/recurrence';
+import { ExcludedNotice } from './ExcludedNotice';
+import { SeriesRow } from './SeriesRow';
+import { seriesKey } from './presentation';
 
 /**
  * Los hallazgos que se repiten, por sitio (etapa 7).
@@ -92,77 +93,4 @@ export function RecurrenceRoute(): React.JSX.Element {
       ) : null}
     </>
   );
-}
-
-function SeriesRow({ series }: { series: RecurrenceSeries }): React.JSX.Element {
-  return (
-    <li className="list__row">
-      <details>
-        <summary>
-          <strong>{series.item_prompt}</strong>{' '}
-          <span className="badge">{series.occurrence_count} times</span>
-        </summary>
-
-        <dl>
-          <dt>First seen</dt>
-          <dd>{formatDay(series.first_occurred_at)}</dd>
-
-          <dt>Last seen</dt>
-          <dd>{formatDay(series.last_occurred_at)}</dd>
-
-          <dt>Locations</dt>
-          <dd>{series.location_id ?? `${series.location_count} across the site`}</dd>
-
-          {/*
-            El número que hace auditable el riesgo A: una serie que cruzó tres versiones
-            de plantilla lo dice. Si todas dijeran 1 en un sitio con años de ediciones,
-            la agrupación estaría partida por la fila publicada y nadie lo notaría.
-          */}
-          <dt>Template versions crossed</dt>
-          <dd>{series.template_version_item_count}</dd>
-
-          <dt>Findings</dt>
-          <dd>
-            <ul>
-              {series.finding_ids.map((id) => (
-                <li key={id}>{id}</li>
-              ))}
-            </ul>
-          </dd>
-        </dl>
-      </details>
-    </li>
-  );
-}
-
-/**
- * Los hallazgos que quedaron fuera de toda serie por no tener `item_key` (design D8).
- *
- * **Se muestra también cuando es cero**, y esa insistencia es el punto: sin este número,
- * "nothing repeated" es indistinguible de "there was nothing to look at". §5 riesgo A
- * dice que el fallo de esta feature no produce ningún error y se ve igual que la
- * ausencia de patrón; esta línea es lo único que separa las dos lecturas en pantalla.
- */
-function ExcludedNotice({ count }: { count: number }): React.JSX.Element {
-  if (count === 0) {
-    return (
-      <p className="notice">
-        Every finding in this window came from an inspection, so all of them were checked
-        against the history.
-      </p>
-    );
-  }
-
-  return (
-    <p className="notice">
-      {count} finding{count === 1 ? ' was' : 's were'} entered by hand in this window and
-      cannot appear in any series: a finding reported outside an inspection has no item to
-      group by.
-    </p>
-  );
-}
-
-/** En modo `item` la ubicación es nula, así que la clave de React la omite. */
-function seriesKey(series: RecurrenceSeries): string {
-  return `${series.site_id}:${series.item_key}:${series.location_id ?? 'all'}`;
 }

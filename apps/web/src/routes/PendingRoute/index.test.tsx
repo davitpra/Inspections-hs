@@ -2,19 +2,30 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { PendingRoute } from './PendingRoute';
+import { DiscardRefusedError } from '../../offline/drafts';
+import { PendingRoute } from './index';
 
 const request = vi.hoisted(() => vi.fn());
 const listDrafts = vi.hoisted(() => vi.fn());
+const discardDraft = vi.hoisted(() => vi.fn());
 const missingForField = vi.hoisted(() => vi.fn());
 const prefetchInspection = vi.hoisted(() => vi.fn());
 const useAppSession = vi.hoisted(() => vi.fn());
 
-vi.mock('../api/client', () => ({ sessionClient: { request } }));
-vi.mock('../offline/drafts', () => ({ listDrafts }));
-vi.mock('../offline/prefetch', () => ({ missingForField, prefetchInspection }));
-vi.mock('../app/session-context', () => ({ useAppSession }));
-vi.mock('../app/InstallPrompt', () => ({ InstallPrompt: () => null }));
+vi.mock('../../api/client', () => ({ sessionClient: { request } }));
+/**
+ * Del almacén se reemplazan las dos escrituras y nada más: `isDiscardable` y
+ * `DiscardRefusedError` son la regla real y el error real. Un doble de esos dos dejaría
+ * a la fila decidiendo con una regla de mentira, que es justo lo que estos tests miran.
+ */
+vi.mock('../../offline/drafts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../offline/drafts')>()),
+  listDrafts,
+  discardDraft,
+}));
+vi.mock('../../offline/prefetch', () => ({ missingForField, prefetchInspection }));
+vi.mock('../../app/session-context', () => ({ useAppSession }));
+vi.mock('../../app/InstallPrompt', () => ({ InstallPrompt: () => null }));
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
@@ -71,6 +82,7 @@ describe('PendingRoute', () => {
   beforeEach(() => {
     request.mockResolvedValue({ ok: true, value: pending() });
     listDrafts.mockResolvedValue([]);
+    discardDraft.mockResolvedValue(true);
     useAppSession.mockReturnValue({ account: { userId: USER } });
   });
 
@@ -137,5 +149,103 @@ describe('PendingRoute', () => {
       ),
     ).toBeTruthy();
     expect(screen.queryByRole('link', { name: 'Start inspection' })).toBeNull();
+  });
+});
+
+/**
+ * Descartar es lo único de esta aplicación que destruye trabajo sin que quede copia en
+ * ningún lado: el borrador nunca salió del dispositivo. Lo que estos tests fijan es que
+ * un solo clic no alcance, que la confirmación diga qué se pierde, y que la línea de
+ * ADR-001 —firmado ya no se descarta— se vea en la fila y no solo en la base.
+ */
+describe('PendingRoute — descartar un borrador', () => {
+  const CAPTURING = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const SIGNED = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+
+  function draft(overrides: Record<string, unknown> = {}) {
+    return {
+      client_submission_id: CAPTURING,
+      scheduled_inspection_id: INSPECTION,
+      account_id: USER,
+      site_id: SITE,
+      template_version_id: VERSION,
+      created_at: '2026-08-01T10:00:00.000Z',
+      updated_at: '2026-08-01T10:00:00.000Z',
+      current_item_key: null,
+      status: 'capturing',
+      signed_at: null,
+      ...overrides,
+    };
+  }
+
+  beforeEach(() => {
+    request.mockResolvedValue({ ok: true, value: pending() });
+    missingForField.mockResolvedValue([]);
+    discardDraft.mockResolvedValue(true);
+    useAppSession.mockReturnValue({ account: { userId: USER } });
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  /** Abre el diálogo desde la fila y devuelve su botón de confirmar. */
+  async function openDialog(): Promise<HTMLElement> {
+    renderRoute();
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Discard the draft started 2026-08-01' }),
+    );
+
+    return screen.getByRole('button', { name: 'Discard the draft' });
+  }
+
+  it('no borra al pulsar la fila: pide confirmar y dice qué se pierde', async () => {
+    listDrafts.mockResolvedValue([draft()]);
+
+    const confirm = await openDialog();
+
+    expect(discardDraft).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(/answers, findings and photos of the inspection started on 2026-08-01/),
+    ).toBeTruthy();
+    expect(screen.getByText(/no copy to bring back/)).toBeTruthy();
+
+    fireEvent.click(confirm);
+
+    await waitFor(() => expect(discardDraft).toHaveBeenCalledWith(CAPTURING, USER));
+  });
+
+  it('mantener el borrador cierra sin borrar nada', async () => {
+    listDrafts.mockResolvedValue([draft()]);
+
+    await openDialog();
+    fireEvent.click(screen.getByRole('button', { name: 'Keep the draft' }));
+
+    expect(discardDraft).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Discard the draft' })).toBeNull(),
+    );
+  });
+
+  /** ADR-001: el envío es el punto de no retorno, y la fila lo dice en vez de callarlo. */
+  it('una inspección firmada no ofrece descartar', async () => {
+    listDrafts.mockResolvedValue([draft({ client_submission_id: SIGNED, status: 'signed' })]);
+
+    renderRoute();
+
+    expect(await screen.findByText(/Signed, waiting to send/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Discard/ })).toBeNull();
+  });
+
+  it('si la base se niega, lo dice y el diálogo no se cierra', async () => {
+    listDrafts.mockResolvedValue([draft()]);
+    discardDraft.mockRejectedValue(new DiscardRefusedError('already_queued'));
+
+    fireEvent.click(await openDialog());
+
+    expect(await screen.findByText(/signed and waiting to be sent/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Discard the draft' })).toBeTruthy();
   });
 });
