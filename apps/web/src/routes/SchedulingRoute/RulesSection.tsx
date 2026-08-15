@@ -1,7 +1,9 @@
-import type { InspectionSchedule } from '@hs/contracts';
+import type { InspectionSchedule } from "@hs/contracts";
 
-import { NewRuleForm } from './NewRuleForm';
-import { RuleRow } from './RuleRow';
+import { InfoIcon } from "./icons";
+import { currentRules } from "./presentation";
+import { NewRuleForm } from "./NewRuleForm";
+import { RuleRow } from "./RuleRow";
 
 /** Las reglas: qué debe esta planta todos los meses. */
 export function RulesSection({
@@ -15,21 +17,36 @@ export function RulesSection({
   canAdminister: boolean;
   ready: boolean;
 }): React.JSX.Element {
+  const visible = currentRules(rules);
+
   return (
-    <section>
-      <h2>Recurrence rules</h2>
+    <section className="card rules-card">
+      <details open>
+        <summary>
+          <strong>Recurrence rules</strong> <InfoIcon />{" "}
+          <span className="note">({visible.length})</span>
+        </summary>
 
-      {ready && rules.length === 0 ? (
-        <p>This site owes no monthly inspection. Without a rule, no period is ever opened.</p>
-      ) : null}
+        {ready && visible.length === 0 ? (
+          <p>
+            This site owes no monthly inspection. Without a rule, no period
+            is ever opened.
+          </p>
+        ) : null}
 
-      <ul className="list">
-        {rules.map((rule) => (
-          <RuleRow key={rule.id} rule={rule} canAdminister={canAdminister} />
-        ))}
-      </ul>
+        <ul className="list">
+          {visible.map((rule) => (
+            <RuleRow
+              key={rule.template_id}
+              rule={rule}
+              siteId={siteId}
+              canAdminister={canAdminister}
+            />
+          ))}
+        </ul>
 
-      {canAdminister ? <NewRuleForm siteId={siteId} rules={rules} /> : null}
+        {canAdminister ? <NewRuleForm siteId={siteId} rules={rules} /> : null}
+      </details>
     </section>
   );
 }

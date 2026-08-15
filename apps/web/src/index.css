@@ -47,6 +47,10 @@
   --warn-bg: var(--amber-100);
   --warn-ink: var(--amber-800); /* 7.40:1; 6.63:1 sobre --warn-bg */
 
+  /* El fondo tenue de una tarjeta destacada (aviso, píldora "open", filtro activo) — el
+     mismo verde de marca, diluido. No lleva texto encima que dependa de su contraste. */
+  --tint-bg: var(--green-50);
+
   /* El fondo detrás de un `<dialog>` en el top layer — lo pinta `::backdrop`. */
   --scrim: var(--black-a50);
 
@@ -181,7 +185,7 @@ select:disabled {
   cursor: not-allowed;
 }
 
-[aria-invalid='true'] {
+[aria-invalid="true"] {
   border-color: var(--warn-ink);
 }
 
@@ -236,6 +240,15 @@ select:disabled {
   padding: 1rem;
   max-width: 46rem;
   margin: 0 auto;
+}
+
+/*
+ * La medida de lectura no aplica a una pantalla que no se lee, se escanea: el calendario
+ * de programación son doce meses y a 46rem entran dos columnas. Ver `WIDE_ROUTES` en
+ * `router.tsx`, que es quien decide qué ruta se sale de la medida y por qué.
+ */
+.shell__main--wide {
+  max-width: 64rem;
 }
 
 /*
@@ -506,6 +519,7 @@ select:disabled {
 .period {
   border: 1px solid var(--line);
   border-left-width: 4px;
+  border-top-width: 3px;
   border-radius: var(--radius);
   padding: 0.5rem;
   display: flex;
@@ -513,17 +527,49 @@ select:disabled {
   gap: 0.15rem;
 }
 
-.period--completed { border-left-color: var(--state-ok); }
-.period--missed { border-left-color: var(--state-danger); }
-.period--cancelled { border-left-color: var(--state-neutral); }
-.period--open { border-left-color: var(--state-info); }
+.period--completed {
+  border-left-color: var(--state-ok);
+  border-top-color: var(--state-ok);
+}
+.period--missed {
+  border-left-color: var(--state-danger);
+  border-top-color: var(--state-danger);
+}
+.period--cancelled {
+  border-left-color: var(--state-neutral);
+  border-top-color: var(--state-neutral);
+}
+.period--open {
+  border-left-color: var(--state-info);
+  border-top-color: var(--state-info);
+}
 
-.period__month { font-weight: 600; }
-.period__status { font-size: var(--text-sm); }
+/* Sin `border-top-width` propia: no hay estado que remarcar, solo un hueco por llenar. */
+.period--unopened {
+  border-style: dashed;
+  border-left-color: var(--line);
+  border-top-color: var(--line);
+}
+
+/* El mes es lo primero que se lee, como el encabezado de una hoja de calendario. */
+.period__month {
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+.period__status {
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
 
 .period__note {
   font-size: var(--text-xs);
   color: var(--muted);
+}
+
+/* Una nota que no es un dato de la fila sino lo que todavía se puede hacer con ella. En
+   gris se lee como pie de página y es justo lo contrario. */
+.period__note--warn {
+  color: var(--warn-ink);
 }
 
 .note {
@@ -545,4 +591,487 @@ select:disabled {
   font-size: var(--text-xs);
   word-break: break-all;
   user-select: all;
+}
+
+/* ---------------------------------------------------------------------------
+   Consola de programación — tarjetas.
+
+   El resto de la app se lee en listas; acá cada bloque (planta, aviso, reglas, mes) es
+   una tarjeta con su propio borde porque son las unidades que el coordinador escanea de
+   a una — cuál mes falta, cuál regla está apagada — y una lista corrida no separa esas
+   unidades tan rápido como un borde.
+   --------------------------------------------------------------------------- */
+
+.scheduling__header h1 {
+  margin: 0;
+}
+
+.scheduling__subtitle {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+}
+
+/*
+ * El título y la planta en la misma línea, y la planta se va al final: no es un filtro
+ * más, es de qué planta habla todo lo que sigue. En un teléfono el `wrap` la baja debajo
+ * del título, que es el único orden que queda cuando no caben las dos.
+ */
+.scheduling__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 1rem 0 1.5rem;
+}
+
+.site-card {
+  display: flex;
+  align-items: start;
+  gap: 0.75rem;
+  flex: 0 1 18rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.6rem 0.9rem;
+}
+
+.site-card__icon {
+  flex: none;
+  color: var(--brand);
+}
+
+/*
+ * `SitePicker` es compartido y sigue dibujando su `.filters` en fila; acá se apila para
+ * que la etiqueta quede arriba del control, como el resto de los campos de la consola.
+ * El envoltorio es de esta ruta y el componente no se entera — por eso se estila desde
+ * afuera y no con una variante nueva en `SitePicker`.
+ */
+.site-card .filters {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.15rem;
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.site-card .filters label {
+  font-weight: 400;
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+.site-card .note {
+  margin: 0;
+}
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1rem;
+  margin: 0 0 1rem;
+}
+
+/* El aviso y su acción lado a lado; en un teléfono la acción cae abajo y a lo ancho, en
+   vez de estrangular el texto a cuatro palabras por renglón. */
+.notice-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1rem;
+  margin: 0 0 1rem;
+  background: var(--tint-bg);
+}
+
+.notice-card__body {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  min-width: 0;
+  flex: 1 1 18rem;
+}
+
+.notice-card__icon {
+  flex: none;
+  color: var(--brand);
+}
+
+.notice-card__title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.notice-card__text {
+  margin: 0.15rem 0 0;
+  color: var(--muted);
+}
+
+.notice-card__cta {
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0.5rem 1rem;
+  white-space: nowrap;
+  text-decoration: none;
+  background: var(--paper);
+}
+
+.rules-card summary {
+  cursor: pointer;
+  font-weight: 600;
+  list-style: none;
+}
+
+.rules-card summary::-webkit-details-marker {
+  display: none;
+}
+
+.rule-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1rem;
+  margin: 0.75rem 0;
+}
+
+.rule-card__icon {
+  flex: none;
+  color: var(--brand);
+}
+
+.rule-card__name {
+  flex: 1 1 12rem;
+  min-width: 0;
+  font-weight: 600;
+}
+
+.rule-card__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 1 1 14rem;
+}
+
+.field-label {
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+.rule-card__hint {
+  margin: 0.75rem 0 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.calendar-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0 0 1rem;
+}
+
+.year-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.year-nav__arrow {
+  min-width: 48px;
+  padding: 0.5rem 0.75rem;
+}
+
+.year-nav__current {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 48px;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--line-control);
+  border-radius: var(--radius);
+  color: var(--brand);
+}
+
+.year-nav__current h3 {
+  font-size: var(--text-lg);
+  margin: 0;
+}
+
+.view-toggle {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.view-toggle__button {
+  min-height: 48px;
+  padding: 0.5rem 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.view-toggle__button[aria-pressed="true"] {
+  background: var(--tint-bg);
+  border-color: var(--brand);
+  color: var(--brand);
+}
+
+/*
+ * Tres columnas en desktop —los doce meses en cuatro filas, el año entero sin scroll— y
+ * una sola en un teléfono. El `minmax` lo resuelve solo: a 64rem de contenido entran tres
+ * de 18rem, y por debajo van cayendo sin un breakpoint escrito a mano.
+ */
+.grid--scheduling {
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  gap: 0.75rem;
+}
+
+.grid--list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.period {
+  gap: 0.5rem;
+  /* El menú se ancla a la tarjeta, no al renglón del encabezado (ver `.period__menu`). */
+  position: relative;
+}
+
+/* Un solo renglón: el ícono, el mes con su plantilla debajo, y contra el borde derecho el
+   estado y el menú. La plantilla va pegada al mes —no suelta bajo la tarjeta— porque las
+   doce filas del año se distinguen justamente por ese par. */
+.period__head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.period__title {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+/* Cuadrado teñido y no un ícono suelto: le da al mes un ancla del tamaño del bloque de
+   texto, que es lo que hace que la tarjeta se lea como una unidad y no como tres líneas. */
+.period__icon {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--radius);
+  background: var(--tint-bg);
+  color: var(--brand);
+}
+
+.period__badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  flex: none;
+}
+
+/* El hueco que el encabezado le reserva al menú, solo donde hay uno: sin esto la píldora
+   de estado se mete debajo del botón en la tarjeta angosta. */
+.period__head--menu {
+  padding-right: 3rem;
+}
+
+/*
+ * El menú vive en la esquina superior derecha de la TARJETA, fuera del flujo: es la
+ * misma esquina en las doce filas del año, gane o pierda ancho el encabezado. Absoluto
+ * también adentro (`.period__menu-list`), para que abrirlo no empuje nada — o el
+ * calendario entero se reacomodaría con cada clic.
+ */
+.period__menu {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+}
+
+.period__menu-button {
+  padding: 0 0.5rem;
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+
+.period__menu-list {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 12rem;
+  padding: 0.25rem;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.period__menu-item {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border-color: transparent;
+  white-space: nowrap;
+}
+
+/* Solo lo que no se deshace lleva el color del riesgo. Volver a programar un mes no lo
+   es —agrega una fila—, y pintarlas iguales dejaría de distinguirlas. */
+.period__menu-item--danger {
+  color: var(--state-danger);
+}
+
+.status-pill {
+  font-size: var(--text-sm);
+  padding: 0.15rem 0.6rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.status-pill--open,
+.status-pill--completed {
+  background: var(--tint-bg);
+  color: var(--state-ok);
+  border-color: var(--state-ok);
+}
+
+.status-pill--missed {
+  background: var(--warn-bg);
+  color: var(--state-danger);
+  border-color: var(--state-danger);
+}
+
+.status-pill--cancelled,
+.status-pill--not-opened {
+  background: var(--disabled-bg);
+  color: var(--muted);
+}
+
+.status-pill--unassigned {
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+  border-color: var(--warn-ink);
+}
+
+.field-select {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--line-control);
+  border-radius: var(--radius);
+  padding: 0 0.6rem;
+}
+
+.field-select__icon {
+  flex: none;
+  color: var(--muted);
+}
+
+.field-select select {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  padding: 0.6rem 0;
+}
+
+.period__action {
+  width: 100%;
+}
+
+.stats-bar {
+  display: flex;
+  flex-wrap: wrap;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin: 1rem 0;
+  overflow: hidden;
+}
+
+.stats-bar__item {
+  flex: 1 1 8rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.9rem 1rem;
+  border-right: 1px solid var(--line);
+}
+
+.stats-bar__item:last-child {
+  border-right: 0;
+}
+
+.stats-bar__icon {
+  flex: none;
+  color: var(--brand);
+}
+
+.stats-bar__number {
+  display: block;
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.stats-bar__label {
+  display: block;
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+.stats-bar__tip {
+  flex: 1 1 100%;
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+
+.button--primary {
+  width: 100%;
+  background: var(--brand);
+  border-color: var(--brand);
+  color: var(--paper);
+}
+
+.button--danger {
+  border-color: var(--state-danger);
+  color: var(--state-danger);
+}
+
+/*
+ * La acción de una tarjeta que se repite doce veces en la pantalla. Marcada —borde y
+ * texto de marca— pero sin el relleno macizo de `button--primary`, que en el calendario
+ * dejaría doce botones compitiendo por ser el paso siguiente cuando ninguno lo es.
+ */
+.button--outline {
+  width: 100%;
+  border-color: var(--brand);
+  color: var(--brand);
+  font-weight: 600;
 }

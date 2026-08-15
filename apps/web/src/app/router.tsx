@@ -70,6 +70,19 @@ const rootRoute = createRootRoute({
 const PUBLIC_ROUTES = ['/accept-invitation'];
 
 /**
+ * Las rutas que NO se leen con medida de lectura.
+ *
+ * `.shell__main` mide 46rem porque casi todo acá es texto y un renglón largo se lee peor.
+ * La consola de programación no es texto: es un calendario de doce meses, y a 46rem entran
+ * dos columnas, así que diciembre queda a seis filas de scroll de enero. El año completo
+ * de un vistazo ES la pantalla, y por eso esta ruta pide más ancho.
+ *
+ * Es una lista y no un `if` por lo mismo que `PUBLIC_ROUTES`: lo que hay que poder leer de
+ * un vistazo es exactamente cuáles se salen de la medida, y cada una tiene que justificarlo.
+ */
+const WIDE_ROUTES = ['/scheduling'];
+
+/**
  * El marco, y la única puerta: sin cuenta no se entra a ninguna pantalla de captura.
  *
  * **La comprobación es contra la cuenta GUARDADA, no contra la red.** El inspector
@@ -147,7 +160,11 @@ function Shell(): React.JSX.Element {
         </button>
       </nav>
 
-      <main className="shell__main">
+      <main
+        className={
+          WIDE_ROUTES.includes(pathname) ? 'shell__main shell__main--wide' : 'shell__main'
+        }
+      >
         <Outlet />
       </main>
     </div>

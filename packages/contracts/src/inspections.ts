@@ -44,6 +44,8 @@ export const inspectionScheduleSchema = z.strictObject({
   default_inspector_id: z.uuid().nullable(),
   /** Ver `inspector_name` en `scheduledInspectionSchema`: mismo criterio, mismo nulo. */
   default_inspector_name: z.string().nullable(),
+  /** Desde cuándo la regla debe períodos — el otro extremo de la ventana que cierra `deactivated_at`. */
+  created_at: z.iso.datetime({ offset: true }),
   deactivated_at: z.iso.datetime({ offset: true }).nullable(),
 });
 

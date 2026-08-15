@@ -1,4 +1,9 @@
-import type { InspectorOption, PeriodStatus, ScheduledInspection } from '@hs/contracts';
+import type {
+  InspectionSchedule,
+  InspectorOption,
+  PeriodStatus,
+  ScheduledInspection,
+} from '@hs/contracts';
 
 /**
  * Cómo se lee la consola de programación: etiquetas y clases, sin marcado.
@@ -23,6 +28,11 @@ export function statusClass(status: PeriodStatus): string {
   return `period period--${status}`;
 }
 
+/** La clase de la píldora de estado — misma paleta que `statusClass`, forma de badge. */
+export function statusPillClass(status: PeriodStatus): string {
+  return `status-pill status-pill--${status}`;
+}
+
 /**
  * Lo que hay que mostrar donde va el nombre del inspector.
  *
@@ -38,6 +48,26 @@ export function inspectorLabel(inspection: ScheduledInspection): string {
   if (inspection.inspector_id === null) return 'Unassigned';
 
   return inspection.inspector_name ?? 'Assigned (name not visible from this site)';
+}
+
+/**
+ * Lo que la píldora `missed` no dice.
+ *
+ * El estado se deriva de la fecha (`period-status.sql.ts`), no de una decisión: el mes
+ * cerró sin inspección y por eso se lee omitido. Pero la fila sigue viva —`ingest`
+ * rechaza la cancelada y la ajena, nunca la vencida—, así que el inspector asignado
+ * todavía puede enviarla y el período pasa a `completed`.
+ *
+ * IMPORTA JUSTO DESPUÉS DE REPROGRAMAR UN MES CERRADO: la fila nueva nace en rojo, y sin
+ * esta línea parece que reprogramar no sirvió de nada. Sin inspector no hay quien la
+ * envíe, y entonces lo que falta es asignarla; eso es lo que cambia entre los dos textos.
+ */
+export function missedNote(inspection: ScheduledInspection): string | null {
+  if (inspection.status !== 'missed') return null;
+
+  return inspection.inspector_id === null
+    ? 'The month closed without an inspection. Assign an inspector and it can still be submitted.'
+    : 'The month closed without an inspection. It can still be submitted.';
 }
 
 /** Si esta fila es de las que el coordinador tiene que resolver. */
@@ -75,7 +105,277 @@ export function candidateLabel(candidate: InspectorOption): string {
   return candidate.employee_number === null ? name : `${name} (${candidate.employee_number})`;
 }
 
-/** El mes del período, que es como se habla de él. `2026-08-01` → `2026-08`. */
-export function periodLabel(periodStart: string): string {
-  return periodStart.slice(0, 7);
+/**
+ * Una fila por plantilla, no una por regla.
+ *
+ * `createSchedule`/`updateSchedule` nunca borran: desactivar y volver a crear una regla
+ * para la misma plantilla deja filas viejas dando vueltas. Acá se elige cuál mostrar — la
+ * activa si hay una (el índice parcial de 0008 garantiza que hay como mucho una), y si no
+ * hay ninguna, la desactivada más reciente. El resto es historial, no estado actual.
+ */
+export function currentRules(
+  rules: readonly InspectionSchedule[],
+): InspectionSchedule[] {
+  const byTemplate = new Map<string, InspectionSchedule>();
+
+  for (const rule of rules) {
+    const chosen = byTemplate.get(rule.template_id);
+
+    if (!chosen) {
+      byTemplate.set(rule.template_id, rule);
+      continue;
+    }
+
+    if (chosen.deactivated_at === null) continue; // ya hay una activa, gana siempre
+
+    if (rule.deactivated_at === null || rule.deactivated_at > chosen.deactivated_at) {
+      byTemplate.set(rule.template_id, rule);
+    }
+  }
+
+  return [...byTemplate.values()];
+}
+
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+/** El mes del período, sin el año — el año lo da el encabezado del grupo. `2026-08-01` → `August`. */
+export function monthName(periodStart: string): string {
+  // `period_start` siempre cae en el primero de un mes válido (periodStartSchema lo exige).
+  return MONTH_NAMES[Number(periodStart.slice(5, 7)) - 1]!;
+}
+
+/**
+ * La zona de la planta. La misma que resuelve el trabajo automático
+ * (`apps/api/src/jobs/job-registry.ts` `SITE_TIME_ZONE`) — el cliente no puede importar
+ * ese archivo, así que el valor se repite acá, y por eso el borde de horario de verano
+ * está fijado en un test en los dos lados.
+ */
+const SITE_TIME_ZONE = 'America/Toronto';
+
+/**
+ * La fecha civil de la planta, como `YYYY-MM-DD`. Espejo de `civilDate` en
+ * `apps/api/src/inspections/period.ts`: mismo método (`Intl`, no aritmética de offsets),
+ * por la misma razón — el horario de verano mueve el offset dos veces al año.
+ */
+function civilDate(instant: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(instant);
+}
+
+/** El mes civil de un instante, como `YYYY-MM`. */
+export function civilMonth(instant: Date, timeZone: string = SITE_TIME_ZONE): string {
+  return civilDate(instant, timeZone).slice(0, 7);
+}
+
+/** El año civil de hoy, en la zona de la planta. Punto de partida de la navegación. */
+export function currentCivilYear(now: Date = new Date()): string {
+  return civilMonth(now).slice(0, 4);
+}
+
+/**
+ * Una casilla del calendario que la regla debe pero que todavía no es una fila: no hay
+ * `id`, ni estado, ni inspector — nada de eso existe hasta que el coordinador la abre.
+ */
+export interface UnopenedPeriod {
+  site_id: string;
+  template_id: string;
+  template_name: string;
+  period_start: string;
+}
+
+export type YearEntry =
+  | { kind: 'opened'; inspection: ScheduledInspection }
+  | { kind: 'unopened'; period: UnopenedPeriod };
+
+function entrySortKey(entry: YearEntry): { periodStart: string; templateName: string } {
+  return entry.kind === 'opened'
+    ? { periodStart: entry.inspection.period_start, templateName: entry.inspection.template_name }
+    : { periodStart: entry.period.period_start, templateName: entry.period.template_name };
+}
+
+/**
+ * Si la regla debe ese mes: dentro de la ventana `created_at`..`deactivated_at`,
+ * inclusiva en los dos extremos y resuelta en la misma zona que el trabajo automático.
+ */
+export function ruleOwesMonth(
+  rule: Pick<InspectionSchedule, 'created_at' | 'deactivated_at'>,
+  periodStart: string,
+): boolean {
+  const month = periodStart.slice(0, 7);
+  const owesFrom = civilMonth(new Date(rule.created_at));
+
+  if (month < owesFrom) return false;
+  if (rule.deactivated_at === null) return true;
+
+  return month <= civilMonth(new Date(rule.deactivated_at));
+}
+
+function monthsOfYear(year: string): string[] {
+  return Array.from({ length: 12 }, (_, index) => `${year}-${String(index + 1).padStart(2, '0')}-01`);
+}
+
+/**
+ * Cuál de las inspecciones de un mismo mes y plantilla es la que representa ese mes.
+ *
+ * Cancelar no borra: programa de nuevo. Después de eso el mes tiene DOS filas —la
+ * cancelada y la que la reemplaza— y el índice parcial de 0008 garantiza que como mucho
+ * una está viva. Esa es la del calendario; entre puras canceladas gana la última, que es
+ * el motivo que corresponde leer.
+ */
+export function currentPeriod(
+  periods: readonly ScheduledInspection[],
+): ScheduledInspection | undefined {
+  return periods.reduce<ScheduledInspection | undefined>((chosen, period) => {
+    if (!chosen) return period;
+    if (chosen.cancelled_at === null) return chosen;
+    if (period.cancelled_at === null) return period;
+
+    return period.cancelled_at > chosen.cancelled_at ? period : chosen;
+  }, undefined);
+}
+
+/** Las inspecciones agrupadas por la casilla del calendario que ocupan. */
+function bySlot(
+  periods: readonly ScheduledInspection[],
+): Map<string, ScheduledInspection[]> {
+  const slots = new Map<string, ScheduledInspection[]>();
+
+  for (const period of periods) {
+    const key = `${period.template_id}|${period.period_start}`;
+    slots.set(key, [...(slots.get(key) ?? []), period]);
+  }
+
+  return slots;
+}
+
+/**
+ * El calendario de un año: una entrada por regla vigente y por mes que esa regla debe,
+ * de enero a diciembre. Donde ya existe la fila real, donde no una casilla `unopened`.
+ *
+ * Los períodos que ninguna regla vigente reclama para ese año —programados fuera del
+ * calendario, o dejados atrás por una regla ya desactivada— se agregan igual: la
+ * proyección solo AGREGA meses, nunca esconde un mes que alguien debe.
+ *
+ * UNA FILA POR CASILLA, y esa es la única cosa que sí se esconde: un mes cancelado y
+ * vuelto a programar tiene dos inspecciones, y `currentPeriod` elige la que manda. Sin
+ * esto el orden de la respuesta decidía cuál se veía, y la cancelada podía tapar a la
+ * viva.
+ */
+export function projectYear(
+  rules: readonly InspectionSchedule[],
+  periods: readonly ScheduledInspection[],
+  year: string,
+): YearEntry[] {
+  const byKey = new Map<string, ScheduledInspection>();
+  for (const [key, slot] of bySlot(periods)) {
+    const chosen = currentPeriod(slot);
+
+    if (chosen) byKey.set(key, chosen);
+  }
+
+  const claimed = new Set<string>();
+  const entries: YearEntry[] = [];
+
+  for (const rule of currentRules(rules)) {
+    for (const periodStart of monthsOfYear(year)) {
+      if (!ruleOwesMonth(rule, periodStart)) continue;
+
+      const key = `${rule.template_id}|${periodStart}`;
+      claimed.add(key);
+
+      const existing = byKey.get(key);
+
+      entries.push(
+        existing
+          ? { kind: 'opened', inspection: existing }
+          : {
+              kind: 'unopened',
+              period: {
+                site_id: rule.site_id,
+                template_id: rule.template_id,
+                template_name: rule.template_name,
+                period_start: periodStart,
+              },
+            },
+      );
+    }
+  }
+
+  for (const [key, period] of byKey) {
+    if (period.period_start.slice(0, 4) !== year) continue;
+    if (claimed.has(key)) continue;
+
+    entries.push({ kind: 'opened', inspection: period });
+  }
+
+  return entries.sort((a, b) => {
+    const left = entrySortKey(a);
+    const right = entrySortKey(b);
+
+    return (
+      left.periodStart.localeCompare(right.periodStart) ||
+      left.templateName.localeCompare(right.templateName)
+    );
+  });
+}
+
+/** Los conteos del pie del calendario: cuántos meses caen en cada estado del año proyectado. */
+export interface YearStats {
+  total: number;
+  assigned: number;
+  unassigned: number;
+  notOpened: number;
+}
+
+/**
+ * Los mismos tres cubos que ya distingue la fila — abierto y con dueño, abierto y sin uno
+ * (`isUnassigned`), o todavía no abierto — contados sobre el año que `projectYear` arma.
+ * Un período cancelado no tiene dueño que asignar, así que cuenta como resuelto y no como
+ * pendiente: `isUnassigned` ya lo excluye por la misma razón.
+ */
+export function yearStats(entries: readonly YearEntry[]): YearStats {
+  let assigned = 0;
+  let unassigned = 0;
+  let notOpened = 0;
+
+  for (const entry of entries) {
+    if (entry.kind === 'unopened') {
+      notOpened += 1;
+      continue;
+    }
+
+    if (isUnassigned(entry.inspection)) {
+      unassigned += 1;
+    } else {
+      assigned += 1;
+    }
+  }
+
+  return { total: entries.length, assigned, unassigned, notOpened };
+}
+
+/**
+ * El año más antiguo al que la navegación deja retroceder: el que ve el coordinador al
+ * abrir la pantalla, o uno más viejo si ya existe una regla o un período ahí. Hacia
+ * adelante no hay tope — la obligación es mensual y se conoce para cualquier año futuro.
+ */
+export function earliestEligibleYear(
+  rules: readonly InspectionSchedule[],
+  periods: readonly ScheduledInspection[],
+  currentYear: string,
+): string {
+  const years = [
+    currentYear,
+    ...rules.map((rule) => civilMonth(new Date(rule.created_at)).slice(0, 4)),
+    ...periods.map((period) => period.period_start.slice(0, 4)),
+  ];
+
+  return years.reduce((earliest, year) => (year < earliest ? year : earliest));
 }

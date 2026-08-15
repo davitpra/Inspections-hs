@@ -1,45 +1,121 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
-import type { InspectionSchedule } from '@hs/contracts';
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useId, useState } from "react";
+import type { InspectionSchedule } from "@hs/contracts";
 
-import { updateSchedule } from '../../api/inspections';
-import { queryKeys } from '../../api/query-keys';
+import { listInspectorCandidates, updateSchedule } from "../../api/inspections";
+import { queryKeys } from "../../api/query-keys";
+import { CalendarIcon, PersonIcon } from "./icons";
+import { candidateLabel } from "./presentation";
 
 export function RuleRow({
   rule,
+  siteId,
   canAdminister,
 }: {
   rule: InspectionSchedule;
+  siteId: string;
   canAdminister: boolean;
 }): React.JSX.Element {
   const queryClient = useQueryClient();
+  const controlId = useId();
   const [error, setError] = useState<string | null>(null);
 
-  const deactivate = useMutation({
-    mutationFn: () => updateSchedule(rule.id, { deactivated: true }),
+  const candidates = useQuery({
+    queryKey: queryKeys.inspectorCandidates(siteId),
+    queryFn: () => listInspectorCandidates(siteId),
+    enabled: canAdminister && siteId !== "",
+    retry: false,
+  });
+
+  const toggle = useMutation({
+    mutationFn: (nextDeactivated: boolean) =>
+      updateSchedule(rule.id, { deactivated: nextDeactivated }),
     onSuccess: () => {
       setError(null);
-      void queryClient.invalidateQueries({ queryKey: queryKeys.inspectionSchedules() });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.inspectionSchedules(),
+      });
+    },
+    onError: (caught: Error) => setError(caught.message),
+  });
+
+  const setDefaultInspector = useMutation({
+    mutationFn: (inspectorId: string) =>
+      updateSchedule(rule.id, { default_inspector_id: inspectorId === "" ? null : inspectorId }),
+    onSuccess: () => {
+      setError(null);
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.inspectionSchedules(),
+      });
     },
     onError: (caught: Error) => setError(caught.message),
   });
 
   const active = rule.deactivated_at === null;
 
-  return (
-    <li className="list__row">
-      <span>{rule.template_name}</span>
+  // El inspector por defecto actual puede haber perdido el alcance de la planta y ya no
+  // aparecer entre los candidatos; si no se agrega acá, el `<select>` cae en "None" y
+  // esconde que la regla todavía apunta a esa persona.
+  const currentNotOffered =
+    rule.default_inspector_id !== null &&
+    !(candidates.data ?? []).some((candidate) => candidate.id === rule.default_inspector_id);
 
-      <span className="note">
-        Default inspector: {rule.default_inspector_name ?? 'none'}
+  return (
+    <li className="rule-card">
+      <span className="rule-card__icon">
+        <CalendarIcon />
       </span>
 
-      {active ? null : <span className="badge badge--closed">Deactivated</span>}
+      <span className="rule-card__name">
+        {rule.template_name}
+        {active ? null : <span className="badge badge--closed"> Deactivated</span>}
+      </span>
 
-      {canAdminister && active ? (
+      {canAdminister ? (
+        <span className="rule-card__field">
+          <label htmlFor={`${controlId}-default-inspector`} className="field-label">
+            Default inspector
+          </label>
+          <div className="field-select">
+            <span className="field-select__icon">
+              <PersonIcon />
+            </span>
+            <select
+              id={`${controlId}-default-inspector`}
+              value={rule.default_inspector_id ?? ""}
+              disabled={setDefaultInspector.isPending}
+              onChange={(event) => setDefaultInspector.mutate(event.target.value)}
+            >
+              <option value="">None</option>
+              {currentNotOffered ? (
+                <option value={rule.default_inspector_id ?? ""}>
+                  {rule.default_inspector_name ?? "Assigned (name not visible from this site)"}
+                </option>
+              ) : null}
+              {(candidates.data ?? []).map((candidate) => (
+                <option key={candidate.id} value={candidate.id}>
+                  {candidateLabel(candidate)}
+                </option>
+              ))}
+            </select>
+          </div>
+        </span>
+      ) : (
+        <span className="note">
+          Default inspector: {rule.default_inspector_name ?? "none"}
+        </span>
+      )}
+
+      {canAdminister ? (
         <button
           type="button"
+          className="button--danger"
           onClick={() => {
+            if (!active) {
+              toggle.mutate(false);
+              return;
+            }
+
             // La confirmación dice QUÉ DEJA DE PASAR. «¿Estás seguro?» no informa nada:
             // desactivar corta la apertura de períodos futuros y hace que el reporte de
             // cobertura deje de contarlos como debidos.
@@ -49,11 +125,17 @@ export function RuleRow({
                 `Periods already opened are unaffected.`,
             );
 
-            if (confirmed) deactivate.mutate();
+            if (confirmed) toggle.mutate(true);
           }}
-          disabled={deactivate.isPending}
+          disabled={toggle.isPending}
         >
-          {deactivate.isPending ? 'Deactivating…' : 'Deactivate'}
+          {active
+            ? toggle.isPending
+              ? "Deactivating…"
+              : "Deactivate"
+            : toggle.isPending
+              ? "Reactivating…"
+              : "Reactivate"}
         </button>
       ) : null}
 

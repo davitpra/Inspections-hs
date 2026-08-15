@@ -1,14 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import type { InspectorOption, ScheduledInspection } from '@hs/contracts';
+import type { InspectionSchedule, InspectorOption, ScheduledInspection } from '@hs/contracts';
 
 import {
   candidateLabel,
+  civilMonth,
+  currentCivilYear,
+  currentPeriod,
+  currentRules,
+  earliestEligibleYear,
   inspectorLabel,
   isUnassigned,
-  periodLabel,
+  missedNote,
+  monthName,
+  projectYear,
+  ruleOwesMonth,
   statusClass,
+  statusPillClass,
   STATUS_LABELS,
   unassignedNotice,
+  yearStats,
+  type YearEntry,
 } from './presentation';
 
 const SITE = '11111111-1111-4111-8111-111111111111';
@@ -45,6 +56,52 @@ function candidate(overrides: Partial<InspectorOption> = {}): InspectorOption {
   };
 }
 
+const TEMPLATE_A = '55555555-5555-4555-8555-555555555555';
+const TEMPLATE_B = '77777777-7777-4777-8777-777777777777';
+
+function rule(overrides: Partial<InspectionSchedule> = {}): InspectionSchedule {
+  return {
+    id: '88888888-8888-4888-8888-888888888888',
+    site_id: SITE,
+    template_id: TEMPLATE_A,
+    template_name: 'Monthly general workplace inspection',
+    default_inspector_id: null,
+    default_inspector_name: null,
+    created_at: '2020-01-01T00:00:00.000Z',
+    deactivated_at: null,
+    ...overrides,
+  };
+}
+
+describe('la fila vigente por plantilla', () => {
+  it('devuelve la única regla cuando no hay historial', () => {
+    expect(currentRules([rule()])).toEqual([rule()]);
+  });
+
+  // El caso de la captura: desactivar y crear de nuevo deja filas viejas dando vueltas.
+  it('entre varias desactivadas de la misma plantilla, se queda con la más reciente', () => {
+    const oldest = rule({ id: 'a', deactivated_at: '2026-01-01T00:00:00.000Z' });
+    const middle = rule({ id: 'b', deactivated_at: '2026-03-01T00:00:00.000Z' });
+    const newest = rule({ id: 'c', deactivated_at: '2026-06-01T00:00:00.000Z' });
+
+    expect(currentRules([oldest, newest, middle])).toEqual([newest]);
+  });
+
+  it('una regla activa gana siempre, sin importar el orden', () => {
+    const active = rule({ id: 'active', deactivated_at: null });
+    const deactivated = rule({ id: 'old', deactivated_at: '2026-06-01T00:00:00.000Z' });
+
+    expect(currentRules([deactivated, active])).toEqual([active]);
+  });
+
+  it('no mezcla plantillas distintas', () => {
+    const a = rule({ id: 'a', template_id: TEMPLATE_A });
+    const b = rule({ id: 'b', template_id: TEMPLATE_B });
+
+    expect(currentRules([a, b])).toEqual([a, b]);
+  });
+});
+
 describe('el estado del período', () => {
   it('nombra los cuatro', () => {
     expect(Object.keys(STATUS_LABELS).sort()).toEqual([
@@ -62,6 +119,11 @@ describe('el estado del período', () => {
     expect(statusClass('missed')).toBe('period period--missed');
     expect(statusClass('cancelled')).toBe('period period--cancelled');
     expect(statusClass('open')).toBe('period period--open');
+  });
+
+  it('la píldora usa la misma paleta', () => {
+    expect(statusPillClass('open')).toBe('status-pill status-pill--open');
+    expect(statusPillClass('missed')).toBe('status-pill status-pill--missed');
   });
 });
 
@@ -86,6 +148,26 @@ describe('el inspector de una fila', () => {
 
     expect(label).not.toBe('Unassigned');
     expect(label).toContain('not visible');
+  });
+});
+
+describe('el mes omitido', () => {
+  it('dice que todavía se puede enviar', () => {
+    const missed = inspection({ status: 'missed' });
+
+    expect(missedNote(missed)).toMatch(/can still be submitted/);
+  });
+
+  it('sin inspector, lo que falta es asignarlo', () => {
+    const missed = inspection({ status: 'missed', inspector_id: null, inspector_name: null });
+
+    expect(missedNote(missed)).toMatch(/Assign an inspector/);
+  });
+
+  it('no dice nada sobre los otros tres estados', () => {
+    for (const status of ['open', 'completed', 'cancelled'] as const) {
+      expect(missedNote(inspection({ status }))).toBeNull();
+    }
   });
 });
 
@@ -151,6 +233,266 @@ describe('el candidato en el selector', () => {
 
 describe('el período', () => {
   it('se lee por mes', () => {
-    expect(periodLabel('2026-08-01')).toBe('2026-08');
+    expect(monthName('2026-08-01')).toBe('August');
+    expect(monthName('2026-01-01')).toBe('January');
+  });
+});
+
+describe('el mes civil', () => {
+  it('resuelve el mes en la zona de la planta, no en UTC', () => {
+    // 2026-09-01T02:00:00Z es 2026-08-31 en America/Toronto.
+    expect(civilMonth(new Date('2026-09-01T02:00:00.000Z'))).toBe('2026-08');
+  });
+
+  it('el año en curso es el de esa misma fecha civil', () => {
+    expect(currentCivilYear(new Date('2026-09-01T02:00:00.000Z'))).toBe('2026');
+  });
+});
+
+describe('lo que una regla debe', () => {
+  it('debe el mes en que se creó', () => {
+    expect(ruleOwesMonth(rule({ created_at: '2026-03-12T00:00:00.000Z' }), '2026-03-01')).toBe(
+      true,
+    );
+  });
+
+  it('no debe un mes anterior a su creación', () => {
+    expect(ruleOwesMonth(rule({ created_at: '2026-03-12T00:00:00.000Z' }), '2026-02-01')).toBe(
+      false,
+    );
+  });
+
+  it('sin desactivar, debe todo mes futuro', () => {
+    expect(ruleOwesMonth(rule({ created_at: '2020-01-01T00:00:00.000Z' }), '2030-01-01')).toBe(
+      true,
+    );
+  });
+
+  it('debe el mes en que se desactivó, no el siguiente', () => {
+    const deactivated = rule({
+      created_at: '2020-01-01T00:00:00.000Z',
+      deactivated_at: '2026-09-15T00:00:00.000Z',
+    });
+
+    expect(ruleOwesMonth(deactivated, '2026-09-01')).toBe(true);
+    expect(ruleOwesMonth(deactivated, '2026-10-01')).toBe(false);
+  });
+
+  it('resuelve la ventana en la zona de la planta', () => {
+    // 2026-04-01T02:00:00Z es 2026-03-31 en America/Toronto: la regla ya debe marzo.
+    const createdLate = rule({ created_at: '2026-04-01T02:00:00.000Z' });
+
+    expect(ruleOwesMonth(createdLate, '2026-03-01')).toBe(true);
+  });
+});
+
+describe('el calendario de un año', () => {
+  function unopened(entry: YearEntry): boolean {
+    return entry.kind === 'unopened';
+  }
+
+  it('un año con una regla muestra doce entradas', () => {
+    const activeRule = rule({ created_at: '2025-01-01T00:00:00.000Z' });
+    const opened = Array.from({ length: 8 }, (_, index) =>
+      inspection({
+        id: `p-${index}`,
+        period_start: `2026-${String(index + 1).padStart(2, '0')}-01`,
+      }),
+    );
+
+    const entries = projectYear([activeRule], opened, '2026');
+
+    expect(entries).toHaveLength(12);
+    expect(entries.filter(unopened)).toHaveLength(4);
+    expect(entries.filter((entry) => !unopened(entry))).toHaveLength(8);
+  });
+
+  it('un año futuro está enteramente sin abrir', () => {
+    const activeRule = rule({ created_at: '2025-01-01T00:00:00.000Z' });
+
+    const entries = projectYear([activeRule], [], '2027');
+
+    expect(entries).toHaveLength(12);
+    expect(entries.every(unopened)).toBe(true);
+  });
+
+  it('no proyecta un mes anterior a que la regla existiera', () => {
+    const createdInMarch = rule({ created_at: '2026-03-15T00:00:00.000Z' });
+
+    const entries = projectYear([createdInMarch], [], '2026');
+    const months = entries.map((entry) =>
+      entry.kind === 'unopened' ? entry.period.period_start : entry.inspection.period_start,
+    );
+
+    expect(months).not.toContain('2026-01-01');
+    expect(months).not.toContain('2026-02-01');
+    expect(months).toContain('2026-03-01');
+  });
+
+  it('no proyecta un mes posterior a que la regla se desactivara', () => {
+    const deactivatedInSeptember = rule({
+      created_at: '2020-01-01T00:00:00.000Z',
+      deactivated_at: '2026-09-10T00:00:00.000Z',
+    });
+
+    const entries = projectYear([deactivatedInSeptember], [], '2026');
+    const months = entries.map((entry) =>
+      entry.kind === 'unopened' ? entry.period.period_start : entry.inspection.period_start,
+    );
+
+    expect(months).toContain('2026-09-01');
+    expect(months).not.toContain('2026-10-01');
+    expect(months).toHaveLength(9);
+  });
+
+  it('un período de una regla ya desactivada se sigue mostrando', () => {
+    const deactivatedInSeptember = rule({
+      created_at: '2020-01-01T00:00:00.000Z',
+      deactivated_at: '2026-09-10T00:00:00.000Z',
+    });
+    const orphan = inspection({ id: 'orphan', period_start: '2026-10-01' });
+
+    const entries = projectYear([deactivatedInSeptember], [orphan], '2026');
+    const october = entries.find(
+      (entry) => entry.kind === 'opened' && entry.inspection.id === 'orphan',
+    );
+
+    expect(october).toBeDefined();
+  });
+
+  it('una cancelada se lee cancelada, no como no abierta', () => {
+    const activeRule = rule({ created_at: '2020-01-01T00:00:00.000Z' });
+    const cancelled = inspection({
+      period_start: '2026-05-01',
+      status: 'cancelled',
+      cancelled_at: '2026-05-02T00:00:00.000Z',
+      cancellation_reason: 'Site closed',
+    });
+
+    const entries = projectYear([activeRule], [cancelled], '2026');
+    const may = entries.find(
+      (entry) => entry.kind === 'opened' && entry.inspection.period_start === '2026-05-01',
+    );
+
+    expect(may).toBeDefined();
+    expect(may?.kind === 'opened' ? may.inspection.status : null).toBe('cancelled');
+  });
+
+  /**
+   * Cancelar y volver a programar deja dos filas para el mismo mes. La viva es la del
+   * calendario: si ganara la cancelada, el mes se vería muerto y el trabajo real —ya
+   * programado, con inspector— no aparecería en ningún lado.
+   */
+  it('un mes cancelado y vuelto a programar muestra la fila viva, y una sola', () => {
+    const activeRule = rule({ created_at: '2020-01-01T00:00:00.000Z' });
+    const cancelled = inspection({
+      id: 'cancelled',
+      period_start: '2026-05-01',
+      status: 'cancelled',
+      cancelled_at: '2026-05-02T00:00:00.000Z',
+      cancellation_reason: 'Site closed',
+    });
+    const reopened = inspection({ id: 'reopened', period_start: '2026-05-01' });
+
+    // El orden de la respuesta no decide: la lista llega `period_start DESC` y dentro de
+    // un mes no hay desempate declarado.
+    for (const periods of [[cancelled, reopened], [reopened, cancelled]]) {
+      const may = projectYear([activeRule], periods, '2026').filter(
+        (entry) => entry.kind === 'opened' && entry.inspection.period_start === '2026-05-01',
+      );
+
+      expect(may.length).toBe(1);
+      expect(may[0]?.kind === 'opened' ? may[0].inspection.id : null).toBe('reopened');
+    }
+  });
+
+  it('entre puras canceladas se lee la última', () => {
+    const first = inspection({
+      id: 'first',
+      status: 'cancelled',
+      cancelled_at: '2026-08-02T00:00:00.000Z',
+      cancellation_reason: 'Site closed',
+    });
+    const last = inspection({
+      id: 'last',
+      status: 'cancelled',
+      cancelled_at: '2026-08-09T00:00:00.000Z',
+      cancellation_reason: 'Strike',
+    });
+
+    expect(currentPeriod([first, last])?.id).toBe('last');
+    expect(currentPeriod([last, first])?.id).toBe('last');
+  });
+
+  it('ordena de enero a diciembre y desempata por plantilla', () => {
+    const ruleA = rule({ id: 'ra', template_id: TEMPLATE_A, created_at: '2020-01-01T00:00:00.000Z' });
+    const ruleB = rule({
+      id: 'rb',
+      template_id: TEMPLATE_B,
+      template_name: 'Fire extinguishers',
+      created_at: '2020-01-01T00:00:00.000Z',
+    });
+
+    const entries = projectYear([ruleA, ruleB], [], '2026');
+
+    expect(entries[0]?.kind === 'unopened' ? entries[0].period.period_start : null).toBe(
+      '2026-01-01',
+    );
+    expect(entries[0]?.kind === 'unopened' ? entries[0].period.template_name : null).toBe(
+      'Fire extinguishers',
+    );
+  });
+});
+
+describe('el año más antiguo al que se puede retroceder', () => {
+  it('sin reglas ni períodos, es el año en curso', () => {
+    expect(earliestEligibleYear([], [], '2026')).toBe('2026');
+  });
+
+  it('retrocede hasta la regla más vieja', () => {
+    const oldRule = rule({ created_at: '2022-06-01T00:00:00.000Z' });
+
+    expect(earliestEligibleYear([oldRule], [], '2026')).toBe('2022');
+  });
+
+  it('retrocede hasta el período más viejo', () => {
+    const oldPeriod = inspection({ period_start: '2021-01-01' });
+
+    expect(earliestEligibleYear([], [oldPeriod], '2026')).toBe('2021');
+  });
+
+  it('no retrocede más allá de lo que hay', () => {
+    const recentRule = rule({ created_at: '2025-06-01T12:00:00.000Z' });
+
+    expect(earliestEligibleYear([recentRule], [], '2026')).toBe('2025');
+  });
+});
+
+describe('los conteos del pie del calendario', () => {
+  it('reparte cada entrada en un solo cubo, y suman el total', () => {
+    const entries: YearEntry[] = [
+      { kind: 'unopened', period: { site_id: SITE, template_id: 't', template_name: 'x', period_start: '2026-01-01' } },
+      { kind: 'opened', inspection: inspection({ inspector_id: null, inspector_name: null }) },
+      { kind: 'opened', inspection: inspection({ inspector_id: USER, inspector_name: 'Dana Okafor' }) },
+    ];
+
+    expect(yearStats(entries)).toEqual({ total: 3, assigned: 1, unassigned: 1, notOpened: 1 });
+  });
+
+  it('un período cancelado cuenta como resuelto, no como pendiente', () => {
+    const cancelled = inspection({
+      inspector_id: null,
+      inspector_name: null,
+      cancelled_at: '2026-08-05T00:00:00.000Z',
+      cancellation_reason: 'Site closed',
+      status: 'cancelled',
+    });
+
+    expect(yearStats([{ kind: 'opened', inspection: cancelled }])).toEqual({
+      total: 1,
+      assigned: 1,
+      unassigned: 0,
+      notOpened: 0,
+    });
   });
 });

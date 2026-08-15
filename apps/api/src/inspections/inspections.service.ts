@@ -117,22 +117,31 @@ export class InspectionsService {
         await this.requireInspector(client, input.default_inspector_id, current.site_id);
       }
 
-      const { rowCount } = await client.query(
-        `UPDATE inspection_schedule
-            SET default_inspector_id = CASE WHEN $2::bool
-                                            THEN $3::uuid ELSE default_inspector_id END,
-                deactivated_at = CASE WHEN $4::bool
-                                      THEN CASE WHEN $5::bool THEN now() ELSE NULL END
-                                      ELSE deactivated_at END
-          WHERE id = $1`,
-        [
-          id,
-          input.default_inspector_id !== undefined,
-          input.default_inspector_id ?? null,
-          input.deactivated !== undefined,
-          input.deactivated ?? false,
-        ],
-      );
+      // Reactivar (deactivated: false) vuelve a chocar contra el mismo parcial de 0008
+      // si mientras tanto se creó otra regla activa para la misma plantilla y sitio.
+      const { rowCount } = await client
+        .query(
+          `UPDATE inspection_schedule
+              SET default_inspector_id = CASE WHEN $2::bool
+                                              THEN $3::uuid ELSE default_inspector_id END,
+                  deactivated_at = CASE WHEN $4::bool
+                                        THEN CASE WHEN $5::bool THEN now() ELSE NULL END
+                                        ELSE deactivated_at END
+            WHERE id = $1`,
+          [
+            id,
+            input.default_inspector_id !== undefined,
+            input.default_inspector_id ?? null,
+            input.deactivated !== undefined,
+            input.deactivated ?? false,
+          ],
+        )
+        .catch((caught: unknown) => {
+          if (isUniqueViolation(caught)) {
+            throw scheduleAlreadyActive(current.site_id, current.template_id);
+          }
+          throw caught;
+        });
 
       if (rowCount === 0) throw inspectionNotFound();
 
@@ -567,6 +576,7 @@ const SCHEDULE_SELECT = `
          t.name AS template_name,
          s.default_inspector_id,
          ${INSPECTOR_NAME_EXPR('dp')} AS default_inspector_name,
+         s.created_at,
          s.deactivated_at
     FROM inspection_schedule s
     JOIN template t ON t.id = s.template_id
@@ -607,6 +617,7 @@ interface ScheduleRow extends Record<string, unknown> {
   template_name: string;
   default_inspector_id: string | null;
   default_inspector_name: string | null;
+  created_at: Date;
   deactivated_at: Date | null;
 }
 
@@ -646,6 +657,7 @@ function toSchedule(row: ScheduleRow): InspectionSchedule {
     template_name: row.template_name,
     default_inspector_id: row.default_inspector_id,
     default_inspector_name: row.default_inspector_name,
+    created_at: row.created_at.toISOString(),
     deactivated_at: row.deactivated_at?.toISOString() ?? null,
   };
 }

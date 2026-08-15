@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   InspectionSchedule,
@@ -29,6 +29,7 @@ const listSchedules = vi.hoisted(() => vi.fn());
 const createSchedule = vi.hoisted(() => vi.fn());
 const updateSchedule = vi.hoisted(() => vi.fn());
 const listScheduled = vi.hoisted(() => vi.fn());
+const createScheduledInspection = vi.hoisted(() => vi.fn());
 const assignInspector = vi.hoisted(() => vi.fn());
 const cancelScheduledInspection = vi.hoisted(() => vi.fn());
 const useAppSession = vi.hoisted(() => vi.fn());
@@ -41,6 +42,7 @@ vi.mock('../../api/inspections', () => ({
   createSchedule,
   updateSchedule,
   listScheduled,
+  createScheduledInspection,
   assignInspector,
   cancelScheduledInspection,
 }));
@@ -72,6 +74,7 @@ function rule(overrides: Partial<InspectionSchedule> = {}): InspectionSchedule {
     template_name: 'Monthly general workplace inspection',
     default_inspector_id: null,
     default_inspector_name: null,
+    created_at: '2020-01-01T00:00:00.000Z',
     deactivated_at: null,
     ...overrides,
   };
@@ -141,6 +144,9 @@ beforeEach(() => {
   createSchedule.mockReset().mockResolvedValue(rule());
   updateSchedule.mockReset().mockResolvedValue(rule({ deactivated_at: '2026-08-05T00:00:00.000Z' }));
   listScheduled.mockReset().mockResolvedValue([inspection()]);
+  createScheduledInspection.mockReset().mockResolvedValue(
+    inspection({ period_start: '2026-12-01', period_end: '2026-12-31', inspector_id: CANDIDATE }),
+  );
   assignInspector.mockReset().mockResolvedValue(inspection({ inspector_id: CANDIDATE }));
   cancelScheduledInspection.mockReset().mockResolvedValue(inspection());
   useAppSession.mockReset().mockReturnValue(session('hs_coordinator'));
@@ -152,12 +158,21 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+/** Abre el menú de la fila de agosto y devuelve el menú, con las acciones que ofrezca. */
+async function openPeriodMenu(): Promise<HTMLElement> {
+  fireEvent.click(await screen.findByRole('button', { name: /More actions for August/ }));
+
+  return screen.getByRole('menu');
+}
+
 describe('quién puede administrar', () => {
   it('el coordinador ve asignar, cancelar y nueva regla', async () => {
     renderRoute();
 
     expect(await screen.findByLabelText('Assign')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Cancel this period' })).toBeTruthy();
+    expect(
+      within(await openPeriodMenu()).getByRole('menuitem', { name: 'Cancel this period' }),
+    ).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Create rule' })).toBeTruthy();
   });
 
@@ -171,11 +186,42 @@ describe('quién puede administrar', () => {
 
     renderRoute();
 
-    // Aparece dos veces: en la regla y en el período que esa regla abrió.
-    expect((await screen.findAllByText('Monthly general workplace inspection')).length).toBe(2);
+    // Aparece en la regla y en las doce casillas del año que esa regla proyecta.
+    expect((await screen.findAllByText('Monthly general workplace inspection')).length).toBe(13);
     expect(screen.queryByLabelText('Assign')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Cancel this period' })).toBeNull();
+    expect(screen.queryByLabelText('Default inspector')).toBeNull();
+    expect(screen.getByText('Default inspector: none')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /More actions/ })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Create rule' })).toBeNull();
+    expect(screen.queryByLabelText('Inspector')).toBeNull();
+    expect(screen.queryByText(/Open this month/)).toBeNull();
+  });
+});
+
+describe('el inspector por defecto de la regla', () => {
+  it('el coordinador lo elige con un selector, no solo lo lee', async () => {
+    renderRoute();
+
+    const select = await screen.findByLabelText('Default inspector');
+    await within(select).findByRole('option', { name: 'Dana Okafor (E-4471)' });
+    fireEvent.change(select, { target: { value: CANDIDATE } });
+
+    await waitFor(() => {
+      expect(updateSchedule).toHaveBeenCalledWith(RULE, { default_inspector_id: CANDIDATE });
+    });
+  });
+
+  it('elegir "None" lo limpia', async () => {
+    listSchedules.mockResolvedValue([rule({ default_inspector_id: CANDIDATE, default_inspector_name: 'Dana Okafor' })]);
+
+    renderRoute();
+
+    const select = await screen.findByLabelText('Default inspector');
+    fireEvent.change(select, { target: { value: '' } });
+
+    await waitFor(() => {
+      expect(updateSchedule).toHaveBeenCalledWith(RULE, { default_inspector_id: null });
+    });
   });
 });
 
@@ -183,22 +229,38 @@ describe('lo que no tiene inspector', () => {
   it('lo marca y explica que no está en la lista de nadie', async () => {
     renderRoute();
 
-    expect(await screen.findByText('Unassigned')).toBeTruthy();
+    expect(
+      await screen.findByText('Unassigned', { selector: '.status-pill' }),
+    ).toBeTruthy();
     expect(screen.getByText(/appear in nobody's pending list/)).toBeTruthy();
   });
 
-  it('asignar llama al endpoint con el candidato elegido', async () => {
+  /** Elegir no manda nada; el botón sí. Recorrer la lista con el teclado no asigna. */
+  it('asignar llama al endpoint con el candidato elegido, y recién al confirmar', async () => {
     renderRoute();
 
     // La opción, no solo la etiqueta: el `<select>` se dibuja antes de que lleguen los
     // candidatos, y un `change` a un valor que todavía no existe no cambia nada.
-    await screen.findByRole('option', { name: 'Dana Okafor (E-4471)' });
-    const select = screen.getByLabelText('Assign');
+    const select = await screen.findByLabelText('Assign');
+    await within(select).findByRole('option', { name: 'Dana Okafor (E-4471)' });
     fireEvent.change(select, { target: { value: CANDIDATE } });
+
+    expect(assignInspector).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Assign inspector' }));
 
     await waitFor(() => {
       expect(assignInspector).toHaveBeenCalledWith(SCHEDULED, CANDIDATE);
     });
+  });
+
+  /** Sin elegir a nadie no hay nada que mandar, y el botón lo dice apagándose. */
+  it('el botón nace deshabilitado', async () => {
+    renderRoute();
+
+    const button = await screen.findByRole('button', { name: 'Assign inspector' });
+
+    expect(button.hasAttribute('disabled')).toBe(true);
   });
 
   it('pide los candidatos de la planta de la fila', async () => {
@@ -222,46 +284,180 @@ describe('cuando el servidor rechaza la asignación', () => {
 
     renderRoute();
 
-    await screen.findByRole('option', { name: 'Dana Okafor (E-4471)' });
-    fireEvent.change(screen.getByLabelText('Assign'), { target: { value: CANDIDATE } });
+    const select = await screen.findByLabelText('Assign');
+    await within(select).findByRole('option', { name: 'Dana Okafor (E-4471)' });
+    fireEvent.change(select, { target: { value: CANDIDATE } });
+    fireEvent.click(screen.getByRole('button', { name: 'Assign inspector' }));
 
     expect(await screen.findByText(/no active access/)).toBeTruthy();
-    expect(screen.getByText('Unassigned')).toBeTruthy();
+    expect(screen.getByText('Unassigned', { selector: '.status-pill' })).toBeTruthy();
+    // El selector vuelve a lo que la fila tiene, no se queda con el intento fallido.
+    expect((select as HTMLSelectElement).value).toBe('');
   });
 });
 
 describe('cancelar', () => {
-  it('no se puede enviar sin motivo', async () => {
+  /** Abre el modal desde el menú de la fila y devuelve su botón de confirmar. */
+  const openDialog = async (): Promise<HTMLElement> => {
+    const menu = await openPeriodMenu();
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Cancel this period' }));
+
+    return screen.getByRole('button', { name: 'Confirm cancellation' });
+  };
+
+  it('no se ofrece en el cuerpo de la fila, sino en el menú', async () => {
     renderRoute();
 
-    const button = await screen.findByRole('button', { name: 'Cancel this period' });
+    await screen.findByRole('button', { name: /More actions for August/ });
+    expect(screen.queryByRole('menuitem', { name: 'Cancel this period' })).toBeNull();
+  });
 
-    expect(button.hasAttribute('disabled')).toBe(true);
+  it('el motivo no se pide en la fila, sino al confirmar', async () => {
+    renderRoute();
+
+    const menu = await openPeriodMenu();
+    expect(screen.queryByLabelText('Cancel with a reason')).toBeNull();
+
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Cancel this period' }));
+    expect(screen.getByLabelText('Cancel with a reason')).toBeTruthy();
+  });
+
+  it('no se puede confirmar sin motivo', async () => {
+    renderRoute();
+
+    const confirm = await openDialog();
+
+    expect(confirm.hasAttribute('disabled')).toBe(true);
 
     fireEvent.change(screen.getByLabelText('Cancel with a reason'), {
       target: { value: 'plant shutdown' },
     });
 
-    expect(button.hasAttribute('disabled')).toBe(false);
+    expect(confirm.hasAttribute('disabled')).toBe(false);
   });
 
   it('manda el motivo escrito', async () => {
     renderRoute();
 
-    fireEvent.change(await screen.findByLabelText('Cancel with a reason'), {
+    const confirm = await openDialog();
+
+    fireEvent.change(screen.getByLabelText('Cancel with a reason'), {
       target: { value: 'plant shutdown' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel this period' }));
+    fireEvent.click(confirm);
 
     await waitFor(() => {
       expect(cancelScheduledInspection).toHaveBeenCalledWith(SCHEDULED, 'plant shutdown');
     });
   });
 
-  it('avisa que no se deshace', async () => {
+  it('avisa que no se deshace al confirmar', async () => {
     renderRoute();
 
-    expect(await screen.findByText(/cannot be undone/)).toBeTruthy();
+    await openDialog();
+
+    expect(screen.getByText(/cannot be undone/)).toBeTruthy();
+  });
+
+  /**
+   * La otra mitad de "no se deshace": el mes sigue debiéndose. El menú del mes cancelado
+   * no ofrece cancelar de nuevo ni asignar —no hay nada que asignar—, sino la única salida
+   * que el motor acepta, que es programarlo otra vez como una fila nueva.
+   */
+  describe('el mes cancelado', () => {
+    beforeEach(() => {
+      listScheduled.mockResolvedValue([
+        inspection({
+          status: 'cancelled',
+          cancelled_at: '2026-08-05T00:00:00.000Z',
+          cancellation_reason: 'Plant shutdown',
+        }),
+      ]);
+    });
+
+    it('se puede volver a programar desde el menú, con inspector y todo', async () => {
+      renderRoute();
+
+      fireEvent.click(
+        within(await openPeriodMenu()).getByRole('menuitem', {
+          name: 'Schedule this month again',
+        }),
+      );
+
+      const dialog = screen.getByRole('dialog');
+      const select = within(dialog).getByLabelText('Inspector');
+      await within(select).findByRole('option', { name: 'Dana Okafor (E-4471)' });
+      fireEvent.change(select, { target: { value: CANDIDATE } });
+
+      fireEvent.click(
+        within(dialog).getByRole('button', { name: /Schedule this month again/ }),
+      );
+
+      await waitFor(() => {
+        expect(createScheduledInspection).toHaveBeenCalledWith({
+          site_id: SITE,
+          template_id: TEMPLATE,
+          period_start: '2026-08-01',
+          inspector_id: CANDIDATE,
+        });
+      });
+    });
+
+    it('el diálogo avisa que la cancelación queda igual', async () => {
+      renderRoute();
+
+      fireEvent.click(
+        within(await openPeriodMenu()).getByRole('menuitem', {
+          name: 'Schedule this month again',
+        }),
+      );
+
+      expect(screen.getByText(/cancellation stays on the record/)).toBeTruthy();
+    });
+
+    it('no ofrece asignar ni cancelar sobre lo que ya está cancelado', async () => {
+      renderRoute();
+
+      const menu = await openPeriodMenu();
+
+      expect(menu.textContent).toBe('Schedule this month again');
+      expect(screen.queryByRole('menuitem', { name: 'Cancel this period' })).toBeNull();
+      expect(screen.queryByLabelText('Assign')).toBeNull();
+    });
+
+    it('un jhsc_member lo lee cancelado y no tiene menú', async () => {
+      useAppSession.mockReturnValue(session('jhsc_member'));
+
+      renderRoute();
+
+      expect(await screen.findByText('Cancelled: Plant shutdown')).toBeTruthy();
+      expect(screen.queryByRole('button', { name: /More actions/ })).toBeNull();
+    });
+  });
+});
+
+/**
+ * Reprogramar un mes que ya cerró devuelve una fila `missed` —el estado lo deriva el
+ * servidor de la fecha, no de una decisión—, y sin explicación eso se lee como que
+ * reprogramar no sirvió de nada.
+ */
+describe('el mes omitido', () => {
+  it('dice que igual se puede enviar', async () => {
+    listScheduled.mockResolvedValue([
+      inspection({ status: 'missed', inspector_id: CANDIDATE, inspector_name: 'Dana Okafor' }),
+    ]);
+
+    renderRoute();
+
+    expect(await screen.findByText(/It can still be submitted/)).toBeTruthy();
+  });
+
+  it('sin inspector, dice que primero hay que asignarlo', async () => {
+    listScheduled.mockResolvedValue([inspection({ status: 'missed' })]);
+
+    renderRoute();
+
+    expect(await screen.findByText(/Assign an inspector/)).toBeTruthy();
   });
 });
 
@@ -315,6 +511,64 @@ describe('la nueva regla', () => {
   });
 });
 
+describe('el calendario del año', () => {
+  it('el año en curso muestra doce meses, once de ellos sin abrir', async () => {
+    renderRoute();
+
+    await screen.findByText('August');
+    expect(
+      screen.getAllByText('Not opened yet', { selector: '.status-pill' }).length,
+    ).toBe(11);
+  });
+
+  it('la flecha adelante lleva a un año entero sin abrir', async () => {
+    renderRoute();
+
+    const heading = await screen.findByRole('heading', { level: 3 });
+    const currentYear = Number(heading.textContent);
+
+    fireEvent.click(screen.getByRole('button', { name: `${currentYear + 1} →` }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 3 }).textContent).toBe(String(currentYear + 1));
+    });
+    expect(
+      screen.getAllByText('Not opened yet', { selector: '.status-pill' }).length,
+    ).toBe(12);
+  });
+
+  it('abrir un mes futuro desde su casilla lo programa con el inspector elegido', async () => {
+    renderRoute();
+
+    const heading = await screen.findByRole('heading', { level: 3 });
+    const currentYear = Number(heading.textContent);
+    const nextYear = currentYear + 1;
+
+    fireEvent.click(screen.getByRole('button', { name: `${nextYear} →` }));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 3 }).textContent).toBe(String(nextYear));
+    });
+
+    const decemberRow = (await screen.findByText('December')).closest('li');
+    if (!decemberRow) throw new Error('no se encontró la fila de diciembre');
+
+    const select = within(decemberRow).getByLabelText('Inspector');
+    await within(select).findByRole('option', { name: 'Dana Okafor (E-4471)' });
+    fireEvent.change(select, { target: { value: CANDIDATE } });
+
+    fireEvent.click(within(decemberRow).getByRole('button', { name: /Open this month/ }));
+
+    await waitFor(() => {
+      expect(createScheduledInspection).toHaveBeenCalledWith({
+        site_id: SITE,
+        template_id: TEMPLATE,
+        period_start: `${nextYear}-12-01`,
+        inspector_id: CANDIDATE,
+      });
+    });
+  });
+});
+
 /**
  * Toda la razón de las tres lecturas de apoyo. Si esto se pone rojo es que algún campo
  * volvió a mostrarse como identificador.
@@ -327,7 +581,9 @@ describe('nombres y no identificadores', () => {
 
     const { container } = renderRoute();
 
-    await screen.findByText('Dana Okafor');
+    // El selector de la fila es el que muestra al inspector asignado, con su número.
+    const select = await screen.findByLabelText('Assign');
+    await within(select).findByRole('option', { name: 'Dana Okafor (E-4471)' });
 
     expect(container.textContent).not.toMatch(
       /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i,

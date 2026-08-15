@@ -475,6 +475,24 @@ describe('los nombres en el listado', () => {
 
     expect(rule?.default_inspector_name).toBe('Dana Okafor');
   });
+
+  it('lleva el instante en que la regla se creó', async () => {
+    const before = new Date();
+    await createSchedule(db.app, SITE_CLOSED, templateId, inspector.accountId);
+    const after = new Date();
+
+    const rules = await stack.inspections.listSchedules(
+      session(coordinator, 'hs_coordinator', [SITE_A, SITE_CLOSED]),
+    );
+    const rule = rules.find(
+      (item) => item.site_id === SITE_CLOSED && item.default_inspector_id === inspector.accountId,
+    );
+
+    expect(rule?.created_at).toBeDefined();
+    const createdAt = new Date(rule!.created_at);
+    expect(createdAt.getTime()).toBeGreaterThanOrEqual(before.getTime());
+    expect(createdAt.getTime()).toBeLessThanOrEqual(after.getTime());
+  });
 });
 
 describe('la regla duplicada', () => {

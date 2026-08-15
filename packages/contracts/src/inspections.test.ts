@@ -94,6 +94,7 @@ describe('inspectionScheduleSchema', () => {
       template_name: 'Monthly general workplace inspection',
       default_inspector_id: ACCOUNT_ID,
       default_inspector_name: 'Dana Okafor',
+      created_at: '2026-01-01T00:00:00.000Z',
       deactivated_at: null,
     });
 
@@ -109,6 +110,7 @@ describe('inspectionScheduleSchema', () => {
       template_name: 'Monthly general workplace inspection',
       default_inspector_id: null,
       default_inspector_name: null,
+      created_at: '2026-01-01T00:00:00.000Z',
       deactivated_at: null,
     });
 

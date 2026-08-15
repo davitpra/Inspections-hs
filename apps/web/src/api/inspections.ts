@@ -4,6 +4,7 @@ import {
   scheduledInspectionSchema,
   siteSchema,
   templateOptionSchema,
+  type CreateScheduledInspection,
   type InspectionSchedule,
   type InspectorOption,
   type ScheduledInspection,
@@ -91,6 +92,20 @@ export async function updateSchedule(
 export async function listScheduled(): Promise<ScheduledInspection[]> {
   return get('/scheduled-inspections', (value) =>
     z.array(scheduledInspectionSchema).parse(value),
+  );
+}
+
+/**
+ * Programa fuera del calendario: la vía por la que el coordinador abre a mano un mes
+ * que el trabajo automático todavía no alcanzó. La versión no viaja — la congela el
+ * servidor a la más alta publicada en este instante, y esa es la elección que la casilla
+ * de la consola le nombra antes de llamar a esto.
+ */
+export async function createScheduledInspection(
+  body: CreateScheduledInspection,
+): Promise<ScheduledInspection> {
+  return send('POST', '/scheduled-inspections', body, (value) =>
+    scheduledInspectionSchema.parse(value),
   );
 }
 

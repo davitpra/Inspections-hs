@@ -6,8 +6,9 @@ import { queryKeys } from '../../api/query-keys';
 import { useAppSession } from '../../app/session-context';
 import { SitePicker } from '../../components/SitePicker';
 import { canAdministerScheduling } from '../permissions';
+import { CalendarIcon, PinIcon } from './icons';
 import { PeriodsSection } from './PeriodsSection';
-import { unassignedNotice } from './presentation';
+import { currentCivilYear, isUnassigned, unassignedNotice } from './presentation';
 import { RulesSection } from './RulesSection';
 
 /**
@@ -34,6 +35,7 @@ export function SchedulingRoute(): React.JSX.Element {
 
   const sites = useQuery({ queryKey: queryKeys.sites(), queryFn: listSites, retry: false });
   const [chosenSite, setChosenSite] = useState<string | null>(null);
+  const [year, setYear] = useState(() => currentCivilYear());
 
   const siteId = chosenSite ?? account?.siteScope[0] ?? '';
 
@@ -57,24 +59,56 @@ export function SchedulingRoute(): React.JSX.Element {
   const rules = (schedules.data ?? []).filter((rule) => rule.site_id === siteId);
   const periods = (scheduled.data ?? []).filter((entry) => entry.site_id === siteId);
   const notice = unassignedNotice(periods);
+  const firstUnassigned = periods.find(isUnassigned);
 
   return (
     <>
-      <h1>Scheduling</h1>
+      {/*
+        El título a la izquierda y la planta a la derecha, en la misma línea: la planta no
+        es un filtro más de la pantalla, es de qué planta habla TODO lo que sigue.
+      */}
+      <header className="scheduling__top">
+        <div className="scheduling__header">
+          <h1>Scheduling</h1>
+          <p className="scheduling__subtitle">
+            Assign an inspector to each month to ensure inspections are completed on time.
+          </p>
+        </div>
 
-      <SitePicker
-        sites={sites.data ?? []}
-        value={siteId}
-        onChange={setChosenSite}
-        siteName={siteName}
-      />
+        <div className="site-card">
+          <span className="site-card__icon">
+            <PinIcon />
+          </span>
+          <SitePicker
+            sites={sites.data ?? []}
+            value={siteId}
+            onChange={setChosenSite}
+            siteName={siteName}
+          />
+        </div>
+      </header>
 
       {schedules.isError || scheduled.isError ? (
         <p className="notice">This view needs a connection.</p>
       ) : null}
       {schedules.isLoading || scheduled.isLoading ? <p>Loading…</p> : null}
 
-      {notice ? <p className="notice notice--warn">{notice}</p> : null}
+      {notice ? (
+        <div className="notice-card">
+          <div className="notice-card__body">
+            <span className="notice-card__icon">
+              <CalendarIcon size={22} />
+            </span>
+            <p className="notice-card__text">{notice}</p>
+          </div>
+
+          {firstUnassigned ? (
+            <a href={`#period-${firstUnassigned.id}`} className="choices__button notice-card__cta">
+              View unassigned ({periods.filter(isUnassigned).length})
+            </a>
+          ) : null}
+        </div>
+      ) : null}
 
       <RulesSection
         rules={rules}
@@ -83,7 +117,14 @@ export function SchedulingRoute(): React.JSX.Element {
         ready={schedules.isSuccess}
       />
 
-      <PeriodsSection periods={periods} siteId={siteId} canAdminister={canAdminister} />
+      <PeriodsSection
+        rules={rules}
+        periods={periods}
+        siteId={siteId}
+        canAdminister={canAdminister}
+        year={year}
+        onYearChange={setYear}
+      />
     </>
   );
 }
