@@ -8,7 +8,7 @@ import type {
 /**
  * Cómo se lee la consola de programación: etiquetas y clases, sin marcado.
  *
- * Aparte del componente por la misma razón que `action-permissions.ts`: lo que importa
+ * Aparte del componente por la misma razón que `src/permissions/`: lo que importa
  * es la decisión y el nombre de cada cosa, y eso se prueba sin renderizar nada.
  */
 

@@ -5,7 +5,6 @@ import {
   type Incident,
   type IncidentState,
   type RegulatoryClockDto,
-  type Session,
 } from '@hs/contracts';
 
 import {
@@ -14,26 +13,14 @@ import {
   INCIDENT_STATE_LABELS,
   OBLIGATION_LABELS,
   TREATMENT_LABELS,
-  availableTransitions,
   clockOrigin,
   clockStatus,
   hadField,
   incidentTransitionLabel,
-} from './incident-presentation';
+} from './incidents';
 
 const PERSON = '11111111-1111-4111-8111-111111111111';
 const USER = '22222222-2222-4222-8222-222222222222';
-
-function session(role: Session['role']): Session {
-  return {
-    userId: USER,
-    personId: PERSON,
-    role,
-    siteScope: ['33333333-3333-4333-8333-333333333333'],
-    recordsFrom: null,
-    recordsTo: null,
-  };
-}
 
 function incident(overrides: Partial<Incident> = {}): Incident {
   return {
@@ -73,52 +60,6 @@ function incident(overrides: Partial<Incident> = {}): Incident {
     ...overrides,
   };
 }
-
-describe('qué botones ofrece la pantalla', () => {
-  it('el supervisor que reportó no puede investigar ni cerrar', () => {
-    expect(availableTransitions(incident(), session('supervisor'))).toEqual([]);
-  });
-
-  it('gerencia tampoco: §4 dice que investigar y cerrar son del coordinador', () => {
-    expect(availableTransitions(incident(), session('management'))).toEqual([]);
-  });
-
-  it('el coordinador puede investigar y cerrar un primeros auxilios', () => {
-    const available = availableTransitions(incident(), session('hs_coordinator'));
-
-    expect(available.map((transition) => transition.to).sort()).toEqual([
-      'closed',
-      'under_investigation',
-    ]);
-  });
-
-  /**
-   * La mitad de la regla que SÍ se puede resolver sin la base: la clasificación decide si
-   * el cierre directo existe siquiera. Las otras dos —causa raíz y acciones abiertas—
-   * dependen de otras filas y las contesta el servidor.
-   */
-  it('una lesión crítica no ofrece el cierre directo, ni siquiera al coordinador', () => {
-    const available = availableTransitions(
-      incident({ classification: 'critical_injury' }),
-      session('hs_coordinator'),
-    );
-
-    expect(available.map((transition) => transition.to)).toEqual(['under_investigation']);
-  });
-
-  it('sin sesión no se ofrece nada', () => {
-    expect(availableTransitions(incident(), null)).toEqual([]);
-  });
-
-  it('un incidente cerrado ofrece reabrir al coordinador y nada a los demás', () => {
-    const closed = incident({ state: 'closed' });
-
-    expect(
-      availableTransitions(closed, session('hs_coordinator')).map((transition) => transition.to),
-    ).toEqual(['under_investigation']);
-    expect(availableTransitions(closed, session('supervisor'))).toEqual([]);
-  });
-});
 
 describe('cómo se nombran las cosas', () => {
   it('hay una etiqueta por estado y por clasificación', () => {

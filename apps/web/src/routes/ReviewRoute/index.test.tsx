@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ReviewRoute } from './ReviewRoute';
+import { ReviewRoute } from './index';
 
 const findDraft = vi.hoisted(() => vi.fn());
 const loadDraft = vi.hoisted(() => vi.fn());
@@ -18,16 +18,16 @@ const navigate = vi.hoisted(() => vi.fn());
  * `captureEligibility` e `incompleteFindings` viajan SIN doble: son la regla real que
  * este test verifica. Lo que se dobla es la lectura/escritura de Dexie.
  */
-vi.mock('../offline/drafts', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../offline/drafts')>()),
+vi.mock('../../offline/drafts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../offline/drafts')>()),
   findDraft,
   loadDraft,
   documentForDraft,
   signDraft,
 }));
-vi.mock('../offline/outbox', () => ({ enqueue, runOutbox }));
-vi.mock('../offline/prefetch', () => ({ storedTemplateVersion }));
-vi.mock('../app/session-context', () => ({ useAppSession }));
+vi.mock('../../offline/outbox', () => ({ enqueue, runOutbox }));
+vi.mock('../../offline/prefetch', () => ({ storedTemplateVersion }));
+vi.mock('../../app/session-context', () => ({ useAppSession }));
 
 vi.mock('@tanstack/react-router', () => ({
   useParams: () => ({ id: INSPECTION }),

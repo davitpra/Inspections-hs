@@ -7,7 +7,9 @@ import { getAction, transitionAction, uploadEvidence } from '../../api/actions';
 import { queryKeys } from '../../api/query-keys';
 import { useAppSession } from '../../app/session-context';
 import { StateBadge } from '../../components/StateBadge';
-import { canAttempt, STATE_LABELS, formatDate, transitionLabel } from '../action-permissions';
+import { canAttempt } from '../../permissions/actions';
+import { STATE_LABELS, transitionLabel } from '../../presentation/actions';
+import { formatDay } from '../../presentation/dates';
 import { EvidencePicker } from './EvidencePicker';
 
 /**
@@ -80,7 +82,7 @@ export function ActionRoute(): React.JSX.Element {
       <h1>{current.description}</h1>
 
       <p>
-        <StateBadge state={current.state} /> Due {formatDate(current.due_at)} — severity{' '}
+        <StateBadge state={current.state} /> Due {formatDay(current.due_at)} — severity{' '}
         {current.severity}
         {current.overdue && current.state !== 'closed' ? (
           <span className="badge badge--overdue">Overdue</span>
@@ -103,7 +105,7 @@ export function ActionRoute(): React.JSX.Element {
         {current.events.map((event) => (
           <li key={event.id} className="list__row">
             <span>
-              {STATE_LABELS[event.to_state]} — {formatDate(event.occurred_at)}
+              {STATE_LABELS[event.to_state]} — {formatDay(event.occurred_at)}
             </span>
             {event.reason ? <p>Reason: {event.reason}</p> : null}
             {event.note ? <p>{event.note}</p> : null}

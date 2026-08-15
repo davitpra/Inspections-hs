@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 
-import { listActions } from '../api/actions';
-import { queryKeys } from '../api/query-keys';
-import { StateBadge } from '../components/StateBadge';
-import { formatDate } from './action-permissions';
+import { listActions } from '../../api/actions';
+import { queryKeys } from '../../api/query-keys';
+import { StateBadge } from '../../components/StateBadge';
+import { formatDay } from '../../presentation/dates';
 
 /**
  * Las acciones correctivas de las plantas del alcance (§3 R3).
@@ -47,9 +47,9 @@ export function ActionsRoute(): React.JSX.Element {
             <StateBadge state={action.state} />
 
             {action.overdue && action.state !== 'closed' ? (
-              <span className="badge badge--overdue">Due {formatDate(action.due_at)}</span>
+              <span className="badge badge--overdue">Due {formatDay(action.due_at)}</span>
             ) : (
-              <span className="badge">Due {formatDate(action.due_at)}</span>
+              <span className="badge">Due {formatDay(action.due_at)}</span>
             )}
 
             {action.escalations.map((escalation) => (

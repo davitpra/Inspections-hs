@@ -1,4 +1,4 @@
-import { hadField } from '../incident-presentation';
+import { hadField } from '../../presentation/incidents';
 
 /**
  * Un campo, o la constancia de que **no existía en la versión de este incidente**.

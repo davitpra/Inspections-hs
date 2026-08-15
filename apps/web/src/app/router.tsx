@@ -27,7 +27,7 @@ import { ReviewRoute } from '../routes/ReviewRoute';
 import { RosterRoute } from '../routes/RosterRoute';
 import { SchedulingRoute } from '../routes/SchedulingRoute';
 import { SignInRoute } from '../routes/SignInRoute';
-import { canAdministerRoster, canAdministerScheduling } from '../routes/permissions';
+import { canAdministerRoster, canAdministerScheduling } from '../permissions/session';
 import { SessionProvider, useAppSession } from './session-context';
 
 /**

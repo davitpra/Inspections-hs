@@ -1,47 +1,23 @@
-import {
-  incidentTransitionsAvailable,
-  type BodyPart,
-  type ClockObligation,
-  type Incident,
-  type IncidentClassification,
-  type IncidentState,
-  type IncidentTransition,
-  type OnSiteTreatment,
-  type RegulatoryClockDto,
-  type Session,
+import type {
+  BodyPart,
+  ClockObligation,
+  Incident,
+  IncidentClassification,
+  IncidentState,
+  OnSiteTreatment,
+  RegulatoryClockDto,
 } from '@hs/contracts';
 
+import { formatInstant } from './dates';
+
 /**
- * Qué ofrece la pantalla de un incidente, y cómo se llama cada cosa.
+ * Cómo se nombra cada cosa en las pantallas de incidentes.
  *
- * Aparte del componente para que se pueda probar sin renderizar, igual que
- * `action-permissions.ts`: lo que importa acá es la decisión —qué botones aparecen para
- * quién— y no el marcado que la muestra.
+ * Aparte del componente para que se pueda probar sin renderizar.
  *
  * **Toda la interfaz es en inglés** (§1). Que un incidente guarde su narrativa en
  * español no localiza nada: es un dato sobre el texto, no una preferencia de interfaz.
  */
-
-/**
- * Las transiciones que esta cuenta puede intentar, según la MISMA tabla que el servidor.
- *
- * Filtra por rol y por clasificación —`incidentTransitionsAvailable` ya saca el cierre
- * directo de las tres clasificaciones que obligan a investigar—, y **no** por las otras
- * dos condiciones: que haya causa raíz y que no queden acciones abiertas dependen del
- * estado de otras filas, y media regla copiada acá sería una que puede separarse de su
- * otra mitad. El botón se ofrece y el servidor responde `root_cause_required` o
- * `incident_has_open_actions`, que son errores que se leen.
- */
-export function availableTransitions(
-  incident: Incident,
-  session: Session | null,
-): readonly IncidentTransition[] {
-  if (session === null) return [];
-
-  return incidentTransitionsAvailable(incident.state, incident.classification).filter(
-    (transition) => transition.roles.includes(session.role),
-  );
-}
 
 /** El estado en palabras. Sale del stream del servidor; la UI no lo deriva. */
 export const INCIDENT_STATE_LABELS: Readonly<Record<IncidentState, string>> = {
@@ -133,16 +109,6 @@ export function clockOrigin(clock: RegulatoryClockDto): string {
   return clock.counts_from === 'occurrence'
     ? 'counted from when it happened'
     : 'counted from when it was reported';
-}
-
-/** Fecha y hora: a diferencia de un plazo de acción, 48 horas se leen con la hora. */
-export function formatInstant(value: string): string {
-  return value.replace('T', ' ').slice(0, 16);
-}
-
-/** La fecha sin hora, para las listas. */
-export function formatDay(value: string): string {
-  return value.slice(0, 10);
 }
 
 /**

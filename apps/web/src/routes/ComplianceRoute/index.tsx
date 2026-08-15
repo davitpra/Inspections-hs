@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { generateReport, getCoverage, listReports } from '../../api/compliance';
 import { queryKeys } from '../../api/query-keys';
 import { useAppSession } from '../../app/session-context';
-import { canGenerateComplianceReport } from '../permissions';
+import { canGenerateComplianceReport } from '../../permissions/session';
 import { PeriodCell } from './PeriodCell';
 import { ReportRow } from './ReportRow';
 import { yearChoices, yearOf } from './presentation';

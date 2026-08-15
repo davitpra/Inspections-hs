@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ASSIGNEE, transitionsFrom, type Action, type ActionState, type Session } from '@hs/contracts';
 
-import { canAttempt } from './action-permissions';
+import { canAttempt } from './actions';
 
 const PERSON = '11111111-1111-4111-8111-111111111111';
 const OTHER_PERSON = '22222222-2222-4222-8222-222222222222';

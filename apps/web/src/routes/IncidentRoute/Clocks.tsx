@@ -1,6 +1,6 @@
 import type { RegulatoryClockDto } from '@hs/contracts';
 
-import { OBLIGATION_LABELS, clockOrigin, clockStatus } from '../incident-presentation';
+import { OBLIGATION_LABELS, clockOrigin, clockStatus } from '../../presentation/incidents';
 
 /**
  * Los relojes regulatorios.

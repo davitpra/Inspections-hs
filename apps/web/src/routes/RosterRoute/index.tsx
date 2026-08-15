@@ -6,7 +6,7 @@ import { queryKeys } from '../../api/query-keys';
 import { listPeople } from '../../api/roster';
 import { useAppSession } from '../../app/session-context';
 import { SitePicker } from '../../components/SitePicker';
-import { canAdministerRoster, canInviteFromRoster } from '../permissions';
+import { canAdministerRoster, canInviteFromRoster } from '../../permissions/session';
 import { InviteDialog } from './InviteDialog';
 import { ReissueDialog } from './ReissueDialog';
 import { RemoveAccessDialog } from './RemoveAccessDialog';

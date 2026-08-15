@@ -1,11 +1,7 @@
 import type { Form7Field, Incident } from '@hs/contracts';
 
-import {
-  BODY_PART_LABELS,
-  CLASSIFICATION_LABELS,
-  TREATMENT_LABELS,
-  formatInstant,
-} from '../incident-presentation';
+import { formatInstant } from '../../presentation/dates';
+import { BODY_PART_LABELS, CLASSIFICATION_LABELS, TREATMENT_LABELS } from '../../presentation/incidents';
 
 /**
  * El valor de un campo del Form 7, sacado del incidente.

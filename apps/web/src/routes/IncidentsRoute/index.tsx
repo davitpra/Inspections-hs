@@ -1,13 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 
-import { listIncidents } from '../api/incidents';
-import { queryKeys } from '../api/query-keys';
-import {
-  CLASSIFICATION_LABELS,
-  INCIDENT_STATE_LABELS,
-  formatDay,
-} from './incident-presentation';
+import { listIncidents } from '../../api/incidents';
+import { queryKeys } from '../../api/query-keys';
+import { formatDay } from '../../presentation/dates';
+import { CLASSIFICATION_LABELS, INCIDENT_STATE_LABELS } from '../../presentation/incidents';
 
 /**
  * Los incidentes que esta cuenta puede ver.

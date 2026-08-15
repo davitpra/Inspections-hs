@@ -6,15 +6,9 @@ import type { IncidentTransition } from '@hs/contracts';
 import { getIncident, transitionIncident } from '../../api/incidents';
 import { queryKeys } from '../../api/query-keys';
 import { useAppSession } from '../../app/session-context';
-import {
-  BODY_PART_LABELS,
-  CLASSIFICATION_LABELS,
-  INCIDENT_STATE_LABELS,
-  TREATMENT_LABELS,
-  availableTransitions,
-  formatInstant,
-  incidentTransitionLabel,
-} from '../incident-presentation';
+import { availableTransitions } from '../../permissions/incidents';
+import { formatInstant } from '../../presentation/dates';
+import { BODY_PART_LABELS, CLASSIFICATION_LABELS, INCIDENT_STATE_LABELS, TREATMENT_LABELS, incidentTransitionLabel } from '../../presentation/incidents';
 import { Clocks } from './Clocks';
 import { Field } from './Field';
 import { Investigation } from './Investigation';
@@ -22,9 +16,9 @@ import { Investigation } from './Investigation';
 /**
  * El detalle de un incidente: qué pasó, qué relojes corren, y qué se puede hacer.
  *
- * `incident-presentation` se queda en `routes/` y no baja a esta carpeta: lo importan
- * seis rutas —la lista, el Form 7, la bandeja, la recurrencia, el reporte y ésta—, así
- * que es vocabulario compartido de incidentes y no la lógica de esta pantalla.
+ * El vocabulario de incidentes vive en `src/presentation/incidents.ts` y no en esta
+ * carpeta: lo importan seis rutas —la lista, el Form 7, la bandeja, la recurrencia, el
+ * reporte y ésta—, así que es compartido y no la lógica de esta pantalla.
  *
  * **Los botones salen de `INCIDENT_TRANSITIONS`, no de un `if` escrito acá.** Es la
  * misma tabla que el servicio consulta y que la guarda de 0012 reproduce en SQL.

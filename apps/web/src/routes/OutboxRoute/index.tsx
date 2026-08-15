@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 
-import { queryKeys } from '../api/query-keys';
-import { useAppSession } from '../app/session-context';
-import { UnsyncedIndicator } from '../components/UnsyncedIndicator';
-import { outboxFor, runOutbox } from '../offline/outbox';
+import { queryKeys } from '../../api/query-keys';
+import { useAppSession } from '../../app/session-context';
+import { UnsyncedIndicator } from '../../components/UnsyncedIndicator';
+import { outboxFor, runOutbox } from '../../offline/outbox';
 
 /**
  * La cola de salida, a la vista.

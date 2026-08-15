@@ -1,6 +1,6 @@
 import type { ActionState } from '@hs/contracts';
 
-import { STATE_LABELS } from '../routes/action-permissions';
+import { STATE_LABELS } from '../presentation/actions';
 
 /**
  * El estado de una acción correctiva, en palabras y no en un color.

@@ -1,13 +1,13 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { AcceptInvitationRoute } from './AcceptInvitationRoute';
+import { AcceptInvitationRoute } from './index';
 
 const acceptInvitation = vi.hoisted(() => vi.fn());
 const useSearch = vi.hoisted(() => vi.fn());
 const navigate = vi.hoisted(() => vi.fn());
 
-vi.mock('../api/client', () => ({ sessionClient: { acceptInvitation } }));
+vi.mock('../../api/client', () => ({ sessionClient: { acceptInvitation } }));
 
 vi.mock('@tanstack/react-router', () => ({
   useSearch,

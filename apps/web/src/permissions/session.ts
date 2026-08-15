@@ -25,7 +25,7 @@ import type { Session } from '@hs/contracts';
  * revisar cada llamada para saber cuál era cuál. El nombre de cada una dice qué se está
  * preguntando, que es lo que un `role === 'hs_coordinator'` suelto no dice.
  *
- * Sigue el precedente de `action-permissions.ts`: la decisión aparte del componente, para
+ * Van acá y no en cada ruta porque las cuatro cruzan pantallas, y aparte del componente para
  * poder probarla sin renderizar.
  *
  * Las tres son predicados de tipo y no `boolean` a secas, porque conceder implica haber

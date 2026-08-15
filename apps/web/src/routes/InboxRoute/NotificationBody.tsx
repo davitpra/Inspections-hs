@@ -1,53 +1,18 @@
-import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import type { Notification } from '@hs/contracts';
 
-import { listNotifications } from '../api/actions';
-import { queryKeys } from '../api/query-keys';
-import { formatDate } from './action-permissions';
-import { CLASSIFICATION_LABELS } from './incident-presentation';
+import { formatDay } from '../../presentation/dates';
+import { CLASSIFICATION_LABELS } from '../../presentation/incidents';
 
 /**
- * La bandeja in-app. ADR-011 D9: no hay correo, así que este es el canal.
+ * Qué dice un aviso, por tipo.
  *
- * **El `switch` de abajo es exhaustivo por tipo, y esa exhaustividad es el punto.**
+ * **El `switch` es exhaustivo por tipo, y esa exhaustividad es el punto.**
  * `Notification` es una unión discriminada por `kind` (design D11): agregar un tipo sin
  * decir cómo se muestra es un error de compilación acá, no una tarjeta vacía en
  * producción. El `default` no existe por descuido — `never` es lo que fuerza el error.
  */
-export function InboxRoute(): React.JSX.Element {
-  const notifications = useQuery({
-    queryKey: queryKeys.notifications(),
-    queryFn: listNotifications,
-    retry: false,
-  });
-
-  const rows = notifications.data ?? [];
-
-  return (
-    <>
-      <h1>Inbox</h1>
-
-      {notifications.isError ? <p className="notice">The inbox needs a connection.</p> : null}
-
-      {notifications.isSuccess && rows.length === 0 ? <p>Nothing new.</p> : null}
-
-      <ul className="list">
-        {rows.map((notification) => (
-          <li
-            key={notification.id}
-            className={notification.read_at === null ? 'list__row list__row--unread' : 'list__row'}
-          >
-            <NotificationBody notification={notification} />
-            <span className="badge">{formatDate(notification.created_at)}</span>
-          </li>
-        ))}
-      </ul>
-    </>
-  );
-}
-
-function NotificationBody({
+export function NotificationBody({
   notification,
 }: {
   notification: Notification;
@@ -66,7 +31,7 @@ function NotificationBody({
       return (
         <Link to="/actions/$id" params={{ id: notification.payload.action_id }}>
           You have a corrective action: {notification.payload.description} — due{' '}
-          {formatDate(notification.payload.due_at)}
+          {formatDay(notification.payload.due_at)}
         </Link>
       );
 
@@ -87,7 +52,7 @@ function NotificationBody({
       return (
         <Link to="/incidents/$id" params={{ id: notification.payload.incident_id }}>
           An incident was reported: {CLASSIFICATION_LABELS[notification.payload.classification]}{' '}
-          — happened {formatDate(notification.payload.occurred_at)}
+          — happened {formatDay(notification.payload.occurred_at)}
         </Link>
       );
 

@@ -1,6 +1,6 @@
 import type { RecurrenceSeries } from '@hs/contracts';
 
-import { formatDay } from '../incident-presentation';
+import { formatDay } from '../../presentation/dates';
 
 /**
  * Una serie: el ítem que se repitió, y los hallazgos que la componen listados por id.

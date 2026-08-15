@@ -5,7 +5,7 @@ import { listScheduled, listSchedules, listSites } from '../../api/inspections';
 import { queryKeys } from '../../api/query-keys';
 import { useAppSession } from '../../app/session-context';
 import { SitePicker } from '../../components/SitePicker';
-import { canAdministerScheduling } from '../permissions';
+import { canAdministerScheduling } from '../../permissions/session';
 import { CalendarIcon, PinIcon } from './icons';
 import { PeriodsSection } from './PeriodsSection';
 import { currentCivilYear, isUnassigned, unassignedNotice } from './presentation';

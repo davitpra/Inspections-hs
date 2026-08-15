@@ -12,11 +12,7 @@ import {
 
 import { reportIncident } from '../../api/incidents';
 import { queryKeys } from '../../api/query-keys';
-import {
-  BODY_PART_LABELS,
-  CLASSIFICATION_LABELS,
-  TREATMENT_LABELS,
-} from '../incident-presentation';
+import { BODY_PART_LABELS, CLASSIFICATION_LABELS, TREATMENT_LABELS } from '../../presentation/incidents';
 import { LocationPicker } from './LocationPicker';
 import { PersonPicker } from './PersonPicker';
 

@@ -80,26 +80,43 @@ Todo acceso a la base pasa por `DbService`, y por cuál método importa
   servidor, tests. Un endpoint que llame a estos está fabricando un alcance que no le
   corresponde, y por eso son métodos distintos.
 
-### Rutas grandes
+### Rutas
 
-Una ruta empieza como un solo archivo `src/routes/XRoute.tsx`. Cuando gana
-subcomponentes propios que ya no caben cómodos ahí —de referencia, más de 150-200 líneas
-o tres o más funciones locales con su propio estado o `useQuery`/`useMutation`—, se
-convierte en una carpeta `src/routes/XRoute/` **sin tocar el import en `router.tsx`**,
-que sigue resolviendo `../routes/XRoute` contra el `index.tsx` de la carpeta:
+**Toda ruta es una carpeta `src/routes/XRoute/`**, sin excepción por tamaño. `router.tsx`
+importa `../routes/XRoute` y eso resuelve contra el `index.tsx` de la carpeta, así que
+una ruta puede crecer sin que nadie la reimporte. Adentro:
 
 - `index.tsx` — el componente de ruta y su composición: qué se arma con qué, no cómo se
-  dibuja cada pieza.
+  dibuja cada pieza. En una ruta chica es el único archivo, y está bien.
 - Un archivo por subcomponente con hooks, estado o `useQuery`/`useMutation`
-  (`PersonRow.tsx`, `NewRuleForm.tsx`…). Si un subcomponente casi idéntico aparece en dos
-  rutas, no se duplica: sube a `src/components/` (ver `SitePicker.tsx`).
-- `presentation.ts` + `presentation.test.ts` — la lógica pura (etiquetas, clases,
-  filtros, orden), como ya se hacía antes de este cambio, solo que ahora sin repetir el
-  nombre de la ruta en el nombre del archivo porque la carpeta ya lo da.
+  (`PersonRow.tsx`, `NewRuleForm.tsx`…). Se separa cuando el subcomponente ya no cabe
+  cómodo en `index.tsx` — de referencia, más de 150-200 líneas o tres o más funciones
+  locales. Si un subcomponente casi idéntico aparece en dos rutas, no se duplica: sube a
+  `src/components/` (ver `SitePicker.tsx`, `StateBadge.tsx`).
+- `presentation.ts` + `presentation.test.ts` — la lógica pura de ESTA ruta (etiquetas,
+  clases, filtros, orden). El nombre no repite el de la ruta porque la carpeta ya lo da.
 - `index.test.tsx` — el test de integración de la ruta completa.
 
-`src/components/` sigue siendo solo lo que cruza rutas; un subcomponente que usa una sola
-ruta vive en su carpeta, no ahí.
+`src/components/` es solo lo que cruza rutas; un subcomponente de una sola ruta vive en
+su carpeta, no ahí.
+
+### Permisos y vocabulario compartidos
+
+Lo que cruza rutas y no es un componente no vive en `routes/`, vive en un directorio
+propio al mismo nivel que `api/` y `offline/`. La división es entre decidir y nombrar:
+
+- `src/permissions/` — **qué le ofrece la interfaz a quién**, y nada más:
+  `session.ts` (los predicados por rol), `actions.ts` (`canAttempt`), `incidents.ts`
+  (`availableTransitions`). Es comodidad, no garantía: la garantía es RLS y el rol que
+  comprueba el servidor. Cada uno es una función pura con su `.test.ts` al lado, para
+  poder probar la decisión sin renderizar.
+- `src/presentation/` — **cómo se llama cada cosa en pantalla**: `actions.ts` e
+  `incidents.ts` (las tablas de etiquetas y los textos de botón por PAR de estados),
+  `dates.ts` (`formatDay` y `formatInstant`, que recortan la cadena ISO a propósito —
+  un registro que se defiende ante un regulador se lee en el huso en que se guardó).
+
+Un archivo que tenga las dos cosas está mal partido: el nombre va a mentir sobre la
+mitad que contiene.
 
 ## Invariantes que ningún change puede violar
 
