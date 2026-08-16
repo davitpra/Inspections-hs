@@ -56,7 +56,7 @@ son ADRs en todo salvo el nombre y se promueven para que los agentes las lean ig
 | Capa                  | Elección                                 | ADR      |
 | --------------------- | ---------------------------------------- | -------- |
 | Cliente               | Vite + React + TanStack Router / Query   | 003      |
-| UI                    | Tailwind + shadcn/ui                     | 003      |
+| UI                    | CSS con tokens semánticos, sin framework | —        |
 | Almacén offline       | Dexie (IndexedDB)                        | 001      |
 | Service worker        | Serwist                                  | 001      |
 | Validación compartida | Zod (cliente y servidor, mismo paquete)  | 007      |
@@ -74,6 +74,16 @@ son ADRs en todo salvo el nombre y se promueven para que los agentes las lean ig
 
 El paquete de esquema compartido no es opcional: la validación de la plantilla tiene que
 correr idéntica en el dispositivo offline y en el servidor al recibir el envío.
+
+La UI no tiene ADR pero tampoco está sin decidir: son dos capas de tokens en
+`apps/web/src/index.css` —primitivas y semánticas, el propio archivo explica por qué no
+hay una tercera— y la regla la fuerza el build. `scripts/check-tokens.mjs` corre dentro de
+`pnpm --filter web build` y rechaza cualquier color literal fuera del bloque de tokens,
+todo `var(--x)` que no resuelva, y el uso de una primitiva salteando la capa semántica.
+Antes de proponer Tailwind o shadcn conviene mirar dos cosas: ese script se queda ciego
+ante una utilidad como `bg-emerald-600` —no es un literal ni un `var()`, así que pasa el
+check y saltea la capa igual—, y el precache tiene el presupuesto de
+`scripts/check-service-worker.mjs`, que es donde se paga cada primitiva de Radix.
 
 ---
 
