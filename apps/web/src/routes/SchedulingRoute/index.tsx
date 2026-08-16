@@ -6,9 +6,10 @@ import { queryKeys } from '../../api/query-keys';
 import { useAppSession } from '../../app/session-context';
 import { SitePicker } from '../../components/SitePicker';
 import { canAdministerScheduling } from '../../permissions/session';
-import { CalendarIcon, PinIcon } from './icons';
+import { CalendarIcon, InfoIcon, PinIcon } from '../../components/icons';
 import { PeriodsSection } from './PeriodsSection';
-import { currentCivilYear, isUnassigned, unassignedNotice } from './presentation';
+import { currentCivilYear } from '../../presentation/dates';
+import { isUnassigned, unassignedNotice } from './presentation';
 import { RulesSection } from './RulesSection';
 
 /**
@@ -69,7 +70,12 @@ export function SchedulingRoute(): React.JSX.Element {
       */}
       <header className="scheduling__top">
         <div className="scheduling__header">
-          <h1>Scheduling</h1>
+          <div className="scheduling__title">
+            <span className="scheduling__icon">
+              <CalendarIcon size={22} />
+            </span>
+            <h1>Scheduling</h1>
+          </div>
           <p className="scheduling__subtitle">
             Assign an inspector to each month to ensure inspections are completed on time.
           </p>
@@ -88,10 +94,21 @@ export function SchedulingRoute(): React.JSX.Element {
         </div>
       </header>
 
+      {/*
+        El estado de la conexión se lee dentro de la misma pila de tarjetas que todo lo
+        demás, así que tiene la silueta de una tarjeta y no la del `.notice` suelto del
+        resto de la app — que es global y lo dibujan otras cinco rutas.
+      */}
       {schedules.isError || scheduled.isError ? (
-        <p className="notice">This view needs a connection.</p>
+        <p className="status-card status-card--error">
+          <InfoIcon size={20} /> This view needs a connection.
+        </p>
       ) : null}
-      {schedules.isLoading || scheduled.isLoading ? <p>Loading…</p> : null}
+      {schedules.isLoading || scheduled.isLoading ? (
+        <p className="status-card">
+          <CalendarIcon size={20} /> Loading…
+        </p>
+      ) : null}
 
       {notice ? (
         <div className="notice-card">

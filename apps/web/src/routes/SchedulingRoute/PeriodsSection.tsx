@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { InspectionSchedule, ScheduledInspection } from '@hs/contracts';
 
-import { CalendarIcon, GridIcon, ListIcon } from './icons';
+import { CalendarIcon, GridIcon, ListIcon } from '../../components/icons';
 import { earliestEligibleYear, projectYear, yearStats } from './presentation';
 import { PeriodRow } from './PeriodRow';
 import { UnopenedPeriodRow } from './UnopenedPeriodRow';

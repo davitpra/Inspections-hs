@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { ScheduledInspection } from '@hs/contracts';
 
-import { monthName } from './presentation';
+import { monthName } from '../../presentation/dates';
 import { OpenPeriodForm } from './OpenPeriodForm';
 
 /**

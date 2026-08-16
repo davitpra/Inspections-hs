@@ -1,6 +1,7 @@
-import { CalendarIcon } from './icons';
+import { CalendarIcon } from '../../components/icons';
 import { OpenPeriodForm } from './OpenPeriodForm';
-import { monthName, type UnopenedPeriod } from './presentation';
+import { monthName } from '../../presentation/dates';
+import { type UnopenedPeriod } from './presentation';
 
 /**
  * La casilla de un mes que la regla debe y que todavía no es una fila.

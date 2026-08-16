@@ -4,7 +4,7 @@ import type { ScheduledInspection } from '@hs/contracts';
 
 import { cancelScheduledInspection } from '../../api/inspections';
 import { queryKeys } from '../../api/query-keys';
-import { monthName } from './presentation';
+import { monthName } from '../../presentation/dates';
 
 /**
  * Cancelar un período abierto: primero la decisión, después el motivo.

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { MoreIcon } from './icons';
+import { MoreIcon } from '../../components/icons';
 
 /** Una entrada del menú. `tone` marca lo que no se deshace, no lo que es importante. */
 export interface PeriodAction {

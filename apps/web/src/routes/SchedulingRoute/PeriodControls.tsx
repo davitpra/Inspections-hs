@@ -4,7 +4,7 @@ import type { ScheduledInspection } from '@hs/contracts';
 
 import { assignInspector, listInspectorCandidates } from '../../api/inspections';
 import { queryKeys } from '../../api/query-keys';
-import { PersonIcon } from './icons';
+import { PersonIcon } from '../../components/icons';
 import { candidateLabel, inspectorLabel } from './presentation';
 
 /**

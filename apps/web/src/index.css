@@ -123,6 +123,13 @@ button,
   border-radius: var(--radius);
   background: var(--paper);
   color: inherit;
+  /*
+   * Como `input` y `select`. Sin esto, un botón a lo ancho de su contenedor
+   * (`.button--primary`, `.period__action`) mide 100% MÁS 2rem de relleno y 2px de
+   * borde, y se sale de la tarjeta por la derecha: 34px que en una grilla de tarjetas
+   * angostas se ven de inmediato.
+   */
+  box-sizing: border-box;
 }
 
 .choices__button.is-selected {
@@ -368,6 +375,7 @@ select:disabled {
   padding: 0.6rem 1rem;
   display: inline-flex;
   align-items: center;
+  box-sizing: border-box; /* Repite el chrome del `button`, y eso incluye la caja. */
   border: 1px solid var(--brand);
   border-radius: var(--radius);
   color: var(--brand);
@@ -586,6 +594,14 @@ select:disabled {
   border-top-color: var(--state-info);
 }
 
+/* El hueco entre "abierto" y "omitido": la inspección está viva y a tiempo, pero su
+   paquete de campo todavía no está en el dispositivo. No es un fallo —se arregla con un
+   botón— y por eso lleva el ámbar del aviso y no el rojo de lo vencido. */
+.period--not-ready {
+  border-left-color: var(--warn-ink);
+  border-top-color: var(--warn-ink);
+}
+
 /* Sin `border-top-width` propia: no hay estado que remarcar, solo un hueco por llenar. */
 .period--unopened {
   border-style: dashed;
@@ -646,6 +662,20 @@ select:disabled {
 
 .scheduling__header h1 {
   margin: 0;
+}
+
+/* El ícono al lado del título, igual que en el año del calendario y en cada número del
+   pie: es lo que hace reconocible el bloque de un vistazo, y el encabezado era el único
+   de la consola que no lo tenía. */
+.scheduling__title {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.scheduling__icon {
+  flex: none;
+  color: var(--brand);
 }
 
 .scheduling__subtitle {
@@ -712,6 +742,33 @@ select:disabled {
   border-radius: var(--radius);
   padding: 1rem;
   margin: 0 0 1rem;
+}
+
+/*
+ * Cargando y sin conexión, con la misma silueta que el resto de la consola. Es una clase
+ * de esta pantalla y no el `.notice` compartido a propósito: `.notice` lo dibujan otras
+ * cinco rutas que se leen como texto corrido, y darle borde ahí cambiaría pantallas que
+ * nadie pidió tocar.
+ */
+.status-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.9rem 1rem;
+  margin: 0 0 1rem;
+  color: var(--muted);
+}
+
+.status-card svg {
+  flex: none;
+  color: var(--brand);
+}
+
+.status-card--error,
+.status-card--error svg {
+  color: var(--state-danger);
 }
 
 /* El aviso y su acción lado a lado; en un teléfono la acción cae abajo y a lo ancho, en
@@ -897,18 +954,24 @@ select:disabled {
 /* Un solo renglón: el ícono, el mes con su plantilla debajo, y contra el borde derecho el
    estado y el menú. La plantilla va pegada al mes —no suelta bajo la tarjeta— porque las
    doce filas del año se distinguen justamente por ese par. */
+/* Con `wrap` porque una tarjeta puede llevar DOS píldoras ("Overdue" y el estado del
+   paquete, en la lista del inspector). Sin esto las píldoras se quedaban en el renglón a
+   toda costa y el nombre de la plantilla se partía en cuatro líneas de una palabra. */
 .period__head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.6rem;
 }
 
+/* La base de 8rem es lo que decide quién cede: por debajo de eso el título deja de
+   encogerse y son las píldoras las que bajan al renglón siguiente. */
 .period__title {
   display: flex;
   flex-direction: column;
   gap: 0.1rem;
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 1 1 8rem;
 }
 
 /* Cuadrado teñido y no un ícono suelto: le da al mes un ancla del tamaño del bloque de
@@ -995,7 +1058,9 @@ select:disabled {
 }
 
 .status-pill--open,
-.status-pill--completed {
+.status-pill--completed,
+.status-pill--ready,
+.status-pill--draft {
   background: var(--tint-bg);
   color: var(--state-ok);
   border-color: var(--state-ok);
@@ -1013,7 +1078,14 @@ select:disabled {
   color: var(--muted);
 }
 
-.status-pill--unassigned {
+/*
+ * Lo que espera una acción de alguien. Sin dueño, vencida, o firmada y todavía en el
+ * dispositivo: son tres cosas distintas, pero para quien mira la pantalla son la misma —
+ * algo que no va a resolverse solo.
+ */
+.status-pill--unassigned,
+.status-pill--overdue,
+.status-pill--signed {
   background: var(--warn-bg);
   color: var(--warn-ink);
   border-color: var(--warn-ink);
@@ -1040,8 +1112,12 @@ select:disabled {
   padding: 0.6rem 0;
 }
 
+/* La acción al pie de la tarjeta, sea `button` o link (`.list__action`): a lo ancho y
+   centrada, para que las doce tarjetas de un año ofrezcan el mismo objetivo de toque en
+   el mismo lugar. */
 .period__action {
   width: 100%;
+  justify-content: center;
 }
 
 .stats-bar {

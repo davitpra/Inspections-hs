@@ -2,13 +2,13 @@ import { useState } from "react";
 import type { ScheduledInspection } from "@hs/contracts";
 
 import { CancelPeriodDialog } from "./CancelPeriodDialog";
-import { CalendarIcon } from "./icons";
+import { CalendarIcon } from "../../components/icons";
+import { monthName } from "../../presentation/dates";
 import { ReopenPeriodDialog } from "./ReopenPeriodDialog";
 import {
   inspectorLabel,
   isUnassigned,
   missedNote,
-  monthName,
   statusClass,
   statusPillClass,
   STATUS_LABELS,

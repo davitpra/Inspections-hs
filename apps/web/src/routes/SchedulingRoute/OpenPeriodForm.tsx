@@ -7,7 +7,7 @@ import {
   listTemplates,
 } from '../../api/inspections';
 import { queryKeys } from '../../api/query-keys';
-import { PersonIcon } from './icons';
+import { PersonIcon } from '../../components/icons';
 import { candidateLabel, type UnopenedPeriod } from './presentation';
 
 /**

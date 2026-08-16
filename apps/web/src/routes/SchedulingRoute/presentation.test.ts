@@ -3,15 +3,12 @@ import type { InspectionSchedule, InspectorOption, ScheduledInspection } from '@
 
 import {
   candidateLabel,
-  civilMonth,
-  currentCivilYear,
   currentPeriod,
   currentRules,
   earliestEligibleYear,
   inspectorLabel,
   isUnassigned,
   missedNote,
-  monthName,
   projectYear,
   ruleOwesMonth,
   statusClass,
@@ -228,24 +225,6 @@ describe('el candidato en el selector', () => {
     const bare = candidate({ first_name: null, last_name: null, employee_number: null });
 
     expect(candidateLabel(bare)).toBe(USER);
-  });
-});
-
-describe('el período', () => {
-  it('se lee por mes', () => {
-    expect(monthName('2026-08-01')).toBe('August');
-    expect(monthName('2026-01-01')).toBe('January');
-  });
-});
-
-describe('el mes civil', () => {
-  it('resuelve el mes en la zona de la planta, no en UTC', () => {
-    // 2026-09-01T02:00:00Z es 2026-08-31 en America/Toronto.
-    expect(civilMonth(new Date('2026-09-01T02:00:00.000Z'))).toBe('2026-08');
-  });
-
-  it('el año en curso es el de esa misma fecha civil', () => {
-    expect(currentCivilYear(new Date('2026-09-01T02:00:00.000Z'))).toBe('2026');
   });
 });
 

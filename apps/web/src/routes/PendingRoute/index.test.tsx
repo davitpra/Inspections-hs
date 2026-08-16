@@ -326,7 +326,10 @@ describe('PendingRoute — lo enviado no se lista como borrador', () => {
 
     renderRoute();
 
-    await screen.findByText(/Draft — started 2026-08-01/);
+    // La tarjeta parte lo que antes era una sola cadena: el estado va en la píldora y la
+    // fecha en el subtítulo, debajo del mes.
+    await screen.findByText('Draft');
+    expect(screen.getByText('Started 2026-08-01')).toBeTruthy();
     expect(screen.queryByText('Submitted from this device')).toBeNull();
     expect(screen.queryByText('No drafts in progress on this device.')).toBeNull();
   });
