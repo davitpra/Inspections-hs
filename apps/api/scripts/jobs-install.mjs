@@ -35,6 +35,34 @@ async function installedVersion(client) {
   return rows[0]?.version ?? null;
 }
 
+/**
+ * El plan de migración desde `current`, o `null` si no hay nada que aplicar.
+ *
+ * pg-boss 12 no distingue "el esquema ya está al día" de "no conozco esa versión": las
+ * dos salen por el mismo `assert` con el texto `Version N not found`. Sobre un esquema
+ * en la última versión eso rompe la idempotencia de este script.
+ *
+ * Se desambigua preguntando por la versión anterior: si pg-boss sabe migrar de
+ * `current - 1` a `current`, entonces `current` es la última que conoce y no hay nada
+ * que hacer. Si tampoco la conoce, el esquema lo instaló un pg-boss más nuevo que el de
+ * este repo y hay que fallar de verdad.
+ */
+function migrationPlansFrom(current) {
+  try {
+    return getMigrationPlans(SCHEMA, current);
+  } catch (error) {
+    if (error.code !== 'ERR_ASSERTION') throw error;
+
+    try {
+      getMigrationPlans(SCHEMA, current - 1);
+    } catch {
+      throw error;
+    }
+
+    return null;
+  }
+}
+
 export async function installJobSchema(client) {
   let current = null;
 
@@ -52,9 +80,9 @@ export async function installJobSchema(client) {
     return { action: 'installed' };
   }
 
-  const plans = getMigrationPlans(SCHEMA, Number(current));
+  const plans = migrationPlansFrom(Number(current));
 
-  if (!plans.trim()) return { action: 'up-to-date', version: current };
+  if (plans === null || !plans.trim()) return { action: 'up-to-date', version: current };
 
   await client.query(plans);
   return { action: 'migrated', from: current };
