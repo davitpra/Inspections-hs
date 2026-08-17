@@ -14,6 +14,7 @@
 export * from './document/answers.js';
 export * from './document/conditions.js';
 export * from './document/negative.js';
+export * from './document/progress.js';
 export * from './document/schema.js';
 export * from './document/validate.js';
 export * from './document/visibility.js';

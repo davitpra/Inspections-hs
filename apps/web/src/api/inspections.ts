@@ -4,12 +4,14 @@ import {
   scheduledInspectionSchema,
   siteSchema,
   templateOptionSchema,
+  templateVersionPackageSchema,
   type CreateScheduledInspection,
   type InspectionSchedule,
   type InspectorOption,
   type ScheduledInspection,
   type Site,
   type TemplateOption,
+  type TemplateVersionPackage,
 } from '@hs/contracts';
 import { z } from 'zod';
 
@@ -131,4 +133,29 @@ export async function cancelScheduledInspection(
   );
 }
 
-export type { InspectionSchedule, InspectorOption, ScheduledInspection, Site, TemplateOption };
+/**
+ * El documento congelado de una inspección programada, pedido POR RED.
+ *
+ * Es el mismo endpoint que usa la descarga del paquete de campo, pero este camino NO
+ * guarda nada: sirve para MIRAR una asignación que todavía no se descargó, y descargarla
+ * tiene que seguir siendo un acto explícito. Si esto guardara, un mes futuro quedaría
+ * "listo para el campo" por haberlo ojeado, y la pantalla de inicio reportaría una decisión
+ * que nadie tomó.
+ *
+ * `findActiveInspection` no filtra por fecha de período —solo por `cancelled_at`—, así que
+ * responde igual para un mes que todavía no abrió.
+ */
+export async function getTemplateVersionPackage(id: string): Promise<TemplateVersionPackage> {
+  return get(`/scheduled-inspections/${id}/template-version`, (value) =>
+    templateVersionPackageSchema.parse(value),
+  );
+}
+
+export type {
+  InspectionSchedule,
+  InspectorOption,
+  ScheduledInspection,
+  Site,
+  TemplateOption,
+  TemplateVersionPackage,
+};

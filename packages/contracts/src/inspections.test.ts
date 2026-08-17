@@ -12,6 +12,7 @@ const TEMPLATE_ID = '22222222-2222-4222-8222-222222222222';
 const VERSION_ID = '33333333-3333-4333-8333-333333333333';
 const SCHEDULED_ID = '44444444-4444-4444-8444-444444444444';
 const ACCOUNT_ID = '55555555-5555-4555-8555-555555555555';
+const INSPECTION_ID = '66666666-6666-4666-8666-666666666666';
 
 /** Una inspección programada válida. Cada test la deforma en un solo punto. */
 function validScheduled() {
@@ -31,6 +32,8 @@ function validScheduled() {
     cancelled_at: null,
     cancellation_reason: null,
     status: 'open',
+    inspection_id: null,
+    completed_at: null,
   };
 }
 
@@ -64,6 +67,28 @@ describe('scheduledInspectionSchema', () => {
     const { status: _status, ...withoutStatus } = validScheduled();
 
     expect(scheduledInspectionSchema.safeParse(withoutStatus).success).toBe(false);
+  });
+
+  it('acepta el cierre: el envío y el instante en que se firmó', () => {
+    const result = scheduledInspectionSchema.safeParse({
+      ...validScheduled(),
+      status: 'completed',
+      inspection_id: INSPECTION_ID,
+      completed_at: '2026-08-29T21:00:00.000Z',
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  /**
+   * Nulos, no ausentes. El `LEFT JOIN` produce nulo para todo período sin envío, que es la
+   * mayoría; dejarlos opcionales haría que "no vino el campo" y "no está completado" fueran
+   * estados distintos del mismo hecho.
+   */
+  it('exige los dos campos de cierre aunque estén vacíos', () => {
+    const { inspection_id: _id, completed_at: _at, ...withoutClosure } = validScheduled();
+
+    expect(scheduledInspectionSchema.safeParse(withoutClosure).success).toBe(false);
   });
 
   it('rechaza un estado que no es uno de los cuatro', () => {

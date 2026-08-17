@@ -10,10 +10,14 @@ const listDrafts = vi.hoisted(() => vi.fn());
 const discardDraft = vi.hoisted(() => vi.fn());
 const missingForField = vi.hoisted(() => vi.fn());
 const prefetchInspection = vi.hoisted(() => vi.fn());
+const storedTemplateVersion = vi.hoisted(() => vi.fn());
+const listSites = vi.hoisted(() => vi.fn());
+const listScheduled = vi.hoisted(() => vi.fn());
 const useAppSession = vi.hoisted(() => vi.fn());
 const search = vi.hoisted(() => vi.fn(() => ({}) as { submitted?: 'accepted' }));
 
 vi.mock('../../api/client', () => ({ sessionClient: { request } }));
+vi.mock('../../api/inspections', () => ({ listSites, listScheduled }));
 /**
  * Del almacén se reemplazan las dos escrituras y nada más: `isDiscardable` y
  * `DiscardRefusedError` son la regla real y el error real. Un doble de esos dos dejaría
@@ -24,7 +28,11 @@ vi.mock('../../offline/drafts', async (importOriginal) => ({
   listDrafts,
   discardDraft,
 }));
-vi.mock('../../offline/prefetch', () => ({ missingForField, prefetchInspection }));
+vi.mock('../../offline/prefetch', () => ({
+  missingForField,
+  prefetchInspection,
+  storedTemplateVersion,
+}));
 vi.mock('../../app/session-context', () => ({ useAppSession }));
 vi.mock('../../app/InstallPrompt', () => ({ InstallPrompt: () => null }));
 
@@ -76,16 +84,26 @@ function renderRoute(): void {
 
 /**
  * La lista de pendientes ES el flujo: no hay pantalla intermedia entre ver que una
- * inspección falta descargar y descargarla. Lo que estos tests fijan es que la fila
- * ofrezca UNA acción y que sea la que corresponde al estado del paquete — ofrecer
- * "empezar" sin documento manda al inspector a una pantalla que lo va a rechazar.
+ * inspección falta descargar y descargarla. Lo que estos tests fijan es que la asignación
+ * destacada ofrezca UNA acción y que sea la que corresponde al estado del paquete —
+ * ofrecer "empezar" sin documento manda al inspector a una pantalla que lo va a rechazar.
+ *
+ * `pending()` es una sola inspección VENCIDA: `focusedAssignment` la elige como héroe de
+ * la pantalla en cualquiera de estos tests, así que las mismas aserciones de antes —el
+ * botón, el link, el texto de lo que falta— ahora las produce `AssignmentHero` /
+ * `AssignmentChecklist` y no la grilla del año.
  */
 describe('PendingRoute', () => {
   beforeEach(() => {
     request.mockResolvedValue({ ok: true, value: pending() });
     listDrafts.mockResolvedValue([]);
     discardDraft.mockResolvedValue(true);
-    useAppSession.mockReturnValue({ account: { userId: USER } });
+    storedTemplateVersion.mockResolvedValue(null);
+    listSites.mockResolvedValue([{ id: SITE, code: 'GLE', name: 'Glencoe', deactivated_at: null }]);
+    listScheduled.mockResolvedValue([]);
+    useAppSession.mockReturnValue({
+      account: { userId: USER, siteScope: [SITE], firstName: 'Marie', lastName: 'Tremblay' },
+    });
     search.mockReturnValue({});
   });
 
@@ -112,7 +130,7 @@ describe('PendingRoute', () => {
 
     renderRoute();
 
-    await screen.findByText('Inspections due');
+    await screen.findByText('My inspections');
     expect(screen.queryByText(/sent and accepted/)).toBeNull();
   });
 
@@ -178,6 +196,64 @@ describe('PendingRoute', () => {
 });
 
 /**
+ * Cuál asignación es el héroe de la pantalla, y qué pasa cuando no hay ninguna.
+ */
+describe('PendingRoute — la asignación destacada', () => {
+  const CURRENT = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+
+  beforeEach(() => {
+    listDrafts.mockResolvedValue([]);
+    discardDraft.mockResolvedValue(true);
+    missingForField.mockResolvedValue([]);
+    storedTemplateVersion.mockResolvedValue(null);
+    listSites.mockResolvedValue([{ id: SITE, code: 'GLE', name: 'Glencoe', deactivated_at: null }]);
+    listScheduled.mockResolvedValue([]);
+    useAppSession.mockReturnValue({
+      account: { userId: USER, siteScope: [SITE], firstName: 'Marie', lastName: 'Tremblay' },
+    });
+    search.mockReturnValue({});
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  /** Lo vencido gana sobre cualquier otro mes, incluido el que está en curso. */
+  it('destaca lo vencido más antiguo por sobre un mes al día', async () => {
+    request.mockResolvedValue({
+      ok: true,
+      value: [
+        {
+          id: CURRENT,
+          site_id: SITE,
+          period_start: '2099-01-01',
+          period_end: '2099-01-31',
+          template_name: 'Un mes al día',
+          template_version_id: VERSION,
+          overdue: false,
+        },
+        ...pending(),
+      ],
+    });
+
+    renderRoute();
+
+    expect(await screen.findByText('Monthly general workplace inspection')).toBeTruthy();
+    expect(screen.queryByText('Un mes al día')).toBeNull();
+  });
+
+  /** Sin nada pendiente, la pantalla dice explícitamente que no hay nada que hacer. */
+  it('sin asignación, dice que no hay nada que hacer y no rompe', async () => {
+    request.mockResolvedValue({ ok: true, value: [] });
+
+    renderRoute();
+
+    expect(await screen.findByText('No inspection assigned this month')).toBeTruthy();
+  });
+});
+
+/**
  * Descartar es lo único de esta aplicación que destruye trabajo sin que quede copia en
  * ningún lado: el borrador nunca salió del dispositivo. Lo que estos tests fijan es que
  * un solo clic no alcance, que la confirmación diga qué se pierde, y que la línea de
@@ -207,7 +283,12 @@ describe('PendingRoute — descartar un borrador', () => {
     request.mockResolvedValue({ ok: true, value: pending() });
     missingForField.mockResolvedValue([]);
     discardDraft.mockResolvedValue(true);
-    useAppSession.mockReturnValue({ account: { userId: USER } });
+    storedTemplateVersion.mockResolvedValue(null);
+    listSites.mockResolvedValue([{ id: SITE, code: 'GLE', name: 'Glencoe', deactivated_at: null }]);
+    listScheduled.mockResolvedValue([]);
+    useAppSession.mockReturnValue({
+      account: { userId: USER, siteScope: [SITE], firstName: 'Marie', lastName: 'Tremblay' },
+    });
     search.mockReturnValue({});
   });
 
@@ -300,7 +381,12 @@ describe('PendingRoute — lo enviado no se lista como borrador', () => {
   beforeEach(() => {
     request.mockResolvedValue({ ok: true, value: pending() });
     missingForField.mockResolvedValue([]);
-    useAppSession.mockReturnValue({ account: { userId: USER } });
+    storedTemplateVersion.mockResolvedValue(null);
+    listSites.mockResolvedValue([{ id: SITE, code: 'GLE', name: 'Glencoe', deactivated_at: null }]);
+    listScheduled.mockResolvedValue([]);
+    useAppSession.mockReturnValue({
+      account: { userId: USER, siteScope: [SITE], firstName: 'Marie', lastName: 'Tremblay' },
+    });
     search.mockReturnValue({});
   });
 

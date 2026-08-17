@@ -97,6 +97,8 @@ function inspection(overrides: Partial<ScheduledInspection> = {}): ScheduledInsp
     cancelled_at: null,
     cancellation_reason: null,
     status: 'open',
+    inspection_id: null,
+    completed_at: null,
     ...overrides,
   };
 }

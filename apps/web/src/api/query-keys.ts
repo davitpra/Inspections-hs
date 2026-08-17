@@ -51,6 +51,14 @@ export const queryKeys = {
   /** El paquete de campo guardado localmente, solo para leer su `inspector_id`. */
   storedTemplateVersion: (scheduledInspectionId?: string) =>
     key('stored-template-version', scheduledInspectionId),
+  /**
+   * El documento pedido POR RED, para la vista previa de una asignación que no está
+   * descargada. Clave distinta de `storedTemplateVersion` a propósito: esa lee del
+   * dispositivo y nunca sale a la red, y confundirlas convertiría una lectura offline
+   * garantizada en una llamada.
+   */
+  templateVersionPackage: (scheduledInspectionId?: string) =>
+    key('template-version-package', scheduledInspectionId),
 
   /**
    * El borrador de ESTE dispositivo y ESTA cuenta (ADR-001: un dueño, un dispositivo).

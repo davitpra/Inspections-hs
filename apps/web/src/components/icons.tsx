@@ -82,3 +82,48 @@ export function ListIcon({ size = 18 }: { size?: number }): React.JSX.Element {
     </svg>
   );
 }
+
+export function ClockIcon({ size = 18 }: { size?: number }): React.JSX.Element {
+  return (
+    <svg {...svgProps(size)}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3.5 2" />
+    </svg>
+  );
+}
+
+export function LockIcon({ size = 18 }: { size?: number }): React.JSX.Element {
+  return (
+    <svg {...svgProps(size)}>
+      <rect x="5" y="11" width="14" height="9" rx="2" />
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    </svg>
+  );
+}
+
+export function CheckIcon({ size = 18 }: { size?: number }): React.JSX.Element {
+  return (
+    <svg {...svgProps(size)}>
+      <path d="m5 12 4.5 4.5L19 7" />
+    </svg>
+  );
+}
+
+export function PlayIcon({ size = 18 }: { size?: number }): React.JSX.Element {
+  return (
+    <svg {...svgProps(size)}>
+      <path d="M7 5.5v13l11-6.5-11-6.5Z" />
+    </svg>
+  );
+}
+
+/** Abrir algo aparte de la pantalla en curso — un reporte, un documento. */
+export function ExternalLinkIcon({ size = 16 }: { size?: number }): React.JSX.Element {
+  return (
+    <svg {...svgProps(size)}>
+      <path d="M14 5h5v5" />
+      <path d="M19 5l-7 7" />
+      <path d="M18 14v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h4" />
+    </svg>
+  );
+}

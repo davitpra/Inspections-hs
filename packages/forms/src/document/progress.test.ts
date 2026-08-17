@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { templateDocumentSchema, type TemplateDocument } from '@hs/forms';
 
-import { countAnswered } from './presentation';
+import { templateDocumentSchema, type TemplateDocument } from './schema.js';
+import { countAnswered, countAnsweredBySection } from './progress.js';
 
 /** `hazard.followup` solo se muestra cuando `hazard.present` es `true`. */
 function document(): TemplateDocument {
@@ -27,6 +27,20 @@ function document(): TemplateDocument {
             response_type: 'text',
             max_length: 500,
             visible_when: { item_key: 'hazard.present', operator: 'equals', value: true },
+          },
+        ],
+      },
+      {
+        section_key: 'ppe',
+        section_title: 'PPE',
+        position: 2,
+        items: [
+          {
+            item_key: 'ppe.worn',
+            prompt: 'PPE worn?',
+            position: 1,
+            required: true,
+            response_type: 'yes_no',
           },
         ],
       },
@@ -56,5 +70,25 @@ describe('el conteo de respondidos', () => {
   /** Un valor visible pero sin contestar no suma: `undefined` es no contestado. */
   it('un ítem visible sin respuesta no suma', () => {
     expect(countAnswered(document(), { 'hazard.present': true })).toBe(1);
+  });
+});
+
+describe('el conteo por sección', () => {
+  it('una sección por entrada, en orden de documento', () => {
+    const result = countAnsweredBySection(document(), {});
+
+    expect(result.map((entry) => entry.section_key)).toEqual(['hazards', 'ppe']);
+  });
+
+  it('el total de una sección baja cuando un ítem condicional queda oculto', () => {
+    const result = countAnsweredBySection(document(), { 'hazard.present': false });
+
+    expect(result[0]).toMatchObject({ section_key: 'hazards', answered: 1, total: 1 });
+  });
+
+  it('el total sube cuando el condicional se vuelve visible', () => {
+    const result = countAnsweredBySection(document(), { 'hazard.present': true });
+
+    expect(result[0]).toMatchObject({ section_key: 'hazards', answered: 1, total: 2 });
   });
 });

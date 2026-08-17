@@ -19,6 +19,7 @@ import { IncidentRoute } from '../routes/IncidentRoute';
 import { IncidentsRoute } from '../routes/IncidentsRoute';
 import { OfflineRoute } from '../routes/OfflineRoute';
 import { OutboxRoute } from '../routes/OutboxRoute';
+import { PastInspectionsRoute } from '../routes/PastInspectionsRoute';
 import { PendingRoute } from '../routes/PendingRoute';
 import { ComplianceRoute } from '../routes/ComplianceRoute';
 import { RecurrenceRoute } from '../routes/RecurrenceRoute';
@@ -76,10 +77,15 @@ const PUBLIC_ROUTES = ['/accept-invitation'];
  * dos columnas, así que diciembre queda a seis filas de scroll de enero. El año completo
  * de un vistazo ES la pantalla, y por eso esta ruta pide más ancho.
  *
+ * `/` por el mismo motivo, con su propia forma: la asignación destacada es contenido
+ * principal (progreso, secciones) más una columna de preparación (antes de empezar,
+ * información de sitio, historial) al lado, y a 46rem esa segunda columna cae siempre —
+ * `.assignment__layout` recién tiene dónde poner las dos a partir de ~58rem.
+ *
  * Es una lista y no un `if` por lo mismo que `PUBLIC_ROUTES`: lo que hay que poder leer de
  * un vistazo es exactamente cuáles se salen de la medida, y cada una tiene que justificarlo.
  */
-const WIDE_ROUTES = ['/scheduling'];
+const WIDE_ROUTES = ['/', '/scheduling'];
 
 /**
  * El marco, y la única puerta: sin cuenta no se entra a ninguna pantalla de captura.
@@ -185,10 +191,34 @@ const pendingRoute = createRoute({
   component: PendingRoute,
 });
 
+/**
+ * La captura, y su MODO de solo lectura.
+ *
+ * `preview` va en el search y no en el path porque no identifica otro recurso: es la misma
+ * inspección, mirada sin tocarla. La pantalla corta hacia la vista previa antes de tocar el
+ * dispositivo, así que abrir esto no crea un borrador ni descarga nada (ADR-001).
+ *
+ * `z.literal('1')` y no un booleano suelto: un valor escrito a mano que no sea exactamente
+ * ese se ignora y la URL abre la captura de siempre.
+ */
 const captureRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/inspections/$id/capture',
+  validateSearch: z.object({ preview: z.literal('1').optional() }),
   component: CaptureRoute,
+});
+
+/**
+ * El historial. Un solo segmento bajo `/inspections`, así que no compite con
+ * `/inspections/$id/capture`, que tiene tres.
+ *
+ * No entra a la barra de navegación: se llega desde el pie de "Recent inspections", en la
+ * pantalla de inicio, que es donde la pregunta aparece.
+ */
+const pastInspectionsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/inspections/past',
+  component: PastInspectionsRoute,
 });
 
 const reviewRoute = createRoute({
@@ -322,6 +352,7 @@ const outboxRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   pendingRoute,
   captureRoute,
+  pastInspectionsRoute,
   reviewRoute,
   outboxRoute,
   schedulingRoute,

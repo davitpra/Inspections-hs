@@ -1,43 +1,50 @@
 import { pendingInspectionSchema, type PendingInspection } from '@hs/contracts';
-import { useQueries, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useSearch } from '@tanstack/react-router';
 import { useState } from 'react';
 import { z } from 'zod';
 
 import { sessionClient } from '../../api/client';
+import { listScheduled, listSites } from '../../api/inspections';
 import { queryKeys } from '../../api/query-keys';
 import { InstallPrompt } from '../../app/InstallPrompt';
 import { useAppSession } from '../../app/session-context';
-import { CalendarIcon, GridIcon, ListIcon } from '../../components/icons';
+import { CalendarIcon, InfoIcon, PinIcon } from '../../components/icons';
 import type { DraftRow as DraftRowData } from '../../offline/db';
 import { listDrafts } from '../../offline/drafts';
-import { missingForField } from '../../offline/prefetch';
+import { civilMonth, civilToday, monthName } from '../../presentation/dates';
+import { AssignmentChecklist } from './AssignmentChecklist';
+import { AssignmentHero } from './AssignmentHero';
 import { DiscardDraftDialog } from './DiscardDraftDialog';
 import { DraftRow } from './DraftRow';
-import { PendingRow } from './PendingRow';
+import { NextAssignment } from './NextAssignment';
+import { NoAssignment } from './NoAssignment';
+import { RecentInspections } from './RecentInspections';
 import {
   draftPeriodStart,
-  earliestPendingYear,
-  initialYear,
-  pendingOfYear,
-  pendingStats,
+  focusedAssignment,
+  nextAssignment,
   pendingWork,
-  readiness,
   submittedFromDevice,
 } from './presentation';
 
 /**
- * La pantalla de inicio del miembro del JHSC: lo que todavía debe, si cada cosa está
- * lista para el campo, y la acción que corresponde.
+ * La pantalla de inicio del miembro del JHSC: lo que debe ahora, lo que viene después, y
+ * lo que ya cerró.
+ *
+ * La asignación del mes en curso —o la vencida más antigua, si hay una— es el HÉROE de la
+ * pantalla: título, acción y datos propios, antes que cualquier otra cosa
+ * (`focusedAssignment` decide cuál es). Debajo van las dos preguntas que el inspector tiene
+ * a continuación: qué sigue, y qué cerró.
+ *
+ * **Acá NO hay calendario del año, y su ausencia es una decisión.** La tenía, copiada de la
+ * consola del coordinador, y el inspector no planifica un año: trabaja una asignación por
+ * vez (ADR-001). El año se planifica en `/scheduling`, que conserva su calendario.
  *
  * El estado de "lista para el campo" se muestra ACÁ, con red todavía disponible, porque
  * es el único momento en que se puede arreglar. Descubrirlo en la planta es descubrirlo
  * tarde. Y se arregla ACÁ también: la tarjeta que dice que falta el roster es la misma que
  * lo baja.
- *
- * SE LEE COMO EL CALENDARIO DEL COORDINADOR, y no es decoración: los dos hojean la misma
- * obligación mensual. El mes es lo que la identifica, así que es lo primero de cada
- * tarjeta, y el año se navega con las mismas flechas.
  */
 export function PendingRoute(): React.JSX.Element {
   const { account } = useAppSession();
@@ -56,8 +63,6 @@ export function PendingRoute(): React.JSX.Element {
    * del roster.
    */
   const [discarding, setDiscarding] = useState<DraftRowData | null>(null);
-
-  const [view, setView] = useState<'grid' | 'list'>('grid');
 
   const pending = useQuery({
     queryKey: queryKeys.pendingInspections(),
@@ -78,38 +83,38 @@ export function PendingRoute(): React.JSX.Element {
     enabled: Boolean(account),
   });
 
-  const all = pending.data ?? [];
-
   /**
-   * `null` hasta que la lista llega, y entonces el año que corresponda: `initialYear`
-   * necesita los pendientes para no abrir en un año vacío, y en el primer render todavía
-   * no están.
+   * Sitios y programación completa: solo para la asignación destacada y su columna de
+   * preparación (nombre de sitio, historial reciente). De lectura — un miembro del JHSC
+   * viendo la programación de su planta es legítimo (ver `router.tsx`).
    */
-  const [chosenYear, setChosenYear] = useState<string | null>(null);
-  const year = chosenYear ?? initialYear(all);
-
-  const entries = pendingOfYear(all, year);
-  const earliestYear = earliestPendingYear(all, year);
-  const canGoBack = year > earliestYear;
-
-  /**
-   * El estado del paquete de las tarjetas visibles, para el pie. Cada tarjeta ya lo
-   * consulta por su cuenta y con la MISMA clave, así que esto no agrega una sola llamada:
-   * es la misma consulta leída dos veces.
-   */
-  const readinessOf = useQueries({
-    queries: entries.map((inspection) => ({
-      queryKey: queryKeys.fieldReady(inspection.id),
-      queryFn: () => missingForField(inspection.id),
-    })),
+  const sites = useQuery({ queryKey: queryKeys.sites(), queryFn: listSites, retry: false });
+  const scheduled = useQuery({
+    queryKey: queryKeys.scheduledInspections(),
+    queryFn: listScheduled,
+    retry: false,
   });
 
-  const stats = pendingStats(
-    entries.map((inspection, index) => ({
-      overdue: inspection.overdue,
-      state: readiness(readinessOf[index]?.data),
-    })),
-  );
+  const siteName = (id: string): string =>
+    sites.data?.find((site) => site.id === id)?.name ?? id;
+
+  const all = pending.data ?? [];
+  const now = new Date();
+
+  const focused = focusedAssignment(all, now);
+  const focusedDraft = focused
+    ? (drafts.data?.find((draft) => draft.scheduled_inspection_id === focused.id) ?? null)
+    : null;
+  const focusedSite = focused
+    ? sites.data?.find((site) => site.id === focused.site_id)
+    : undefined;
+
+  /**
+   * Lo que sigue después de lo destacado. Se calcula igual haya o no asignación en curso:
+   * la tarjeta es la misma en los dos estados, y por eso la compone la ruta y no cada
+   * rama.
+   */
+  const next = nextAssignment(all, now);
 
   const working = pendingWork(drafts.data ?? []);
   const sent = submittedFromDevice(drafts.data ?? []);
@@ -124,10 +129,10 @@ export function PendingRoute(): React.JSX.Element {
             <span className="scheduling__icon">
               <CalendarIcon size={22} />
             </span>
-            <h1>Inspections due</h1>
+            <h1>My inspections</h1>
           </div>
           <p className="scheduling__subtitle">
-            Download each inspection while you have a connection, then walk the site.
+            View and complete workplace inspections assigned to you.
           </p>
         </div>
       </header>
@@ -145,109 +150,71 @@ export function PendingRoute(): React.JSX.Element {
         </p>
       ) : null}
 
-      <div className="calendar-toolbar">
-        <div className="year-nav">
-          <button
-            type="button"
-            className="year-nav__arrow"
-            disabled={!canGoBack}
-            onClick={() => setChosenYear(String(Number(year) - 1))}
-          >
-            ← {Number(year) - 1}
-          </button>
+      {account && pending.isSuccess ? (
+        focused ? (
+          <>
+            <AssignmentHero
+              inspection={focused}
+              site={focusedSite}
+              account={account}
+              draftStatus={focusedDraft?.status ?? null}
+              today={civilToday(now)}
+            />
 
-          <div className="year-nav__current">
-            <CalendarIcon size={18} />
-            <h2>{year}</h2>
-          </div>
+            <div className="assignment__layout">
+              <div>
+                <AssignmentChecklist inspection={focused} draft={focusedDraft} />
+              </div>
 
-          <button
-            type="button"
-            className="year-nav__arrow"
-            onClick={() => setChosenYear(String(Number(year) + 1))}
-          >
-            {Number(year) + 1} →
-          </button>
-        </div>
+              <aside className="assignment__aside">
+                <div className="card">
+                  <h3>
+                    <InfoIcon size={18} /> Before you begin
+                  </h3>
+                  <ul className="checklist">
+                    <li>Review the inspection instructions.</li>
+                    <li>Be on site and walk all areas.</li>
+                    <li>Take photos of any issues.</li>
+                    <li>Save your progress as you go.</li>
+                    <li>Submit by the due date.</li>
+                  </ul>
+                </div>
 
-        <div className="view-toggle">
-          <button
-            type="button"
-            className="view-toggle__button"
-            aria-pressed={view === 'grid'}
-            onClick={() => setView('grid')}
-          >
-            <GridIcon size={16} /> Grid view
-          </button>
-          <button
-            type="button"
-            className="view-toggle__button"
-            aria-pressed={view === 'list'}
-            onClick={() => setView('list')}
-          >
-            <ListIcon size={16} /> List view
-          </button>
-        </div>
-      </div>
+                <div className="card">
+                  <h3>
+                    <PinIcon size={18} /> Site information
+                  </h3>
+                  <p className="progress__text">{focusedSite?.name ?? '—'}</p>
+                </div>
 
-      {pending.isSuccess && entries.length === 0 ? (
-        <p>Nothing is due in {year}.</p>
+              </aside>
+            </div>
+          </>
+        ) : (
+          <NoAssignment
+            currentSiteId={account.siteScope[0] ?? ''}
+            monthLabel={`${monthName(`${civilMonth(now)}-01`)} ${civilMonth(now).slice(0, 4)}`}
+            siteName={siteName}
+          />
+        )
       ) : null}
 
-      <ul className={view === 'grid' ? 'grid grid--scheduling' : 'grid--list'}>
-        {entries.map((inspection) => (
-          <PendingRow key={inspection.id} inspection={inspection} />
-        ))}
-      </ul>
+      {/*
+        Las dos preguntas que siguen a "¿qué debo ahora?": qué viene después, y qué cerré.
+        Van fuera del ternario de arriba porque no dependen de él — se leen igual con
+        asignación en curso que sin ella.
+      */}
+      {account && next ? (
+        <NextAssignment inspection={next} account={account} siteName={siteName} />
+      ) : null}
 
-      <div className="stats-bar">
-        <div className="stats-bar__item">
-          <span className="stats-bar__icon">
-            <CalendarIcon size={22} />
-          </span>
-          <span>
-            <span className="stats-bar__number">{stats.total}</span>
-            <span className="stats-bar__label">Due in {year}</span>
-          </span>
-        </div>
-        <div className="stats-bar__item">
-          <span className="stats-bar__icon">
-            <CalendarIcon size={22} />
-          </span>
-          <span>
-            <span className="stats-bar__number">{stats.ready}</span>
-            <span className="stats-bar__label">Ready for the field</span>
-          </span>
-        </div>
-        <div className="stats-bar__item">
-          <span className="stats-bar__icon">
-            <CalendarIcon size={22} />
-          </span>
-          <span>
-            <span className="stats-bar__number">{stats.notReady}</span>
-            <span className="stats-bar__label">Need downloading</span>
-          </span>
-        </div>
-        <div className="stats-bar__item">
-          <span className="stats-bar__icon">
-            <CalendarIcon size={22} />
-          </span>
-          <span>
-            <span className="stats-bar__number">{stats.overdue}</span>
-            <span className="stats-bar__label">Overdue</span>
-          </span>
-        </div>
-
-        {/*
-          El número de "Need downloading" es el único que caduca: se arregla con red y no
-          se puede arreglar sin ella. El pie es donde se mira ese número, así que es donde
-          tiene que estar la consecuencia.
-        */}
-        <p className="stats-bar__tip">
-          Tip: download an inspection before you lose the connection — the site walk works
-          offline, the download does not.
-        </p>
-      </div>
+      {account ? (
+        <RecentInspections
+          scheduled={scheduled.data ?? []}
+          userId={account.userId}
+          siteName={siteName}
+        />
+      ) : null}
 
       {/*
         Los borradores del dispositivo NO se filtran por año. No guardan el período —el mes
@@ -258,7 +225,7 @@ export function PendingRoute(): React.JSX.Element {
 
       {working.length === 0 ? <p>No drafts in progress on this device.</p> : null}
 
-      <ul className={view === 'grid' ? 'grid grid--scheduling' : 'grid--list'}>
+      <ul className="grid--list">
         {working.map((draft) => (
           <DraftRow
             key={draft.client_submission_id}
@@ -278,7 +245,7 @@ export function PendingRoute(): React.JSX.Element {
         <>
           <h2>Submitted from this device</h2>
 
-          <ul className={view === 'grid' ? 'grid grid--scheduling' : 'grid--list'}>
+          <ul className="grid--list">
             {sent.map((draft) => (
               <DraftRow
                 key={draft.client_submission_id}

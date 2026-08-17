@@ -13,6 +13,9 @@ const openDraft = vi.hoisted(() => vi.fn());
 const loadDraft = vi.hoisted(() => vi.fn());
 const documentForDraft = vi.hoisted(() => vi.fn());
 const useAppSession = vi.hoisted(() => vi.fn());
+const getTemplateVersionPackage = vi.hoisted(() => vi.fn());
+
+vi.mock('../../api/inspections', () => ({ getTemplateVersionPackage }));
 
 vi.mock('../../offline/prefetch', () => ({
   missingForField,
@@ -38,8 +41,13 @@ vi.mock('../../app/session-context', () => ({ useAppSession }));
 
 vi.mock('@tanstack/react-router', () => ({
   useParams: () => ({ id: INSPECTION }),
+  // `search` es mutable a propósito: la vista previa y la captura son la misma URL con
+  // distinto search, así que un test la mueve para entrar por el otro camino.
+  useSearch: () => search,
   Link: ({ to, children }: { to: string; children: React.ReactNode }) => <a href={to}>{children}</a>,
 }));
+
+let search: { preview?: '1' } = {};
 
 const INSPECTION = '11111111-1111-4111-8111-111111111111';
 const SITE = '22222222-2222-4222-8222-222222222222';
@@ -60,6 +68,7 @@ function renderRoute(): void {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  search = {};
 });
 
 /**
@@ -183,5 +192,80 @@ describe('elegibilidad de captura', () => {
 
     await waitFor(() => expect(openDraft).toHaveBeenCalled());
     expect(screen.queryByText('Not your inspection')).toBeNull();
+  });
+});
+
+/**
+ * La vista previa: mirar una asignación NO es empezarla.
+ *
+ * La garantía no es un `readOnly` que viaja hacia adentro esquivando escrituras — es que
+ * `Walkthrough` no se monta, y con él no se monta `openDraft`. Estos tests fijan
+ * exactamente eso, porque es lo que ADR-001 protege: el borrador es de quien lo empieza, y
+ * ojear un mes que ni siquiera abrió no puede empezar nada.
+ */
+describe('la vista previa de una asignación', () => {
+  const DOCUMENT = {
+    sections: [
+      {
+        section_key: 'housekeeping',
+        section_title: 'Work areas and housekeeping',
+        items: [
+          {
+            item_key: 'floors_clear',
+            prompt: 'Are floors clear of obstructions?',
+            response_type: 'yes_no',
+            required: true,
+          },
+        ],
+      },
+    ],
+  };
+
+  it('muestra las preguntas y no abre ningún borrador', async () => {
+    search = { preview: '1' };
+    storedTemplateVersion.mockResolvedValue({
+      site_id: SITE,
+      template_version_id: VERSION,
+      document: DOCUMENT,
+    });
+
+    renderRoute();
+
+    expect(await screen.findByText('Are floors clear of obstructions?')).toBeTruthy();
+    expect(screen.getByText('Work areas and housekeeping')).toBeTruthy();
+
+    expect(openDraft).not.toHaveBeenCalled();
+    expect(loadDraft).not.toHaveBeenCalled();
+    expect(prefetchInspection).not.toHaveBeenCalled();
+  });
+
+  /**
+   * El caso que justifica la pantalla: el mes que viene no está descargado. Se pide el
+   * documento por red y NO se guarda — si se guardara, ojear dejaría la inspección "lista
+   * para el campo" y la pantalla de inicio reportaría una decisión que nadie tomó.
+   */
+  it('pide el documento por red cuando no está en el dispositivo, y no lo descarga', async () => {
+    search = { preview: '1' };
+    storedTemplateVersion.mockResolvedValue(null);
+    getTemplateVersionPackage.mockResolvedValue({ document: DOCUMENT });
+
+    renderRoute();
+
+    expect(await screen.findByText('Are floors clear of obstructions?')).toBeTruthy();
+
+    expect(getTemplateVersionPackage).toHaveBeenCalledWith(INSPECTION);
+    expect(prefetchInspection).not.toHaveBeenCalled();
+    expect(openDraft).not.toHaveBeenCalled();
+  });
+
+  it('sin documento y sin red lo dice, en vez de mostrar medio recorrido', async () => {
+    search = { preview: '1' };
+    storedTemplateVersion.mockResolvedValue(null);
+    getTemplateVersionPackage.mockRejectedValue(new Error('offline'));
+
+    renderRoute();
+
+    expect(await screen.findByText('Preview unavailable')).toBeTruthy();
+    expect(openDraft).not.toHaveBeenCalled();
   });
 });

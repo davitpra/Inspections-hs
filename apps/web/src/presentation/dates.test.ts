@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { civilMonth, currentCivilYear, formatDay, formatInstant, monthName } from './dates';
+import {
+  civilMonth,
+  civilToday,
+  currentCivilYear,
+  formatCivilDay,
+  formatDay,
+  formatInstant,
+  monthName,
+} from './dates';
 
 describe('cómo se lee un instante', () => {
   it('un plazo se lee por día', () => {
@@ -36,5 +44,29 @@ describe('el mes civil', () => {
 
   it('el año en curso es el de esa misma fecha civil', () => {
     expect(currentCivilYear(new Date('2026-09-01T02:00:00.000Z'))).toBe('2026');
+  });
+
+  it('el día civil de hoy resuelve en la zona de la planta, no en UTC', () => {
+    expect(civilToday(new Date('2026-09-01T02:00:00.000Z'))).toBe('2026-08-31');
+  });
+});
+
+describe('el día de cierre en una celda', () => {
+  it('se escribe corto, en inglés y sin depender del locale', () => {
+    expect(formatCivilDay('2027-07-29T18:00:00.000Z')).toBe('Jul 29, 2027');
+    expect(formatCivilDay('2027-05-30T18:00:00.000Z')).toBe('May 30, 2027');
+  });
+
+  it('no rellena el día con cero', () => {
+    expect(formatCivilDay('2027-09-01T18:00:00.000Z')).toBe('Sep 1, 2027');
+  });
+
+  /**
+   * El caso que justifica resolver el huso en vez de recortar la cadena, como hace
+   * `formatDay`: una inspección firmada a las 21:00 del último día del mes en Ontario llega
+   * como el día 1 del mes SIGUIENTE en UTC, y el mes es lo que identifica la obligación.
+   */
+  it('fecha en el día de la planta y no en el de UTC', () => {
+    expect(formatCivilDay('2027-08-01T01:00:00.000Z')).toBe('Jul 31, 2027');
   });
 });

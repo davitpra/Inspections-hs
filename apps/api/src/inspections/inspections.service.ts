@@ -595,6 +595,18 @@ const SCHEDULE_SELECT = `
     ${INSPECTOR_NAME_JOIN('s.default_inspector_id', 'du', 'dp')}
    WHERE true`;
 
+/**
+ * `insp` ya estaba unido para derivar `status` (`insp.id IS NOT NULL` es la definición de
+ * "completado"); las dos columnas de cierre son esa misma unión leída una vez más, sin
+ * JOIN nuevo y sin consulta aparte.
+ *
+ * **`signed_at` y NO `received_at`.** El período se fecha por cuándo se FIRMÓ el recorrido,
+ * no por cuándo volvió la red: los dos se separan por todo lo que el dispositivo haya
+ * estado sin señal, y el mes es lo que identifica la obligación ante el regulador. Es el
+ * mismo instante que `compliance.sql.ts` proyecta como `occurred_at` y que heredan los
+ * hallazgos del envío. Que sea un reloj de dispositivo está anotado en el campo de
+ * `scheduledInspectionSchema`.
+ */
 const SCHEDULED_SELECT = `
   SELECT si.id,
          si.site_id,
@@ -614,7 +626,9 @@ const SCHEDULED_SELECT = `
            scheduled: 'si',
            inspection: 'insp',
            periodEnd: 'si.period_end',
-         })} AS status
+         })} AS status,
+         insp.id AS inspection_id,
+         insp.signed_at AS completed_at
     FROM scheduled_inspection si
     JOIN template t ON t.id = si.template_id
     JOIN template_version tv ON tv.id = si.template_version_id
@@ -649,6 +663,8 @@ interface ScheduledRow extends Record<string, unknown> {
   cancelled_at: Date | null;
   cancellation_reason: string | null;
   status: PeriodStatus;
+  inspection_id: string | null;
+  completed_at: Date | null;
 }
 
 interface PendingRow extends Record<string, unknown> {
@@ -691,6 +707,8 @@ function toScheduled(row: ScheduledRow): ScheduledInspection {
     cancelled_at: row.cancelled_at?.toISOString() ?? null,
     cancellation_reason: row.cancellation_reason,
     status: row.status,
+    inspection_id: row.inspection_id,
+    completed_at: row.completed_at?.toISOString() ?? null,
   };
 }
 

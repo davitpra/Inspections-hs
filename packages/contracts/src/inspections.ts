@@ -118,6 +118,30 @@ export const scheduledInspectionSchema = z.strictObject({
    * exige un sitio y un rango de meses enteros.
    */
   status: periodStatusSchema,
+  /**
+   * El envío que cerró el período, cuando existe. Nulo en la mayoría de las filas: es el
+   * `LEFT JOIN` del que ya sale `status`, leído una vez más.
+   *
+   * Viaja aunque todavía nadie lo lea. Es el asa con la que se va a pedir el reporte de
+   * una inspección enviada, y agregarlo después sería romper el contrato dos veces por la
+   * misma consulta.
+   */
+  inspection_id: z.uuid().nullable(),
+  /**
+   * Cuándo se cerró, y **cuál de los dos relojes es**.
+   *
+   * Es `inspection.signed_at`: el instante en que el inspector FIRMÓ el recorrido, tomado
+   * del reloj del dispositivo. NO es `received_at`, que es cuando el servidor lo recibió.
+   * Los dos se separan por todo lo que el dispositivo haya estado sin señal —hasta los
+   * siete días que presupone ADR-010—, y el mes es lo que identifica la obligación ante el
+   * regulador: una inspección caminada y firmada el 29 de marzo que sincroniza el 2 de
+   * abril se fecha en marzo, que es cuando pasó.
+   *
+   * Es el mismo instante que `compliance.sql.ts` llama `occurred_at` y que heredan los
+   * hallazgos derivados del envío. Que sea un reloj de dispositivo se dice acá a propósito:
+   * quien lea `completed_at` sin saberlo va a suponer que es del servidor.
+   */
+  completed_at: z.iso.datetime({ offset: true }).nullable(),
 });
 
 export type ScheduledInspection = z.infer<typeof scheduledInspectionSchema>;

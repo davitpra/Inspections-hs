@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest';
 
 import { DiscardRefusedError } from '../../offline/drafts';
 import {
+  assignmentState,
+  availabilityLabel,
   discardRefusalMessage,
   draftPeriodStart,
-  earliestPendingYear,
-  initialYear,
-  pendingCardClass,
-  pendingOfYear,
-  pendingStats,
+  dueIn,
+  focusedAssignment,
+  nextAssignment,
   pendingWork,
   readiness,
   statusLabel,
@@ -25,7 +25,7 @@ function inspection(overrides: Record<string, unknown> = {}) {
     template_version_id: 'v-1',
     overdue: false,
     ...overrides,
-  } as Parameters<typeof pendingOfYear>[0][number];
+  } as Parameters<typeof focusedAssignment>[0][number];
 }
 
 describe('statusLabel', () => {
@@ -49,47 +49,10 @@ describe('readiness', () => {
   });
 });
 
-describe('pendingCardClass', () => {
-  it('lo vencido gana sobre el estado del paquete', () => {
-    expect(pendingCardClass('ready', true)).toBe('period period--missed');
-    expect(pendingCardClass('not-ready', true)).toBe('period period--missed');
-  });
-
-  it('falta de paquete se avisa, no se alarma', () => {
-    expect(pendingCardClass('not-ready', false)).toBe('period period--not-ready');
-    expect(pendingCardClass('ready', false)).toBe('period period--open');
-    expect(pendingCardClass('unknown', false)).toBe('period period--open');
-  });
-});
-
-describe('el año que se mira', () => {
-  it('lista un año en orden de mes', () => {
-    const items = [
-      inspection({ id: 'a', period_start: '2026-05-01' }),
-      inspection({ id: 'b', period_start: '2025-12-01' }),
-      inspection({ id: 'c', period_start: '2026-02-01' }),
-    ];
-
-    expect(pendingOfYear(items, '2026').map((item) => item.id)).toEqual(['c', 'a']);
-  });
-
-  it('deja retroceder hasta el pendiente más viejo y no más', () => {
-    const items = [inspection({ period_start: '2024-11-01' })];
-
-    expect(earliestPendingYear(items, '2026')).toBe('2024');
-    expect(earliestPendingYear([], '2026')).toBe('2026');
-  });
-
-  /**
-   * La pantalla de inicio no puede abrir vacía teniendo trabajo atrasado: el inspector
-   * concluye que no debe nada y las vencidas quedan a un clic que nunca va a dar.
-   */
-  it('abre en el año en curso solo cuando ese año tiene algo', () => {
-    const now = new Date('2026-08-15T12:00:00.000Z');
-
-    expect(initialYear([inspection({ period_start: '2026-03-01' })], now)).toBe('2026');
-    expect(initialYear([inspection({ period_start: '2025-12-01' })], now)).toBe('2025');
-    expect(initialYear([], now)).toBe('2026');
+describe('availabilityLabel', () => {
+  it('dice el día en que la próxima asignación se puede empezar', () => {
+    expect(availabilityLabel('2027-09-01')).toBe('Opens September 1');
+    expect(availabilityLabel('2027-01-01')).toBe('Opens January 1');
   });
 });
 
@@ -99,18 +62,6 @@ describe('draftPeriodStart', () => {
 
     expect(draftPeriodStart({ scheduled_inspection_id: 'i-1' }, items)).toBe('2026-03-01');
     expect(draftPeriodStart({ scheduled_inspection_id: 'otra' }, items)).toBeNull();
-  });
-});
-
-describe('pendingStats', () => {
-  it('cuenta lo vencido aparte del estado del paquete', () => {
-    const stats = pendingStats([
-      { overdue: true, state: 'not-ready' },
-      { overdue: false, state: 'ready' },
-      { overdue: false, state: 'unknown' },
-    ]);
-
-    expect(stats).toEqual({ total: 3, ready: 1, notReady: 1, overdue: 1 });
   });
 });
 
@@ -130,6 +81,122 @@ describe('discardRefusalMessage', () => {
   /** Un error que no es de descarte igual tiene que decir que la inspección sigue ahí. */
   it('un error inesperado no sugiere que se borró', () => {
     expect(discardRefusalMessage(new Error('boom'))).toMatch(/still on this device/);
+  });
+});
+
+describe('focusedAssignment', () => {
+  const now = new Date('2026-08-15T12:00:00.000Z');
+
+  it('devuelve null sin pendientes: es el estado vacío, no un accidente', () => {
+    expect(focusedAssignment([], now)).toBeNull();
+  });
+
+  it('destaca el mes en curso cuando no hay nada vencido', () => {
+    const august = inspection({ id: 'august', period_start: '2026-08-01', overdue: false });
+    const items = [inspection({ id: 'december', period_start: '2025-12-01' }), august];
+
+    expect(focusedAssignment(items, now)?.id).toBe('august');
+  });
+
+  it('lo vencido gana sobre el mes en curso, y el más antiguo entre vencidos', () => {
+    const items = [
+      inspection({ id: 'august', period_start: '2026-08-01', overdue: false }),
+      inspection({ id: 'june', period_start: '2026-06-01', overdue: true }),
+      inspection({ id: 'july', period_start: '2026-07-01', overdue: true }),
+    ];
+
+    expect(focusedAssignment(items, now)?.id).toBe('june');
+  });
+
+  it('sin nada vencido y sin nada este mes, no hay héroe', () => {
+    const items = [inspection({ id: 'december', period_start: '2025-12-01', overdue: false })];
+
+    expect(focusedAssignment(items, now)).toBeNull();
+  });
+});
+
+describe('nextAssignment', () => {
+  const now = new Date('2026-08-15T12:00:00.000Z');
+
+  it('null la mayoría de las veces: nada programado más allá del mes en curso', () => {
+    expect(nextAssignment([inspection({ period_start: '2026-08-01' })], now)).toBeNull();
+  });
+
+  it('el próximo mes ya abierto, el más cercano primero', () => {
+    const items = [
+      inspection({ id: 'october', period_start: '2026-10-01' }),
+      inspection({ id: 'september', period_start: '2026-09-01' }),
+    ];
+
+    expect(nextAssignment(items, now)?.id).toBe('september');
+  });
+});
+
+describe('dueIn', () => {
+  it('cuenta los días que faltan', () => {
+    expect(dueIn('2026-08-30', '2026-08-15')).toBe('in 15 days');
+    expect(dueIn('2026-08-16', '2026-08-15')).toBe('in 1 day');
+  });
+
+  it('hoy es hoy, no "en 0 días"', () => {
+    expect(dueIn('2026-08-15', '2026-08-15')).toBe('Due today');
+  });
+
+  it('lo vencido se lee para atrás', () => {
+    expect(dueIn('2026-08-10', '2026-08-15')).toBe('5 days overdue');
+    expect(dueIn('2026-08-14', '2026-08-15')).toBe('1 day overdue');
+  });
+});
+
+describe('assignmentState', () => {
+  it('sin saber si el paquete está, no ofrece ninguna acción', () => {
+    const state = assignmentState({ readiness: 'unknown', overdue: false, draftStatus: null });
+
+    expect(state.action).toBe('none');
+    expect(state.pillLabel).toBe('');
+  });
+
+  it('falta el paquete: descargar, no empezar', () => {
+    const state = assignmentState({ readiness: 'not-ready', overdue: false, draftStatus: null });
+
+    expect(state).toMatchObject({ action: 'download', actionLabel: 'Download for the field' });
+  });
+
+  it('listo y sin borrador: empezar', () => {
+    const state = assignmentState({ readiness: 'ready', overdue: false, draftStatus: null });
+
+    expect(state).toMatchObject({ action: 'start', actionLabel: 'Start inspection' });
+  });
+
+  it('con un borrador a medias: retomar', () => {
+    const state = assignmentState({
+      readiness: 'ready',
+      overdue: false,
+      draftStatus: 'capturing',
+    });
+
+    expect(state).toMatchObject({ action: 'resume', actionLabel: 'Resume inspection' });
+  });
+
+  it('firmado y esperando: abrir, no volver a empezar', () => {
+    const state = assignmentState({ readiness: 'ready', overdue: false, draftStatus: 'signed' });
+
+    expect(state).toMatchObject({ action: 'open', actionLabel: 'Open inspection' });
+  });
+
+  /**
+   * El caso que separa la píldora de la acción: un mes vencido y YA descargado sigue
+   * ofreciendo "Start inspection" — lo que falta no es el paquete — pero la píldora dice
+   * "Overdue" y no "Ready to start", porque eso es lo que de verdad hay que resolver.
+   */
+  it('vencido gana en la píldora, nunca en la acción', () => {
+    const state = assignmentState({ readiness: 'ready', overdue: true, draftStatus: null });
+
+    expect(state).toMatchObject({
+      action: 'start',
+      actionLabel: 'Start inspection',
+      pillLabel: 'Overdue',
+    });
   });
 });
 

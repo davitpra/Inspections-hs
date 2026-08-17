@@ -326,6 +326,38 @@ describe('aceptación', () => {
     expect(row.received_at.getTime()).toBeGreaterThan(row.signed_at.getTime());
   });
 
+  /**
+   * El cierre, visible desde la lista. Es lo que la pantalla del inspector fecha, y por eso
+   * importa CUÁL de los dos relojes viaja: `signed_at`, el del recorrido, no `received_at`.
+   * Los dos se separan por todo lo que el dispositivo haya estado sin señal, y el mes es lo
+   * que identifica la obligación ante el regulador.
+   */
+  it('el período listado queda fechado por la firma, no por la recepción', async () => {
+    const scheduled = await freshInspection();
+    const payload = submissionFor(scheduled, SITE_A, versionV2);
+    const session = sessionFor(inspector.accountId, [SITE_A]);
+
+    const before = one(
+      (await stack.inspections.listScheduled(session)).filter((item) => item.id === scheduled),
+    );
+
+    expect(before.status).not.toBe('completed');
+    expect(before.inspection_id).toBeNull();
+    expect(before.completed_at).toBeNull();
+
+    const accepted = await submissions.ingest(session, payload);
+    const row = one(await inspectionRows(payload.client_submission_id));
+
+    const after = one(
+      (await stack.inspections.listScheduled(session)).filter((item) => item.id === scheduled),
+    );
+
+    expect(after.status).toBe('completed');
+    expect(after.inspection_id).toBe(accepted.id);
+    expect(after.completed_at).toBe(row.signed_at.toISOString());
+    expect(after.completed_at).not.toBe(row.received_at.toISOString());
+  });
+
   it('acepta un ítem de foto satisfecho SOLO por photos', async () => {
     // Es el caso normal del dispositivo y por eso es el que más barato se rompe: si
     // alguien quita la fusión, este test es el único que lo dice.

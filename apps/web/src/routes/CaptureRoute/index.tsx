@@ -1,4 +1,5 @@
 import {
+  countAnswered,
   evaluateVisibility,
   negativeAnswers,
   sectionsInDocumentOrder,
@@ -6,7 +7,7 @@ import {
   type TemplateDocument,
 } from '@hs/forms';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useParams } from '@tanstack/react-router';
+import { Link, useParams, useSearch } from '@tanstack/react-router';
 
 import { queryKeys } from '../../api/query-keys';
 import { useAppSession } from '../../app/session-context';
@@ -28,7 +29,7 @@ import type { FindingDraftRow } from '../../offline/db';
 import { capturePhoto, discardPhoto } from '../../offline/photos';
 import { missingForField, storedLocations, storedTemplateVersion } from '../../offline/prefetch';
 import { ItemRow } from './ItemRow';
-import { countAnswered } from './presentation';
+import { Preview } from './Preview';
 
 /**
  * La captura. Todo lo que pasa acá pasa sin red.
@@ -38,8 +39,24 @@ import { countAnswered } from './presentation';
  * corre al recibir el envío (ADR-007). El cliente no tiene una segunda opinión sobre si
  * la inspección está completa.
  */
+/**
+ * Las dos formas de abrir una inspección, y por qué son DOS COMPONENTES y no una bandera.
+ *
+ * Mirar una asignación no puede escribir en el dispositivo: ni un borrador, ni una
+ * descarga, ni una marca de empezada (ADR-001). Eso no se asegura con un `readOnly` que
+ * viaja hacia adentro esquivando escrituras una por una — se asegura no montando el
+ * componente que escribe. `Walkthrough` abre el borrador apenas se monta; en la vista
+ * previa no se monta, y por eso no hay nada que esquivar.
+ */
 export function CaptureRoute(): React.JSX.Element {
   const { id } = useParams({ from: '/inspections/$id/capture' });
+  const { preview } = useSearch({ from: '/inspections/$id/capture' });
+
+  return preview === '1' ? <Preview id={id} /> : <Walkthrough id={id} />;
+}
+
+/** La captura de verdad: abre el borrador, guarda respuestas y no necesita red. */
+function Walkthrough({ id }: { id: string }): React.JSX.Element {
   const { account, ready } = useAppSession();
   const queryClient = useQueryClient();
 

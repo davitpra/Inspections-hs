@@ -71,3 +71,27 @@ export function civilMonth(instant: Date, timeZone: string = SITE_TIME_ZONE): st
 export function currentCivilYear(now: Date = new Date()): string {
   return civilMonth(now).slice(0, 4);
 }
+
+/** El día civil de hoy, como `YYYY-MM-DD`. Lo que `dueIn` compara contra un plazo. */
+export function civilToday(now: Date = new Date(), timeZone: string = SITE_TIME_ZONE): string {
+  return civilDate(now, timeZone);
+}
+
+/**
+ * El día de un instante, escrito para leerse en una celda: `2027-07-29T…` → `Jul 29, 2027`.
+ *
+ * A diferencia de `formatDay`, que recorta la cadena, este RESUELVE el día en la zona de la
+ * planta, y tiene que hacerlo: `completed_at` es un instante y no un día, así que un envío
+ * firmado a las 21:00 de Ontario llega como el día siguiente en UTC. Recortarlo lo fecharía
+ * un día tarde — y en el último día de un mes, un mes tarde, que es justamente lo que
+ * identifica la obligación ante el regulador.
+ *
+ * El mes se escribe con `MONTH_NAMES` y no con el formato largo de `Intl`: la zona es lo
+ * único que se delega, nunca el idioma. La interfaz es solo inglés y no depende del locale
+ * del dispositivo.
+ */
+export function formatCivilDay(instant: string, timeZone: string = SITE_TIME_ZONE): string {
+  const day = civilDate(new Date(instant), timeZone);
+
+  return `${MONTH_NAMES[Number(day.slice(5, 7)) - 1]!.slice(0, 3)} ${Number(day.slice(8, 10))}, ${day.slice(0, 4)}`;
+}

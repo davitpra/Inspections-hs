@@ -1,5 +1,7 @@
 import { ROLE_LABELS, type Session } from '@hs/contracts';
 
+import { displayName } from '../presentation/account';
+
 /**
  * Quién está usando el dispositivo, escrito donde se ve sin buscarlo.
  *
@@ -29,19 +31,4 @@ export function AccountChip({ account }: { account: Session }): React.JSX.Elemen
       {name === role ? null : <span className="account-chip__role">{role}</span>}
     </div>
   );
-}
-
-/**
- * El nombre, con dos respaldos, y los respaldos son el punto.
- *
- * `firstName`/`lastName` y `email` son opcionales en `sessionSchema` para que un
- * dispositivo con la sesión cacheada por una versión anterior siga entrando sin red
- * (ver el comentario del esquema). Esa tolerancia solo sirve si acá no queda un hueco:
- * sin nombre se muestra el email, y sin email el rol —que siempre está— alcanza para
- * saber con qué permisos se está trabajando.
- */
-function displayName(account: Session): string {
-  const full = [account.firstName, account.lastName].filter(Boolean).join(' ');
-
-  return full || account.email || ROLE_LABELS[account.role];
 }
