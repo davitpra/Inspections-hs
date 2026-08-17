@@ -15,6 +15,7 @@ import { ActionsRoute } from '../routes/ActionsRoute';
 import { CaptureRoute } from '../routes/CaptureRoute';
 import { Form7Route } from '../routes/Form7Route';
 import { InboxRoute } from '../routes/InboxRoute';
+import { InspectionReportRoute } from '../routes/InspectionReportRoute';
 import { IncidentRoute } from '../routes/IncidentRoute';
 import { IncidentsRoute } from '../routes/IncidentsRoute';
 import { OfflineRoute } from '../routes/OfflineRoute';
@@ -209,6 +210,16 @@ const captureRoute = createRoute({
 });
 
 /**
+ * Una inspección enviada, leída de vuelta. Mismo `$id` que la captura y la revisión —la
+ * inspección programada—, así que las tres pantallas de una inspección se direccionan igual.
+ */
+const inspectionReportRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/inspections/$id/report',
+  component: InspectionReportRoute,
+});
+
+/**
  * El historial. Un solo segmento bajo `/inspections`, así que no compite con
  * `/inspections/$id/capture`, que tiene tres.
  *
@@ -353,6 +364,7 @@ const routeTree = rootRoute.addChildren([
   pendingRoute,
   captureRoute,
   pastInspectionsRoute,
+  inspectionReportRoute,
   reviewRoute,
   outboxRoute,
   schedulingRoute,

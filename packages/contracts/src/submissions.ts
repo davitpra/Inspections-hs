@@ -1,7 +1,7 @@
-import { ITEM_KEY_PATTERN, signatureAnswerSchema } from '@hs/forms';
+import { ITEM_KEY_PATTERN, signatureAnswerSchema, templateDocumentSchema } from '@hs/forms';
 import { z } from 'zod';
 
-import { submissionFindingsSchema } from './findings.js';
+import { findingSchema, submissionFindingsSchema } from './findings.js';
 
 /**
  * Requisitos §7 etapa 3 — Lo que sale del dispositivo: la subida de una foto y el
@@ -201,3 +201,57 @@ export const acceptedSubmissionSchema = z.strictObject({
 });
 
 export type AcceptedSubmission = z.infer<typeof acceptedSubmissionSchema>;
+
+// ---------------------------------------------------------------------------
+// Lo que se lee de vuelta
+
+/**
+ * Un envío aceptado, leído de vuelta desde el servidor.
+ *
+ * **El `document` es el de `template_version_id` de ESTA inspección**, no el de la
+ * versión publicada hoy. Es lo que hace que publicar la versión 5 no cambie cómo se lee
+ * un envío firmado contra la 2: las preguntas, su orden y su redacción son las que el
+ * inspector contestó (ADR-005).
+ *
+ * **`answers` viaja aparte del documento y no pre-apareado**, y esa separación es
+ * deliberada. Aparearlos en el servidor sería una tercera implementación del recorrido
+ * que `@hs/forms` ya hace en el dispositivo y en la ingesta, y el primer lugar donde las
+ * tres podrían discrepar en silencio sobre un registro que es evidencia (ADR-007).
+ *
+ * De ahí sale también la distinción entre "no contestado" y "contestado vacío": un ítem
+ * sin respuesta **no tiene clave** en el mapa. No hace falta un centinela.
+ *
+ * **Sin bytes y sin URLs.** Una respuesta de tipo `photo` o `signature` lleva sus object
+ * keys, igual que `photo_object_keys` de un hallazgo, y una key es inerte sin una URL
+ * firmada. Poder verlas es otro change.
+ */
+export const submittedInspectionSchema = z.strictObject({
+  scheduled_inspection_id: z.uuid(),
+  inspection_id: z.uuid(),
+  site_id: z.uuid(),
+  period_start: z.iso.date(),
+  template_name: z.string().min(1),
+  template_version_id: z.uuid(),
+  template_version: z.int().positive(),
+
+  document: templateDocumentSchema,
+  answers: z.record(itemKeySchema, answerValueSchema),
+  findings: z.array(findingSchema),
+
+  submitted_by: z.uuid(),
+  /**
+   * Nulo por el mismo motivo que `inspector_name`: la asignación es un hecho, pero la
+   * fila de `person` del firmante puede no ser visible para quien lee. Falta el nombre;
+   * no falta la firma.
+   */
+  submitted_by_name: z.string().nullable(),
+
+  /** El reloj del dispositivo al firmar. Es la fecha del registro (ver `completed_at`). */
+  signed_at: z.iso.datetime({ offset: true }),
+  /** El del servidor al recibirlo. Los dos, porque el riesgo C de §5 pide los dos. */
+  received_at: z.iso.datetime({ offset: true }),
+
+  answer_count: z.int().nonnegative(),
+});
+
+export type SubmittedInspection = z.infer<typeof submittedInspectionSchema>;

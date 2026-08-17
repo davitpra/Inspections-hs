@@ -410,3 +410,32 @@ function isUniqueViolation(error: unknown, constraint: string): boolean {
 
   return candidate?.code === '23505' && candidate.constraint === constraint;
 }
+
+/**
+ * Los hallazgos que abrió un envío, para leerlo de vuelta.
+ *
+ * Función libre y con `PoolClient`, igual que `insertRecurrenceMarks`: corre DENTRO de la
+ * transacción de quien la llama —`inspections`, que es la dirección de dependencia que
+ * declara ADR-008— y no abre una propia. Sin `WHERE site_id`: el recorte es la política
+ * sobre esa transacción.
+ *
+ * Vive acá y no en un archivo aparte porque reusa `FINDING_SELECT` y `toFinding`, que son
+ * privados de este módulo. Un segundo `SELECT` escrito afuera sería una segunda definición
+ * de qué es un hallazgo, y la clasificación vigente y la marca de recurrencia —los dos
+ * `LEFT JOIN LATERAL` de arriba— serían lo primero en desincronizarse.
+ *
+ * `f.inspection_id = $1` alcanza para excluir los manuales: el `CHECK` de la migración
+ * impide que un hallazgo manual tenga inspección, así que filtrar por `origin` además
+ * sería decir dos veces lo mismo.
+ */
+export async function findingsForInspection(
+  client: PoolClient,
+  inspectionId: string,
+): Promise<Finding[]> {
+  const { rows } = await client.query<FindingRow>(
+    `${FINDING_SELECT} WHERE f.inspection_id = $1 ORDER BY f.recorded_at, f.id`,
+    [inspectionId],
+  );
+
+  return rows.map(toFinding);
+}

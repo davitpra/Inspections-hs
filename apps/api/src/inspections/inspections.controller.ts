@@ -21,6 +21,7 @@ import {
   type PendingInspection,
   type RosterPackage,
   type ScheduledInspection,
+  type SubmittedInspection,
   type TemplateVersionPackage,
 } from '@hs/contracts';
 import { z } from 'zod';
@@ -149,6 +150,25 @@ export class InspectionsController {
     @Param('id') id: string,
   ): Promise<RosterPackage> {
     return this.inspections.rosterPackage(session, id);
+  }
+
+  /**
+   * El envío aceptado, leído de vuelta: el documento congelado con el que se contestó,
+   * las respuestas, y los hallazgos que abrieron.
+   *
+   * CUARTA HERMANA de las tres de arriba y por el mismo motivo: cuelga de la inspección
+   * programada, así que el alcance es una sola pregunta que RLS ya responde sobre
+   * `scheduled_inspection`. Sin comprobación de rol — quien tenga alcance a la planta
+   * puede leer su registro, igual que puede leer su programación.
+   *
+   * Un período sin envío responde como uno que no existe (ver `active-inspection.ts`).
+   */
+  @Get('scheduled-inspections/:id/submission')
+  async submittedInspection(
+    @CurrentSession() session: SessionContext,
+    @Param('id') id: string,
+  ): Promise<SubmittedInspection> {
+    return this.inspections.submittedInspection(session, id);
   }
 
   // -------------------------------------------------------------------------

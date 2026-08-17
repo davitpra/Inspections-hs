@@ -59,6 +59,9 @@ export const queryKeys = {
    */
   templateVersionPackage: (scheduledInspectionId?: string) =>
     key('template-version-package', scheduledInspectionId),
+  /** El envío aceptado, leído del servidor. */
+  submittedInspection: (scheduledInspectionId?: string) =>
+    key('submitted-inspection', scheduledInspectionId),
 
   /**
    * El borrador de ESTE dispositivo y ESTA cuenta (ADR-001: un dueño, un dispositivo).

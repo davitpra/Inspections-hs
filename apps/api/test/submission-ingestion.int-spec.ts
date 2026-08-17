@@ -1,4 +1,9 @@
-import { acceptedSubmissionSchema, type InspectionSubmission, type TemplateDocument } from '@hs/contracts';
+import {
+  acceptedSubmissionSchema,
+  submittedInspectionSchema,
+  type InspectionSubmission,
+  type TemplateDocument,
+} from '@hs/contracts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 
@@ -759,5 +764,174 @@ describe('alcance y autoría', () => {
     const accepted = await submissions.ingest(sessionFor(inspector.accountId, [SITE_A]), payload);
 
     expect(accepted.submitted_by).toBe(inspector.accountId);
+  });
+});
+
+/**
+ * Leer de vuelta lo enviado.
+ *
+ * Estos tests van en ESTE archivo y no en uno propio porque el envío tiene que existir
+ * para poder leerse: reconstruir el fixture completo —plantilla, versiones, ítems,
+ * cuentas, ubicación— en otro archivo sería una segunda definición de qué es un envío
+ * válido, y la que envejece es siempre la copia.
+ */
+describe('lectura del envío', () => {
+  it('devuelve las respuestas, el firmante y los dos relojes', async () => {
+    const scheduled = await freshInspection();
+    const payload = submissionFor(scheduled, SITE_A, versionV2);
+    const session = sessionFor(inspector.accountId, [SITE_A]);
+
+    const accepted = await submissions.ingest(session, payload);
+    const read = await stack.inspections.submittedInspection(session, scheduled);
+
+    // Cumple el contrato compartido con el cliente, letra por letra.
+    expect(submittedInspectionSchema.parse(read)).toEqual(read);
+
+    expect(read.inspection_id).toBe(accepted.id);
+    expect(read.scheduled_inspection_id).toBe(scheduled);
+    expect(read.submitted_by).toBe(inspector.accountId);
+    expect(read.template_version_id).toBe(versionV2);
+    expect(read.answer_count).toBe(FILLER_COUNT + 4);
+
+    const row = one(await inspectionRows(payload.client_submission_id));
+    expect(read.signed_at).toBe(row.signed_at.toISOString());
+    expect(read.received_at).toBe(row.received_at.toISOString());
+
+    // Las respuestas vuelven bajo la MISMA item_key con la que se enviaron.
+    expect(read.answers['sub.guards']).toBe(false);
+    expect(read.answers['sub.spill-present']).toBe('na');
+    // La foto viajó solo en `photos` y la ingesta la fundió en la respuesta del ítem.
+    expect(read.answers['sub.photo']).toEqual(payload.photos['sub.photo']);
+  });
+
+  /**
+   * ADR-005. Es la aserción que hace que el registro sea defendible: publicar una versión
+   * nueva no puede cambiar cómo se lee un envío firmado contra una anterior.
+   */
+  it('publicar una versión nueva no cambia lo que devuelve un envío anterior', async () => {
+    const scheduled = await freshInspection();
+    const payload = submissionFor(scheduled, SITE_A, versionV2);
+    const session = sessionFor(inspector.accountId, [SITE_A]);
+
+    await submissions.ingest(session, payload);
+
+    // La versión 3 reformula la misma pregunta. El envío ya firmado no la conoce.
+    const reworded = document();
+    const guards = reworded.sections[0]!.items.find((item) => item.item_key === 'sub.guards')!;
+    guards.prompt = 'REWORDED IN VERSION 3';
+    await publishVersion(db.migrator, templateId, 3, reworded);
+
+    const read = await stack.inspections.submittedInspection(session, scheduled);
+
+    expect(read.template_version_id).toBe(versionV2);
+
+    const prompts = read.document.sections.flatMap((section) =>
+      section.items.map((item) => item.prompt),
+    );
+    expect(prompts).not.toContain('REWORDED IN VERSION 3');
+  });
+
+  /**
+   * `sub.spill-cleanup` solo se muestra cuando `sub.spill-present` es `yes`, y el envío
+   * manda `na`. Nunca se contestó, así que NO tiene clave: es lo que distingue "no
+   * contestado" de "contestado vacío" sin necesitar un centinela.
+   */
+  it('un ítem escondido por su condición no aparece entre las respuestas', async () => {
+    const scheduled = await freshInspection();
+    const session = sessionFor(inspector.accountId, [SITE_A]);
+
+    await submissions.ingest(session, submissionFor(scheduled, SITE_A, versionV2));
+
+    const read = await stack.inspections.submittedInspection(session, scheduled);
+
+    expect(read.answers).not.toHaveProperty('sub.spill-cleanup');
+    // Y sigue estando en el documento: la pregunta existe, no se contestó.
+    const keys = read.document.sections.flatMap((section) =>
+      section.items.map((item) => item.item_key),
+    );
+    expect(keys).toContain('sub.spill-cleanup');
+  });
+
+  it('trae los hallazgos que abrió el envío, y no los cargados a mano', async () => {
+    const scheduled = await freshInspection();
+    const session = sessionFor(inspector.accountId, [SITE_A]);
+
+    await submissions.ingest(session, submissionFor(scheduled, SITE_A, versionV2));
+
+    // Un hallazgo manual de la MISMA planta: no pertenece a ningún envío. Va con su foto
+    // en la misma transacción porque el motor exige evidencia — un hallazgo sin foto no
+    // llega al COMMIT.
+    await inScope(
+      db.app,
+      [SITE_A],
+      `WITH manual AS (
+         INSERT INTO finding (site_id, origin, location_id, description, reported_by, occurred_at)
+         VALUES ($1, 'manual', $2, 'Spotted outside any inspection', $3, now())
+         RETURNING id, site_id
+       )
+       INSERT INTO finding_photo (finding_id, site_id, object_key)
+       SELECT id, site_id, $4 FROM manual`,
+      [SITE_A, locationA, inspector.accountId, keyFor(SITE_A, 'manual', 'photo')],
+    );
+
+    const read = await stack.inspections.submittedInspection(session, scheduled);
+
+    expect(read.findings).toHaveLength(1);
+    expect(read.findings[0]!.item_key).toBe('sub.guards');
+    expect(read.findings[0]!.origin).toBe('inspection');
+    expect(read.findings[0]!.location_id).toBe(locationA);
+    // La foto del hallazgo viaja como object key, nunca como bytes.
+    expect(read.findings[0]!.photo_object_keys).toHaveLength(1);
+  });
+
+  it('un período sin envío no tiene nada que leer', async () => {
+    const scheduled = await freshInspection();
+
+    await expect(
+      stack.inspections.submittedInspection(sessionFor(inspector.accountId, [SITE_A]), scheduled),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
+  /**
+   * El envío de otra planta falla IGUAL que el que no existe. Separarlos convertiría la
+   * ruta en un oráculo de qué se inspecciona donde el solicitante no tiene alcance.
+   */
+  it('el envío de otra planta responde igual que uno que no existe', async () => {
+    const scheduled = await freshInspection();
+    await submissions.ingest(
+      sessionFor(inspector.accountId, [SITE_A]),
+      submissionFor(scheduled, SITE_A, versionV2),
+    );
+
+    await expect(
+      stack.inspections.submittedInspection(
+        sessionFor(inspectorB.accountId, [SITE_B]),
+        scheduled,
+      ),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('leer no escribe', async () => {
+    const scheduled = await freshInspection();
+    const session = sessionFor(inspector.accountId, [SITE_A]);
+
+    await submissions.ingest(session, submissionFor(scheduled, SITE_A, versionV2));
+
+    const count = async () => {
+      const rows = await inScope<{ counts: string }>(
+        db.app,
+        [SITE_A],
+        `SELECT (SELECT count(*) FROM inspection)::text || '/' ||
+                (SELECT count(*) FROM inspection_answer)::text || '/' ||
+                (SELECT count(*) FROM finding)::text AS counts`,
+      );
+      return one(rows).counts;
+    };
+
+    const before = await count();
+    await stack.inspections.submittedInspection(session, scheduled);
+    await stack.inspections.submittedInspection(session, scheduled);
+
+    expect(await count()).toBe(before);
   });
 });

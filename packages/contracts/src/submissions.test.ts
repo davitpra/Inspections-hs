@@ -8,6 +8,7 @@ import {
   presignActionUploadRequestSchema,
   presignUploadRequestSchema,
   presignUploadResponseSchema,
+  submittedInspectionSchema,
 } from './submissions.js';
 
 const INSPECTION_ID = '11111111-1111-4111-8111-111111111111';
@@ -17,6 +18,7 @@ const USER_ID = '44444444-4444-4444-8444-444444444444';
 const LOCATION_ID = '55555555-5555-4555-8555-555555555555';
 const SITE_ID = '66666666-6666-4666-8666-666666666666';
 const DRAFT_FINDING_ID = '77777777-7777-4777-8777-777777777777';
+const FINDING_ID = '88888888-8888-4888-8888-888888888888';
 
 function validPresign() {
   return {
@@ -311,5 +313,117 @@ describe('acceptedSubmissionSchema', () => {
 
     expect(acceptedSubmissionSchema.safeParse(record).success).toBe(true);
     expect(acceptedSubmissionSchema.safeParse({ ...record, created: false }).success).toBe(true);
+  });
+});
+
+describe('submittedInspectionSchema', () => {
+  function validSubmitted() {
+    return {
+      scheduled_inspection_id: INSPECTION_ID,
+      inspection_id: SUBMISSION_ID,
+      site_id: SITE_ID,
+      period_start: '2026-08-01',
+      template_name: 'Monthly general workplace inspection',
+      template_version_id: VERSION_ID,
+      template_version: 2,
+      document: {
+        sections: [
+          {
+            section_key: 'guarding',
+            section_title: 'Machine guarding',
+            position: 1,
+            items: [
+              {
+                item_key: 'guarding.installed',
+                prompt: 'Are all guards installed?',
+                position: 1,
+                response_type: 'yes_no',
+                required: true,
+              },
+            ],
+          },
+        ],
+      },
+      answers: {
+        'guarding.installed': false,
+        'guarding.rating': 4,
+        'guarding.notes': 'Machine 3 guard was refitted',
+        'guarding.defects': ['loose', 'bent'],
+        'guarding.photo': ['site/inspection/aaa.jpg'],
+        'walkthrough.signature': {
+          object_key: 'site/inspection/signature.png',
+          signed_at: '2026-08-08T15:00:00.000Z',
+        },
+      },
+      findings: [
+        {
+          id: FINDING_ID,
+          site_id: SITE_ID,
+          origin: 'inspection',
+          inspection_id: SUBMISSION_ID,
+          template_version_item_id: VERSION_ID,
+          item_key: 'guarding.installed',
+          location_id: LOCATION_ID,
+          description: 'Guard missing on the infeed of packaging line 3',
+          photo_object_keys: ['site/inspection/ccc.jpg'],
+          reported_by: USER_ID,
+          occurred_at: '2026-08-08T15:00:00.000Z',
+          recorded_at: '2026-08-08T15:05:00.000Z',
+          assessment: null,
+          recurrence: null,
+        },
+      ],
+      submitted_by: USER_ID,
+      submitted_by_name: 'Marie Tremblay',
+      signed_at: '2026-08-08T15:00:00.000Z',
+      received_at: '2026-08-09T11:00:00.000Z',
+      answer_count: 6,
+    };
+  }
+
+  it('acepta un envío leído con respuestas de cada forma que define response_type', () => {
+    expect(submittedInspectionSchema.safeParse(validSubmitted()).success).toBe(true);
+  });
+
+  /**
+   * El nombre del firmante falta cuando su fila de `person` está en la otra planta. La
+   * firma no falta: `submitted_by` sigue ahí.
+   */
+  it('acepta un firmante sin nombre visible', () => {
+    const result = submittedInspectionSchema.safeParse({
+      ...validSubmitted(),
+      submitted_by_name: null,
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  /**
+   * Un ítem sin respuesta NO tiene clave. Es lo que distingue "no contestado" de
+   * "contestado vacío" sin necesitar un centinela.
+   */
+  it('acepta un envío sin ninguna respuesta para un ítem del documento', () => {
+    const result = submittedInspectionSchema.safeParse({
+      ...validSubmitted(),
+      answers: {},
+      answer_count: 0,
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rechaza una item_key que no cumple el patrón', () => {
+    const result = submittedInspectionSchema.safeParse({
+      ...validSubmitted(),
+      answers: { 'Guarding Installed': true },
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('exige el documento congelado: sin él no hay con qué leer las respuestas', () => {
+    const { document: _document, ...withoutDocument } = validSubmitted();
+
+    expect(submittedInspectionSchema.safeParse(withoutDocument).success).toBe(false);
   });
 });

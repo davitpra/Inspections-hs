@@ -12,8 +12,24 @@ vi.mock('../../api/inspections', () => ({ listSites, listScheduled }));
 vi.mock('../../app/session-context', () => ({ useAppSession }));
 
 vi.mock('@tanstack/react-router', () => ({
-  Link: ({ to, children }: { to: string; children: React.ReactNode }) => <a href={to}>{children}</a>,
+  Link: ({
+    to,
+    params,
+    children,
+  }: {
+    to: string;
+    params?: Record<string, string>;
+    children: React.ReactNode;
+  }) => <a href={substitute(to, params)}>{children}</a>,
 }));
+
+/** El `$id` del `to` resuelto con los `params`, como haría el router de verdad. */
+function substitute(to: string, params?: Record<string, string>): string {
+  return Object.entries(params ?? {}).reduce(
+    (path, [name, value]) => path.replace(`$${name}`, value),
+    to,
+  );
+}
 
 const USER = '11111111-1111-4111-8111-111111111111';
 const OTHER = '22222222-2222-4222-8222-222222222222';
@@ -126,13 +142,25 @@ describe('PastInspectionsRoute', () => {
     expect(screen.queryByText('You have not completed any inspections yet.')).toBeNull();
   });
 
-  /** El reporte todavía no existe: la acción se ve, pero no promete una pantalla. */
-  it('ofrece el reporte deshabilitado, no un link roto', async () => {
-    listScheduled.mockResolvedValue([scheduled()]);
+  it('ofrece el reporte de cada envío, apuntando a su inspección', async () => {
+    listScheduled.mockResolvedValue([scheduled({ id: 'july' })]);
 
     renderRoute();
 
-    const report = await screen.findByRole('button', { name: /View report/ });
-    expect(report.hasAttribute('disabled')).toBe(true);
+    const report = await screen.findByRole('link', { name: /View report/ });
+    expect(report.getAttribute('href')).toBe('/inspections/july/report');
+  });
+
+  /**
+   * `inspection_id` nulo es "no hay envío que leer". Ofrecer el link igual mandaría al
+   * inspector a una pantalla que va a responder que no encontró nada.
+   */
+  it('no ofrece reporte cuando el período no tiene envío que leer', async () => {
+    listScheduled.mockResolvedValue([scheduled({ inspection_id: null })]);
+
+    renderRoute();
+
+    await screen.findByText('July 2027');
+    expect(screen.queryByRole('link', { name: /View report/ })).toBeNull();
   });
 });

@@ -1,7 +1,8 @@
-import type { ScheduledInspection } from '@hs/contracts';
+import type { ScheduledInspection } from "@hs/contracts";
+import { Link } from "@tanstack/react-router";
 
-import { formatCivilDay, monthName } from '../presentation/dates';
-import { ExternalLinkIcon } from './icons';
+import { formatCivilDay, monthName } from "../presentation/dates";
+import { ExternalLinkIcon } from "./icons";
 
 /**
  * Lo que un inspector cerró, en tabla. La comparten la tarjeta de la pantalla de inicio
@@ -42,28 +43,31 @@ export function CompletedInspectionsTable({
             </th>
             <td>{siteName(item.site_id)}</td>
             <td>
-              <span className="status-pill status-pill--completed">Completed</span>
+              <span className="status-pill status-pill--completed">
+                Completed
+              </span>
             </td>
             <td>
-              {item.completed_at ? `Completed on ${formatCivilDay(item.completed_at)}` : '—'}
+              {item.completed_at
+                ? `Completed on ${formatCivilDay(item.completed_at)}`
+                : "—"}
             </td>
             <td>
               {/*
-                UN BOTÓN DESHABILITADO Y NO UN LINK, a propósito. Leer una inspección
-                enviada todavía no existe: el servidor no devuelve sus respuestas y no hay
-                pantalla que las dibuje. Un `<a>` que no navega a ningún lado sería una
-                promesa rota; esto dice "todavía no" sin mentir, y el día que el reporte
-                exista se cambia por el link acá mismo.
+                `inspection_id` no nulo es exactamente "hay un envío que leer", y es lo
+                único de esta fila que lo dice sin volver a derivar `status`. Sin él no se
+                ofrece nada: un link a un reporte que no existe sería una promesa rota.
               */}
               <div className="table__actions">
-                <button
-                  type="button"
-                  className="button--outline"
-                  disabled
-                  title="Reading a submitted inspection is not available yet."
-                >
-                  View report <ExternalLinkIcon size={16} />
-                </button>
+                {item.inspection_id ? (
+                  <Link
+                    to="/inspections/$id/report"
+                    params={{ id: item.id }}
+                    className="list__action"
+                  >
+                    View report <ExternalLinkIcon size={16} />
+                  </Link>
+                ) : null}
               </div>
             </td>
           </tr>

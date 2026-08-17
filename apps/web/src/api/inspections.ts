@@ -4,12 +4,14 @@ import {
   scheduledInspectionSchema,
   siteSchema,
   templateOptionSchema,
+  submittedInspectionSchema,
   templateVersionPackageSchema,
   type CreateScheduledInspection,
   type InspectionSchedule,
   type InspectorOption,
   type ScheduledInspection,
   type Site,
+  type SubmittedInspection,
   type TemplateOption,
   type TemplateVersionPackage,
 } from '@hs/contracts';
@@ -151,11 +153,23 @@ export async function getTemplateVersionPackage(id: string): Promise<TemplateVer
   );
 }
 
+/**
+ * El envío aceptado, leído de vuelta: el documento con el que se contestó, las respuestas
+ * y los hallazgos. De servidor y sin equivalente local — el borrador que quedó en el
+ * dispositivo cubre los primeros días y nada más (ADR-010).
+ */
+export async function getSubmittedInspection(id: string): Promise<SubmittedInspection> {
+  return get(`/scheduled-inspections/${id}/submission`, (value) =>
+    submittedInspectionSchema.parse(value),
+  );
+}
+
 export type {
   InspectionSchedule,
   InspectorOption,
   ScheduledInspection,
   Site,
+  SubmittedInspection,
   TemplateOption,
   TemplateVersionPackage,
 };

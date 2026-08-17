@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type {
+  AnswerValue,
   CreateInspectionSchedule,
   CreateScheduledInspection,
   InspectionSchedule,
@@ -10,6 +11,7 @@ import type {
   Role,
   RosterPackage,
   ScheduledInspection,
+  SubmittedInspection,
   TemplateVersionPackage,
   UpdateInspectionSchedule,
 } from '@hs/contracts';
@@ -19,6 +21,7 @@ import type { PoolClient } from 'pg';
 import { DbService } from '../db/db.service';
 import { forbidden } from '../auth/auth.errors';
 import type { SessionScope } from '../db/site-scope';
+import { findingsForInspection } from '../findings/findings.service';
 import { findActiveInspection, type ActiveInspection } from './active-inspection';
 import { SITE_TIME_ZONE } from '../jobs/job-registry';
 import { LATEST_PUBLISHED_VERSION_CTE } from '../templates/published-version.sql';
@@ -384,6 +387,83 @@ export class InspectionsService {
     });
   }
 
+  /**
+   * El envío aceptado de una inspección, leído de vuelta.
+   *
+   * **El documento sale del `template_version_id` DE LA INSPECCIÓN**, no del de la
+   * plantilla hoy: publicar la versión 5 no puede cambiar cómo se lee un envío firmado
+   * contra la 2 (ADR-005). Es la misma lectura que hace `templateVersionPackage`, contra
+   * la misma columna congelada.
+   *
+   * Las respuestas se devuelven como MAPA y aparte del documento. Aparearlas acá sería
+   * una tercera implementación del recorrido que `@hs/forms` ya hace en el dispositivo y
+   * en la ingesta (ADR-007). Y de la forma sale gratis lo que si no haría falta inventar:
+   * un ítem sin fila no tiene clave, y eso distingue "no contestado" de "contestado
+   * vacío".
+   *
+   * Solo `SELECT`, sobre cuatro tablas inmutables. Sin `WHERE site_id`: el recorte es la
+   * política sobre la transacción (ADR-002/004), y por eso el envío de otra planta y el
+   * período que nunca se envió fallan igual.
+   */
+  async submittedInspection(session: SessionScope, id: string): Promise<SubmittedInspection> {
+    return this.db.withSessionClient(session, async (client) => {
+      const scheduled = await this.requireActive(client, id);
+
+      const { rows } = await client.query<SubmittedRow>(
+        `SELECT insp.id,
+                insp.template_version_id,
+                insp.submitted_by,
+                insp.signed_at,
+                insp.received_at,
+                insp.answer_count,
+                si.period_start::text AS period_start,
+                t.name AS template_name,
+                tv.version AS template_version,
+                tv.document,
+                ${INSPECTOR_NAME_EXPR('sp')} AS submitted_by_name
+           FROM inspection insp
+           JOIN scheduled_inspection si ON si.id = insp.scheduled_inspection_id
+           JOIN template t ON t.id = si.template_id
+           JOIN template_version tv ON tv.id = insp.template_version_id
+           ${INSPECTOR_NAME_JOIN('insp.submitted_by', 'su', 'sp')}
+          WHERE insp.scheduled_inspection_id = $1`,
+        [id],
+      );
+
+      // Un período sin envío no tiene nada que leer, y responde como el que no existe:
+      // separarlos convertiría la ruta en un oráculo de qué se inspeccionó dónde.
+      const row = rows[0];
+      if (!row) throw inspectionNotFound();
+
+      const answers = await client.query<{ item_key: string; value: AnswerValue }>(
+        `SELECT item_key, value
+           FROM inspection_answer
+          WHERE inspection_id = $1`,
+        [row.id],
+      );
+
+      return {
+        scheduled_inspection_id: id,
+        inspection_id: row.id,
+        site_id: scheduled.site_id,
+        period_start: row.period_start,
+        template_name: row.template_name,
+        template_version_id: row.template_version_id,
+        template_version: row.template_version,
+        document: row.document,
+        answers: Object.fromEntries(
+          answers.rows.map((answer) => [answer.item_key, answer.value]),
+        ),
+        findings: await findingsForInspection(client, row.id),
+        submitted_by: row.submitted_by,
+        submitted_by_name: row.submitted_by_name,
+        signed_at: row.signed_at.toISOString(),
+        received_at: row.received_at.toISOString(),
+        answer_count: row.answer_count,
+      };
+    });
+  }
+
   /** El catálogo cerrado de ubicaciones ACTIVAS de la planta de la inspección. */
   async locationPackage(session: SessionScope, id: string): Promise<LocationPackage> {
     return this.db.withSessionClient(session, async (client) => {
@@ -665,6 +745,20 @@ interface ScheduledRow extends Record<string, unknown> {
   status: PeriodStatus;
   inspection_id: string | null;
   completed_at: Date | null;
+}
+
+interface SubmittedRow extends Record<string, unknown> {
+  id: string;
+  template_version_id: string;
+  template_version: number;
+  template_name: string;
+  document: TemplateDocument;
+  period_start: string;
+  submitted_by: string;
+  submitted_by_name: string | null;
+  signed_at: Date;
+  received_at: Date;
+  answer_count: number;
 }
 
 interface PendingRow extends Record<string, unknown> {
