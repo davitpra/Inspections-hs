@@ -1,32 +1,32 @@
-import { pendingInspectionSchema, type PendingInspection } from '@hs/contracts';
-import { useQuery } from '@tanstack/react-query';
-import { useSearch } from '@tanstack/react-router';
-import { useState } from 'react';
-import { z } from 'zod';
+import { pendingInspectionSchema, type PendingInspection } from "@hs/contracts";
+import { useQuery } from "@tanstack/react-query";
+import { useSearch } from "@tanstack/react-router";
+import { useState } from "react";
+import { z } from "zod";
 
-import { sessionClient } from '../../api/client';
-import { listScheduled, listSites } from '../../api/inspections';
-import { queryKeys } from '../../api/query-keys';
-import { InstallPrompt } from '../../app/InstallPrompt';
-import { useAppSession } from '../../app/session-context';
-import { CalendarIcon, InfoIcon, PinIcon } from '../../components/icons';
-import type { DraftRow as DraftRowData } from '../../offline/db';
-import { listDrafts } from '../../offline/drafts';
-import { civilMonth, civilToday, monthName } from '../../presentation/dates';
-import { AssignmentChecklist } from './AssignmentChecklist';
-import { AssignmentHero } from './AssignmentHero';
-import { DiscardDraftDialog } from './DiscardDraftDialog';
-import { DraftRow } from './DraftRow';
-import { NextAssignment } from './NextAssignment';
-import { NoAssignment } from './NoAssignment';
-import { RecentInspections } from './RecentInspections';
+import { sessionClient } from "../../api/client";
+import { listScheduled, listSites } from "../../api/inspections";
+import { queryKeys } from "../../api/query-keys";
+import { InstallPrompt } from "../../app/InstallPrompt";
+import { useAppSession } from "../../app/session-context";
+import { CalendarIcon, InfoIcon, PinIcon } from "../../components/icons";
+import type { DraftRow as DraftRowData } from "../../offline/db";
+import { listDrafts } from "../../offline/drafts";
+import { civilMonth, civilToday, monthName } from "../../presentation/dates";
+import { AssignmentChecklist } from "./AssignmentChecklist";
+import { AssignmentHero } from "./AssignmentHero";
+import { DeviceDrafts } from "./DeviceDrafts";
+import { DiscardDraftDialog } from "./DiscardDraftDialog";
+import { NextAssignment } from "./NextAssignment";
+import { NoAssignment } from "./NoAssignment";
+import { RecentInspections } from "./RecentInspections";
 import {
   draftPeriodStart,
   focusedAssignment,
   nextAssignment,
   pendingWork,
-  submittedFromDevice,
-} from './presentation';
+  // submittedFromDevice,
+} from "./presentation";
 
 /**
  * La pantalla de inicio del miembro del JHSC: lo que debe ahora, lo que viene después, y
@@ -54,7 +54,7 @@ export function PendingRoute(): React.JSX.Element {
    * porque una inspección aceptada no está esperando nada: la lista de la que salió es
    * el lugar donde su ausencia se entiende.
    */
-  const { submitted } = useSearch({ from: '/' });
+  const { submitted } = useSearch({ from: "/" });
 
   /**
    * El borrador que se está por descartar, ACÁ y no en la tarjeta: descartar invalida la
@@ -67,7 +67,9 @@ export function PendingRoute(): React.JSX.Element {
   const pending = useQuery({
     queryKey: queryKeys.pendingInspections(),
     queryFn: async (): Promise<PendingInspection[]> => {
-      const result = await sessionClient.request<unknown>('/me/pending-inspections');
+      const result = await sessionClient.request<unknown>(
+        "/me/pending-inspections",
+      );
       if (!result.ok) throw new Error(result.message);
 
       return z.array(pendingInspectionSchema).parse(result.value);
@@ -88,7 +90,11 @@ export function PendingRoute(): React.JSX.Element {
    * preparación (nombre de sitio, historial reciente). De lectura — un miembro del JHSC
    * viendo la programación de su planta es legítimo (ver `router.tsx`).
    */
-  const sites = useQuery({ queryKey: queryKeys.sites(), queryFn: listSites, retry: false });
+  const sites = useQuery({
+    queryKey: queryKeys.sites(),
+    queryFn: listSites,
+    retry: false,
+  });
   const scheduled = useQuery({
     queryKey: queryKeys.scheduledInspections(),
     queryFn: listScheduled,
@@ -103,7 +109,9 @@ export function PendingRoute(): React.JSX.Element {
 
   const focused = focusedAssignment(all, now);
   const focusedDraft = focused
-    ? (drafts.data?.find((draft) => draft.scheduled_inspection_id === focused.id) ?? null)
+    ? (drafts.data?.find(
+        (draft) => draft.scheduled_inspection_id === focused.id,
+      ) ?? null)
     : null;
   const focusedSite = focused
     ? sites.data?.find((site) => site.id === focused.site_id)
@@ -117,7 +125,7 @@ export function PendingRoute(): React.JSX.Element {
   const next = nextAssignment(all, now);
 
   const working = pendingWork(drafts.data ?? []);
-  const sent = submittedFromDevice(drafts.data ?? []);
+  // const sent = submittedFromDevice(drafts.data ?? []);
 
   return (
     <>
@@ -137,16 +145,17 @@ export function PendingRoute(): React.JSX.Element {
         </div>
       </header>
 
-      {submitted === 'accepted' ? (
+      {submitted === "accepted" ? (
         <p className="notice">
-          Your signed inspection was sent and accepted. It is no longer waiting on this device.
+          Your signed inspection was sent and accepted. It is no longer waiting
+          on this device.
         </p>
       ) : null}
 
       {pending.isError ? (
         <p className="notice">
-          The list of scheduled inspections needs a connection. Drafts already on this device
-          are below and are not affected.
+          The list of scheduled inspections needs a connection. Drafts already
+          on this device are below and are not affected.
         </p>
       ) : null}
 
@@ -163,7 +172,10 @@ export function PendingRoute(): React.JSX.Element {
 
             <div className="assignment__layout">
               <div>
-                <AssignmentChecklist inspection={focused} draft={focusedDraft} />
+                <AssignmentChecklist
+                  inspection={focused}
+                  draft={focusedDraft}
+                />
               </div>
 
               <aside className="assignment__aside">
@@ -184,15 +196,14 @@ export function PendingRoute(): React.JSX.Element {
                   <h3>
                     <PinIcon size={18} /> Site information
                   </h3>
-                  <p className="progress__text">{focusedSite?.name ?? '—'}</p>
+                  <p className="progress__text">{focusedSite?.name ?? "—"}</p>
                 </div>
-
               </aside>
             </div>
           </>
         ) : (
           <NoAssignment
-            currentSiteId={account.siteScope[0] ?? ''}
+            currentSiteId={account.siteScope[0] ?? ""}
             monthLabel={`${monthName(`${civilMonth(now)}-01`)} ${civilMonth(now).slice(0, 4)}`}
             siteName={siteName}
           />
@@ -205,7 +216,11 @@ export function PendingRoute(): React.JSX.Element {
         asignación en curso que sin ella.
       */}
       {account && next ? (
-        <NextAssignment inspection={next} account={account} siteName={siteName} />
+        <NextAssignment
+          inspection={next}
+          account={account}
+          siteName={siteName}
+        />
       ) : null}
 
       {account ? (
@@ -216,47 +231,14 @@ export function PendingRoute(): React.JSX.Element {
         />
       ) : null}
 
-      {/*
-        Los borradores del dispositivo NO se filtran por año. No guardan el período —el mes
-        se resuelve contra la lista de arriba y muchas veces no se puede—, así que un
-        filtro escondería trabajo real sin que se entienda por qué.
-      */}
-      <h2>Drafts on this device</h2>
-
-      {working.length === 0 ? <p>No drafts in progress on this device.</p> : null}
-
-      <ul className="grid--list">
-        {working.map((draft) => (
-          <DraftRow
-            key={draft.client_submission_id}
-            draft={draft}
-            periodStart={draftPeriodStart(draft, all)}
-            onDiscard={setDiscarding}
-          />
-        ))}
-      </ul>
-
-      {/*
-        Lo ya enviado, aparte y después: no espera nada y no se puede tocar. Sigue en la
-        pantalla porque abrirlo de solo lectura es el único acceso del inspector a lo que
-        mandó cuando no hay red.
-      */}
-      {sent.length > 0 ? (
-        <>
-          <h2>Submitted from this device</h2>
-
-          <ul className="grid--list">
-            {sent.map((draft) => (
-              <DraftRow
-                key={draft.client_submission_id}
-                draft={draft}
-                periodStart={draftPeriodStart(draft, all)}
-                onDiscard={setDiscarding}
-              />
-            ))}
-          </ul>
-        </>
-      ) : null}
+      <DeviceDrafts
+        title="Drafts on this device"
+        drafts={working}
+        empty="No drafts in progress on this device."
+        periodStart={(draft) => draftPeriodStart(draft, all)}
+        siteName={siteName}
+        onDiscard={setDiscarding}
+      />
 
       {discarding && account ? (
         <DiscardDraftDialog

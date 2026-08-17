@@ -372,13 +372,9 @@ select:disabled {
  */
 .list__action {
   min-height: 48px;
-  padding: 0.6rem 1rem;
-  margin: 0.6rem 0 0;
   display: inline-flex;
   align-items: center;
   box-sizing: border-box; /* Repite el chrome del `button`, y eso incluye la caja. */
-  border: 1px solid var(--brand);
-  border-radius: var(--radius);
   color: var(--brand);
   font-weight: 600;
   text-decoration: none;
@@ -977,10 +973,16 @@ select:disabled {
   gap: 0.75rem;
 }
 
+/* El mismo reset que `.grid`, y por la misma razón: un `<ul>` trae relleno propio del
+   navegador, así que sin esto la lista arranca ~40px a la derecha del resto de la página.
+   El `flex` esconde los marcadores pero no el corrimiento, que es lo que se ve. */
 .grid--list {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
 }
 
 .period {
@@ -1159,6 +1161,13 @@ select:disabled {
   justify-content: center;
 }
 
+/* Dos acciones apiladas (abrir y descartar, en la lista del inspector): el `gap` de
+   0.15rem de `.period` separa datos, no objetivos de toque. La primera trae su propio
+   margen desde `.list__action`; la segunda lo necesita acá. */
+.period__action + .period__action {
+  margin-top: 0.5rem;
+}
+
 .stats-bar {
   display: flex;
   flex-wrap: wrap;
@@ -1219,6 +1228,23 @@ select:disabled {
 .button--danger {
   border-color: var(--state-danger);
   color: var(--state-danger);
+}
+
+/*
+ * Descartar cuando comparte celda con un link y no es la acción principal de un diálogo:
+ * el color de peligro se queda —es lo que distingue destruir de abrir— pero el borde se
+ * va. Enmarcado al lado de "Resume", el botón se leía como el paso siguiente de la fila
+ * cuando es lo contrario.
+ *
+ * El peso repite el de `.list__action` a propósito: en la misma celda conviven un link y
+ * un `button`, y dos acciones con distinto peso se leen como dos jerarquías que no
+ * existen. El piso de 48px sigue siendo el del `button` base (ADR-010).
+ */
+.button--danger-quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--state-danger);
+  font-weight: 600;
 }
 
 /*
