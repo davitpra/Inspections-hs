@@ -122,9 +122,9 @@ export function pendingWork(drafts: DraftRow[]): DraftRow[] {
   return drafts.filter((draft) => draft.status !== "accepted");
 }
 
-// export function submittedFromDevice(drafts: DraftRow[]): DraftRow[] {
-//   return drafts.filter((draft) => draft.status === 'accepted');
-// }
+export function submittedFromDevice(drafts: DraftRow[]): DraftRow[] {
+  return drafts.filter((draft) => draft.status === "accepted");
+}
 
 /**
  * Por qué no se pudo descartar, en inglés y diciendo dónde quedó el borrador.

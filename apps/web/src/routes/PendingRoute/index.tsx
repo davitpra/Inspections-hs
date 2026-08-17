@@ -25,7 +25,7 @@ import {
   focusedAssignment,
   nextAssignment,
   pendingWork,
-  // submittedFromDevice,
+  submittedFromDevice,
 } from "./presentation";
 
 /**
@@ -125,7 +125,7 @@ export function PendingRoute(): React.JSX.Element {
   const next = nextAssignment(all, now);
 
   const working = pendingWork(drafts.data ?? []);
-  // const sent = submittedFromDevice(drafts.data ?? []);
+  const sent = submittedFromDevice(drafts.data ?? []);
 
   return (
     <>
@@ -239,6 +239,24 @@ export function PendingRoute(): React.JSX.Element {
         siteName={siteName}
         onDiscard={setDiscarding}
       />
+
+      {/*
+        Lo ya enviado, aparte y después: no espera nada y no se puede tocar. Sigue en la
+        pantalla porque abrirlo de solo lectura es el único acceso del inspector a lo que
+        mandó cuando no hay red. Sin nada enviado la sección no se monta —de ahí el
+        `empty` nulo—: un encabezado permanente sobre una tabla vacía prometería un
+        historial que este dispositivo no guarda.
+      */}
+      {sent.length > 0 ? (
+        <DeviceDrafts
+          title="Submitted from this device"
+          drafts={sent}
+          empty={null}
+          periodStart={(draft) => draftPeriodStart(draft, all)}
+          siteName={siteName}
+          onDiscard={setDiscarding}
+        />
+      ) : null}
 
       {discarding && account ? (
         <DiscardDraftDialog

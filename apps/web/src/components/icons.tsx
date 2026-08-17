@@ -8,17 +8,21 @@ function svgProps(size: number) {
   return {
     width: size,
     height: size,
-    viewBox: '0 0 24 24',
-    fill: 'none',
-    stroke: 'currentColor',
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
     strokeWidth: 1.8,
-    strokeLinecap: 'round' as const,
-    strokeLinejoin: 'round' as const,
-    'aria-hidden': true,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true,
   };
 }
 
-export function CalendarIcon({ size = 20 }: { size?: number }): React.JSX.Element {
+export function CalendarIcon({
+  size = 20,
+}: {
+  size?: number;
+}): React.JSX.Element {
   return (
     <svg {...svgProps(size)}>
       <rect x="3" y="5" width="18" height="16" rx="2" />
@@ -28,7 +32,11 @@ export function CalendarIcon({ size = 20 }: { size?: number }): React.JSX.Elemen
   );
 }
 
-export function PersonIcon({ size = 18 }: { size?: number }): React.JSX.Element {
+export function PersonIcon({
+  size = 18,
+}: {
+  size?: number;
+}): React.JSX.Element {
   return (
     <svg {...svgProps(size)}>
       <circle cx="12" cy="8" r="3.5" />
@@ -118,7 +126,11 @@ export function PlayIcon({ size = 18 }: { size?: number }): React.JSX.Element {
 }
 
 /** Abrir algo aparte de la pantalla en curso — un reporte, un documento. */
-export function ExternalLinkIcon({ size = 16 }: { size?: number }): React.JSX.Element {
+export function ExternalLinkIcon({
+  size = 16,
+}: {
+  size?: number;
+}): React.JSX.Element {
   return (
     <svg {...svgProps(size)}>
       <path d="M14 5h5v5" />
