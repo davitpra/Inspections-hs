@@ -52,7 +52,9 @@ export function PastInspectionsRoute(): React.JSX.Element {
       </header>
 
       <p>
-        <Link to="/">← Back to my inspections</Link>
+        <Link className="back-link" to="/">
+          Back to my inspections
+        </Link>
       </p>
 
       {scheduled.isError ? (

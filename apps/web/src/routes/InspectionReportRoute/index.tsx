@@ -46,7 +46,9 @@ export function InspectionReportRoute(): React.JSX.Element {
           so reading one needs a connection.
         </p>
         <p>
-          <Link to="/inspections/past">Back to past inspections</Link>
+          <Link className="back-link" to="/inspections/past">
+            Back to past inspections
+          </Link>
         </p>
       </>
     );
@@ -76,7 +78,9 @@ export function InspectionReportRoute(): React.JSX.Element {
       </header>
 
       <p>
-        <Link to="/inspections/past">← Back to past inspections</Link>
+        <Link className="back-link" to="/inspections/past">
+          Back to past inspections
+        </Link>
       </p>
 
       <dl className="facts">

@@ -196,22 +196,112 @@ select:disabled {
   border-color: var(--warn-ink);
 }
 
+/*
+ * La barra. Dos grupos: los links y quién está adentro.
+ *
+ * **La línea va de borde a borde y el contenido no.** Es un `padding-inline` calculado y
+ * no un `max-width` con `margin: auto` porque el ancho que hay que limitar es el del
+ * CONTENIDO: con el ancho limitado sobre la barra, la divisoria terminaba a media pantalla
+ * y el techo de la aplicación parecía un recuadro suelto flotando en la ventana. El `max()`
+ * mantiene el 1rem de siempre cuando la ventana es más angosta que los 64rem de
+ * `.shell__main`, así que en el teléfono no cambia nada.
+ *
+ * `flex-wrap` en los dos niveles: son nueve links en el peor caso (coordinador) y el
+ * teléfono de la planta es la pantalla chica que hay que sostener. Al envolver, el par
+ * chip + "Sign out" baja entero y no partido, que es para lo que existe `.shell__account`.
+ */
 .shell__nav {
   display: flex;
-  gap: 1rem;
-  padding: 0.75rem 1rem;
+  flex-wrap: wrap;
+  /*
+   * `stretch` y no `center`, y el relleno vertical lo pone cada link: los subrayados de la
+   * fila tienen que apoyarse todos sobre la misma línea, y con los links centrados cada uno
+   * apoyaba donde terminaba su propia caja.
+   */
+  align-items: stretch;
+  gap: 0 1.5rem;
+  padding-inline: max(1rem, calc((100% - 64rem) / 2));
   border-bottom: 1px solid var(--line);
+}
+
+.shell__nav-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.5rem;
+}
+
+/*
+ * Un link de la barra es una PESTAÑA: el actual se marca con un subrayado grueso apoyado
+ * sobre la divisoria de la barra, no con un fondo. Un fondo lleno compite con el contenido
+ * de la pantalla —que es lo que hay que mirar— y el subrayado dice lo mismo con tinta.
+ *
+ * El borde de 2px está SIEMPRE, transparente en reposo: si apareciera solo en el activo,
+ * el texto saltaría 2px al navegar.
+ *
+ * **El estado actual no depende del color** (WCAG 1.4.1): la marca es la presencia del
+ * subrayado, que es una diferencia de forma y se ve igual en escala de grises. El color
+ * lo acompaña, no lo carga.
+ *
+ * No se cambia el `font-weight` del activo: la negrita ensancha la palabra y correría los
+ * links de al lado cada vez que se navega.
+ *
+ * 44px de alto mínimo y no los 48px del resto de los controles porque acá hay nueve
+ * seguidos y el alto de la barra se paga en cada pantalla; el objetivo de toque termina
+ * siendo más grande igual, porque el link se estira a todo el alto de la fila.
+ */
+.navlink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0.75rem 0.25rem;
+  border-bottom: 2px solid transparent;
+  font-size: var(--text-sm);
+  text-decoration: none;
+  color: var(--muted);
+}
+
+.navlink:hover {
+  color: var(--ink);
+  border-bottom-color: var(--line-control);
+}
+
+.navlink[data-status="active"] {
+  color: var(--brand);
+  border-bottom-color: var(--brand);
+}
+
+/*
+ * El foco de teclado se dibuja alrededor del link entero y no pegado al texto, que es lo
+ * que hace el default del navegador: el anillo tiene que rodear lo que se toca. El
+ * `offset` negativo lo mete adentro del alto de la fila —con uno positivo, el anillo del
+ * primer link se cortaba contra el borde de la ventana.
+ */
+.navlink:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: -4px;
+  border-radius: var(--radius);
+}
+
+/* Quién está adentro, y la puerta de salida. Juntos y al final. */
+.shell__account {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-left: auto;
+  /* Un nombre largo recorta el chip antes de empujar el botón fuera de la barra. */
+  min-width: 0;
 }
 
 .shell__signout {
   min-height: auto;
   padding: 0.35rem 0.75rem;
   font-size: var(--text-sm);
+  white-space: nowrap;
 }
 
 /*
- * Quién está adentro. El `margin-left: auto` vive acá y ya no en `.shell__signout`: el
- * chip es el primero del par que se va a la derecha, y el botón lo sigue.
+ * El chip. El `margin-left: auto` ya no vive acá sino en `.shell__account`: el que se va a
+ * la derecha es el par, no el primero de los dos.
  *
  * Se lee, no se toca — es un `div` y no un control, así que el piso de 48px de la barra
  * no le aplica. El nombre es el dato y el rol lo acompaña un paso más abajo en tamaño y
@@ -219,7 +309,6 @@ select:disabled {
  * coordinator" siga siendo legible con luz de planta y no solo decorativo.
  */
 .account-chip {
-  margin-left: auto;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -243,19 +332,17 @@ select:disabled {
   color: var(--muted);
 }
 
+/*
+ * El ancho de TODA la aplicación, uno solo. Fue 46rem —medida de lectura— con una lista de
+ * excepciones para las pantallas que se escanean en vez de leerse (el calendario de doce
+ * meses, la asignación destacada con su columna al lado). Las excepciones dejaron de ser la
+ * excepción: acá casi nada es prosa, y dos anchos distintos hacían saltar el contenido al
+ * navegar entre pantallas que son la misma aplicación.
+ */
 .shell__main {
   padding: 1rem;
-  max-width: 46rem;
-  margin: 0 auto;
-}
-
-/*
- * La medida de lectura no aplica a una pantalla que no se lee, se escanea: el calendario
- * de programación son doce meses y a 46rem entran dos columnas. Ver `WIDE_ROUTES` en
- * `router.tsx`, que es quien decide qué ruta se sale de la medida y por qué.
- */
-.shell__main--wide {
   max-width: 64rem;
+  margin: 0 auto;
 }
 
 /*
@@ -390,6 +477,35 @@ select:disabled {
   width: 100%;
   justify-content: center;
   gap: 0.5rem;
+}
+
+/*
+ * El link de vuelta al pie del encabezado. No es una acción de la pantalla —no compite
+ * con "Start inspection"— así que va en `--muted` y sin chrome de botón: pesa menos que
+ * cualquier `.list__action`. Mantiene igual el piso de 48px de toque (ADR-010), que es
+ * lo que lo salva de ser un objetivo diminuto arriba de todo.
+ *
+ * La flecha la pone el CSS y no el JSX: es decoración de la afordancia, no texto del
+ * registro, y así las dos vueltas —la de la lista y la del error— se ven iguales sin
+ * que nadie se acuerde de escribirla.
+ */
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 48px;
+  color: var(--muted);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.back-link::before {
+  content: "←";
+}
+
+.back-link:hover {
+  color: var(--brand);
+  text-decoration: underline;
 }
 
 /*

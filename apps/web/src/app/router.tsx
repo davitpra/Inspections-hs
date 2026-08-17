@@ -71,24 +71,6 @@ const rootRoute = createRootRoute({
 const PUBLIC_ROUTES = ['/accept-invitation'];
 
 /**
- * Las rutas que NO se leen con medida de lectura.
- *
- * `.shell__main` mide 46rem porque casi todo acá es texto y un renglón largo se lee peor.
- * La consola de programación no es texto: es un calendario de doce meses, y a 46rem entran
- * dos columnas, así que diciembre queda a seis filas de scroll de enero. El año completo
- * de un vistazo ES la pantalla, y por eso esta ruta pide más ancho.
- *
- * `/` por el mismo motivo, con su propia forma: la asignación destacada es contenido
- * principal (progreso, secciones) más una columna de preparación (antes de empezar,
- * información de sitio, historial) al lado, y a 46rem esa segunda columna cae siempre —
- * `.assignment__layout` recién tiene dónde poner las dos a partir de ~58rem.
- *
- * Es una lista y no un `if` por lo mismo que `PUBLIC_ROUTES`: lo que hay que poder leer de
- * un vistazo es exactamente cuáles se salen de la medida, y cada una tiene que justificarlo.
- */
-const WIDE_ROUTES = ['/', '/scheduling'];
-
-/**
  * El marco, y la única puerta: sin cuenta no se entra a ninguna pantalla de captura.
  *
  * **La comprobación es contra la cuenta GUARDADA, no contra la red.** El inspector
@@ -126,51 +108,87 @@ function Shell(): React.JSX.Element {
 
   return (
     <div className="shell">
-      <nav className="shell__nav">
-        <Link to="/">Inspections</Link>
-        <Link to="/actions">Corrective actions</Link>
-        <Link to="/recurrence">Recurring findings</Link>
-        <Link to="/compliance">Compliance</Link>
+      {/*
+        La barra tiene DOS grupos y no una fila de elementos sueltos: a la izquierda a dónde
+        se puede ir, a la derecha quién está adentro. Con un solo grupo, el `flex-wrap` que
+        necesita un teléfono terminaba bajando el chip a un renglón propio o dejando "Sign
+        out" colgado entre dos links.
+
+        No es `position: sticky`: el indicador de trabajo sin enviar (ADR-010) ya se pega
+        arriba, y dos barras pegadas se tapan entre sí. Se elige la que no puede perderse.
+      */}
+      <nav className="shell__nav" aria-label="Main">
+        <div className="shell__nav-links">
+          {/*
+            `activeOptions={{ exact: true }}` sólo en "/": sin eso la raíz es prefijo de todo
+            y quedaría marcada como actual en cada pantalla.
+          */}
+          <Link className="navlink" to="/" activeOptions={{ exact: true }}>
+            Inspections
+          </Link>
+          <Link className="navlink" to="/actions">
+            Corrective actions
+          </Link>
+          <Link className="navlink" to="/recurrence">
+            Recurring findings
+          </Link>
+          <Link className="navlink" to="/compliance">
+            Compliance
+          </Link>
+          {/*
+            LOS DOS LINKS CONDICIONADOS POR ROL de esta barra. Solo el coordinador administra
+            la programación y el roster, así que ofrecérselas al resto sería ofrecer una
+            pantalla sin controles.
+
+            **Y no se condicionan igual por dentro**, que es lo que conviene leer acá:
+
+              - `/scheduling` sigue siendo alcanzable por URL y se renderiza de solo lectura;
+                sus GET no comprueban rol y RLS ya recorta lo que se ve. Que un miembro del
+                JHSC vea la programación de su planta es legítimo.
+              - `/roster` NO. Ahí el rol se comprueba también en la lectura, en el cliente y
+                en el servidor: §4 dice que se elige a una persona sin poder ver su perfil, y
+                un roster de solo lectura para un supervisor sería exactamente esa ficha.
+
+            O sea: el link ausente es una comodidad en los dos casos, pero la garantía solo
+            la hay en el segundo, y está del lado del servidor.
+
+            Las dos condiciones son las MISMAS funciones que usan las dos pantallas, y por
+            eso son dos y no una: hoy preguntan lo mismo, pero un link que se ofrece y una
+            pantalla que se niega serían el peor de los desacuerdos posibles.
+          */}
+          {canAdministerScheduling(account) ? (
+            <Link className="navlink" to="/scheduling">
+              Scheduling
+            </Link>
+          ) : null}
+          {canAdministerRoster(account) ? (
+            <Link className="navlink" to="/roster">
+              Roster
+            </Link>
+          ) : null}
+          <Link className="navlink" to="/inbox">
+            Inbox
+          </Link>
+          <Link className="navlink" to="/outbox">
+            Waiting to be sent
+          </Link>
+        </div>
+
         {/*
-          LOS DOS LINKS CONDICIONADOS POR ROL de esta barra. Solo el coordinador administra
-          la programación y el roster, así que ofrecérselas al resto sería ofrecer una
-          pantalla sin controles.
-
-          **Y no se condicionan igual por dentro**, que es lo que conviene leer acá:
-
-            - `/scheduling` sigue siendo alcanzable por URL y se renderiza de solo lectura;
-              sus GET no comprueban rol y RLS ya recorta lo que se ve. Que un miembro del
-              JHSC vea la programación de su planta es legítimo.
-            - `/roster` NO. Ahí el rol se comprueba también en la lectura, en el cliente y
-              en el servidor: §4 dice que se elige a una persona sin poder ver su perfil, y
-              un roster de solo lectura para un supervisor sería exactamente esa ficha.
-
-          O sea: el link ausente es una comodidad en los dos casos, pero la garantía solo
-          la hay en el segundo, y está del lado del servidor.
-
-          Las dos condiciones son las MISMAS funciones que usan las dos pantallas, y por
-          eso son dos y no una: hoy preguntan lo mismo, pero un link que se ofrece y una
-          pantalla que se niega serían el peor de los desacuerdos posibles.
+          El chip y "Sign out" quedan juntos al final de la barra, y ahora en un grupo propio:
+          el `margin-left: auto` que empujaba primero al botón y después al chip vive acá, así
+          el par se mantiene junto cuando los links de la izquierda pasan a dos renglones.
         */}
-        {canAdministerScheduling(account) ? <Link to="/scheduling">Scheduling</Link> : null}
-        {canAdministerRoster(account) ? <Link to="/roster">Roster</Link> : null}
-        <Link to="/inbox">Inbox</Link>
-        <Link to="/outbox">Waiting to be sent</Link>
-        {/*
-          El chip y "Sign out" quedan juntos al final de la barra: el `margin-left: auto`
-          que empujaba al botón pasó al chip, que ahora es el primero del par.
-        */}
-        <AccountChip account={account} />
-        <button type="button" className="shell__signout" onClick={() => void signOut()}>
-          Sign out
-        </button>
+        <div className="shell__account">
+          <AccountChip account={account} />
+          <button type="button" className="shell__signout" onClick={() => void signOut()}>
+            Sign out
+          </button>
+        </div>
       </nav>
 
-      <main
-        className={
-          WIDE_ROUTES.includes(pathname) ? 'shell__main shell__main--wide' : 'shell__main'
-        }
-      >
+      {/* Un solo ancho para todas las rutas; el porqué está en `.shell__main`. */}
+      <main className="shell__main">
         <Outlet />
       </main>
     </div>
