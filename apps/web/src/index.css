@@ -332,6 +332,184 @@ select:disabled {
   color: var(--muted);
 }
 
+/* ---------------------------------------------------------------------------
+   La barra del teléfono: menú, título, cuenta.
+
+   El corte está en 48rem porque es el ancho en el que los ocho links del coordinador dejan
+   de entrar en dos renglones. Ahí las pestañas se apagan y se enciende `.appbar`: no se
+   achican ni se ponen en una tira que se desplaza, porque los destinos que quedan fuera de
+   la vista en una tira son destinos que nadie sabe que existen.
+
+   `display: none` y no un `matchMedia` en JavaScript: el ancho de la ventana no es estado
+   de la aplicación. Las dos barras están en el DOM y solo una se dibuja; la que no se
+   dibuja tampoco recibe foco, así que Tab no pasa por links invisibles.
+   --------------------------------------------------------------------------- */
+
+.appbar {
+  display: none;
+}
+
+@media (max-width: 48rem) {
+  .shell__nav {
+    display: none;
+  }
+
+  /*
+   * Tres columnas y no un `space-between`: con `1fr` en el medio el título queda centrado
+   * respecto de la PANTALLA y no del hueco que dejan los botones, así que no se corre
+   * cuando el de la izquierda es más ancho que el de la derecha.
+   */
+  .appbar {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.5rem;
+    padding-inline: max(0.25rem, env(safe-area-inset-left))
+      max(0.25rem, env(safe-area-inset-right));
+    border-bottom: 1px solid var(--line);
+  }
+
+  /*
+   * Un botón de ícono, no un botón con caja: el borde y el fondo que la regla global le da
+   * a todo `button` acá dibujarían dos recuadros compitiendo con el título. Lo que queda es
+   * el objetivo de toque, que sigue siendo el piso de 48px.
+   */
+  .appbar__button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--brand);
+  }
+
+  .appbar__button:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: -4px;
+    border-radius: var(--radius);
+  }
+
+  /*
+   * El título, y el `<h1>` de la página. Se recorta con puntos suspensivos antes que
+   * envolver: un título de dos renglones cambiaría el alto de la barra según la pantalla, y
+   * el nombre más largo ("Waiting to be sent") entra completo en un teléfono de 360px.
+   */
+  .appbar__title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .shell__main {
+    padding-inline: max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right));
+    /* La barra de gestos, si no, se come el último botón de la pantalla. */
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  }
+}
+
+/*
+ * El panel que entra desde un costado (`Sheet.tsx`).
+ *
+ * Es un `<dialog>` en el top layer, así que no necesita `position: fixed` ni `z-index`: el
+ * navegador ya lo dibuja arriba de todo, incluido el indicador pegajoso de ADR-010.
+ *
+ * `margin` es lo que lo pega a un borde —un `<dialog>` viene centrado por sus márgenes
+ * automáticos—, y `100dvh` y no `100vh` porque en un teléfono la barra de direcciones se
+ * retrae: con `vh`, el último link del menú quedaba debajo de ella.
+ */
+.sheet {
+  width: min(20rem, 82vw);
+  max-width: 100%;
+  height: 100dvh;
+  max-height: 100dvh;
+  padding: 1rem;
+  border: none;
+  background: var(--paper);
+  color: var(--ink);
+  box-sizing: border-box;
+}
+
+.sheet--start {
+  margin: 0 auto 0 0;
+  border-right: 1px solid var(--line);
+  padding-left: max(1rem, env(safe-area-inset-left));
+}
+
+.sheet--end {
+  margin: 0 0 0 auto;
+  border-left: 1px solid var(--line);
+  padding-right: max(1rem, env(safe-area-inset-right));
+}
+
+.sheet::backdrop {
+  background: var(--scrim);
+}
+
+/* El panel se desplaza por dentro si el menú no entra; el `<dialog>` no cambia de alto. */
+.sheet__body {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  height: 100%;
+  overflow-y: auto;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.sheet__nav {
+  display: flex;
+  flex-direction: column;
+}
+
+/*
+ * Un destino del menú. La marca del actual es la misma idea que la pestaña —una barra de
+ * 3px y el color de marca— girada al costado, que es donde está el borde de la fila. Y por
+ * lo mismo que la pestaña: la marca es la forma, el color la acompaña (WCAG 1.4.1).
+ *
+ * Filas a lo ancho del panel y no texto suelto: acá se toca con el pulgar y en movimiento,
+ * así que el objetivo es la fila entera.
+ */
+.sheet__link {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 0.75rem;
+  border-left: 3px solid transparent;
+  border-radius: 0 var(--radius) var(--radius) 0;
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.sheet__link[data-status="active"] {
+  border-left-color: var(--brand);
+  background: var(--tint-bg);
+  color: var(--brand);
+  font-weight: 600;
+}
+
+.sheet__link:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: -2px;
+}
+
+/* El chip se alinea a la derecha en la barra ancha; adentro del panel es una ficha. */
+.sheet__account {
+  align-items: flex-start;
+}
+
+.sheet__account .account-chip {
+  align-items: flex-start;
+}
+
+.sheet__account .account-chip__name {
+  max-width: 100%;
+  font-size: 1rem;
+}
+
 /*
  * El ancho de TODA la aplicación, uno solo. Fue 46rem —medida de lectura— con una lista de
  * excepciones para las pantallas que se escanean en vez de leerse (el calendario de doce
@@ -1578,4 +1756,62 @@ select:disabled {
   flex: none;
   margin-top: 0.15rem;
   color: var(--state-ok);
+}
+
+/* ---------------------------------------------------------------------------
+   La pantalla sin conexión. Reutiliza el encabezado, `.card`, `.checklist` y
+   `.notice-card`; lo único propio son sus dos salidas, que son links dibujados como
+   acciones y necesitan lo que un `<a>` no trae del `button` base: centrado y el mismo
+   reparto del ancho.
+   --------------------------------------------------------------------------- */
+
+.offline__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.offline__actions a {
+  flex: 1 1 14rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+/* ---------------------------------------------------------------------------
+   La cola de salida. Reutiliza el encabezado, `.stats-bar`, `.card`, `.list` y
+   `.status-pill*`; lo propio es solo lo que la lista necesita para vivir DENTRO de una
+   tarjeta, que es donde se lee en esta pantalla y no sobre el fondo.
+   --------------------------------------------------------------------------- */
+
+/* El estado y los intentos en la misma línea, con los intentos contra el borde: la
+   píldora es lo que se escanea y el número es el dato que la acompaña. Envuelve en un
+   teléfono en vez de comprimir la píldora, que no parte (`white-space: nowrap`). */
+.outbox__row-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+/* La lista termina donde termina el contenido de la tarjeta: el margen inferior de
+   `.list` y la divisoria de su última fila dejaban un hueco y una línea de más justo
+   arriba de la del pie, que se leían como dos separadores distintos. */
+.outbox__list {
+  margin-bottom: 0;
+}
+
+.outbox__list .list__row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+/* Reintentar no toma el ancho entero como `button--outline` en una tarjeta del
+   calendario: en 64rem, un botón de borde a borde se lee como el paso que hay que dar, y
+   acá la cola se envía sola. Sigue siendo un objetivo de toque cómodo con guantes. */
+.outbox__retry {
+  width: auto;
+  flex: 0 1 18rem;
 }

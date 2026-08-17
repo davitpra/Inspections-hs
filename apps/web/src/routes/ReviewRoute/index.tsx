@@ -193,7 +193,7 @@ export function ReviewRoute(): React.JSX.Element {
       ) : null}
 
       <p>
-        <Link to="/inspections/$id/capture" params={{ id }}>
+        <Link className="back-link" to="/inspections/$id/capture" params={{ id }}>
           Back to the walkthrough
         </Link>
       </p>
@@ -235,8 +235,15 @@ export function ReviewRoute(): React.JSX.Element {
         </p>
       ) : null}
 
+      {/*
+        La acción de la pantalla, y la única: `button--primary` —relleno de marca, ancho
+        entero— porque firmar es a lo que se vino, y el punto de no retorno no se toca
+        por accidente buscando cuál de dos botones era. Deshabilitado gana igual
+        `button:disabled`, así que "Signed" y la espera se siguen leyendo apagados.
+      */}
       <button
         type="button"
+        className="button--primary"
         disabled={blocking.length > 0 || submitted || submit.isPending || eligibility !== 'ok'}
         onClick={() => {
           submit.reset();

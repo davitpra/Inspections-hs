@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from "react";
 
-import { useAppSession } from './session-context';
+import { useAppSession } from "./session-context";
 
 /**
  * El paso de onboarding de ADR-010: instalar en la pantalla de inicio.
@@ -16,12 +16,14 @@ import { useAppSession } from './session-context';
 
 interface InstallPromptEvent extends Event {
   prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
 export function InstallPrompt(): React.JSX.Element | null {
   const { storage, ready } = useAppSession();
-  const [installEvent, setInstallEvent] = useState<InstallPromptEvent | null>(null);
+  const [installEvent, setInstallEvent] = useState<InstallPromptEvent | null>(
+    null,
+  );
   const [installed, setInstalled] = useState(false);
 
   useEffect(() => {
@@ -38,18 +40,18 @@ export function InstallPrompt(): React.JSX.Element | null {
       setInstallEvent(null);
     };
 
-    globalThis.addEventListener('beforeinstallprompt', onPrompt);
-    globalThis.addEventListener('appinstalled', onInstalled);
+    globalThis.addEventListener("beforeinstallprompt", onPrompt);
+    globalThis.addEventListener("appinstalled", onInstalled);
 
     return () => {
-      globalThis.removeEventListener('beforeinstallprompt', onPrompt);
-      globalThis.removeEventListener('appinstalled', onInstalled);
+      globalThis.removeEventListener("beforeinstallprompt", onPrompt);
+      globalThis.removeEventListener("appinstalled", onInstalled);
     };
   }, []);
 
   if (!ready) return null;
 
-  const degraded = storage.mode === 'degraded';
+  const degraded = storage.mode === "degraded";
 
   if (!installEvent && !degraded) return null;
 
@@ -65,15 +67,15 @@ export function InstallPrompt(): React.JSX.Element | null {
             }}
           >
             Add to home screen
-          </button>{' '}
+          </button>{" "}
           Install the app before going out on a walkthrough.
         </p>
       ) : null}
 
       {degraded ? (
         <p className="onboarding__degraded">
-          Storage is not persistent on this device. Your drafts are safe for now, but submit
-          them as soon as you have a connection.
+          This device may delete unsubmitted drafts if it runs low on space.
+          Nothing is lost
         </p>
       ) : null}
     </section>

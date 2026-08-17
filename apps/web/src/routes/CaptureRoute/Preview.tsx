@@ -60,7 +60,9 @@ export function Preview({ id }: { id: string }): React.JSX.Element {
           Previewing an assignment needs a connection.
         </p>
         <p>
-          <Link to="/">Back to my inspections</Link>
+          <Link className="back-link" to="/">
+            Back to my inspections
+          </Link>
         </p>
       </>
     );
@@ -108,7 +110,9 @@ export function Preview({ id }: { id: string }): React.JSX.Element {
       ))}
 
       <p>
-        <Link to="/">Back to my inspections</Link>
+        <Link className="back-link" to="/">
+          Back to my inspections
+        </Link>
       </p>
     </>
   );

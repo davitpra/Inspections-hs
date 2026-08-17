@@ -139,3 +139,17 @@ export function ExternalLinkIcon({
     </svg>
   );
 }
+
+/**
+ * El menú de la barra del teléfono. Es el único ícono de este archivo que NO acompaña a un
+ * texto: es el contenido entero de un botón, así que quien lo usa pone el `aria-label`
+ * —`AppBar` lo hace— y el `aria-hidden` de acá sigue siendo lo correcto, porque el nombre
+ * accesible lo da el botón y no el dibujo.
+ */
+export function MenuIcon({ size = 24 }: { size?: number }): React.JSX.Element {
+  return (
+    <svg {...svgProps(size)}>
+      <path d="M4 7h16M4 12h16M4 17h16" />
+    </svg>
+  );
+}

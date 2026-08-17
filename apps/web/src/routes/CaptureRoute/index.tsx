@@ -205,7 +205,9 @@ function Walkthrough({ id }: { id: string }): React.JSX.Element {
             : 'This inspection is assigned to someone else.'}
         </p>
         <p>
-          <Link to="/">Back to pending inspections</Link>
+          <Link className="back-link" to="/">
+            Back to pending inspections
+          </Link>
         </p>
       </>
     );
@@ -275,8 +277,17 @@ function Walkthrough({ id }: { id: string }): React.JSX.Element {
         );
       })}
 
+      {/*
+        El paso siguiente del recorrido, y la única acción al pie: va con el chrome de
+        `list__action--block` —ancho entero, 48px de toque (ADR-010)— para que se toque
+        igual que "Resume" o "Start inspection" en la lista y no como texto corrido.
+      */}
       <p>
-        <Link to="/inspections/$id/review" params={{ id }}>
+        <Link
+          className="list__action list__action--block"
+          to="/inspections/$id/review"
+          params={{ id }}
+        >
           Review and sign ({countAnswered(document.data, answers)} answered)
         </Link>
       </p>

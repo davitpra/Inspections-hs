@@ -29,7 +29,8 @@ import { ReviewRoute } from '../routes/ReviewRoute';
 import { RosterRoute } from '../routes/RosterRoute';
 import { SchedulingRoute } from '../routes/SchedulingRoute';
 import { SignInRoute } from '../routes/SignInRoute';
-import { canAdministerRoster, canAdministerScheduling } from '../permissions/session';
+import { AppBar } from './AppBar';
+import { visibleNavItems } from './nav-items';
 import { SessionProvider, useAppSession } from './session-context';
 
 /**
@@ -109,74 +110,49 @@ function Shell(): React.JSX.Element {
   return (
     <div className="shell">
       {/*
-        La barra tiene DOS grupos y no una fila de elementos sueltos: a la izquierda a dónde
-        se puede ir, a la derecha quién está adentro. Con un solo grupo, el `flex-wrap` que
-        necesita un teléfono terminaba bajando el chip a un renglón propio o dejando "Sign
-        out" colgado entre dos links.
+        DOS BARRAS, UNA SOLA VISIBLE, Y ES CSS EL QUE ELIGE (ver `.shell__nav` y `.appbar`).
+        Las dos se montan siempre y no se conmutan con un `matchMedia` en JavaScript: el
+        ancho de la ventana no es estado de la aplicación, y una barra que se monta y se
+        desmonta al girar el teléfono perdería el foco del teclado en el giro.
 
-        No es `position: sticky`: el indicador de trabajo sin enviar (ADR-010) ya se pega
-        arriba, y dos barras pegadas se tapan entre sí. Se elige la que no puede perderse.
+        Arriba de 48rem, las pestañas: caben, y tener los ocho destinos a la vista con el
+        actual subrayado es mejor que esconderlos detrás de un botón.
+
+        Debajo, `AppBar`: menú, título y cuenta. El porqué de que no sean las mismas pestañas
+        achicadas está escrito en `AppBar.tsx`, junto al componente que lo resuelve.
+
+        No es `position: sticky` —ninguna de las dos—: el indicador de trabajo sin enviar
+        (ADR-010) ya se pega arriba, y dos barras pegadas se tapan entre sí. Se elige la que
+        no puede perderse.
       */}
       <nav className="shell__nav" aria-label="Main">
+        {/*
+          La barra tiene DOS grupos y no una fila de elementos sueltos: a la izquierda a dónde
+          se puede ir, a la derecha quién está adentro. Con un solo grupo, el `flex-wrap` de
+          una ventana angosta terminaba bajando el chip a un renglón propio o dejando "Sign
+          out" colgado entre dos links.
+
+          Los destinos salen de `NAV_ITEMS` y no están escritos acá: son los mismos ocho que
+          dibuja el menú del teléfono, y dos listas a mano se separan en el primer destino
+          nuevo. Ahí está también por qué dos de ellos dependen del rol.
+        */}
         <div className="shell__nav-links">
-          {/*
-            `activeOptions={{ exact: true }}` sólo en "/": sin eso la raíz es prefijo de todo
-            y quedaría marcada como actual en cada pantalla.
-          */}
-          <Link className="navlink" to="/" activeOptions={{ exact: true }}>
-            Inspections
-          </Link>
-          <Link className="navlink" to="/actions">
-            Corrective actions
-          </Link>
-          <Link className="navlink" to="/recurrence">
-            Recurring findings
-          </Link>
-          <Link className="navlink" to="/compliance">
-            Compliance
-          </Link>
-          {/*
-            LOS DOS LINKS CONDICIONADOS POR ROL de esta barra. Solo el coordinador administra
-            la programación y el roster, así que ofrecérselas al resto sería ofrecer una
-            pantalla sin controles.
-
-            **Y no se condicionan igual por dentro**, que es lo que conviene leer acá:
-
-              - `/scheduling` sigue siendo alcanzable por URL y se renderiza de solo lectura;
-                sus GET no comprueban rol y RLS ya recorta lo que se ve. Que un miembro del
-                JHSC vea la programación de su planta es legítimo.
-              - `/roster` NO. Ahí el rol se comprueba también en la lectura, en el cliente y
-                en el servidor: §4 dice que se elige a una persona sin poder ver su perfil, y
-                un roster de solo lectura para un supervisor sería exactamente esa ficha.
-
-            O sea: el link ausente es una comodidad en los dos casos, pero la garantía solo
-            la hay en el segundo, y está del lado del servidor.
-
-            Las dos condiciones son las MISMAS funciones que usan las dos pantallas, y por
-            eso son dos y no una: hoy preguntan lo mismo, pero un link que se ofrece y una
-            pantalla que se niega serían el peor de los desacuerdos posibles.
-          */}
-          {canAdministerScheduling(account) ? (
-            <Link className="navlink" to="/scheduling">
-              Scheduling
+          {visibleNavItems(account).map((item) => (
+            <Link
+              key={item.to}
+              className="navlink"
+              to={item.to}
+              // Sin `exact`, la raíz es prefijo de todo y quedaría marcada en cada pantalla.
+              activeOptions={item.to === '/' ? { exact: true } : undefined}
+            >
+              {item.label}
             </Link>
-          ) : null}
-          {canAdministerRoster(account) ? (
-            <Link className="navlink" to="/roster">
-              Roster
-            </Link>
-          ) : null}
-          <Link className="navlink" to="/inbox">
-            Inbox
-          </Link>
-          <Link className="navlink" to="/outbox">
-            Waiting to be sent
-          </Link>
+          ))}
         </div>
 
         {/*
-          El chip y "Sign out" quedan juntos al final de la barra, y ahora en un grupo propio:
-          el `margin-left: auto` que empujaba primero al botón y después al chip vive acá, así
+          El chip y "Sign out" quedan juntos al final de la barra, y en un grupo propio: el
+          `margin-left: auto` que empujaba primero al botón y después al chip vive acá, así
           el par se mantiene junto cuando los links de la izquierda pasan a dos renglones.
         */}
         <div className="shell__account">
@@ -186,6 +162,8 @@ function Shell(): React.JSX.Element {
           </button>
         </div>
       </nav>
+
+      <AppBar account={account} pathname={pathname} onSignOut={() => void signOut()} />
 
       {/* Un solo ancho para todas las rutas; el porqué está en `.shell__main`. */}
       <main className="shell__main">

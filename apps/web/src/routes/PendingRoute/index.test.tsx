@@ -358,8 +358,8 @@ describe('PendingRoute — descartar un borrador', () => {
 });
 
 /**
- * Las dos listas del dispositivo. El encabezado "Drafts on this device" tiene que ser
- * cierto: lo aceptado ya está en el servidor y no es un borrador de nadie.
+ * La lista del dispositivo. El encabezado "Drafts on this device" tiene que ser cierto:
+ * lo aceptado ya está en el servidor y no es un borrador de nadie.
  */
 describe('PendingRoute — lo enviado no se lista como borrador', () => {
   function draft(overrides: Record<string, unknown> = {}) {
@@ -395,19 +395,21 @@ describe('PendingRoute — lo enviado no se lista como borrador', () => {
     vi.clearAllMocks();
   });
 
-  it('separa lo aceptado en su propia sección y no lo ofrece descartar', async () => {
+  it('lo aceptado no se lista en el dispositivo ni se ofrece descartar', async () => {
     listDrafts.mockResolvedValue([
       draft({ status: 'accepted', client_submission_id: 'accepted-1' }),
     ]);
 
     renderRoute();
 
-    expect(await screen.findByText('Submitted from this device')).toBeTruthy();
-    expect(screen.getByText('No drafts in progress on this device.')).toBeTruthy();
+    expect(
+      await screen.findByText('No drafts in progress on this device.'),
+    ).toBeTruthy();
+    expect(screen.queryByText('Submitted')).toBeNull();
     expect(screen.queryByRole('button', { name: /^Discard/ })).toBeNull();
   });
 
-  it('sin nada enviado no aparece la segunda sección', async () => {
+  it('lo que sí pide trabajo sigue listado', async () => {
     listDrafts.mockResolvedValue([draft()]);
 
     renderRoute();
@@ -416,7 +418,6 @@ describe('PendingRoute — lo enviado no se lista como borrador', () => {
     // fecha en el subtítulo, debajo del mes.
     await screen.findByText('Draft');
     expect(screen.getByText('Started 2026-08-01')).toBeTruthy();
-    expect(screen.queryByText('Submitted from this device')).toBeNull();
     expect(screen.queryByText('No drafts in progress on this device.')).toBeNull();
   });
 });

@@ -12,7 +12,6 @@ import {
   pendingWork,
   readiness,
   statusLabel,
-  submittedFromDevice,
 } from './presentation';
 
 function inspection(overrides: Record<string, unknown> = {}) {
@@ -225,10 +224,5 @@ describe('las dos listas de este dispositivo', () => {
 
   it('lo que todavía pide trabajo excluye lo aceptado', () => {
     expect(pendingWork(drafts).map((draft) => draft.status)).toEqual(['capturing', 'signed']);
-  });
-
-  /** Y no desaparece: es el único acceso sin red a lo que ya se envió. */
-  it('lo enviado se lista aparte, no se esconde', () => {
-    expect(submittedFromDevice(drafts).map((draft) => draft.status)).toEqual(['accepted']);
   });
 });
