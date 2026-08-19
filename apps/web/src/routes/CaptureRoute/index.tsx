@@ -27,7 +27,7 @@ import {
 } from '../../offline/drafts';
 import type { FindingDraftRow } from '../../offline/db';
 import { capturePhoto, discardPhoto } from '../../offline/photos';
-import { missingForField, storedLocations, storedTemplateVersion } from '../../offline/prefetch';
+import { missingForField, storedTemplateVersion } from '../../offline/prefetch';
 import { ItemRow } from './ItemRow';
 import { Preview } from './Preview';
 
@@ -145,11 +145,6 @@ function Walkthrough({ id }: { id: string }): React.JSX.Element {
   });
 
   /** La lista cerrada que bajó la descarga previa. Sin red y sin texto libre. */
-  const locations = useQuery({
-    queryKey: queryKeys.locations(id),
-    queryFn: () => storedLocations(id),
-  });
-
   const finding = useMutation({
     mutationFn: async (input: {
       itemKey: string;
@@ -260,7 +255,6 @@ function Walkthrough({ id }: { id: string }): React.JSX.Element {
                   (photoRow) => photoRow.item_key === item.item_key && photoRow.kind === 'finding',
                 )}
                 finding={findings.find((findingRow) => findingRow.item_key === item.item_key)}
-                locations={locations.data ?? []}
                 readOnly={readOnly}
                 onFocus={() => void setCurrentItem(row.client_submission_id, item.item_key)}
                 onChange={(value) =>

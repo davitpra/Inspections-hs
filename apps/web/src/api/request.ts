@@ -31,7 +31,7 @@ export async function get<T>(path: string, parse: (value: unknown) => T): Promis
 }
 
 export async function send<T>(
-  method: 'POST' | 'PATCH',
+  method: 'POST' | 'PATCH' | 'PUT',
   path: string,
   body: unknown,
   parse: (value: unknown) => T,
@@ -46,6 +46,11 @@ export async function send<T>(
 
   return parse(result.value);
 }
+
+/**
+ * `PUT` está en la unión desde la autoría de plantillas: un borrador se guarda entero, no
+ * por partes, y `PATCH` habría prometido un parche que el servidor no acepta.
+ */
 
 /** `send('POST', …)` con menos ruido, que es la mayoría de los casos. */
 export async function post<T>(

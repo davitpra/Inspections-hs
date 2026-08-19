@@ -97,7 +97,6 @@ export function Preview({ id }: { id: string }): React.JSX.Element {
               answerPhotos={[]}
               findingPhotos={[]}
               finding={undefined}
-              locations={[]}
               readOnly
               onFocus={() => {}}
               onChange={() => {}}

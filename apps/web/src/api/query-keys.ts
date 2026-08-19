@@ -39,7 +39,18 @@ function key(...parts: readonly (string | number | undefined)[]): readonly (stri
 export const queryKeys = {
   // Catálogo — lo que convierte identificadores en nombres.
   sites: () => key('sites'),
+  organizationLocations: () => key('organization-locations'),
+  catalogLocations: () => key('catalog-locations'),
   templates: () => key('templates'),
+
+  /**
+   * Los borradores de plantilla. NO cuelgan de `templates()`: aquello son las publicadas,
+   * que es otra población y otra pregunta. Invalidar una no tiene por qué invalidar la
+   * otra —guardar un borrador no cambia nada de lo programable— y si colgaran del mismo
+   * prefijo, cada guardado refrescaría el selector de la consola de programación.
+   */
+  templateDrafts: () => key('template-drafts'),
+  templateDraft: (id?: string) => key('template-drafts', 'draft', id),
 
   // Inspecciones: programación y campo.
   pendingInspections: () => key('pending-inspections'),

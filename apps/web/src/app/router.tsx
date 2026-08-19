@@ -29,6 +29,9 @@ import { ReviewRoute } from '../routes/ReviewRoute';
 import { RosterRoute } from '../routes/RosterRoute';
 import { SchedulingRoute } from '../routes/SchedulingRoute';
 import { SignInRoute } from '../routes/SignInRoute';
+import { TemplateDraftRoute } from '../routes/TemplateDraftRoute';
+import { TemplatesRoute } from '../routes/TemplatesRoute';
+import { LocationsRoute } from '../routes/LocationsRoute';
 import { AppBar } from './AppBar';
 import { visibleNavItems } from './nav-items';
 import { SessionProvider, useAppSession } from './session-context';
@@ -344,6 +347,36 @@ const acceptInvitationRoute = createRoute({
   component: AcceptInvitationRoute,
 });
 
+/**
+ * La autoría de plantillas (§7 etapa 8). ONLINE y fuera del precacheo, por lo mismo que
+ * `/scheduling` y `/roster` —se escribe sentado— y por una razón propia: un borrador servido
+ * desde caché sería un documento viejo sobre el que alguien seguiría escribiendo, y el lock
+ * de revisión rechazaría cada guardado sin que se entienda por qué.
+ *
+ * **`/templates` y no `/inspections/templates`**: `CAPTURE_ROUTES` en `sw.ts` matchea
+ * `/^\/inspections\//`, así que colgarla de ese prefijo la metería sin querer en el shell
+ * precacheado. Es la misma trampa que documentan `schedulingRoute` y `rosterRoute`.
+ */
+const templatesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/templates',
+  component: TemplatesRoute,
+});
+
+// Dos segmentos más que `/templates`, así que no compiten; se declara después igual, por el
+// mismo orden de lo general a lo específico que sigue el resto del árbol.
+const templateDraftRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/templates/drafts/$id',
+  component: TemplateDraftRoute,
+});
+
+const locationsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/catalog/locations',
+  component: LocationsRoute,
+});
+
 const inboxRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/inbox',
@@ -365,6 +398,9 @@ const routeTree = rootRoute.addChildren([
   outboxRoute,
   schedulingRoute,
   rosterRoute,
+  templatesRoute,
+  templateDraftRoute,
+  locationsRoute,
   actionsRoute,
   actionRoute,
   incidentsRoute,

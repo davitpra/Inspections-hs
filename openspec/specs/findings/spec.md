@@ -105,14 +105,15 @@ every finding of every inspection.
 - **THEN** the `prompt`, `section_key`, `position` and `response_type` of version `2` are
   returned, not those of the current version
 
-### Requirement: A finding carries a description, a location and at least one photo
+### Requirement: A finding carries a description, an optional resolved location and at least one photo
 
 The system SHALL require, on every finding regardless of its origin, a `description` of at least
-10 characters, a `location_id` naming a location of the finding's own site from the closed
-catalogue, and at least one photo recorded as an object key. The engine SHALL reject a finding
-whose `location_id` belongs to another site, and SHALL reject at commit a finding with no photo.
-Photos SHALL be stored as object keys of files uploaded beforehand; a finding SHALL NEVER carry
-image bytes.
+10 characters and at least one photo recorded as an object key. `location_id` MAY be null when
+the section's organization location cannot be resolved for the finding's site. When non-null, it
+SHALL name a location of the finding's own site from the closed catalogue. The engine SHALL reject
+a finding whose `location_id` belongs to another site, and SHALL reject at commit a finding with no
+photo. Photos SHALL be stored as object keys of files uploaded beforehand; a finding SHALL NEVER
+carry image bytes.
 
 #### Scenario: A finding is stored with all three
 
@@ -141,18 +142,26 @@ image bytes.
 
 ### Requirement: A location deactivated after the field package was prepared is still accepted for a derived finding
 
-The system SHALL accept a derived finding whose `location_id` names a location deactivated after
-the inspection's field package was prepared, because the catalogue on the device was current when
-the inspector stood in front of the hazard, and refusing it would turn an administrative edit into
-a lost inspection. The system SHALL refuse a deactivated `location_id` on a manually entered
-finding, which is reported online against a current list.
+The system SHALL resolve a section's `organization_location_code` against the location catalogue
+of the inspection's site. If no active mapping exists, the derived finding SHALL be stored with a
+null `location_id` rather than inventing a location or losing the submission. A supplied non-null
+`location_id` SHALL be accepted only when it resolves to the section's declared organization
+location in that site. A manually entered finding MAY also omit its location; when it supplies one,
+the server SHALL refuse a deactivated location.
 
 #### Scenario: A stale catalogue does not lose an inspection
 
 - **GIVEN** an inspection prepared while `pack-line-3` was active, and `pack-line-3` deactivated
   before the submission arrives
 - **WHEN** the submission carries a finding located at `pack-line-3`
-- **THEN** the submission is accepted and the finding records `pack-line-3`
+- **THEN** the submission is accepted and the finding records `pack-line-3` when its mapping still
+  resolves
+
+#### Scenario: An unmapped section leaves the finding location unresolved
+
+- **GIVEN** a section whose organization location has no active mapping in the inspection's site
+- **WHEN** a negative answer produces a finding
+- **THEN** the submission is accepted and the `finding.location_id` is null
 
 #### Scenario: A manual finding cannot use a deactivated location
 
@@ -362,7 +371,7 @@ finding that does not exist.
 The system SHALL write, for every finding derived from an inspection answer, exactly one
 `finding_recurrence` row inside the same transaction that inserts the `finding`. The row SHALL
 record `prior_count` — how many earlier findings within the window share the finding's `item_key`
-and `location_id` — `prior_count_site_wide` — how many share its `item_key` alone across the site
+and non-null `location_id` — `prior_count_site_wide` — how many share its `item_key` alone across the site
 — the `window_months` used, and `first_prior_occurred_at`, the `occurred_at` of the oldest of
 those earlier findings or null when there are none. `is_recurrent` SHALL be derived by the engine
 as `prior_count > 0` and SHALL NOT be writable by any caller. An accepted submission SHALL NOT be
@@ -390,6 +399,13 @@ committed with a derived finding that has no `finding_recurrence` row.
 - **WHEN** a submission produces a finding for `dock.guards` at `shipping-bay`
 - **THEN** its `prior_count` is `0`
 - **AND** its `prior_count_site_wide` is `3`
+
+#### Scenario: An unresolved location still has a site-wide recurrence mark
+
+- **GIVEN** two findings for the same `item_key` whose section has no active location mapping
+- **WHEN** the second finding is accepted
+- **THEN** its `finding_recurrence.location_id` is null
+- **AND** its `prior_count_site_wide` counts the first finding
 
 #### Scenario: A submission with no mark does not commit
 

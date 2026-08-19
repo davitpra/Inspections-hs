@@ -1,7 +1,6 @@
 import {
   FINDING_DESCRIPTION_MAX,
   FINDING_DESCRIPTION_MIN,
-  type LocationOption,
 } from '@hs/contracts';
 
 import type { FindingDraftRow, PhotoRow } from '../offline/db';
@@ -15,15 +14,14 @@ import { PhotoField } from './PhotoField';
  * descripción y la foto más tarde —en una pantalla de repaso, o al firmar— es pedírselas
  * cuando ya caminó los 48 acres y no está más frente a la guarda que falta.
  *
- * **La ubicación es una lista cerrada y no hay campo de texto** (§6 pregunta 1). Un
- * `<input>` de texto acá volvería a abrir por la puerta de atrás lo que la lista cerrada
- * existe para cerrar, y la agrupación fina de la recurrencia dejaría de ser posible.
+ * La ubicación ya no se pregunta acá: la sección declara la ubicación conceptual y el
+ * servidor la resuelve contra el catálogo de la planta. Si no hay mapeo, el hallazgo queda
+ * explícitamente sin resolver en vez de inventar un lugar.
  */
 export function FindingFields({
   itemKey,
   finding,
   photos,
-  locations,
   disabled,
   onChange,
   onCapturePhoto,
@@ -32,14 +30,12 @@ export function FindingFields({
   itemKey: string;
   finding: FindingDraftRow | undefined;
   photos: PhotoRow[];
-  locations: LocationOption[];
   disabled: boolean;
   onChange: (patch: Partial<Pick<FindingDraftRow, 'description' | 'location_id'>>) => void;
   onCapturePhoto: (blob: Blob) => void;
   onDiscardPhoto: (photoId: string) => void;
 }): React.JSX.Element {
   const description = finding?.description ?? '';
-  const locationId = finding?.location_id ?? '';
 
   return (
     <div className="finding">
@@ -67,21 +63,6 @@ export function FindingFields({
         // debounce es una ventana en la que Android puede matar el proceso.
         onChange={(event) => onChange({ description: event.target.value })}
       />
-
-      <label htmlFor={`finding-location-${itemKey}`}>Where?</label>
-      <select
-        id={`finding-location-${itemKey}`}
-        value={locationId}
-        disabled={disabled}
-        onChange={(event) => onChange({ location_id: event.target.value || null })}
-      >
-        <option value="">Choose a location…</option>
-        {locations.map((location) => (
-          <option key={location.id} value={location.id}>
-            {location.name}
-          </option>
-        ))}
-      </select>
 
       {/*
         La foto es obligatoria, y por eso `maxCount` es alto y no hay estado en el que el

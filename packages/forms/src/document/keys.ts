@@ -1,7 +1,7 @@
 /**
- * `item_key` legible y no opaca: los seeds se escriben a mano y la key aparece
- * en el reporte de recurrencia que lee el coordinador. Minúsculas, dígitos, y
- * `.` o `-` como separadores entre segmentos — nunca al principio ni al final.
+ * `item_key` estable. Puede ser legible en seeds históricos u opaca en documentos
+ * creados desde el editor. Minúsculas, dígitos, y `.` o `-` como separadores entre
+ * segmentos — nunca al principio ni al final.
  *
  * El mismo patrón está escrito como `CHECK` en la migración 0003. Si uno cambia,
  * el otro también.

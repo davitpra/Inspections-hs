@@ -158,7 +158,7 @@ describe('incompleteFindings', () => {
     expect(
       incompleteFindings(TEST_DOCUMENT, loaded!.answers, loaded!.findings, loaded!.photos),
     ).toEqual([
-      { item_key: 'guarding.installed', missing: ['description', 'location', 'photo'] },
+      { item_key: 'guarding.installed', missing: ['description', 'photo'] },
     ]);
   });
 

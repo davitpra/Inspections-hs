@@ -458,7 +458,6 @@ function missingOf(
   if (description.length === 0) missing.push('description');
   else if (description.length < FINDING_DESCRIPTION_MIN) missing.push('description_too_short');
 
-  if (!row || row.location_id === null) missing.push('location');
   if (!photos.some((photo) => photo.kind === 'finding' && photo.item_key === itemKey)) {
     missing.push('photo');
   }

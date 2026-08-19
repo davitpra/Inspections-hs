@@ -32,6 +32,14 @@ export const site = pgTable('site', {
  * Lleva política RLS por `site_id`: una consulta que no declara alcance con
  * `withSiteScope` no devuelve ninguna fila. No es un bug, es el default.
  */
+export const organizationLocation = pgTable('organization_location', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  code: text('code').notNull().unique(),
+  name: text('name').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  deactivatedAt: timestamp('deactivated_at', { withTimezone: true }),
+});
+
 export const location = pgTable(
   'location',
   {
@@ -49,6 +57,9 @@ export const location = pgTable(
 
     // La baja es lógica: no hay DELETE en ninguna de las dos tablas.
     deactivatedAt: timestamp('deactivated_at', { withTimezone: true }),
+    organizationLocationId: uuid('organization_location_id').references(
+      () => organizationLocation.id,
+    ),
   },
   (table) => [
     unique('location_site_code_uq').on(table.siteId, table.code),
@@ -70,6 +81,7 @@ export const location = pgTable(
 
 export type Site = typeof site.$inferSelect;
 export type Location = typeof location.$inferSelect;
+export type OrganizationLocation = typeof organizationLocation.$inferSelect;
 
 /**
  * Lo que un caller puede cambiar de una ubicación. `id`, `site_id`, `code` y

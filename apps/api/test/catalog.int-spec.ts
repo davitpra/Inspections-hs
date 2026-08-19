@@ -4,6 +4,8 @@ import { dirname, resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { applySeeds } from '../scripts/seed.mjs';
+import { DbService } from '../src/db/db.service';
+import { LocationsService } from '../src/catalog/locations.service';
 import { withSiteScope } from '../src/db/site-scope';
 import {
   createLocation,
@@ -35,6 +37,7 @@ const SITE_B = '99999999-0000-4000-8000-00000000000b';
  * prueba.
  */
 const ACTOR = '99999999-0000-4000-8000-0000000000ac';
+const ORGANIZATION_LOCATION = '99999999-0000-4000-8000-0000000000ad';
 
 /** insufficient_privilege. También es el SQLSTATE de una violación de política RLS. */
 const INSUFFICIENT_PRIVILEGE = '42501';
@@ -46,6 +49,8 @@ const UNIQUE_VIOLATION = '23505';
 const FOREIGN_KEY_VIOLATION = '23503';
 
 let db: TestDatabase;
+let dbService: DbService;
+let locations: LocationsService;
 
 /** Una ubicación de cada sitio, creadas una vez y reusadas por los tests de lectura. */
 let dockA: string;
@@ -61,6 +66,13 @@ let versionItemId: string;
 beforeAll(async () => {
   db = await startTestDatabase();
 
+  const previous = process.env.DATABASE_URL;
+  process.env.DATABASE_URL = db.appUrl;
+  dbService = new DbService();
+  process.env.DATABASE_URL = previous;
+
+  locations = new LocationsService(dbService);
+
   const fixture = resolve(dirname(__filename), 'fixtures/finding_stub.sql');
   await db.migrator.query(await readFile(fixture, 'utf8'));
 
@@ -71,6 +83,18 @@ beforeAll(async () => {
 
   dockA = await createLocation(db.migrator, SITE_A, 'shipping-dock', 'Shipping dock');
   dockB = await createLocation(db.migrator, SITE_B, 'shipping-dock', 'Shipping dock');
+  await inScope(
+    db.migrator,
+    [],
+    'INSERT INTO organization_location (id, code, name) VALUES ($1, $2, $3)',
+    [ORGANIZATION_LOCATION, 'shipping-dock', 'Shipping dock'],
+  );
+  await inScope(
+    db.migrator,
+    [SITE_A, SITE_B],
+    'UPDATE location SET organization_location_id = $1 WHERE id = ANY($2::uuid[])',
+    [ORGANIZATION_LOCATION, [dockA, dockB]],
+  );
 
   const templateId = await createTemplate(db.migrator, 'catalog-spec-template');
   await registerItems(db.migrator, templateId, ['guards.packaging-lines']);
@@ -96,6 +120,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await dbService?.onModuleDestroy();
   await db?.stop();
 });
 
@@ -293,6 +318,28 @@ describe('las ubicaciones se desactivan, nunca se borran', () => {
 });
 
 describe('unicidad dentro del sitio', () => {
+  it('una ubicación física no puede mapearse dos veces al mismo destino', async () => {
+    const second = await createLocation(db.migrator, SITE_A, uniqueCode('second'), 'Second area');
+
+    await expect(
+      inScope(
+        db.migrator,
+        [SITE_A],
+        'UPDATE location SET organization_location_id = $1 WHERE id = $2',
+        [ORGANIZATION_LOCATION, second],
+      ),
+    ).rejects.toSatisfy((error) => sqlstate(error) === UNIQUE_VIOLATION);
+  });
+
+  it('el code del catálogo global también es inmutable para la aplicación', async () => {
+    await expect(
+      inScope(db.app, [], 'UPDATE organization_location SET code = $1 WHERE id = $2', [
+        'shipping-dock-renamed',
+        ORGANIZATION_LOCATION,
+      ]),
+    ).rejects.toSatisfy((error) => sqlstate(error) === INSUFFICIENT_PRIVILEGE);
+  });
+
   it('un code repetido en el mismo sitio se rechaza', async () => {
     await expect(
       createLocation(db.migrator, SITE_A, 'shipping-dock', 'Shipping dock (again)'),
@@ -597,4 +644,130 @@ describe('el catálogo se carga por seed', () => {
 
     return one(rows);
   }
+});
+
+/**
+ * El alta desde la consola del coordinador.
+ *
+ * §6 ya decía que «adding one is a catalogue operation» y hasta acá no había ninguna: las
+ * ubicaciones entraban solo por seed, así que registrar una máquina nueva era editar SQL y
+ * desplegar. Estos tests cubren las dos altas contra Postgres de verdad, porque lo que hay
+ * que probar es qué hace cada único cuando choca —y eso no lo sabe ningún mock.
+ */
+describe('dar de alta desde la consola', () => {
+  const asCoordinator = () => ({
+    userId: ACTOR,
+    role: 'hs_coordinator',
+    siteIds: [SITE_A, SITE_B],
+  });
+
+  it('crea una ubicación compartida, sin planta', async () => {
+    const code = uniqueCode('org-new');
+    const created = await locations.createOrganizationLocation(asCoordinator(), {
+      code,
+      name: 'Brand new',
+    });
+
+    expect(created.code).toBe(code);
+    expect(created.deactivated_at).toBeNull();
+    expect(created).not.toHaveProperty('site_id');
+  });
+
+  it('rechaza una compartida con un code ya tomado', async () => {
+    const code = uniqueCode('org-dup');
+    await locations.createOrganizationLocation(asCoordinator(), { code, name: 'First' });
+
+    await expect(
+      locations.createOrganizationLocation(asCoordinator(), { code, name: 'Second' }),
+    ).rejects.toThrow(/already in use/);
+  });
+
+  it('crea una ubicación física en la planta de la ruta, sin mapear', async () => {
+    const code = uniqueCode('loc-new');
+    const created = await locations.createLocation(asCoordinator(), SITE_A, {
+      code,
+      name: `Boiler room ${code}`,
+    });
+
+    expect(created.site_id).toBe(SITE_A);
+    expect(created.organization_location_code).toBeNull();
+  });
+
+  /**
+   * Los dos sitios son espacios de nombres independientes (0004): el mismo `code` en las
+   * dos plantas son dos filas distintas, y eso es lo que hace que una plantilla de toda la
+   * organización resuelva en cada una a lo suyo.
+   */
+  it('el mismo code puede existir en las dos plantas', async () => {
+    const code = uniqueCode('loc-both');
+
+    const a = await locations.createLocation(asCoordinator(), SITE_A, { code, name: `A ${code}` });
+    const b = await locations.createLocation(asCoordinator(), SITE_B, { code, name: `B ${code}` });
+
+    expect(a.id).not.toBe(b.id);
+    expect(a.site_id).toBe(SITE_A);
+    expect(b.site_id).toBe(SITE_B);
+  });
+
+  it('rechaza un code repetido dentro de la misma planta, y lo dice', async () => {
+    const code = uniqueCode('loc-dup');
+    await locations.createLocation(asCoordinator(), SITE_A, { code, name: `One ${code}` });
+
+    await expect(
+      locations.createLocation(asCoordinator(), SITE_A, { code, name: `Two ${code}` }),
+    ).rejects.toThrow(/code/);
+  });
+
+  /**
+   * Dos únicos distintos y dos mensajes distintos: `location_site_code_uq` y el parcial
+   * `location_site_active_name_uq`. Un «ya existe» a secas dejaría al coordinador
+   * cambiando el campo equivocado.
+   */
+  it('rechaza un nombre repetido entre las activas, y lo dice', async () => {
+    const name = `Duplicated name ${uniqueCode('n')}`;
+    await locations.createLocation(asCoordinator(), SITE_A, { code: uniqueCode('n1'), name });
+
+    await expect(
+      locations.createLocation(asCoordinator(), SITE_A, { code: uniqueCode('n2'), name }),
+    ).rejects.toThrow(/named/);
+  });
+
+  /**
+   * EL AISLAMIENTO CONTESTA ANTES QUE LA FK. Una planta fuera del alcance no la rechaza
+   * ningún `if` del servicio: la rechaza la política RLS sobre `location`. Es exactamente
+   * lo que hace que el `siteId` de la ruta sea una selección y no el límite (ADR-004), y
+   * solo se puede comprobar contra Postgres de verdad.
+   */
+  it('el motor rechaza una planta fuera del alcance, no el servicio', async () => {
+    await expect(
+      locations.createLocation(
+        { userId: ACTOR, role: 'hs_coordinator', siteIds: [SITE_A] },
+        SITE_B,
+        { code: uniqueCode('outside'), name: 'Outside the scope' },
+      ),
+    ).rejects.toThrow(/not one you can administer/);
+  });
+
+  it('y con la planta en el alcance, crear ahí funciona', async () => {
+    const created = await locations.createLocation(
+      { userId: ACTOR, role: 'hs_coordinator', siteIds: [SITE_B] },
+      SITE_B,
+      { code: uniqueCode('inside'), name: `Inside ${uniqueCode('i')}` },
+    );
+
+    expect(created.site_id).toBe(SITE_B);
+  });
+
+  it('se lo niega a todo rol que no sea el coordinador', async () => {
+    for (const role of ['supervisor', 'jhsc_member', 'management', 'external_auditor']) {
+      const other = { userId: ACTOR, role, siteIds: [SITE_A] };
+
+      await expect(
+        locations.createOrganizationLocation(other, { code: uniqueCode('x'), name: 'X' }),
+      ).rejects.toThrow(/coordinator/);
+      await expect(
+        locations.createLocation(other, SITE_A, { code: uniqueCode('y'), name: 'Y' }),
+      ).rejects.toThrow(/coordinator/);
+    }
+  });
 });

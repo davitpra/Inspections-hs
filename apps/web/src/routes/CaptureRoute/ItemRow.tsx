@@ -1,5 +1,4 @@
 import type { TemplateItem } from '@hs/forms';
-import type { LocationOption } from '@hs/contracts';
 
 import { FindingFields } from '../../components/FindingFields';
 import { ItemInput } from '../../components/ItemInput';
@@ -25,7 +24,6 @@ export function ItemRow({
   answerPhotos,
   findingPhotos,
   finding,
-  locations,
   readOnly,
   onFocus,
   onChange,
@@ -40,7 +38,6 @@ export function ItemRow({
   answerPhotos: PhotoRow[];
   findingPhotos: PhotoRow[];
   finding: FindingDraftRow | undefined;
-  locations: LocationOption[];
   readOnly: boolean;
   onFocus: () => void;
   onChange: (value: unknown) => void;
@@ -71,7 +68,6 @@ export function ItemRow({
             itemKey={item.item_key}
             finding={finding}
             photos={findingPhotos}
-            locations={locations}
             disabled={readOnly}
             onChange={onFindingChange}
             onCapturePhoto={(blob) => onCapturePhoto(blob, 'finding')}

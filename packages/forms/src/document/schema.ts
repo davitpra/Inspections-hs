@@ -258,6 +258,8 @@ export const templateSectionSchema = z.strictObject({
     .string()
     .regex(SECTION_KEY_PATTERN, 'section_key: minúsculas, dígitos y "." o "-" como separadores'),
   section_title: z.string().min(1),
+  /** Optional only for historical versions created before the organization catalog. */
+  organization_location_code: z.string().min(1).optional(),
   position: z.number().int().positive(),
   visible_when: visibleWhenSchema.optional(),
   items: z.array(templateItemSchema).min(1),

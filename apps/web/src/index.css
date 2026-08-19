@@ -1815,3 +1815,149 @@ select:disabled {
   width: auto;
   flex: 0 1 18rem;
 }
+
+/* ---------------------------------------------------------------------------
+ * El editor de plantillas (§7 etapa 8).
+ *
+ * Es la única pantalla de la aplicación que es un FORMULARIO ANIDADO —una plantilla tiene
+ * secciones, una sección tiene preguntas, una pregunta tiene opciones— y la única cuyo
+ * contenido crece hacia adentro. Todo lo que sigue existe para que esos tres niveles se
+ * distingan a simple vista sin agregar una paleta: el nivel se marca con un borde y una
+ * sangría, no con un color de fondo por profundidad, que a la tercera vuelta deja de tener
+ * contraste contra algo.
+ */
+
+/* La pregunta dentro de su sección. Sangría izquierda con un filete: es lo que dice "esto
+   pertenece a la tarjeta que lo contiene" sin encajar otra tarjeta adentro de una tarjeta,
+   que en un teléfono deja el contenido a 2rem de cada margen. */
+.item-editor {
+  list-style: none;
+  border-left: 2px solid var(--line);
+  padding: 0.75rem 0 0.75rem 0.75rem;
+  margin: 0 0 0.75rem;
+}
+
+/* La pregunta y sus botones de orden en la misma línea, y el texto llevándose el espacio
+   sobrante: es el campo que se lee, y los botones son tres objetivos de tamaño fijo. */
+.item-editor__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.item-editor__head .filters {
+  flex: 1 1 18rem;
+  margin: 0;
+}
+
+/*
+ * Subir, bajar y quitar. Juntos y en ese orden, porque las dos flechas son la misma
+ * decisión en dos sentidos y separarlas obligaría a buscar la segunda.
+ *
+ * `flex-shrink: 0` para que el grupo no se comprima cuando la pregunta es larga: un botón
+ * de 48px que se achica a 30 deja de cumplir ADR-010 justo en el caso en que más se usa.
+ */
+.item-editor__order {
+  display: flex;
+  flex-shrink: 0;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+/* Las flechas son cuadradas y no toman ancho de botón normal: su etiqueta es un glifo, y
+   un botón de 18rem con una flecha en el medio se lee como otra cosa. El piso de 48px de
+   ADR-010 se mantiene en los dos ejes. */
+.item-editor__order button {
+  width: auto;
+  min-width: 48px;
+}
+
+/* La lista de preguntas de una sección no lleva el margen inferior de `.list`: la sección
+   ya lo pone, y sumados dejaban un hueco del alto de una fila antes de "Add question". */
+.list--items {
+  margin-bottom: 0.5rem;
+}
+
+/* Cada pendiente en su renglón, sin la divisoria de `.list__row`: son frases, no filas
+   comparables, y una línea entre cada una las convierte en una tabla de una columna. */
+.list--issues .list__row {
+  border-bottom: 0;
+  padding: 0.25rem 0;
+}
+
+/* Las opciones de un ítem de selección: el tercer nivel. Mismo recurso que
+   `.item-editor` —filete y sangría— y no un tercer tono de fondo. */
+.options {
+  border-left: 2px solid var(--line);
+  padding-left: 0.75rem;
+  margin: 0 0 0.75rem;
+}
+
+/*
+ * Etiqueta y valor de una opción en la misma línea, con el botón de quitar al final.
+ *
+ * Los dos campos comparten el renglón porque son las dos caras de una misma opción y se
+ * comparan entre sí; en renglones separados, una lista de cinco opciones son diez campos
+ * que hay que emparejar a ojo. En un teléfono envuelven, que es lo correcto.
+ */
+.options__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+}
+
+.options__row input {
+  flex: 1 1 10rem;
+}
+
+.options__row button {
+  width: auto;
+  flex-shrink: 0;
+}
+
+/* ---------------------------------------------------------------------------
+ * El catálogo de ubicaciones (§6).
+ *
+ * La fila es «un concepto, dónde está en esta planta, y si está»: tres columnas que se
+ * leen de izquierda a derecha y que en un teléfono envuelven en ese mismo orden. El nombre
+ * se lleva el espacio sobrante porque es lo que se busca con el ojo; el select y el estado
+ * son de ancho acotado, así que la columna del medio queda alineada al recorrer la lista y
+ * los huecos se ven de un vistazo.
+ */
+.list--mapping .list__row {
+  gap: 0.5rem 1rem;
+}
+
+.mapping__label {
+  flex: 1 1 12rem;
+  min-width: 0; /* Sin esto, un nombre largo desborda en vez de recortar la columna. */
+}
+
+.mapping__label label {
+  font-weight: 600;
+}
+
+/* El código debajo del nombre y un paso por debajo en contraste: es lo que la sección de
+   una plantilla guarda, así que tiene que estar a la vista, pero no compite con el nombre. */
+.mapping__label p {
+  margin: 0;
+}
+
+.list--mapping select {
+  flex: 1 1 14rem;
+}
+
+/* El estado de ESTA fila, no el de la pantalla. Ancho fijo para que la columna no salte
+   entre «Mapped» y «Saving…» y arrastre el select de al lado. */
+.mapping__state {
+  flex: 0 0 auto;
+  min-width: 7rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: var(--text-sm);
+}

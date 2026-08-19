@@ -1,6 +1,11 @@
 import type { Session } from '@hs/contracts';
 
-import { canAdministerRoster, canAdministerScheduling } from '../permissions/session';
+import {
+  canAdministerRoster,
+  canAdministerCatalog,
+  canAdministerScheduling,
+  canAuthorTemplates,
+} from '../permissions/session';
 
 /**
  * A dónde se puede ir, en un solo lugar.
@@ -28,6 +33,8 @@ export type NavPath =
   | '/compliance'
   | '/scheduling'
   | '/roster'
+  | '/templates'
+  | '/catalog/locations'
   | '/inbox'
   | '/outbox';
 
@@ -39,8 +46,9 @@ export type NavItem = {
 };
 
 /**
- * LOS DOS DESTINOS CONDICIONADOS POR ROL. Solo el coordinador administra la programación y
- * el roster, así que ofrecérselas al resto sería ofrecer una pantalla sin controles.
+ * LOS TRES DESTINOS CONDICIONADOS POR ROL. Solo el coordinador administra la programación,
+ * el roster y las plantillas, así que ofrecérselas al resto sería ofrecer una pantalla sin
+ * controles.
  *
  * **Y no se condicionan igual por dentro**, que es lo que conviene leer acá:
  *
@@ -50,6 +58,9 @@ export type NavItem = {
  *   - `/roster` NO. Ahí el rol se comprueba también en la lectura, en el cliente y en el
  *     servidor: §4 dice que se elige a una persona sin poder ver su perfil, y un roster de
  *     solo lectura para un supervisor sería exactamente esa ficha.
+ *   - `/templates` tampoco. El servidor contesta `template_draft_forbidden` en las cinco
+ *     rutas de borrador, el GET incluido: una plantilla a medio pensar son preguntas que la
+ *     organización todavía no decidió hacer.
  *
  * O sea: el link ausente es una comodidad en los dos casos, pero la garantía solo la hay en
  * el segundo, y está del lado del servidor.
@@ -65,6 +76,8 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/compliance', label: 'Compliance' },
   { to: '/scheduling', label: 'Scheduling', visible: canAdministerScheduling },
   { to: '/roster', label: 'Roster', visible: canAdministerRoster },
+  { to: '/templates', label: 'Templates', visible: canAuthorTemplates },
+  { to: '/catalog/locations', label: 'Locations', visible: canAdministerCatalog },
   { to: '/inbox', label: 'Inbox' },
   { to: '/outbox', label: 'Waiting to be sent' },
 ];
@@ -101,6 +114,9 @@ const TITLES: readonly (readonly [string, string])[] = [
   ['/compliance', 'Compliance'],
   ['/scheduling', 'Scheduling'],
   ['/roster', 'Roster'],
+  ['/templates', 'Templates'],
+  ['/templates/drafts/*', 'Template'],
+  ['/catalog/locations', 'Locations'],
   ['/inbox', 'Inbox'],
   ['/outbox', 'Waiting to be sent'],
   ['/accept-invitation', 'Accept invitation'],

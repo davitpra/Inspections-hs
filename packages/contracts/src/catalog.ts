@@ -55,6 +55,7 @@ export const locationSchema = z.strictObject({
   code: codeSchema,
   name: labelSchema,
   deactivated_at: z.iso.datetime({ offset: true }).nullable(),
+  organization_location_code: codeSchema.nullable().optional(),
 });
 
 export type Location = z.infer<typeof locationSchema>;
@@ -63,9 +64,38 @@ export type Location = z.infer<typeof locationSchema>;
  * Lo que necesita el desplegable, y nada más. Solo se arman con las activas: una
  * ubicación desactivada sigue resolviendo desde el historial, pero no se ofrece.
  */
-export const locationOptionSchema = locationSchema.pick({ id: true, code: true, name: true });
+export const locationOptionSchema = locationSchema.pick({
+  id: true,
+  code: true,
+  name: true,
+  organization_location_code: true,
+});
 
 export type LocationOption = z.infer<typeof locationOptionSchema>;
+
+/** Una ubicación conceptual compartida por las plantas de la organización. */
+export const organizationLocationSchema = z.strictObject({
+  id: z.uuid(),
+  code: codeSchema,
+  name: labelSchema,
+  deactivated_at: z.iso.datetime({ offset: true }).nullable(),
+});
+
+export type OrganizationLocation = z.infer<typeof organizationLocationSchema>;
+
+export const organizationLocationOptionSchema = organizationLocationSchema.pick({
+  id: true,
+  code: true,
+  name: true,
+});
+
+export type OrganizationLocationOption = z.infer<typeof organizationLocationOptionSchema>;
+
+export const locationOrganizationMappingSchema = z.strictObject({
+  organization_location_id: z.uuid().nullable(),
+});
+
+export type LocationOrganizationMapping = z.infer<typeof locationOrganizationMappingSchema>;
 
 /**
  * La referencia a una ubicación desde cualquier registro que la lleve. Es un id,
@@ -78,13 +108,40 @@ export const locationReferenceSchema = z.strictObject({
 
 export type LocationReference = z.infer<typeof locationReferenceSchema>;
 
-/** Alta de una ubicación. El sitio sale del alcance de la sesión, no del payload. */
+/**
+ * Alta de una ubicación física. El sitio **no va en el payload**: viaja en la ruta
+ * (`POST /sites/:siteId/locations`).
+ *
+ * La distinción es la de siempre y la que ADR-004 pide: el sitio de la ruta es una
+ * SELECCIÓN entre las plantas del alcance —el coordinador tiene las dos—, no el límite.
+ * El límite lo pone la política RLS sobre `location`, que rechaza una planta fuera del
+ * alcance sin que el endpoint tenga que comprobar nada. Con `site_id` adentro del cuerpo,
+ * el objeto que se valida y el aislamiento que se aplica quedarían pareciendo lo mismo.
+ */
 export const createLocationSchema = z.strictObject({
   code: codeSchema,
   name: labelSchema,
 });
 
 export type CreateLocation = z.infer<typeof createLocationSchema>;
+
+/**
+ * Alta de una ubicación compartida por toda la organización.
+ *
+ * Sin sitio, y esa ausencia es la definición: `organization_location` no lleva `site_id`
+ * ni política, por la misma razón que no la lleva `template`. Es el concepto —"el muelle
+ * de carga"— del que cada planta tiene su fila física.
+ *
+ * `code` se escribe, no se deriva. Es la decisión que la cabecera de este archivo ya toma
+ * para el catálogo: legible y no opaco, porque los seeds se escriben a mano y el código
+ * aparece en los reportes. Es lo contrario de la `key` de una plantilla, y a propósito.
+ */
+export const createOrganizationLocationSchema = z.strictObject({
+  code: codeSchema,
+  name: labelSchema,
+});
+
+export type CreateOrganizationLocation = z.infer<typeof createOrganizationLocationSchema>;
 
 /**
  * Las dos únicas cosas que se pueden cambiar de una ubicación: cómo se llama y si

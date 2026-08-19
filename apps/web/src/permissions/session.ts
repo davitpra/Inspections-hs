@@ -19,16 +19,20 @@ import type { Session } from '@hs/contracts';
  *     servidor: §4 dice que se elige a una persona sin poder ver su perfil, y un roster de
  *     solo lectura para un supervisor sería exactamente esa ficha.
  *
- * **Tres funciones y no una `isCoordinator`.** Hoy las tres preguntan lo mismo, pero son
- * tres decisiones distintas: el día que `management` pueda generar el reporte de
+ *   - `/templates` tampoco. Ahí el rol se comprueba en la lectura, igual que en `/roster`,
+ *     y por una razón propia: un borrador es una plantilla a medio pensar, y mostrarlo
+ *     sería mostrar preguntas que la organización todavía no decidió hacer.
+ *
+ * **Una función por decisión y no una `isCoordinator`.** Hoy todas preguntan lo mismo, pero
+ * son decisiones distintas: el día que `management` pueda generar el reporte de
  * cumplimiento sin administrar el roster, colapsarlas obligaría a separarlas de nuevo y a
  * revisar cada llamada para saber cuál era cuál. El nombre de cada una dice qué se está
  * preguntando, que es lo que un `role === 'hs_coordinator'` suelto no dice.
  *
- * Van acá y no en cada ruta porque las cuatro cruzan pantallas, y aparte del componente para
- * poder probarla sin renderizar.
+ * Van acá y no en cada ruta porque todas cruzan pantallas, y aparte del componente para
+ * poder probarlas sin renderizar.
  *
- * Las tres son predicados de tipo y no `boolean` a secas, porque conceder implica haber
+ * Todas son predicados de tipo y no `boolean` a secas, porque conceder implica haber
  * resuelto la cuenta: quien pregunta puede usar el `account` adentro del `if` sin volver
  * a comprobar que existe, que es lo que hacía el `account?.role !== …` que reemplazan.
  */
@@ -54,5 +58,23 @@ export function canAdministerScheduling(account: Session | null): account is Ses
 }
 
 export function canGenerateComplianceReport(account: Session | null): account is Session {
+  return account?.role === 'hs_coordinator';
+}
+
+/**
+ * Quién escribe plantillas (§6 — "el coordinador administra plantillas y roster").
+ *
+ * A diferencia de `canAdministerScheduling`, esta condiciona también la LECTURA: el servidor
+ * contesta `template_draft_forbidden` en las cinco rutas de borrador, el `GET` incluido, así
+ * que una pantalla de solo lectura para otro rol sería una pantalla vacía con un error.
+ *
+ * Es sobre BORRADORES, no sobre plantillas publicadas. `GET /templates` sigue abierto y lo
+ * consume `/scheduling`: gatear eso rompería la consola de programación para todos.
+ */
+export function canAuthorTemplates(account: Session | null): account is Session {
+  return account?.role === 'hs_coordinator';
+}
+
+export function canAdministerCatalog(account: Session | null): account is Session {
   return account?.role === 'hs_coordinator';
 }

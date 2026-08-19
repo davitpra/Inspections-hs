@@ -56,7 +56,9 @@ export class FindingsService {
     }
 
     return this.db.withSessionClient(session, async (client) => {
-      await this.requireActiveLocation(client, payload.site_id, payload.details.location_id);
+      if (payload.details.location_id !== null) {
+        await this.requireActiveLocation(client, payload.site_id, payload.details.location_id);
+      }
 
       // El prefijo del camino manual: no hay inspección programada de la que colgar,
       // así que la carpeta es la del borrador que el cliente creó antes de subir.

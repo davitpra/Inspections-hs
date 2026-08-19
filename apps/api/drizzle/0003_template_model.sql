@@ -59,10 +59,10 @@ CREATE TABLE template (
 -- desaparece de las versiones nuevas, sigue resolviendo desde los hallazgos
 -- históricos, y la serie de recurrencia termina en lugar de romperse.
 CREATE TABLE template_item (
-  -- `item_key` legible y no opaca: los seeds se escriben a mano y la key aparece
-  -- en el reporte de recurrencia que lee el coordinador. Es PK **global**, no
-  -- única por plantilla: §4 dice que no se reutiliza ni se recicla, y "no se
-  -- recicla" solo tiene sentido si el espacio de nombres es uno solo.
+  -- `item_key` puede ser legible en los seeds históricos y opaca en las plantillas
+  -- creadas desde el editor. Es PK **global**, no única por plantilla: §4 dice que
+  -- no se reutiliza ni se recicla, y "no se recicla" solo tiene sentido si el espacio
+  -- de nombres es uno solo.
   --
   -- El patrón está duplicado en `packages/contracts/src/template-document.ts`.
   -- Si uno cambia, el otro también.

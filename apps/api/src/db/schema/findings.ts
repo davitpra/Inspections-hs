@@ -65,9 +65,7 @@ export const finding = pgTable(
     itemKey: text('item_key').references(() => templateItem.itemKey),
 
     // La lista cerrada de la pregunta 1 de §6, obligatoria en los dos orígenes.
-    locationId: uuid('location_id')
-      .notNull()
-      .references(() => location.id),
+    locationId: uuid('location_id').references(() => location.id),
 
     description: text('description').notNull(),
 

@@ -58,13 +58,10 @@ export const findingRecurrence = pgTable(
       .notNull()
       .references(() => site.id),
 
-    // NOT NULL, y es lo que hace imposible una marca sobre un hallazgo manual: la FK
-    // compuesta de abajo no encuentra destino cuando la del hallazgo es NULL.
+    // Puede ser NULL cuando la sección no resolvió una ubicación en la planta.
     itemKey: text('item_key').notNull(),
 
-    locationId: uuid('location_id')
-      .notNull()
-      .references(() => location.id),
+    locationId: uuid('location_id').references(() => location.id),
 
     windowMonths: integer('window_months').notNull(),
 

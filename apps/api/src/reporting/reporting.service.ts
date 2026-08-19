@@ -97,10 +97,9 @@ function toSeries(row: SeriesRow): RecurrenceSeries {
   return {
     site_id: row.site_id,
     item_key: row.item_key,
-    // Un ítem cuya plantilla ya no lo publica en ninguna versión no tiene redacción que
-    // mostrar. La serie sigue existiendo —los hallazgos ocurrieron— y se muestra con su
-    // clave, que es el único nombre que le queda.
-    item_prompt: row.item_prompt ?? row.item_key,
+    // Las claves nuevas son opacas; una serie histórica sin redacción no debe mostrar
+    // un identificador técnico como si fuera una pregunta.
+    item_prompt: row.item_prompt ?? 'Question no longer available',
     location_id: row.location_id,
     location_count: row.location_count,
     occurrence_count: row.occurrence_count,

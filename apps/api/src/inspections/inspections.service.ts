@@ -481,11 +481,13 @@ export class InspectionsService {
         //
         // La prueba que las separa: sin este `WHERE` hay un bug de producto (opciones de
         // más, todas dentro del alcance); sin la política habría uno de seguridad.
-        `SELECT id, code, name
-           FROM location
-          WHERE site_id = $1
-            AND deactivated_at IS NULL
-          ORDER BY name`,
+        `SELECT l.id, l.code, l.name, ol.code AS organization_location_code
+           FROM location l
+           LEFT JOIN organization_location ol
+             ON ol.id = l.organization_location_id AND ol.deactivated_at IS NULL
+          WHERE l.site_id = $1
+            AND l.deactivated_at IS NULL
+          ORDER BY l.name`,
         [inspection.site_id],
       );
 

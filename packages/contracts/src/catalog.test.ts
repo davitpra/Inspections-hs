@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   createLocationSchema,
+  createOrganizationLocationSchema,
   locationOptionSchema,
   locationSchema,
   siteSchema,
@@ -83,7 +84,7 @@ describe('locationSchema', () => {
 });
 
 describe('locationOptionSchema', () => {
-  it('el desplegable lleva id, code y nombre, y nada más', () => {
+  it('el desplegable incluye el mapeo conceptual además de id, code y nombre', () => {
     const result = locationOptionSchema.safeParse({
       id: LOCATION_ID,
       code: 'packaging-line-3',
@@ -91,7 +92,12 @@ describe('locationOptionSchema', () => {
     });
 
     expect(result.success).toBe(true);
-    expect(Object.keys(locationOptionSchema.shape).sort()).toEqual(['code', 'id', 'name']);
+    expect(Object.keys(locationOptionSchema.shape).sort()).toEqual([
+      'code',
+      'id',
+      'name',
+      'organization_location_code',
+    ]);
   });
 });
 
@@ -115,6 +121,40 @@ describe('createLocationSchema', () => {
     });
 
     expect(result.success).toBe(false);
+  });
+});
+
+describe('createOrganizationLocationSchema', () => {
+  it('acepta code y nombre', () => {
+    expect(
+      createOrganizationLocationSchema.safeParse({ code: 'loading-dock', name: 'Loading dock' })
+        .success,
+    ).toBe(true);
+  });
+
+  // Una ubicación compartida no pertenece a ninguna planta: es el concepto del que cada
+  // planta tiene su fila física. Un `site_id` acá sería la contradicción de la entidad.
+  it('rechaza un site_id', () => {
+    expect(
+      createOrganizationLocationSchema.safeParse({
+        code: 'loading-dock',
+        name: 'Loading dock',
+        site_id: SITE_ID,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('rechaza un code que no respeta el patrón del catálogo', () => {
+    expect(
+      createOrganizationLocationSchema.safeParse({ code: 'Loading Dock', name: 'Loading dock' })
+        .success,
+    ).toBe(false);
+  });
+
+  it('rechaza un nombre en blancos', () => {
+    expect(
+      createOrganizationLocationSchema.safeParse({ code: 'loading-dock', name: '   ' }).success,
+    ).toBe(false);
   });
 });
 

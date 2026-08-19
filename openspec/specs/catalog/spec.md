@@ -7,6 +7,32 @@ inspections that referenced it years ago.
 
 ## Requirements
 
+### Requirement: Organization locations provide shared section destinations
+
+The system SHALL store organization-wide locations with a unique stable `code`, a `name`, a
+`created_at` timestamp and nullable `deactivated_at`. These rows SHALL not carry `site_id` or RLS:
+they are shared reference data. A physical `location` MAY reference one organization location,
+and `(site_id, organization_location_id)` SHALL be unique so a plant cannot map two physical rows
+to the same shared destination.
+
+#### Scenario: Two plants map to the same organization location
+
+- **GIVEN** an active organization location with code `shipping-dock`
+- **WHEN** one physical location in St. Thomas and one in Glencoe are mapped to it
+- **THEN** both mappings are accepted
+- **AND** each physical location retains its own site and id
+
+#### Scenario: A shared destination is unique within a plant
+
+- **WHEN** a second physical location in the same plant is mapped to an organization location
+  already used there
+- **THEN** the mapping is rejected with a unique violation
+
+#### Scenario: An organization location code cannot be changed by the application
+
+- **WHEN** the application role runs `UPDATE organization_location SET code = ...`
+- **THEN** the statement fails with SQLSTATE `42501`
+
 ### Requirement: A site is an identified workplace
 
 The system SHALL store each workplace as a `site` row carrying a stable `code`, a human-readable
@@ -103,6 +129,65 @@ SHALL NOT belong to two sites, and SHALL NOT exist without one.
 - **WHEN** any role runs `UPDATE location SET site_id = <the other site's id> WHERE id = <existing id>`
 - **THEN** the statement fails with SQLSTATE `HS001`
 - **AND** the stored `site_id` is unchanged when read back
+
+### Requirement: The HS coordinator adds catalogue entries from the console
+
+The system SHALL let the HS coordinator create both kinds of catalogue entry without a
+deployment: an `organization_location`, which carries no site, and a `location`, which
+belongs to one. Seeding SHALL remain a valid and sufficient way to load the catalogue, and
+neither path SHALL produce an entry the other could not have produced.
+
+The site of a new `location` SHALL travel in the request path and never in the request
+body. It names which of the requester's plants the entry belongs to; it is a selection
+within scope and not the isolation boundary, which stays with the row-level security policy
+on `location`. A site outside the requester's scope SHALL therefore be refused by the
+engine rather than by a check in the endpoint.
+
+A new `location` SHALL be created unmapped. Recording that a plant has a place and
+declaring which shared location it represents are two acts, and a creation that did both
+would force the coordinator to decide the second before knowing the first.
+
+Every creation SHALL be restricted to the HS coordinator, and a collision SHALL name the
+field to change: a repeated code and a repeated active name are two different constraints
+and two different corrections.
+
+#### Scenario: A shared location is created without a site
+
+- **WHEN** the HS coordinator creates an `organization_location` with a `code` and a `name`
+- **THEN** the entry is created and carries no site
+- **AND** it is offered as a section destination to every plant
+
+#### Scenario: A plant location is created unmapped
+
+- **WHEN** the HS coordinator creates a `location` in one of their plants
+- **THEN** the entry belongs to that site
+- **AND** its `organization_location_id` is null until it is mapped
+
+#### Scenario: The same code in both plants is two entries
+
+- **WHEN** a `location` with code `shipping-dock` is created in each of two sites
+- **THEN** both are created
+- **AND** they are distinct rows, each belonging to its own site
+
+#### Scenario: A site outside the requester's scope is refused by the engine
+
+- **GIVEN** a coordinator whose scope covers only St. Thomas
+- **WHEN** they create a `location` naming Glencoe
+- **THEN** the row-level security policy on `location` rejects the insert
+- **AND** the refusal does not depend on any site comparison in the endpoint
+
+#### Scenario: A collision names the field to change
+
+- **WHEN** a `location` is created with a `code` already used in that site
+- **THEN** the refusal names the code
+- **WHEN** a `location` is created with a `name` already used by an active location of that
+  site
+- **THEN** the refusal names the name
+
+#### Scenario: Only the HS coordinator can add
+
+- **WHEN** an account whose role is `supervisor` creates either kind of entry
+- **THEN** the request is refused
 
 ### Requirement: Location codes and active names are unique within their site
 

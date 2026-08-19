@@ -97,7 +97,7 @@ export const FINDING_DESCRIPTION_MAX = 2000;
  */
 export const findingDetailsSchema = z.strictObject({
   description: z.string().trim().min(FINDING_DESCRIPTION_MIN).max(FINDING_DESCRIPTION_MAX),
-  location_id: z.uuid(),
+  location_id: z.uuid().nullable(),
   photo_object_keys: z.array(objectKeySchema).min(1).max(10),
 });
 
@@ -208,7 +208,7 @@ export type ManualFindingRequest = z.infer<typeof manualFindingRequestSchema>;
  * visible en vez de taparlo (D8).
  */
 export const findingRecurrenceSchema = z.strictObject({
-  /** Cuántos hallazgos previos de la misma `item_key` **y la misma ubicación**. */
+  /** Cuántos hallazgos previos de la misma `item_key` y ubicación, si quedó resuelta. */
   prior_count: z.number().int().min(0),
 
   /** Cuántos de la misma `item_key` en cualquier ubicación del sitio. */
@@ -247,7 +247,7 @@ export const findingSchema = z.strictObject({
   inspection_id: z.uuid().nullable(),
   template_version_item_id: z.uuid().nullable(),
   item_key: itemKeySchema.nullable(),
-  location_id: z.uuid(),
+  location_id: z.uuid().nullable(),
   description: z.string(),
   photo_object_keys: z.array(objectKeySchema),
   reported_by: z.uuid(),

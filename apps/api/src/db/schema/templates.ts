@@ -1,4 +1,9 @@
-import type { ResponseType, TemplateDocument, VisibleWhen } from '@hs/contracts';
+import type {
+  ResponseType,
+  TemplateDocument,
+  TemplateDraftDocument,
+  VisibleWhen,
+} from '@hs/contracts';
 import {
   boolean,
   index,
@@ -13,7 +18,8 @@ import {
 
 /**
  * ADR-004 — La fuente de verdad de estas tablas es
- * `apps/api/drizzle/0003_template_model.sql`, no este archivo.
+ * `apps/api/drizzle/0003_template_model.sql` —y `0016_template_drafts.sql` para
+ * el borrador—, no este archivo.
  *
  * Acá solo viven los tipos con los que el repositorio consulta. El SQL lleva
  * además los triggers de numeración, de proyección del documento a filas y de
@@ -115,6 +121,46 @@ export const templateVersionItem = pgTable(
 );
 
 /**
+ * El documento MIENTRAS SE ESCRIBE (migración 0016), que es lo contrario de todo
+ * lo de arriba: mutable, posiblemente incompleto, y sin FK a nada.
+ *
+ * No cuelga de `template`: un borrador lleva su propia `key` y no escribe una
+ * sola fila en el modelo publicado hasta que alguien lo publique, que es la
+ * segunda mitad de la etapa 8. Por eso `template_draft` no aparece en ninguna
+ * consulta de `templateOption`: son dos poblaciones que no se tocan.
+ *
+ * `revision` es el lock optimista; el UPDATE lo incrementa y filtra por él.
+ * `key` y `createdBy` no están en el `GRANT UPDATE` de la migración, así que
+ * escribirlos falla en el motor aunque este espejo los deje tipar.
+ */
+export const templateDraft = pgTable(
+  'template_draft',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    key: text('key').notNull(),
+    name: text('name').notNull(),
+
+    // La forma laxa: `templateDraftDocumentSchema` de @hs/forms, sin `position`.
+    document: jsonb('document').$type<TemplateDraftDocument>().notNull(),
+
+    revision: integer('revision').notNull().default(1),
+
+    // Sin referencia, igual que `templateVersion.publishedBy`: es autoría, no una
+    // relación que alguien navegue.
+    createdBy: uuid('created_by').notNull(),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+
+    // Nunca DELETE: el trigger de 0016 lo prohíbe para todos los roles.
+    discardedAt: timestamp('discarded_at', { withTimezone: true }),
+  },
+  // El índice es PARCIAL (`WHERE discarded_at IS NULL`) y eso Drizzle no lo sabe
+  // expresar acá; vive en la migración. Un borrador descartado libera su `key`.
+  (table) => [index('template_draft_key_live_idx').on(table.key)],
+);
+
+/**
  * El mismo enum que el `CHECK` del SQL. Ya no se escribe acá: viene de
  * `@hs/forms` vía `@hs/contracts`, que es donde el motor lo define. La única
  * copia que queda es la del SQL, y un test de integración la compara.
@@ -125,3 +171,4 @@ export type Template = typeof template.$inferSelect;
 export type TemplateItemRow = typeof templateItem.$inferSelect;
 export type TemplateVersion = typeof templateVersion.$inferSelect;
 export type TemplateVersionItem = typeof templateVersionItem.$inferSelect;
+export type TemplateDraftRow = typeof templateDraft.$inferSelect;

@@ -306,7 +306,7 @@ async function findingsBlock(
       row.item_key,
       {
         description: row.description,
-        location_id: row.location_id ?? '',
+        location_id: row.location_id,
         photo_object_keys: keysByItem[row.item_key] ?? [],
       },
     ]),

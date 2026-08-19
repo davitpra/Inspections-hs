@@ -1,0 +1,45 @@
+-- Requisitos §7 etapa 8 — El nombre de un borrador es su identidad; la clave se deriva.
+--
+-- ESTA MIGRACIÓN TAMPOCO TOCA NINGUNA TABLA INMUTABLE. Agrega un índice sobre
+-- `template_draft` y nada más.
+--
+-- QUÉ ARREGLA. 0016 dejó único el `key` y libre el `name`, así que dos borradores
+-- se podían llamar igual con claves distintas. En el listado eso son dos renglones
+-- idénticos que solo se distinguen por la clave — justo el dato que la interfaz no
+-- le pide al autor. Y como el `name` se puede editar después de creado, no era un
+-- caso raro: bastaba renombrar.
+--
+-- POR QUÉ EL ARREGLO VA SOBRE EL NOMBRE Y NO SOBRE LA CLAVE. Desde este change la
+-- clave se DERIVA del nombre y el autor no la escribe. Con el nombre libre, la
+-- derivación tendría que desempatar sola —`monthly-electrical`,
+-- `monthly-electrical-2`— y esa es exactamente la divergencia que el índice viene a
+-- impedir, solo que invisible. Único el nombre, la clave se deriva sin desempates y
+-- `key = f(name)` se sostiene siempre.
+--
+-- La clave sigue siendo write-once (`0016` §4 no la incluye en el GRANT UPDATE), así
+-- que renombrar un borrador NO la mueve. Es deliberado: la clave es lo que va a
+-- identificar a la plantilla publicada y lo que usan los seeds, y un identificador
+-- que cambia con cada corrección de estilo no identifica nada. El costo es que un
+-- borrador renombrado puede quedar con una clave que ya no se parece a su nombre, y
+-- por eso el editor la muestra —de solo lectura— en vez de esconderla del todo.
+--
+-- Escrita a mano, como todas.
+
+-- ---------------------------------------------------------------------------
+-- 1. Un nombre vivo a la vez.
+--
+-- `lower(btrim(name))` y no `name` pelado: "Monthly Electrical" y "monthly
+-- electrical " son el mismo nombre para cualquiera que lea el listado, y dos filas
+-- que solo difieren en mayúsculas son el mismo problema que el índice viene a
+-- resolver.
+--
+-- PARCIAL, igual que el de `key`: un borrador descartado libera su nombre. Es lo que
+-- hace que equivocarse al crear uno no sea permanente.
+--
+-- NO cubre la colisión contra una plantilla ya PUBLICADA —son dos tablas, y
+-- `template.name` ni siquiera es único— y esa la comprueba el servicio antes de
+-- insertar, con el mismo carácter de cortesía que ya tenía la de `key`: la
+-- refutación autoritativa vive en el `UNIQUE` de `template.key` al publicar.
+CREATE UNIQUE INDEX template_draft_name_live_idx
+  ON template_draft (lower(btrim(name)))
+  WHERE discarded_at IS NULL;

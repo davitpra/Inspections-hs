@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   canAdministerRoster,
   canAdministerScheduling,
+  canAuthorTemplates,
   canGenerateComplianceReport,
   canInviteFromRoster,
 } from './session';
@@ -26,6 +27,7 @@ const permissions = [
   ['canAdministerScheduling', canAdministerScheduling],
   ['canGenerateComplianceReport', canGenerateComplianceReport],
   ['canInviteFromRoster', canInviteFromRoster],
+  ['canAuthorTemplates', canAuthorTemplates],
 ] as const;
 
 describe.each(permissions)('%s', (_name, allows) => {

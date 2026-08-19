@@ -119,7 +119,13 @@ export class SubmissionsService {
       // Esta línea es la que hace que `inspections` conozca `findings`, que es la
       // excepción declarada de ADR-008. Lo que no puede pasar nunca es la inversa:
       // `findings` no llama a `inspections`.
-      await this.insertFindings(client, created.row, derived.findings);
+      const resolvedFindings = await this.resolveFindingLocations(
+        client,
+        scheduled.site_id,
+        document,
+        derived.findings,
+      );
+      await this.insertFindings(client, created.row, resolvedFindings);
 
       // LA MARCA DE RECURRENCIA (etapa 7). En la misma transacción y por el mismo motivo
       // que la derivación: la marca dice qué se sabía cuando el hallazgo nació, y un
@@ -409,6 +415,59 @@ export class SubmissionsService {
         photos.map((photo) => photo.objectKey),
       ],
     );
+  }
+
+  /** Resuelve la ubicación conceptual de la sección contra el catálogo de esta planta. */
+  private async resolveFindingLocations(
+    client: PoolClient,
+    siteId: string,
+    document: TemplateDocument,
+    findings: readonly DerivedFinding[],
+  ): Promise<readonly DerivedFinding[]> {
+    const sectionByItem = new Map(
+      document.sections.flatMap((section) =>
+        section.items.map((item) => [item.item_key, section.organization_location_code] as const),
+      ),
+    );
+    const codes = [
+      ...new Set(
+        findings
+          .map((finding) => sectionByItem.get(finding.item_key))
+          .filter((code): code is string => code !== undefined),
+      ),
+    ];
+    const { rows } = await client.query<{ id: string; code: string }>(
+      `SELECT l.id, ol.code
+         FROM location l
+         JOIN organization_location ol ON ol.id = l.organization_location_id
+        WHERE l.site_id = $1
+          AND l.deactivated_at IS NULL
+          AND ol.deactivated_at IS NULL
+          AND ol.code = ANY($2::text[])`,
+      [siteId, codes],
+    );
+    const locationByCode = new Map(rows.map((row) => [row.code, row.id]));
+
+    return findings.map((finding) => {
+      const code = sectionByItem.get(finding.item_key);
+      // Versiones históricas no tenían catálogo conceptual. Conservan la ubicación
+      // que ya traían; la revalidación estricta aplica a documentos nuevos que declaran código.
+      if (code === undefined) return finding;
+
+      const resolved = locationByCode.get(code) ?? null;
+      const supplied = finding.details.location_id;
+
+      if (supplied !== null && supplied !== resolved) {
+        throw invalidSubmission(
+          `The finding location does not match the location declared by its section`,
+        );
+      }
+
+      return {
+        ...finding,
+        details: { ...finding.details, location_id: resolved },
+      };
+    });
   }
 }
 
