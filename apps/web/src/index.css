@@ -1863,23 +1863,44 @@ select:disabled {
   margin: 0 0 0.75rem;
 }
 
-/*
- * Etiqueta y valor de una opción en la misma línea, con el botón de quitar al final.
- *
- * Los dos campos comparten el renglón porque son las dos caras de una misma opción y se
- * comparan entre sí; en renglones separados, una lista de cinco opciones son diez campos
- * que hay que emparejar a ojo. En un teléfono envuelven, que es lo correcto.
- */
+/* La tabla de opciones se compacta en desktop y se vuelve vertical en pantallas pequeñas. */
+.options__head,
 .options__row {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.5rem;
+}
+
+.options__head {
+  padding: 0 0.5rem 0.25rem;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.options__row {
   padding: 0.25rem 0;
 }
 
-.options__row input {
-  flex: 1 1 10rem;
+.options__field {
+  min-width: 0;
+}
+
+.options__field label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.options__field input {
+  width: 100%;
 }
 
 .options__row button {
@@ -2281,9 +2302,68 @@ select:disabled {
   align-items: start;
 }
 
+.builder__sections {
+  margin-top: 1.5rem;
+}
+
+.builder__sections-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0 0 0.75rem;
+}
+
+.builder__sections-head h2 {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+
+.builder__sections-head .note {
+  max-width: 42rem;
+  margin: 0.15rem 0 0;
+}
+
+.builder__sections-head > div {
+  min-width: 0;
+}
+
+.builder__sections-head .status-pill {
+  flex: none;
+  margin-top: 0.15rem;
+}
+
+.builder__empty-sections {
+  padding: 1.25rem;
+  border: 1px dashed var(--line-control);
+  border-radius: var(--radius);
+  background: var(--tint-bg);
+  text-align: center;
+}
+
+.builder__empty-sections-title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.builder__empty-sections .note {
+  margin: 0.25rem 0 0;
+}
+
 @media (max-width: 48rem) {
   .builder__identity-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 30rem) {
+  .builder__sections-head {
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .builder__sections-head .status-pill {
+    margin-top: 0;
   }
 }
 
@@ -2342,51 +2422,130 @@ select:disabled {
 
 /* El resumen ------------------------------------------------------------- */
 
+.builder__summary-card {
+  padding: 1.25rem;
+}
+
+.builder__summary-head {
+  align-items: flex-start;
+  margin-bottom: 1.25rem;
+}
+
+.builder__summary-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+}
+
+.builder__summary-heading svg {
+  flex: none;
+  margin-top: 0.1rem;
+}
+
+.builder__summary-heading h3 {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+
+.builder__summary-heading .note {
+  margin: 0.1rem 0 0;
+}
+
+.builder__summary-scope {
+  padding: 0.75rem;
+  border-radius: var(--radius);
+  background: var(--tint-bg);
+}
+
+.builder__summary-scope .field-label {
+  margin-bottom: 0.25rem;
+}
+
 .builder__counts {
-  margin: 0 0 1rem;
-  border-top: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin: 1rem 0 1.25rem;
 }
 
 .builder__counts > div {
   display: flex;
+  flex-direction: column-reverse;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.6rem 0;
-  border-bottom: 1px solid var(--line);
+  justify-content: center;
+  gap: 0.15rem;
+  min-width: 0;
+  padding: 0.65rem 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
 }
 
 .builder__counts dt {
   color: var(--muted);
+  font-size: var(--text-sm);
+  text-align: center;
 }
 
 .builder__counts dd {
   margin: 0;
+  font-size: var(--text-lg);
   font-weight: 600;
+}
+
+.builder__breakdown-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.builder__breakdown-head .field-label {
+  margin: 0;
+}
+
+.builder__breakdown-head .note {
+  margin: 0;
+  white-space: nowrap;
 }
 
 .builder__breakdown {
   list-style: none;
-  margin: 0.5rem 0 0;
+  margin: 0.6rem 0 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.5rem;
 }
 
-.builder__breakdown li {
+.builder__breakdown-item {
   display: flex;
-  gap: 0.6rem;
+  gap: 0.7rem;
   align-items: start;
+  padding: 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.builder__breakdown-content {
+  flex: 1;
+  min-width: 0;
 }
 
 .builder__breakdown-title {
   margin: 0;
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
-.builder__breakdown .note {
-  margin: 0 0 0.35rem;
+.builder__breakdown-scope {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0.15rem 0 0.45rem;
+}
+
+.builder__breakdown-scope svg {
+  flex: none;
 }
 
 .builder__chips {
@@ -2395,11 +2554,24 @@ select:disabled {
   gap: 0.35rem;
 }
 
+.builder__empty-summary {
+  margin: 0;
+  padding: 1rem;
+  border: 1px dashed var(--line-control);
+  border-radius: var(--radius);
+  color: var(--muted);
+  text-align: center;
+}
+
 /* La sección ------------------------------------------------------------- */
 
 /* `relative` para el `.row-menu` de la sección, igual que `.period`. */
 .builder__section {
   position: relative;
+}
+
+.builder__section--stranded {
+  border-inline-start: 4px solid var(--warn-ink);
 }
 
 /* Mientras se arrastra, la fila se atenúa en vez de desaparecer: sacarla del flujo haría
@@ -2435,6 +2607,13 @@ select:disabled {
 .builder__section-title h2 {
   margin: 0;
   font-size: var(--text-lg);
+}
+
+.builder__section-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .builder__section-title .note {
@@ -2597,17 +2776,28 @@ select:disabled {
 /* Un renglón: manija, número, texto, tipo, obligatoria, menú. `relative` para el menú. */
 .item-editor__row {
   position: relative;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: start;
   gap: 0.5rem;
   padding-right: 3rem;
 }
 
 .item-editor__prompt {
-  flex: 1 1 14rem;
+  grid-column: 3;
+  grid-row: 1;
   width: auto;
   min-width: 0;
+}
+
+.item-editor__controls {
+  grid-column: 3;
+  grid-row: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding-top: 0.15rem;
 }
 
 .item-editor__type {
@@ -2624,14 +2814,80 @@ select:disabled {
   white-space: nowrap;
 }
 
-/* La configuración del tipo, plegada bajo la fila y con el mismo filete que la pregunta
-   dentro de su sección: se lee como algo que pertenece a la fila de arriba. */
+.item-editor__settings-toggle {
+  width: auto;
+  min-height: 48px;
+  padding-inline: 0.75rem;
+  border-color: var(--line-control);
+  background: var(--paper);
+  color: var(--brand);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+/* La configuración queda separada de la pregunta y solo ocupa espacio cuando se solicita. */
 .item-editor__settings {
-  margin: 0.5rem 0 0 1.5rem;
-  padding-left: 0.75rem;
+  margin: 0.75rem 0 0 2.5rem;
+  padding: 0.75rem 0 0 0.75rem;
+  border-top: 1px solid var(--line);
   border-left: 2px solid var(--line);
+}
+
+.item-editor__settings-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.item-editor__settings-title {
+  margin: 0;
+  font-weight: 600;
 }
 
 .item-editor__settings .note {
   margin: 0 0 0.5rem;
+}
+
+@media (max-width: 44rem) {
+  .options__head {
+    display: none;
+  }
+
+  .options__row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+  }
+
+  .options__field {
+    grid-column: 1 / -1;
+  }
+
+  .options__field label {
+    position: static;
+    display: block;
+    width: auto;
+    height: auto;
+    margin: 0 0 0.25rem;
+    overflow: visible;
+    clip: auto;
+    color: var(--muted);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    white-space: normal;
+  }
+
+  .options__row button {
+    grid-column: 2;
+  }
+
+  .item-editor__settings {
+    margin-left: 0;
+  }
+
+  .item-editor__settings-head {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
 }

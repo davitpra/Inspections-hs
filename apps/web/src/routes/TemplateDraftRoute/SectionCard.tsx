@@ -112,6 +112,7 @@ export function SectionCard({
       className={[
         'card',
         'builder__section',
+        stranded ? 'builder__section--stranded' : '',
         sortable.dragging === index ? 'is-dragging' : '',
         sortable.isDropTarget(index) ? 'is-drop-target' : '',
       ]
@@ -119,6 +120,7 @@ export function SectionCard({
         .join(' ')}
       data-sortable-group={sortable.group}
       data-sortable-index={index}
+      aria-labelledby={`${controlId}-section-title`}
     >
       <div className="builder__section-head">
         <button
@@ -135,7 +137,14 @@ export function SectionCard({
         </span>
 
         <div className="builder__section-title">
-          <h2>{section.section_title.trim() || `Section ${index + 1}`}</h2>
+          <div className="builder__section-title-row">
+            <h2 id={`${controlId}-section-title`}>
+              {section.section_title.trim() || `Section ${index + 1}`}
+            </h2>
+            {stranded ? (
+              <span className="status-pill status-pill--not-ready">Needs mapping</span>
+            ) : null}
+          </div>
           <p className="note">Section applies to: {sectionAppliesTo(section, locations, siteIds, sites)}</p>
         </div>
 

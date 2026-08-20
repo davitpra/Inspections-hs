@@ -5,12 +5,13 @@ import type {
   TemplateDraftDocument,
 } from "@hs/contracts";
 
-import { BuildingIcon } from "../../components/icons";
+import { BuildingIcon, DocumentIcon, PinIcon } from "../../components/icons";
 import { PublishReadiness } from "./PublishReadiness";
 import {
   locationCoverage,
   scopeLabel,
   sectionAppliesTo,
+  scopeNotice,
   summaryCounts,
 } from "./presentation";
 
@@ -43,13 +44,25 @@ export function TemplateSummary({
 
   return (
     <aside className="builder__aside">
-      <section className="card">
-        <h3>Template summary</h3>
+      <section className="card builder__summary-card">
+        <div className="card__head builder__summary-head">
+          <div className="builder__summary-heading">
+            <DocumentIcon size={22} />
+            <div>
+              <h3>Template summary</h3>
+              <p className="note">Live overview of this draft</p>
+            </div>
+          </div>
+        </div>
 
-        <p className="field-label">Scope</p>
-        <p className="builder__scope-summary">
-          <BuildingIcon size={18} /> {scopeLabel(siteIds, sites)}
-        </p>
+        <div className="builder__summary-scope">
+          <p className="field-label">Scope</p>
+          <p className="builder__scope-summary">
+            <BuildingIcon size={18} />
+            <strong>{scopeLabel(siteIds, sites)}</strong>
+          </p>
+          <p className="note builder__scope-note">{scopeNotice(siteIds, sites)}</p>
+        </div>
 
         <dl className="builder__counts">
           <div>
@@ -68,20 +81,24 @@ export function TemplateSummary({
 
         {document.sections.length > 0 ? (
           <>
-            <p className="field-label">Section breakdown</p>
+            <div className="builder__breakdown-head">
+              <p className="field-label">Section breakdown</p>
+              <span className="note">{document.sections.length} total</span>
+            </div>
             <ol className="builder__breakdown">
               {document.sections.map((section, index) => (
                 // Índice como clave, igual que en el editor: la identidad técnica no forma
                 // parte de la interfaz y la lista se recalcula entera en cada tecla.
-                <li key={index}>
+                <li key={index} className="builder__breakdown-item">
                   <span className="builder__number" aria-hidden>
                     {index + 1}
                   </span>
-                  <div>
+                  <div className="builder__breakdown-content">
                     <p className="builder__breakdown-title">
                       {section.section_title.trim() || `Section ${index + 1}`}
                     </p>
-                    <p className="note">
+                    <p className="note builder__breakdown-scope">
+                      <PinIcon size={15} />
                       {sectionAppliesTo(section, locations, siteIds, sites)}
                     </p>
                     <div className="builder__chips">
@@ -105,7 +122,11 @@ export function TemplateSummary({
               ))}
             </ol>
           </>
-        ) : null}
+        ) : (
+          <p className="builder__empty-summary">
+            Add a section to see its location coverage here.
+          </p>
+        )}
       </section>
 
       <PublishReadiness issues={issues} />

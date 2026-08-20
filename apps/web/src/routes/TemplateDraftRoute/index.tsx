@@ -315,140 +315,166 @@ function DraftForm({
             }
           />
 
-          {document.sections.map((section, sectionIndex) => (
-            // Índice como clave: las identidades técnicas no forman parte de la interfaz y
-            // el índice mantiene estable el foco mientras se edita.
-            <SectionCard
-              key={sectionIndex}
-              section={section}
-              index={sectionIndex}
-              count={document.sections.length}
-              locations={locations}
-              organizationLocations={organizationLocations}
-              sites={sites}
-              siteIds={siteIds}
-              stranded={stranded.has(sectionIndex)}
-              sortable={sections}
-              onLocation={(code) => {
-                const location = organizationLocations.find(
-                  (each) => each.code === code,
-                );
-                write(
-                  setSectionLocation(
-                    document,
-                    sectionIndex,
-                    code,
-                    location?.name ?? "",
-                  ),
-                );
-              }}
-              onMove={(delta) =>
-                write(moveSection(document, sectionIndex, delta))
-              }
-              onDuplicate={() => {
-                const taken = [
-                  ...allItemKeys(document),
-                  ...document.sections.map((each) => each.section_key),
-                ];
-                const minted = newKeys(section.items.length + 1, taken);
+          <section className="builder__sections" aria-labelledby="builder-sections-title">
+            <div className="builder__sections-head">
+              <div>
+                <h2 id="builder-sections-title">Inspection flow</h2>
+                <p className="note">
+                  Arrange the sections and questions in the order inspectors will follow.
+                </p>
+              </div>
+              <span className="status-pill status-pill--draft">
+                {document.sections.length}{" "}
+                {document.sections.length === 1 ? "section" : "sections"}
+              </span>
+            </div>
 
-                write(
-                  duplicateSection(document, sectionIndex, {
-                    section: minted[0]!,
-                    items: minted.slice(1),
-                  }),
-                );
-              }}
-              onRemove={() => write(removeSection(document, sectionIndex))}
-              onAddItem={() =>
-                write(
-                  addItem(
-                    document,
-                    sectionIndex,
-                    newKey(allItemKeys(document)),
-                  ),
-                )
-              }
-              item={{
-                /** La identidad se mantiene aunque la pregunta se reformule. */
-                prompt: (itemIndex, prompt) =>
-                  write(setPrompt(document, sectionIndex, itemIndex, prompt)),
-                required: (itemIndex, required) =>
+            {document.sections.length === 0 ? (
+              <div className="builder__empty-sections">
+                <p className="builder__empty-sections-title">Your flow is empty</p>
+                <p className="note">
+                  Start with a section for the first area an inspector will check.
+                </p>
+              </div>
+            ) : null}
+
+            {document.sections.map((section, sectionIndex) => (
+              // Índice como clave: las identidades técnicas no forman parte de la interfaz y
+              // el índice mantiene estable el foco mientras se edita.
+              <SectionCard
+                key={sectionIndex}
+                section={section}
+                index={sectionIndex}
+                count={document.sections.length}
+                locations={locations}
+                organizationLocations={organizationLocations}
+                sites={sites}
+                siteIds={siteIds}
+                stranded={stranded.has(sectionIndex)}
+                sortable={sections}
+                onLocation={(code) => {
+                  const location = organizationLocations.find(
+                    (each) => each.code === code,
+                  );
                   write(
-                    setRequired(document, sectionIndex, itemIndex, required),
-                  ),
-                responseType: (itemIndex, responseType: ResponseType) =>
-                  write(
-                    changeResponseType(
+                    setSectionLocation(
                       document,
                       sectionIndex,
-                      itemIndex,
-                      responseType,
+                      code,
+                      location?.name ?? "",
                     ),
-                  ),
-                number: (itemIndex, field, value) =>
+                  );
+                }}
+                onMove={(delta) =>
+                  write(moveSection(document, sectionIndex, delta))
+                }
+                onDuplicate={() => {
+                  const taken = [
+                    ...allItemKeys(document),
+                    ...document.sections.map((each) => each.section_key),
+                  ];
+                  const minted = newKeys(section.items.length + 1, taken);
+
                   write(
-                    setConfig(document, sectionIndex, itemIndex, field, value),
-                  ),
-                optionChange: (
-                  itemIndex,
-                  optionIndex,
-                  change: Partial<ChoiceOption>,
-                ) =>
+                    duplicateSection(document, sectionIndex, {
+                      section: minted[0]!,
+                      items: minted.slice(1),
+                    }),
+                  );
+                }}
+                onRemove={() => write(removeSection(document, sectionIndex))}
+                onAddItem={() =>
                   write(
-                    setOption(
+                    addItem(
                       document,
                       sectionIndex,
-                      itemIndex,
-                      optionIndex,
-                      change,
-                    ),
-                  ),
-                optionAdd: (itemIndex) =>
-                  write(addOption(document, sectionIndex, itemIndex)),
-                optionRemove: (itemIndex, optionIndex) =>
-                  write(
-                    removeOption(
-                      document,
-                      sectionIndex,
-                      itemIndex,
-                      optionIndex,
-                    ),
-                  ),
-                move: (itemIndex, delta) =>
-                  write(moveItem(document, sectionIndex, itemIndex, delta)),
-                duplicate: (itemIndex) =>
-                  write(
-                    duplicateItem(
-                      document,
-                      sectionIndex,
-                      itemIndex,
                       newKey(allItemKeys(document)),
                     ),
-                  ),
-                remove: (itemIndex) =>
-                  write(removeItem(document, sectionIndex, itemIndex)),
-              }}
-            />
-          ))}
-
-          <div className="builder__add builder__add--section">
-            <button
-              type="button"
-              onClick={() =>
-                write(
-                  addSection(
-                    document,
-                    newKey(
-                      document.sections.map((section) => section.section_key),
+                  )
+                }
+                item={{
+                  /** La identidad se mantiene aunque la pregunta se reformule. */
+                  prompt: (itemIndex, prompt) =>
+                    write(setPrompt(document, sectionIndex, itemIndex, prompt)),
+                  required: (itemIndex, required) =>
+                    write(
+                      setRequired(document, sectionIndex, itemIndex, required),
                     ),
-                  ),
-                )
-              }
-            >
-              <PlusIcon /> Add section
-            </button>
-          </div>
+                  responseType: (itemIndex, responseType: ResponseType) =>
+                    write(
+                      changeResponseType(
+                        document,
+                        sectionIndex,
+                        itemIndex,
+                        responseType,
+                      ),
+                    ),
+                  number: (itemIndex, field, value) =>
+                    write(
+                      setConfig(document, sectionIndex, itemIndex, field, value),
+                    ),
+                  optionChange: (
+                    itemIndex,
+                    optionIndex,
+                    change: Partial<ChoiceOption>,
+                  ) =>
+                    write(
+                      setOption(
+                        document,
+                        sectionIndex,
+                        itemIndex,
+                        optionIndex,
+                        change,
+                      ),
+                    ),
+                  optionAdd: (itemIndex) =>
+                    write(addOption(document, sectionIndex, itemIndex)),
+                  optionRemove: (itemIndex, optionIndex) =>
+                    write(
+                      removeOption(
+                        document,
+                        sectionIndex,
+                        itemIndex,
+                        optionIndex,
+                      ),
+                    ),
+                  move: (itemIndex, delta) =>
+                    write(moveItem(document, sectionIndex, itemIndex, delta)),
+                  duplicate: (itemIndex) =>
+                    write(
+                      duplicateItem(
+                        document,
+                        sectionIndex,
+                        itemIndex,
+                        newKey(allItemKeys(document)),
+                      ),
+                    ),
+                  remove: (itemIndex) =>
+                    write(removeItem(document, sectionIndex, itemIndex)),
+                }}
+              />
+            ))}
+
+            <div className="builder__add builder__add--section">
+              <button
+                type="button"
+                className="button--primary"
+                onClick={() =>
+                  write(
+                    addSection(
+                      document,
+                      newKey(
+                        document.sections.map((section) => section.section_key),
+                      ),
+                    ),
+                  )
+                }
+              >
+                <PlusIcon />{" "}
+                {document.sections.length === 0 ? "Add your first section" : "Add section"}
+              </button>
+            </div>
+          </section>
         </div>
 
         <TemplateSummary

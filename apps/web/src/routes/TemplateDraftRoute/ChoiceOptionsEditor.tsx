@@ -33,28 +33,40 @@ export function ChoiceOptionsEditor({
         <p className="note">No options yet. An item to choose from needs at least one.</p>
       ) : null}
 
+      {options.length > 0 ? (
+        <div className="options__head" aria-hidden="true">
+          <span>Label</span>
+          <span>Stored value</span>
+          <span>Actions</span>
+        </div>
+      ) : null}
+
       {options.map((option, index) => (
         // La clave es el índice y no el `value`: el `value` es editable y arranca vacío en
         // dos opciones nuevas seguidas, así que usarlo remontaría el input en cada tecla y
         // perdería el foco.
         <div key={index} className="options__row">
-          <label htmlFor={`${controlId}-label-${index}`}>Label</label>
-          <input
-            id={`${controlId}-label-${index}`}
-            type="text"
-            value={option.label}
-            placeholder="What the inspector reads"
-            onChange={(event) => onChange(index, { label: event.target.value })}
-          />
+          <div className="options__field">
+            <label htmlFor={`${controlId}-label-${index}`}>Label</label>
+            <input
+              id={`${controlId}-label-${index}`}
+              type="text"
+              value={option.label}
+              placeholder="What the inspector reads"
+              onChange={(event) => onChange(index, { label: event.target.value })}
+            />
+          </div>
 
-          <label htmlFor={`${controlId}-value-${index}`}>Stored value</label>
-          <input
-            id={`${controlId}-value-${index}`}
-            type="text"
-            value={option.value}
-            placeholder="what-gets-recorded"
-            onChange={(event) => onChange(index, { value: event.target.value })}
-          />
+          <div className="options__field">
+            <label htmlFor={`${controlId}-value-${index}`}>Stored value</label>
+            <input
+              id={`${controlId}-value-${index}`}
+              type="text"
+              value={option.value}
+              placeholder="what-gets-recorded"
+              onChange={(event) => onChange(index, { value: event.target.value })}
+            />
+          </div>
 
           <button
             type="button"

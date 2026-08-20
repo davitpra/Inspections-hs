@@ -443,6 +443,47 @@ describe('duplicar', () => {
 });
 
 describe('la configuración del tipo de respuesta', () => {
+  it('mantiene cerrada la configuración de opciones al cargar un ítem', async () => {
+    getTemplateDraft.mockResolvedValue(
+      draft({
+        document: {
+          sections: [
+            {
+              section_key: 'guarding',
+              section_title: 'Guarding',
+              organization_location_code: 'guarding',
+              items: [
+                {
+                  item_key: 'guard.choice',
+                  prompt: 'Which guard is fitted?',
+                  required: true,
+                  response_type: 'single_choice' as const,
+                  options: [
+                    { label: 'Fixed', value: 'fixed' },
+                    { label: 'Removable', value: 'removable' },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    renderRoute();
+    await ready();
+
+    expect(screen.queryByText('Answer settings')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Edit answer settings' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit answer settings' }));
+
+    expect(screen.getByText('Answer settings')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Hide answer settings' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Hide settings' })).toBeTruthy();
+    expect(screen.getByLabelText('Question 1')).toBeTruthy();
+  });
+
   it('cambiar de tipo reemplaza los campos de configuración', async () => {
     renderRoute();
     await ready();
