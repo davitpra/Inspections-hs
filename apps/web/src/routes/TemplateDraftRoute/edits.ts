@@ -112,6 +112,50 @@ export function setSectionLocation(
   }));
 }
 
+/**
+ * Duplica una sección con todas sus preguntas.
+ *
+ * **JUSTO DESPUÉS DE LA ORIGINAL, no al final.** Se duplica para escribir una variante de
+ * lo que se está mirando; mandarla al final movería el trabajo lejos del lugar donde el
+ * autor está trabajando, y en un documento de ocho secciones eso es scrollear para
+ * encontrar lo que uno acaba de crear.
+ *
+ * Las identidades llegan de afuera —`newKeys` usa `crypto`, que no entra en un archivo
+ * puro— y son TODAS nuevas: la sección y cada uno de sus ítems. Reutilizar una `item_key`
+ * sería declarar que las dos preguntas son la misma a lo largo del tiempo, que es
+ * exactamente lo que la identidad de §4 significa y lo contrario de lo que pasó acá.
+ *
+ * `visible_when` NO se copia, ni el de la sección ni el de sus ítems. Un duplicado que
+ * responde a la misma condición que el original casi nunca es lo que se quiso, y además
+ * apunta a ítems que —después de un reordenamiento— pueden dejar de estar estrictamente
+ * antes, que es la única regla que esa condición tiene.
+ */
+export function duplicateSection(
+  document: TemplateDraftDocument,
+  index: number,
+  keys: { section: string; items: readonly string[] },
+): TemplateDraftDocument {
+  const section = document.sections[index];
+
+  if (!section) return document;
+
+  const copy: TemplateDraftSection = {
+    section_key: keys.section,
+    section_title: section.section_title,
+    ...(section.organization_location_code === undefined
+      ? {}
+      : { organization_location_code: section.organization_location_code }),
+    items: section.items.map((item, itemIndex) =>
+      withoutCondition({ ...item, item_key: keys.items[itemIndex] ?? item.item_key }),
+    ),
+  };
+
+  const sections = [...document.sections];
+  sections.splice(index + 1, 0, copy);
+
+  return { sections };
+}
+
 export function moveSection(
   document: TemplateDraftDocument,
   index: number,
@@ -154,6 +198,46 @@ export function addItem(
       },
     ],
   }));
+}
+
+/**
+ * Un ítem sin su condición de visibilidad.
+ *
+ * Se escribe con `delete` sobre una copia y no con un spread selectivo porque
+ * `TemplateDraftItem` es una unión discriminada de nueve formas: enumerar los campos que
+ * SÍ sobreviven obligaría a nueve ramas, y la que faltara se descubriría en pantalla.
+ */
+function withoutCondition(item: TemplateDraftItem): TemplateDraftItem {
+  const copy = { ...item };
+
+  delete copy.visible_when;
+
+  return copy;
+}
+
+/**
+ * Duplica una pregunta, justo debajo de la original y con identidad nueva.
+ *
+ * Copia todo lo que la describe —el texto, el tipo de respuesta con su configuración, y si
+ * es obligatoria— porque duplicar existe para escribir la variación de al lado. Lo único
+ * que no viaja es `visible_when`, por lo mismo que en `duplicateSection`.
+ */
+export function duplicateItem(
+  document: TemplateDraftDocument,
+  sectionIndex: number,
+  itemIndex: number,
+  itemKey: string,
+): TemplateDraftDocument {
+  return withSection(document, sectionIndex, (section) => {
+    const item = section.items[itemIndex];
+
+    if (!item) return section;
+
+    const items = [...section.items];
+    items.splice(itemIndex + 1, 0, withoutCondition({ ...item, item_key: itemKey }));
+
+    return { ...section, items };
+  });
 }
 
 /** Reemplaza el ítem `itemIndex` por el resultado de `change`. */

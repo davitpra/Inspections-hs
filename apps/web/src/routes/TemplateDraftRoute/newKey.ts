@@ -15,3 +15,20 @@ export function newKey(taken: readonly string[] = []): string {
 
   return key;
 }
+
+/**
+ * `count` identidades nuevas de una vez, todas distintas entre sí.
+ *
+ * Existe para duplicar una sección: llamar `newKey` en un bucle sin ir acumulando lo ya
+ * generado puede devolver dos veces la misma, y esa colisión sería un problema que la
+ * pantalla se fabrica sola y después le reporta al autor.
+ */
+export function newKeys(count: number, taken: readonly string[] = []): string[] {
+  const minted: string[] = [];
+
+  for (let index = 0; index < count; index += 1) {
+    minted.push(newKey([...taken, ...minted]));
+  }
+
+  return minted;
+}

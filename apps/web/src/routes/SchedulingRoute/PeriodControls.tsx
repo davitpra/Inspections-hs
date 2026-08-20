@@ -9,7 +9,7 @@ import { candidateLabel, inspectorLabel } from './presentation';
 
 /**
  * Elegir el inspector de un período abierto. Cancelar ya no está acá: vive en el menú de
- * la fila (`PeriodMenu`), que es donde va lo que se hace una vez y no se deshace.
+ * la fila (`RowMenu`), que es donde va lo que se hace una vez y no se deshace.
  *
  * EL SELECTOR MUESTRA A QUIÉN ESTÁ ASIGNADO, no una lista vacía: la fila ya no repite el
  * nombre en una línea aparte, así que el control es también el estado. Cuando la persona

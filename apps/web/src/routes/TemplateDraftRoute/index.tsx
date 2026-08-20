@@ -1,27 +1,40 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useParams } from '@tanstack/react-router';
-import { useId, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
+import { useState } from "react";
 import {
   draftIssues,
   type ChoiceOption,
+  type Location,
+  type OrganizationLocation,
   type ResponseType,
+  type Site,
   type TemplateDraft,
   type TemplateDraftDocument,
-} from '@hs/contracts';
+} from "@hs/contracts";
 
-import { listOrganizationLocations } from '../../api/catalog';
-import { getTemplateDraft, saveTemplateDraft } from '../../api/templates';
-import { queryKeys } from '../../api/query-keys';
-import { useAppSession } from '../../app/session-context';
-import { InfoIcon } from '../../components/icons';
-import { canAuthorTemplates } from '../../permissions/session';
-import { itemCountLabel } from '../../presentation/templates';
+import {
+  listCatalogLocations,
+  listOrganizationLocations,
+} from "../../api/catalog";
+import { listSites } from "../../api/inspections";
+import {
+  discardTemplateDraft,
+  getTemplateDraft,
+  saveTemplateDraft,
+} from "../../api/templates";
+import { queryKeys } from "../../api/query-keys";
+import { useAppSession } from "../../app/session-context";
+import { InfoIcon, PlusIcon } from "../../components/icons";
+import { canAuthorTemplates } from "../../permissions/session";
+import { DraftHeader } from "./DraftHeader";
 import {
   addItem,
   addOption,
   addSection,
   allItemKeys,
   changeResponseType,
+  duplicateItem,
+  duplicateSection,
   moveItem,
   moveSection,
   removeItem,
@@ -32,14 +45,21 @@ import {
   setPrompt,
   setRequired,
   setSectionLocation,
-} from './edits';
-import { newKey } from './newKey';
-import { hasUnsavedChanges, saveButtonLabel, saveErrorNotice, totalItems } from './presentation';
-import { PublishReadiness } from './PublishReadiness';
-import { SectionCard } from './SectionCard';
+} from "./edits";
+import { newKey, newKeys } from "./newKey";
+import {
+  hasUnsavedChanges,
+  saveErrorNotice,
+  strandedSections,
+} from "./presentation";
+import { SectionCard } from "./SectionCard";
+import { TemplateIdentity } from "./TemplateIdentity";
+import { TemplateSummary } from "./TemplateSummary";
+import { useSortable } from "./useSortable";
 
 /**
- * §7 etapa 8 — Escribir una plantilla: secciones, preguntas, tipos de respuesta y orden.
+ * §7 etapa 8 — Escribir una plantilla: para qué plantas vale, qué secciones tiene, qué
+ * preguntas van en cada una y en qué orden.
  *
  * EL DOCUMENTO VIVE EN ESTADO LOCAL Y SE GUARDA A PEDIDO. Sin autosave y sin actualización
  * optimista, que es como trabaja el resto de este cliente y lo único compatible con el lock:
@@ -54,30 +74,50 @@ import { SectionCard } from './SectionCard';
  * `@hs/forms` (ADR-007): si fueran dos implementaciones, la pantalla diría que la plantilla
  * está lista y el servidor la rechazaría al publicar.
  *
+ * **EL ALCANCE VIAJA CON EL DOCUMENTO Y NO POR SU CUENTA.** Cambiar para qué plantas vale la
+ * plantilla es una edición como cualquier otra: entra en el mismo guardado y cae bajo el
+ * mismo lock. Y no es un `site_id`: la plantilla sigue sin pertenecer a una planta —sigue
+ * siendo UNA, con UN juego de `item_key`—; el alcance solo dice dónde se piensa usar, y su
+ * consecuencia visible es qué ubicaciones puede nombrar cada sección.
+ *
+ * **La cobertura de ubicaciones se calcula acá y NO en `draftIssues`.** Esa función decide
+ * sobre el documento y nada más; el catálogo de las dos plantas es una entrada que no tiene
+ * y no puede pedir. Lo de acá es de la misma clase que `src/permissions/`: comodidad, no
+ * garantía.
+ *
  * **`visible_when` no se edita**, y el documento no lo pierde: los `edits` lo arrastran
- * intactos. Su regla —la referencia tiene que apuntar estrictamente hacia atrás— interactúa
- * con el reordenamiento de una forma que merece su propio change; mientras tanto,
- * `PublishReadiness` reporta si algún reordenamiento la rompió.
+ * intactos —salvo al duplicar, y ahí se dice por qué—. Su regla —la referencia tiene que
+ * apuntar estrictamente hacia atrás— interactúa con el reordenamiento de una forma que
+ * merece su propio change; mientras tanto, `PublishReadiness` reporta si algún
+ * reordenamiento la rompió.
  */
 export function TemplateDraftRoute(): React.JSX.Element {
   const { account } = useAppSession();
-  const { id } = useParams({ from: '/templates/drafts/$id' });
+  const { id } = useParams({ from: "/templates/drafts/$id" });
 
   if (!canAuthorTemplates(account)) {
     return (
       <>
         <h1>Template</h1>
-        <p className="notice">Only the H&amp;S coordinator can write templates.</p>
+        <p className="notice">
+          Only the H&amp;S coordinator can write templates.
+        </p>
       </>
     );
   }
 
   // `key` remonta el editor entero al cambiar de borrador: el estado local es del documento
   // que se está editando, y arrastrarlo de uno a otro escribiría en el equivocado.
-  return <DraftEditor key={id} id={id} />;
+  return <DraftEditor key={id} id={id} siteScope={account.siteScope} />;
 }
 
-function DraftEditor({ id }: { id: string }): React.JSX.Element {
+function DraftEditor({
+  id,
+  siteScope,
+}: {
+  id: string;
+  siteScope: readonly string[];
+}): React.JSX.Element {
   const draft = useQuery({
     queryKey: queryKeys.templateDraft(id),
     queryFn: () => getTemplateDraft(id),
@@ -86,6 +126,21 @@ function DraftEditor({ id }: { id: string }): React.JSX.Element {
   const organizationLocations = useQuery({
     queryKey: queryKeys.organizationLocations(),
     queryFn: listOrganizationLocations,
+    retry: false,
+  });
+  /**
+   * Las ubicaciones FÍSICAS, que la pantalla anterior no necesitaba. Son las que dicen qué
+   * planta tiene tickeada cada compartida, y sin ellas no hay forma de recortar la oferta
+   * de una sección ni de mostrar a qué lugar resuelve en cada planta.
+   */
+  const locations = useQuery({
+    queryKey: queryKeys.catalogLocations(),
+    queryFn: listCatalogLocations,
+    retry: false,
+  });
+  const sites = useQuery({
+    queryKey: queryKeys.sites(),
+    queryFn: listSites,
     retry: false,
   });
 
@@ -120,6 +175,10 @@ function DraftEditor({ id }: { id: string }): React.JSX.Element {
    * `key` es el id y NO el borrador entero: un refetch de fondo devuelve un objeto nuevo con
    * el mismo id, así que el formulario no se remonta y lo que se está escribiendo sobrevive.
    * Para eso está el lock de revisión — avisa en el guardado en vez de borrar sin preguntar.
+   *
+   * Las plantas se recortan por el alcance de la CUENTA: `listSites` puede devolver alguna
+   * que esta no administra, y ofrecerla como opción de alcance sería ofrecer un rechazo —el
+   * servidor la niega con `template_draft_site_out_of_scope`.
    */
   return (
     <DraftForm
@@ -127,6 +186,8 @@ function DraftEditor({ id }: { id: string }): React.JSX.Element {
       id={id}
       loaded={draft.data}
       organizationLocations={organizationLocations.data ?? []}
+      locations={locations.data ?? []}
+      sites={(sites.data ?? []).filter((site) => siteScope.includes(site.id))}
     />
   );
 }
@@ -135,21 +196,27 @@ function DraftForm({
   id,
   loaded,
   organizationLocations,
+  locations,
+  sites,
 }: {
   id: string;
   loaded: TemplateDraft;
-  organizationLocations: readonly import('@hs/contracts').OrganizationLocationOption[];
+  organizationLocations: readonly OrganizationLocation[];
+  locations: readonly Location[];
+  sites: readonly Site[];
 }): React.JSX.Element {
   const queryClient = useQueryClient();
-  const controlId = useId();
+  const navigate = useNavigate();
 
-  /** El documento y el nombre en edición, y la revisión sobre la que se está editando. */
+  /** El documento, el nombre y el alcance en edición, y la revisión sobre la que se editó. */
   const [edited, setEdited] = useState(() => ({
     document: loaded.document,
     name: loaded.name,
+    siteIds: loaded.site_ids,
     revision: loaded.revision,
     savedDocument: loaded.document,
     savedName: loaded.name,
+    savedSiteIds: loaded.site_ids,
   }));
 
   const save = useMutation({
@@ -157,35 +224,57 @@ function DraftForm({
       saveTemplateDraft(id, {
         name: edited.name.trim(),
         document: edited.document,
+        site_ids: [...edited.siteIds],
         revision: edited.revision,
       }),
     onSuccess: (saved) => {
       setEdited({
         document: saved.document,
         name: saved.name,
+        siteIds: saved.site_ids,
         revision: saved.revision,
         savedDocument: saved.document,
         savedName: saved.name,
+        savedSiteIds: saved.site_ids,
       });
 
-      void queryClient.invalidateQueries({ queryKey: queryKeys.templateDrafts() });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.templateDrafts(),
+      });
     },
   });
 
-  const { document } = edited;
+  const discard = useMutation({
+    mutationFn: () => discardTemplateDraft(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.templateDrafts(),
+      });
+      void navigate({ to: "/templates" });
+    },
+  });
+
+  const { document, siteIds } = edited;
 
   /** Escribe el documento editado sin tocar lo guardado ni la revisión. */
   const write = (next: TemplateDraftDocument): void =>
     setEdited((current) => ({ ...current, document: next }));
 
-  const dirty = hasUnsavedChanges(
-    edited.document,
-    edited.savedDocument,
-    edited.name,
-    edited.savedName,
-  );
+  const dirty =
+    hasUnsavedChanges(
+      edited.document,
+      edited.savedDocument,
+      edited.name,
+      edited.savedName,
+    ) ||
+    JSON.stringify([...edited.siteIds].sort()) !==
+      JSON.stringify([...edited.savedSiteIds].sort());
 
   const issues = draftIssues(document);
+  const stranded = new Set(strandedSections(document, locations, siteIds));
+  const sections = useSortable("sections", (index, delta) =>
+    write(moveSection(document, index, delta)),
+  );
 
   return (
     <>
@@ -193,97 +282,182 @@ function DraftForm({
         Templates
       </Link>
 
-      <header className="card">
-        <div className="card__head">
-          <div className="filters">
-            <label htmlFor={`${controlId}-name`}>Template name</label>
-            <input
-              id={`${controlId}-name`}
-              type="text"
-              value={edited.name}
-              onChange={(event) =>
-                setEdited((current) => ({ ...current, name: event.target.value }))
-              }
-            />
-          </div>
+      <DraftHeader
+        revision={edited.revision}
+        dirty={dirty}
+        saving={save.isPending}
+        canSave={
+          dirty &&
+          !save.isPending &&
+          edited.name.trim() !== "" &&
+          siteIds.length > 0
+        }
+        onSave={() => save.mutate()}
+        onDiscard={() => discard.mutate()}
+      />
 
-          <button
-            type="button"
-            className="button--primary"
-            onClick={() => save.mutate()}
-            disabled={!dirty || save.isPending || edited.name.trim() === ''}
-          >
-            {saveButtonLabel(save.isPending, dirty)}
-          </button>
+      {save.isError ? (
+        <p className="notice notice--warn">
+          {saveErrorNotice((save.error as Error).message)}
+        </p>
+      ) : null}
+
+      <div className="builder__layout">
+        <div>
+          <TemplateIdentity
+            name={edited.name}
+            templateKey={loaded.key}
+            sites={sites}
+            siteIds={siteIds}
+            onName={(name) => setEdited((current) => ({ ...current, name }))}
+            onScope={(next) =>
+              setEdited((current) => ({ ...current, siteIds: next }))
+            }
+          />
+
+          {document.sections.map((section, sectionIndex) => (
+            // Índice como clave: las identidades técnicas no forman parte de la interfaz y
+            // el índice mantiene estable el foco mientras se edita.
+            <SectionCard
+              key={sectionIndex}
+              section={section}
+              index={sectionIndex}
+              count={document.sections.length}
+              locations={locations}
+              organizationLocations={organizationLocations}
+              sites={sites}
+              siteIds={siteIds}
+              stranded={stranded.has(sectionIndex)}
+              sortable={sections}
+              onLocation={(code) => {
+                const location = organizationLocations.find(
+                  (each) => each.code === code,
+                );
+                write(
+                  setSectionLocation(
+                    document,
+                    sectionIndex,
+                    code,
+                    location?.name ?? "",
+                  ),
+                );
+              }}
+              onMove={(delta) =>
+                write(moveSection(document, sectionIndex, delta))
+              }
+              onDuplicate={() => {
+                const taken = [
+                  ...allItemKeys(document),
+                  ...document.sections.map((each) => each.section_key),
+                ];
+                const minted = newKeys(section.items.length + 1, taken);
+
+                write(
+                  duplicateSection(document, sectionIndex, {
+                    section: minted[0]!,
+                    items: minted.slice(1),
+                  }),
+                );
+              }}
+              onRemove={() => write(removeSection(document, sectionIndex))}
+              onAddItem={() =>
+                write(
+                  addItem(
+                    document,
+                    sectionIndex,
+                    newKey(allItemKeys(document)),
+                  ),
+                )
+              }
+              item={{
+                /** La identidad se mantiene aunque la pregunta se reformule. */
+                prompt: (itemIndex, prompt) =>
+                  write(setPrompt(document, sectionIndex, itemIndex, prompt)),
+                required: (itemIndex, required) =>
+                  write(
+                    setRequired(document, sectionIndex, itemIndex, required),
+                  ),
+                responseType: (itemIndex, responseType: ResponseType) =>
+                  write(
+                    changeResponseType(
+                      document,
+                      sectionIndex,
+                      itemIndex,
+                      responseType,
+                    ),
+                  ),
+                number: (itemIndex, field, value) =>
+                  write(
+                    setConfig(document, sectionIndex, itemIndex, field, value),
+                  ),
+                optionChange: (
+                  itemIndex,
+                  optionIndex,
+                  change: Partial<ChoiceOption>,
+                ) =>
+                  write(
+                    setOption(
+                      document,
+                      sectionIndex,
+                      itemIndex,
+                      optionIndex,
+                      change,
+                    ),
+                  ),
+                optionAdd: (itemIndex) =>
+                  write(addOption(document, sectionIndex, itemIndex)),
+                optionRemove: (itemIndex, optionIndex) =>
+                  write(
+                    removeOption(
+                      document,
+                      sectionIndex,
+                      itemIndex,
+                      optionIndex,
+                    ),
+                  ),
+                move: (itemIndex, delta) =>
+                  write(moveItem(document, sectionIndex, itemIndex, delta)),
+                duplicate: (itemIndex) =>
+                  write(
+                    duplicateItem(
+                      document,
+                      sectionIndex,
+                      itemIndex,
+                      newKey(allItemKeys(document)),
+                    ),
+                  ),
+                remove: (itemIndex) =>
+                  write(removeItem(document, sectionIndex, itemIndex)),
+              }}
+            />
+          ))}
+
+          <div className="builder__add builder__add--section">
+            <button
+              type="button"
+              onClick={() =>
+                write(
+                  addSection(
+                    document,
+                    newKey(
+                      document.sections.map((section) => section.section_key),
+                    ),
+                  ),
+                )
+              }
+            >
+              <PlusIcon /> Add section
+            </button>
+          </div>
         </div>
 
-        {/*
-          LA CLAVE, DE SOLO LECTURA Y NO COMO CAMPO.
-          El autor no la elige —la deriva el servidor del nombre al crear— y no la puede
-          cambiar: es lo que va a identificar a la plantilla publicada y lo que usan los
-          seeds. Pero se muestra, y esconderla del todo habría sido peor: renombrar NO la
-          mueve, así que una plantilla renombrada queda con una clave que ya no se le parece,
-          y el día que alguien lea un seed tiene que poder entender por qué.
-        */}
-        <p className="note">
-          Key <code>{loaded.key}</code> · {document.sections.length} section(s) ·{' '}
-          {itemCountLabel(totalItems(document))} · saved revision {edited.revision}
-        </p>
-
-        {save.isError ? (
-          <p className="notice">{saveErrorNotice((save.error as Error).message)}</p>
-        ) : null}
-      </header>
-
-      <PublishReadiness issues={issues} />
-
-      {document.sections.map((section, sectionIndex) => (
-        // Índice como clave: las identidades técnicas no forman parte de la interfaz y el
-        // índice mantiene estable el foco mientras se edita.
-        <SectionCard
-          key={sectionIndex}
-          section={section}
-          locations={organizationLocations}
-          index={sectionIndex}
-          count={document.sections.length}
-          onLocation={(code) => {
-            const location = organizationLocations.find((each) => each.code === code);
-            write(setSectionLocation(document, sectionIndex, code, location?.name ?? ''));
-          }}
-          onMove={(delta) => write(moveSection(document, sectionIndex, delta))}
-          onRemove={() => write(removeSection(document, sectionIndex))}
-          onAddItem={() => write(addItem(document, sectionIndex, newKey(allItemKeys(document))))}
-          item={{
-            /** La identidad se mantiene aunque la pregunta se reformule. */
-            prompt: (itemIndex, prompt) =>
-              write(setPrompt(document, sectionIndex, itemIndex, prompt)),
-            required: (itemIndex, required) =>
-              write(setRequired(document, sectionIndex, itemIndex, required)),
-            responseType: (itemIndex, responseType: ResponseType) =>
-              write(changeResponseType(document, sectionIndex, itemIndex, responseType)),
-            number: (itemIndex, field, value) =>
-              write(setConfig(document, sectionIndex, itemIndex, field, value)),
-            optionChange: (itemIndex, optionIndex, change: Partial<ChoiceOption>) =>
-              write(setOption(document, sectionIndex, itemIndex, optionIndex, change)),
-            optionAdd: (itemIndex) => write(addOption(document, sectionIndex, itemIndex)),
-            optionRemove: (itemIndex, optionIndex) =>
-              write(removeOption(document, sectionIndex, itemIndex, optionIndex)),
-            move: (itemIndex, delta) =>
-              write(moveItem(document, sectionIndex, itemIndex, delta)),
-            remove: (itemIndex) => write(removeItem(document, sectionIndex, itemIndex)),
-          }}
+        <TemplateSummary
+          document={document}
+          issues={issues}
+          locations={locations}
+          sites={sites}
+          siteIds={siteIds}
         />
-      ))}
-
-      <div className="card__footer">
-        <button
-          type="button"
-          onClick={() =>
-            write(addSection(document, newKey(document.sections.map((section) => section.section_key))))
-          }
-        >
-          Add section
-        </button>
       </div>
     </>
   );

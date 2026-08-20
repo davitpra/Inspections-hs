@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import {
   createLocationSchema,
   createOrganizationLocationSchema,
+  deactivateOrganizationLocationSchema,
   locationOrganizationMappingSchema,
   type Location,
   type OrganizationLocation,
@@ -55,6 +56,16 @@ export class LocationsController {
     @Body() body: unknown,
   ): Promise<Location> {
     return this.locations.createLocation(session, siteId, createLocationSchema.parse(body));
+  }
+
+  @Patch('organization-locations/:id')
+  deactivateOrganizationLocation(
+    @CurrentSession() session: SessionContext,
+    @Param('id') organizationLocationId: string,
+    @Body() body: unknown,
+  ): Promise<void> {
+    deactivateOrganizationLocationSchema.parse(body);
+    return this.locations.deactivateOrganizationLocation(session, organizationLocationId);
   }
 
   @Patch('locations/:id/organization-location')

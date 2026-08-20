@@ -20,6 +20,7 @@ export type TemplateDraftErrorCode =
   | 'template_draft_not_found'
   | 'template_draft_name_taken'
   | 'template_draft_name_unusable'
+  | 'template_draft_site_out_of_scope'
   | 'template_draft_stale';
 
 export class TemplateDraftException extends HttpException {
@@ -92,6 +93,27 @@ export const templateDraftNameUnusable = (): TemplateDraftException =>
   new TemplateDraftException(
     'template_draft_name_unusable',
     'The name needs at least one letter or digit',
+    HttpStatus.UNPROCESSABLE_ENTITY,
+  );
+
+/**
+ * El alcance nombra una planta que esta cuenta no administra.
+ *
+ * **Es selección, no aislamiento**, y por eso este error existe en vez de un `403`. La
+ * tabla no tiene `site_id` ni política RLS (0016 §5, 0020 §5): `site_ids` dice dónde se
+ * PIENSA USAR la plantilla, no de quién es. Lo que el servicio se niega a hacer es
+ * escribir una planta que el request no puede ver — mismo criterio que `sites.service.ts`,
+ * que también filtra por `session.siteIds` sobre una tabla sin política.
+ *
+ * Es un `422` y no un `400` por el mismo motivo que `template_draft_name_unusable`: el
+ * cuerpo está bien formado —`site_ids` es un arreglo de uuid no vacío, que es todo lo que
+ * el contrato pide— y lo que falla es qué dice. Y no es un `403`, que en este módulo
+ * significa otra cosa: «tu rol no escribe plantillas».
+ */
+export const templateDraftSiteOutOfScope = (): TemplateDraftException =>
+  new TemplateDraftException(
+    'template_draft_site_out_of_scope',
+    'A template can only be scoped to the plants your account administers',
     HttpStatus.UNPROCESSABLE_ENTITY,
   );
 

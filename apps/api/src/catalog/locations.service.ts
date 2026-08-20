@@ -117,6 +117,41 @@ export class LocationsService {
   }
 
   /**
+   * Retira el concepto compartido y las físicas activas que lo representan.
+   *
+   * `organization_location` no tiene RLS, así que la baja vale para toda la organización;
+   * `location` sí tiene RLS y esta segunda sentencia solo alcanza las plantas del alcance de
+   * quien ejecuta. Un coordinador de una sola planta puede dejar una física activa en otra,
+   * que entonces aparece correctamente como huérfana.
+   */
+  async deactivateOrganizationLocation(
+    session: SessionScope,
+    organizationLocationId: string,
+  ): Promise<void> {
+    this.requireCoordinator(session);
+
+    await this.db.withSessionClient(session, async (client) => {
+      const deactivated = await client.query(
+        `UPDATE organization_location
+            SET deactivated_at = now()
+          WHERE id = $1 AND deactivated_at IS NULL`,
+        [organizationLocationId],
+      );
+
+      if (deactivated.rowCount === 0) {
+        throw new NotFoundException('Organization location not found');
+      }
+
+      await client.query(
+        `UPDATE location
+            SET deactivated_at = now()
+          WHERE organization_location_id = $1 AND deactivated_at IS NULL`,
+        [organizationLocationId],
+      );
+    });
+  }
+
+  /**
    * Alta de una ubicación compartida.
    *
    * Sin planta: es el concepto. Nace sin mapear en ninguna de las dos, así que crear una

@@ -14,11 +14,11 @@ import {
   STATUS_LABELS,
 } from "./presentation";
 import { PeriodControls } from "./PeriodControls";
-import { PeriodMenu } from "./PeriodMenu";
+import { RowMenu } from "../../components/RowMenu";
 
 /**
  * Un mes ya abierto: el encabezado dice qué es y cómo está, el cuerpo ofrece lo único
- * que se hace seguido —asignar—, y lo excepcional vive en el menú (ver `PeriodMenu`).
+ * que se hace seguido —asignar—, y lo excepcional vive en el menú (ver `RowMenu`).
  *
  * La plantilla es el subtítulo del mes y no una línea suelta: las doce filas del año son
  * del mismo mes distinto y de la misma plantilla, así que lo que las distingue tiene que
@@ -73,7 +73,7 @@ export function PeriodRow({
       {/* Fuera del flujo del encabezado: ancla en la esquina de la tarjeta, no una columna
           más del renglón, así el mes y su estado se acomodan sin contar con él. */}
       {actions.length > 0 ? (
-        <PeriodMenu
+        <RowMenu
           label={`More actions for ${monthName(inspection.period_start)}`}
           actions={actions}
         />

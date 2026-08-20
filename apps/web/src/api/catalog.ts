@@ -1,6 +1,7 @@
 import {
   createLocationSchema,
   createOrganizationLocationSchema,
+  deactivateOrganizationLocationSchema,
   locationOrganizationMappingSchema,
   locationSchema,
   organizationLocationSchema,
@@ -47,6 +48,15 @@ export async function createOrganizationLocation(input: {
 }): Promise<OrganizationLocation> {
   return send('POST', '/organization-locations', createOrganizationLocationSchema.parse(input), (value) =>
     organizationLocationSchema.parse(value),
+  );
+}
+
+export async function deactivateOrganizationLocation(id: string): Promise<void> {
+  await send(
+    'PATCH',
+    `/organization-locations/${id}`,
+    deactivateOrganizationLocationSchema.parse({ deactivated: true }),
+    () => undefined,
   );
 }
 

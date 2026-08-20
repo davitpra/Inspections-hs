@@ -406,7 +406,8 @@ select:disabled {
   }
 
   .shell__main {
-    padding-inline: max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right));
+    padding-inline: max(1rem, env(safe-area-inset-left))
+      max(1rem, env(safe-area-inset-right));
     /* La barra de gestos, si no, se come el último botón de la pantalla. */
     padding-bottom: calc(1rem + env(safe-area-inset-bottom));
   }
@@ -1281,7 +1282,7 @@ select:disabled {
 
 .period {
   gap: 0.5rem;
-  /* El menú se ancla a la tarjeta, no al renglón del encabezado (ver `.period__menu`). */
+  /* El menú se ancla a la tarjeta, no al renglón del encabezado (ver `.row-menu`). */
   position: relative;
 }
 
@@ -1337,25 +1338,29 @@ select:disabled {
 }
 
 /*
- * El menú vive en la esquina superior derecha de la TARJETA, fuera del flujo: es la
- * misma esquina en las doce filas del año, gane o pierda ancho el encabezado. Absoluto
- * también adentro (`.period__menu-list`), para que abrirlo no empuje nada — o el
- * calendario entero se reacomodaría con cada clic.
+ * El menú «⋮» de una fila (`components/RowMenu.tsx`), compartido por la consola de
+ * programación y por el builder de plantillas.
+ *
+ * SE ANCLA A LA ESQUINA DEL BLOQUE QUE LO CONTIENE, fuera del flujo: es la misma esquina
+ * en las doce filas del año y en cada sección del builder, gane o pierda ancho el
+ * encabezado. El contenedor pone el `position: relative`. Absoluto también adentro
+ * (`.row-menu__list`), para que abrirlo no empuje nada — o la pantalla entera se
+ * reacomodaría con cada clic.
  */
-.period__menu {
+.row-menu {
   position: absolute;
   top: 0.25rem;
   right: 0.25rem;
 }
 
-.period__menu-button {
+.row-menu__button {
   padding: 0 0.5rem;
   background: transparent;
   border-color: transparent;
   color: var(--muted);
 }
 
-.period__menu-list {
+.row-menu__list {
   position: absolute;
   top: 100%;
   right: 0;
@@ -1369,7 +1374,7 @@ select:disabled {
   border-radius: var(--radius);
 }
 
-.period__menu-item {
+.row-menu__item {
   width: 100%;
   text-align: left;
   background: transparent;
@@ -1379,7 +1384,7 @@ select:disabled {
 
 /* Solo lo que no se deshace lleva el color del riesgo. Volver a programar un mes no lo
    es —agrega una fila—, y pintarlas iguales dejaría de distinguirlas. */
-.period__menu-item--danger {
+.row-menu__item--danger {
   color: var(--state-danger);
 }
 
@@ -1837,43 +1842,6 @@ select:disabled {
   margin: 0 0 0.75rem;
 }
 
-/* La pregunta y sus botones de orden en la misma línea, y el texto llevándose el espacio
-   sobrante: es el campo que se lee, y los botones son tres objetivos de tamaño fijo. */
-.item-editor__head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 0.5rem 1rem;
-}
-
-.item-editor__head .filters {
-  flex: 1 1 18rem;
-  margin: 0;
-}
-
-/*
- * Subir, bajar y quitar. Juntos y en ese orden, porque las dos flechas son la misma
- * decisión en dos sentidos y separarlas obligaría a buscar la segunda.
- *
- * `flex-shrink: 0` para que el grupo no se comprima cuando la pregunta es larga: un botón
- * de 48px que se achica a 30 deja de cumplir ADR-010 justo en el caso en que más se usa.
- */
-.item-editor__order {
-  display: flex;
-  flex-shrink: 0;
-  gap: 0.5rem;
-  align-items: center;
-}
-
-/* Las flechas son cuadradas y no toman ancho de botón normal: su etiqueta es un glifo, y
-   un botón de 18rem con una flecha en el medio se lee como otra cosa. El piso de 48px de
-   ADR-010 se mantiene en los dos ejes. */
-.item-editor__order button {
-  width: auto;
-  min-width: 48px;
-}
-
 /* La lista de preguntas de una sección no lleva el margen inferior de `.list`: la sección
    ya lo pone, y sumados dejaban un hueco del alto de una fila antes de "Add question". */
 .list--items {
@@ -1922,42 +1890,748 @@ select:disabled {
 /* ---------------------------------------------------------------------------
  * El catálogo de ubicaciones (§6).
  *
- * La fila es «un concepto, dónde está en esta planta, y si está»: tres columnas que se
- * leen de izquierda a derecha y que en un teléfono envuelven en ese mismo orden. El nombre
- * se lleva el espacio sobrante porque es lo que se busca con el ojo; el select y el estado
- * son de ancho acotado, así que la columna del medio queda alineada al recorrer la lista y
- * los huecos se ven de un vistazo.
- */
-.list--mapping .list__row {
-  gap: 0.5rem 1rem;
+ * UNA TABLA: una fila por ubicación compartida y una columna por planta. Es una tabla
+ * dibujada con grid y no un `<table>` porque las columnas de planta son un número que sale
+ * del alcance de la cuenta, y porque en un teléfono la fila tiene que dejar de ser una fila.
+ *
+ * FLEX Y NO GRID, aunque sea una tabla: las columnas de planta son N y el ancho de la grilla
+ * habría que pasárselo desde React en un custom property, que es justo lo que `check-tokens`
+ * no puede verificar. Con `flex-basis` fijo en la celda de planta el encabezado y todas las
+ * filas se alinean solas, sin que nadie declare cuántas columnas hay.
+ *
+ * NINGÚN COLOR POR PLANTA. La maqueta pintaba Glencoe de azul, que se lee bien con dos
+ * plantas y deja de significar nada con tres. El tick usa `--brand` en todas.
+ * --------------------------------------------------------------------------- */
+
+.mapping {
+  padding: 0;
+  overflow: hidden;
 }
 
-.mapping__label {
+.mapping__add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 48px;
+  width: auto;
+  white-space: nowrap;
+}
+
+.mapping__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+/* El buscador es un `<label>` con el ícono adentro: el input no lleva borde propio, lo pone
+   el envoltorio, y así el foco encierra al ícono también. */
+.mapping__search {
+  flex: 1 1 14rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 48px;
+  padding: 0 0.7rem;
+  border: 1px solid var(--line-control);
+  border-radius: var(--radius);
+  color: var(--muted);
+}
+
+.mapping__search:focus-within {
+  border-color: var(--brand);
+}
+
+.mapping__search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  padding: 0;
+  background: transparent;
+  font: inherit;
+  color: var(--ink);
+}
+
+/* Para el lector de pantalla y nada más: la etiqueta del buscador —un placeholder no es una
+   etiqueta— y el sentido del orden, que a la vista lo dice la flecha. */
+.mapping__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* El encabezado ordenable: un botón que no parece uno. Hereda el tamaño y las mayúsculas de
+   la fila de encabezado, y solo se distingue al pasar por encima. */
+.mapping__sort {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 44px;
+}
+
+.mapping__sort:hover {
+  color: var(--ink);
+}
+
+.mapping__count {
+  margin-left: auto;
+  font-size: var(--text-sm);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.mapping__table {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.mapping__row {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+}
+
+.mapping__cell--name {
   flex: 1 1 12rem;
-  min-width: 0; /* Sin esto, un nombre largo desborda en vez de recortar la columna. */
 }
 
-.mapping__label label {
+.mapping__cell--plant {
+  flex: 0 0 11rem;
+}
+
+.mapping__cell--actions {
+  flex: 0 0 3.5rem;
+  border-left: 1px solid var(--line);
+  text-align: center;
+  padding-inline: 0.25rem;
+}
+
+.mapping__row:last-child {
+  border-bottom: 0;
+}
+
+.mapping__row--head {
+  background: var(--tint-bg);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.mapping__cell {
+  padding: 0.6rem 1rem;
+  min-width: 0;
+}
+
+/* La divisoria vertical solo entre plantas: separa lo que se compara —una columna contra la
+   otra— y no el nombre de su propia fila. */
+.mapping__cell--plant {
+  border-left: 1px solid var(--line);
+  text-align: center;
+  padding-inline: 0.4rem;
+}
+
+.mapping__name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
   font-weight: 600;
 }
 
 /* El código debajo del nombre y un paso por debajo en contraste: es lo que la sección de
    una plantilla guarda, así que tiene que estar a la vista, pero no compite con el nombre. */
-.mapping__label p {
+.mapping__code {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+/* El «9 of 21» de la columna, en su encabezado. Fuera de las mayúsculas del resto del
+   encabezado: es un número, no un rótulo. */
+.mapping__progress {
+  display: block;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+/* El rótulo de planta dentro de la celda: sobra mientras haya encabezado de columna, y es lo
+   único que la identifica cuando la fila se apila. */
+.mapping__plant-label {
+  display: none;
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.mapping__action {
+  width: 100%;
+  min-height: 44px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted);
+  display: inline-grid;
+  place-items: center;
+}
+
+.mapping__action:hover {
+  background: var(--tint-bg);
+  color: var(--ink);
+}
+
+/* El tick ocupa la celda entera: el blanco alrededor de la caja también es superficie donde
+   hacer clic, y con 21 filas eso es la diferencia entre apuntar y apuntar bien. */
+.tick {
+  width: 100%;
+  min-height: 48px;
+  border: 0;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: var(--radius);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+.tick:hover:not(:disabled) {
+  background: var(--tint-bg);
+}
+
+.tick:disabled {
+  color: var(--disabled-ink);
+}
+
+.tick__box {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  border: 1.5px solid var(--line-control);
+  display: grid;
+  place-items: center;
+  color: var(--paper);
+}
+
+.tick[aria-checked="true"] {
+  color: var(--brand);
+  font-weight: 600;
+}
+
+.tick[aria-checked="true"] .tick__box {
+  background: var(--brand);
+  border-color: var(--brand);
+}
+
+/* Un nombre de física largo recorta antes que ensanchar la columna y desalinear la tabla. */
+.tick__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tick__error {
+  margin: 0 0 0.4rem;
+  font-size: var(--text-xs);
+}
+
+/*
+ * En un teléfono la fila deja de ser una fila: el nombre arriba y las celdas de planta
+ * envolviendo debajo, con su rótulo, porque el encabezado de columna ya no está. `flex-wrap`
+ * y no `grid-template-areas`: las áreas habría que escribirlas de a una por planta.
+ */
+@media (max-width: 44rem) {
+  .mapping__row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+  }
+
+  .mapping__row--head {
+    display: none;
+  }
+
+  .mapping__cell--name {
+    flex: 1 1 100%;
+    padding-bottom: 0;
+  }
+
+  .mapping__cell--plant {
+    flex: 1 1 8rem;
+    border-left: 0;
+  }
+
+  .mapping__cell--actions {
+    flex: 0 0 3.5rem;
+    border-left: 1px solid var(--line);
+  }
+
+  .mapping__cell--plant:first-of-type {
+    border-left: 0;
+  }
+
+  .mapping__plant-label {
+    display: block;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   El builder de plantillas.
+
+   DOS COLUMNAS: el editor a la izquierda, el resumen a la derecha. El resumen no repite
+   el editor, contesta lo que el editor no puede —cuántas preguntas quedaron, qué sección
+   no resuelve en las dos plantas— y por eso vale una columna en vez de una tarjeta más
+   abajo de todo, donde nadie mira mientras escribe.
+
+   Todo lo de acá es color semántico: `--brand`, `--tint-bg`, `--line`, `--muted`,
+   `--state-*`, `--warn-*`. Ni un literal ni una primitiva, que es lo que comprueba
+   `scripts/check-tokens.mjs` en el build.
+   --------------------------------------------------------------------------- */
+
+.builder__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(16rem, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+/* Debajo de ~58rem la segunda columna ya no tiene aire y el resumen baja entero. Es el
+   mismo corte que `.assignment__layout`, para que las dos consolas cambien de forma en el
+   mismo ancho y no una a cada lado del mismo arrastre de ventana. */
+@media (max-width: 58rem) {
+  .builder__layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.builder__aside {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  position: sticky;
+  /* Pegado arriba, porque el editor es mucho más alto que el resumen: sin esto, escribir
+     la octava sección deja el resumen fuera de pantalla justo cuando más sirve. */
+  top: 1rem;
+}
+
+.builder__aside h3 {
+  margin: 0 0 0.75rem;
+}
+
+/* El encabezado ---------------------------------------------------------- */
+
+.builder__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.builder__state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.15rem;
+}
+
+/* El único botón de la pantalla que no ocupa el ancho: `.button--primary` es `width: 100%`
+   porque casi siempre cierra un formulario, y acá vive en un renglón con otras dos cosas. */
+.builder__save {
+  width: auto;
+}
+
+/* `.row-menu` se ancla en absoluto, así que necesita a quién anclarse: sin esto se iría a
+   la esquina de la página en vez de la del encabezado. */
+.builder__menu-anchor {
+  position: relative;
+  width: 48px;
+  height: 48px;
+}
+
+/* Identidad y alcance ---------------------------------------------------- */
+
+.builder__identity-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 1rem 1.5rem;
+  align-items: start;
+}
+
+@media (max-width: 48rem) {
+  .builder__identity-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.builder__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.builder__field .note {
   margin: 0;
 }
 
-.list--mapping select {
-  flex: 1 1 14rem;
+.builder__scope {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
 }
 
-/* El estado de ESTA fila, no el de la pantalla. Ancho fijo para que la columna no salte
-   entre «Mapped» y «Saving…» y arrastre el select de al lado. */
-.mapping__state {
-  flex: 0 0 auto;
-  min-width: 7rem;
+.builder__scope .note {
+  margin: 0 0 0.5rem;
+}
+
+.builder__scope-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* Las tres opciones a la vista y la elegida pintada: es la decisión que condiciona qué
+   ubicaciones ofrece cada sección, y detrás de un desplegable habría que abrirlo para
+   saber en qué se está parado. */
+.builder__scope-option {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
+  flex: 1 1 8rem;
+  justify-content: center;
+}
+
+.builder__scope-option.is-chosen {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: var(--paper);
+}
+
+.builder__scope-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.15rem 0 1rem;
+  font-weight: 600;
+}
+
+/* El resumen ------------------------------------------------------------- */
+
+.builder__counts {
+  margin: 0 0 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.builder__counts > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.builder__counts dt {
+  color: var(--muted);
+}
+
+.builder__counts dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.builder__breakdown {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.builder__breakdown li {
+  display: flex;
+  gap: 0.6rem;
+  align-items: start;
+}
+
+.builder__breakdown-title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.builder__breakdown .note {
+  margin: 0 0 0.35rem;
+}
+
+.builder__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+/* La sección ------------------------------------------------------------- */
+
+/* `relative` para el `.row-menu` de la sección, igual que `.period`. */
+.builder__section {
+  position: relative;
+}
+
+/* Mientras se arrastra, la fila se atenúa en vez de desaparecer: sacarla del flujo haría
+   saltar todo lo de abajo bajo el dedo, que es justo lo que no se quiere al apuntar. */
+.builder__section.is-dragging,
+.item-editor.is-dragging {
+  opacity: 0.5;
+}
+
+/* Dónde va a caer. Sin esto el arrastre no devuelve nada y hay que soltar para averiguarlo,
+   que es justo cuando ya es tarde. Un borde y no un desplazamiento: mover las filas de
+   verdad durante el arrastre las hace pasar bajo el dedo y cambiar el destino solas. */
+.builder__section.is-drop-target,
+.item-editor.is-drop-target {
+  outline: 2px dashed var(--brand);
+  outline-offset: 2px;
+}
+
+.builder__section-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  /* El hueco que el encabezado le reserva al menú, como `.period__head--menu`. */
+  padding-right: 3rem;
+  margin: 0 0 0.75rem;
+}
+
+.builder__section-title {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.builder__section-title h2 {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+
+.builder__section-title .note {
+  margin: 0;
+}
+
+.builder__section-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.builder__section-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: auto;
+}
+
+.builder__collapse {
+  min-width: 48px;
+  padding: 0;
+  justify-content: center;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+
+/* Una sola forma de chevron y una rotación: dos SVG para el mismo control se desincronizan
+   en cuanto alguien toca uno. */
+.builder__collapse.is-closed svg {
+  transform: rotate(180deg);
+}
+
+/* El número de la sección: el mismo círculo en el editor y en el desglose del resumen, que
+   es lo que permite saltar de uno al otro sin volver a leer el título. */
+.builder__number {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: var(--radius-pill);
+  background: var(--brand);
+  color: var(--paper);
   font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+/* En una pregunta el número es referencia, no jerarquía: pintarlo como el de la sección
+   pondría veinte círculos verdes compitiendo con los dos que sí ordenan la pantalla. */
+.builder__number--quiet {
+  width: auto;
+  min-width: 1.5rem;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+/* La manija de arrastre. Sin `min-height` de 48px porque no es un objetivo de toque
+   independiente —arrastrar empieza en cualquier punto de ella y sigue con el dedo abajo—,
+   y el camino que sí necesita el tamaño completo es el menú «⋮», que lo tiene. */
+.builder__grip {
+  flex: none;
+  min-height: 0;
+  min-width: 0;
+  padding: 0.35rem;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+  cursor: grab;
+  touch-action: none;
+}
+
+.builder__grip:active {
+  cursor: grabbing;
+}
+
+.builder__section-location {
+  margin: 0 0 0.75rem;
+}
+
+.builder__section-location .field-label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* Una caja por planta, lado a lado. Es una LECTURA, no un control: la sección nombra una
+   sola ubicación compartida y esto es a qué lugar resuelve en cada planta. */
+.builder__resolution {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.75rem;
+  margin: 0 0 0.75rem;
+}
+
+.builder__plant {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.6rem 0.8rem;
+  background: var(--tint-bg);
+}
+
+/* El hueco se dibuja, no se esconde: «esta sección no resuelve en Glencoe» es la respuesta
+   útil, y omitir la caja la convertiría en algo que no está y nadie nota. */
+.builder__plant--gap {
+  background: var(--warn-bg);
+  border-color: var(--warn-ink);
+}
+
+.builder__plant .note {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+}
+
+.builder__plant-name {
+  margin: 0.15rem 0 0;
+  font-weight: 600;
+}
+
+.builder__questions-label {
+  margin: 0 0 0.5rem;
+  font-weight: 600;
+}
+
+.builder__questions {
+  margin-bottom: 0.5rem;
+}
+
+.builder__add {
+  display: flex;
+  justify-content: center;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.builder__add button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: auto;
+}
+
+/* «Add section» cierra la columna, así que lleva su propio marco punteado en vez del
+   filete del pie de una tarjeta: no es el pie de nada, es el hueco siguiente. */
+.builder__add--section {
+  border: 1px dashed var(--line-control);
+  border-radius: var(--radius);
+  padding: 0.5rem;
+  margin: 0 0 1rem;
+}
+
+/* La pregunta ------------------------------------------------------------ */
+
+/* Un renglón: manija, número, texto, tipo, obligatoria, menú. `relative` para el menú. */
+.item-editor__row {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding-right: 3rem;
+}
+
+.item-editor__prompt {
+  flex: 1 1 14rem;
+  width: auto;
+  min-width: 0;
+}
+
+.item-editor__type {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.item-editor__required {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 48px;
+  white-space: nowrap;
+}
+
+/* La configuración del tipo, plegada bajo la fila y con el mismo filete que la pregunta
+   dentro de su sección: se lee como algo que pertenece a la fila de arriba. */
+.item-editor__settings {
+  margin: 0.5rem 0 0 1.5rem;
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--line);
+}
+
+.item-editor__settings .note {
+  margin: 0 0 0.5rem;
 }

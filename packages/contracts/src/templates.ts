@@ -71,11 +71,32 @@ export const draftIssueSchema = z.strictObject({
 });
 
 /**
+ * LAS PLANTAS PARA LAS QUE SE ESCRIBE LA PLANTILLA. Nunca vacío.
+ *
+ * **No es `site_id` y no contradice la cabecera de este archivo.** Una plantilla sigue
+ * sin pertenecer a una planta: sigue siendo UNA, con UN juego de `item_key`, y las dos
+ * plantas siguen compartiendo la serie de recurrencia. Esto es otra pregunta —dónde se
+ * piensa USAR—, y existe porque el catálogo de ubicaciones se mapea POR PLANTA: una
+ * sección solo puede nombrar una ubicación compartida que la planta donde corre la
+ * inspección tenga tickeada, y sin saber para qué plantas se escribe no hay forma de
+ * recortar esa oferta.
+ *
+ * **No viaja dentro del documento**, y por eso vive acá y no en `template-document.ts`:
+ * `packages/forms` interpreta el documento dentro del service worker, sobre la misma
+ * entrada en el dispositivo y en el servidor. El alcance no cambia cómo se contesta una
+ * pregunta; cambia qué se le puede ofrecer al autor.
+ */
+const siteScopeSchema = z.array(z.uuid()).min(1);
+
+/**
  * Un borrador en el listado: lo justo para elegir cuál abrir.
  *
  * `publishable` viaja en el listado —y no solo en el detalle— porque es la única
  * pregunta que se hace sobre un borrador sin abrirlo. `issues` no: la lista completa de
  * lo que falta solo tiene sentido al lado del documento que la produce.
+ *
+ * `site_ids` también viaja en el listado, por la misma razón que `publishable`: «¿esta
+ * plantilla es de las dos plantas o de una?» se responde sin abrir el borrador.
  */
 export const templateDraftSummarySchema = z.strictObject({
   id: z.uuid(),
@@ -84,6 +105,7 @@ export const templateDraftSummarySchema = z.strictObject({
   revision: z.int().positive(),
   updated_at: z.string(),
   publishable: z.boolean(),
+  site_ids: siteScopeSchema,
 });
 
 export type TemplateDraftSummary = z.infer<typeof templateDraftSummarySchema>;
@@ -114,6 +136,11 @@ export type DraftIssueDto = z.infer<typeof draftIssueSchema>;
  * nombre es único (migración 0017) y la colisión se reporta sobre el nombre.
  *
  * El documento nace vacío y por lo tanto no publicable, que es lo que corresponde.
+ *
+ * **Sin `site_ids`, y por el mismo motivo que sin `key`.** Un borrador nace con TODO el
+ * alcance de la cuenta que lo creó, y el autor lo achica después si quiere. Pedirlo acá
+ * sería pedir la decisión más difícil —«¿esta plantilla va a valer para las dos
+ * plantas?»— antes de haber escrito una sola pregunta.
  */
 export const createTemplateDraftSchema = z.strictObject({
   name: z.string().min(1),
@@ -133,11 +160,17 @@ export type CreateTemplateDraft = z.infer<typeof createTemplateDraftSchema>;
  * uno renombrado puede quedar con una clave que ya no se le parece — deliberado, porque un
  * identificador que cambia con cada corrección de estilo no identifica nada. Por eso el
  * editor la muestra de solo lectura en vez de esconderla del todo.
+ *
+ * `site_ids` SÍ está, y viaja en el mismo guardado que el documento a propósito: cambiar
+ * el alcance es una edición como cualquier otra y tiene que quedar bajo el mismo lock.
+ * Un endpoint aparte para el alcance dejaría dos escrituras que se pueden intercalar, y
+ * la segunda no sabría contra qué revisión se decidió la primera.
  */
 export const saveTemplateDraftSchema = z.strictObject({
   name: z.string().min(1),
   document: templateDraftDocumentSchema,
   revision: z.int().positive(),
+  site_ids: siteScopeSchema,
 });
 
 export type SaveTemplateDraft = z.infer<typeof saveTemplateDraftSchema>;

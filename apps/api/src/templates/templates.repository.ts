@@ -19,9 +19,10 @@ export interface TemplateDraftRecord extends Record<string, unknown> {
   document: TemplateDraftDocument;
   revision: number;
   updated_at: Date;
+  site_ids: string[];
 }
 
-const DRAFT_COLUMNS = 'id, key, name, document, revision, updated_at';
+const DRAFT_COLUMNS = 'id, key, name, document, revision, updated_at, site_ids';
 
 /** Los borradores vivos, el más trabajado primero. */
 export async function findDrafts(client: PoolClient): Promise<TemplateDraftRecord[]> {
@@ -129,15 +130,26 @@ export function isDraftUniqueViolation(caught: unknown): boolean {
   );
 }
 
+/**
+ * `site_ids` llega desde el servicio y no tiene default útil acá: la migración le puso
+ * `'{}'` para poder agregar la columna, pero el CHECK de 0020 §3 lo rechaza. Quién decide
+ * el alcance inicial es el servicio, con el de la sesión.
+ */
 export async function insertDraft(
   client: PoolClient,
-  draft: { key: string; name: string; document: TemplateDraftDocument; createdBy: string },
+  draft: {
+    key: string;
+    name: string;
+    document: TemplateDraftDocument;
+    createdBy: string;
+    siteIds: readonly string[];
+  },
 ): Promise<TemplateDraftRecord> {
   const { rows } = await client.query<TemplateDraftRecord>(
-    `INSERT INTO template_draft (key, name, document, created_by)
-          VALUES ($1, $2, $3, $4)
+    `INSERT INTO template_draft (key, name, document, created_by, site_ids)
+          VALUES ($1, $2, $3, $4, $5::uuid[])
        RETURNING ${DRAFT_COLUMNS}`,
-    [draft.key, draft.name, JSON.stringify(draft.document), draft.createdBy],
+    [draft.key, draft.name, JSON.stringify(draft.document), draft.createdBy, draft.siteIds],
   );
 
   // El INSERT devuelve fila o tira; no hay caso vacío.
@@ -154,22 +166,39 @@ export async function insertDraft(
  * pasó.
  *
  * `key` no se toca, y tampoco podría: no está en el `GRANT UPDATE` de 0016 §4.
+ *
+ * `site_ids` sí entra, y va en ESTA sentencia y no en otra: cambiar el alcance es una
+ * edición como cualquiera y tiene que caer bajo el mismo lock. Dos escrituras separadas se
+ * pueden intercalar, y la segunda no sabría contra qué revisión se decidió la primera.
  */
 export async function updateDraft(
   client: PoolClient,
-  update: { id: string; name: string; document: TemplateDraftDocument; revision: number },
+  update: {
+    id: string;
+    name: string;
+    document: TemplateDraftDocument;
+    revision: number;
+    siteIds: readonly string[];
+  },
 ): Promise<TemplateDraftRecord | null> {
   const { rows } = await client.query<TemplateDraftRecord>(
     `UPDATE template_draft
         SET name = $2,
             document = $3,
             revision = revision + 1,
-            updated_at = now()
+            updated_at = now(),
+            site_ids = $5::uuid[]
       WHERE id = $1
         AND revision = $4
         AND discarded_at IS NULL
   RETURNING ${DRAFT_COLUMNS}`,
-    [update.id, update.name, JSON.stringify(update.document), update.revision],
+    [
+      update.id,
+      update.name,
+      JSON.stringify(update.document),
+      update.revision,
+      update.siteIds,
+    ],
   );
 
   return rows[0] ?? null;

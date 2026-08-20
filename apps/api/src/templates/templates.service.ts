@@ -18,6 +18,7 @@ import {
   templateDraftNameTaken,
   templateDraftNameUnusable,
   templateDraftNotFound,
+  templateDraftSiteOutOfScope,
   templateDraftStale,
 } from './templates.errors';
 import {
@@ -146,6 +147,10 @@ export class TemplatesService {
           name,
           document: emptyDraftDocument(),
           createdBy: session.userId,
+          // TODO EL ALCANCE DE LA CUENTA, y el autor lo achica después si quiere.
+          // Pedirlo al crear sería pedir la decisión más difícil —«¿esto vale para
+          // las dos plantas?»— antes de haber escrito una sola pregunta.
+          siteIds: session.siteIds,
         });
 
         return toDraft(created);
@@ -189,6 +194,7 @@ export class TemplatesService {
     input: SaveTemplateDraft,
   ): Promise<TemplateDraft> {
     requireCoordinator(session);
+    requireSitesInScope(session, input.site_ids);
 
     const name = input.name.trim();
 
@@ -206,6 +212,7 @@ export class TemplatesService {
         name,
         document: input.document,
         revision: input.revision,
+        siteIds: input.site_ids,
       }).catch((caught: unknown) => {
         if (isDraftUniqueViolation(caught)) throw templateDraftNameTaken(name);
 
@@ -237,6 +244,25 @@ function requireCoordinator(session: SessionScope): void {
 }
 
 /**
+ * El alcance declarado tiene que estar dentro del de la sesión.
+ *
+ * **Esto es lo único que hay**, y conviene que quede dicho: el motor no puede sostenerlo
+ * porque PostgreSQL no admite FK sobre el elemento de un arreglo (0020 §1). Que estos uuid
+ * sean sitios, y sitios que esta cuenta administra, se decide acá.
+ *
+ * `session.siteIds` sale de `user_site_scope` en cada request y nunca del token
+ * (`db.service.ts`), así que un id inventado no pasa por más que el cliente insista.
+ *
+ * Que el arreglo no esté vacío ya lo garantizan dos capas: `saveTemplateDraftSchema` con
+ * su `.min(1)` y el CHECK de 0020 §3. No se repite acá.
+ */
+function requireSitesInScope(session: SessionScope, siteIds: readonly string[]): void {
+  const allowed = new Set(session.siteIds);
+
+  if (siteIds.some((siteId) => !allowed.has(siteId))) throw templateDraftSiteOutOfScope();
+}
+
+/**
  * `publishable` e `issues` los calcula `draftIssues` de `@hs/forms` (ADR-007): la
  * misma función que corre en el dispositivo mientras el autor escribe. Que sean
  * dos implementaciones es exactamente cómo la pantalla termina diciendo que un
@@ -250,6 +276,7 @@ function toSummary(row: TemplateDraftRecord): TemplateDraftSummary {
     revision: row.revision,
     updated_at: row.updated_at.toISOString(),
     publishable: draftIssues(row.document).length === 0,
+    site_ids: row.site_ids,
   };
 }
 

@@ -143,6 +143,15 @@ export const createOrganizationLocationSchema = z.strictObject({
 
 export type CreateOrganizationLocation = z.infer<typeof createOrganizationLocationSchema>;
 
+/** Desde la consola una ubicación compartida solo se puede retirar, no reactivar. */
+export const deactivateOrganizationLocationSchema = z.strictObject({
+  deactivated: z.literal(true),
+});
+
+export type DeactivateOrganizationLocation = z.infer<
+  typeof deactivateOrganizationLocationSchema
+>;
+
 /**
  * Las dos únicas cosas que se pueden cambiar de una ubicación: cómo se llama y si
  * sigue ofreciéndose. `code` y `site_id` no están, y no es una omisión — el

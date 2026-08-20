@@ -5,23 +5,33 @@ import { draftIssues, type Session, type TemplateDraft } from '@hs/contracts';
 
 import { TemplateDraftRoute } from './index';
 
-const SITE = '11111111-1111-4111-8111-111111111111';
+const ST_THOMAS = '11111111-1111-4111-8111-111111111111';
+const GLENCOE = '11111111-1111-4111-8111-111111111112';
 const USER = '22222222-2222-4222-8222-222222222222';
 const PERSON = '33333333-3333-4333-8333-333333333333';
 const DRAFT = '44444444-4444-4444-8444-444444444444';
 
 const getTemplateDraft = vi.hoisted(() => vi.fn());
 const saveTemplateDraft = vi.hoisted(() => vi.fn());
+const discardTemplateDraft = vi.hoisted(() => vi.fn());
 const useAppSession = vi.hoisted(() => vi.fn());
 const listOrganizationLocations = vi.hoisted(() => vi.fn());
+const listCatalogLocations = vi.hoisted(() => vi.fn());
+const listSites = vi.hoisted(() => vi.fn());
 
-vi.mock('../../api/templates', () => ({ getTemplateDraft, saveTemplateDraft }));
-vi.mock('../../api/catalog', () => ({ listOrganizationLocations }));
+vi.mock('../../api/templates', () => ({
+  getTemplateDraft,
+  saveTemplateDraft,
+  discardTemplateDraft,
+}));
+vi.mock('../../api/catalog', () => ({ listOrganizationLocations, listCatalogLocations }));
+vi.mock('../../api/inspections', () => ({ listSites }));
 vi.mock('../../app/session-context', () => ({ useAppSession }));
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ children }: { children: React.ReactNode }) => <a href="/templates">{children}</a>,
   useParams: () => ({ id: DRAFT }),
+  useNavigate: () => vi.fn(),
 }));
 
 function session(role: Session['role']): { account: Session } {
@@ -30,30 +40,47 @@ function session(role: Session['role']): { account: Session } {
       userId: USER,
       personId: PERSON,
       role,
-      siteScope: [SITE],
+      siteScope: [ST_THOMAS, GLENCOE],
       recordsFrom: null,
       recordsTo: null,
     },
   };
 }
 
-const LOCATIONS = [
-  {
-    id: '55555555-5555-4555-8555-555555555555',
-    code: 'guarding',
-    name: 'Guarding',
-  },
-  {
-    id: '66666666-6666-4666-8666-666666666666',
-    code: 'storage',
-    name: 'Storage',
-  },
-  {
-    id: '77777777-7777-4777-8777-777777777777',
-    code: 'machines',
-    name: 'Machines',
-  },
+const SITES = [
+  { id: ST_THOMAS, code: 'st-thomas', name: 'St. Thomas', deactivated_at: null },
+  { id: GLENCOE, code: 'glencoe', name: 'Glencoe', deactivated_at: null },
 ];
+
+/** Las compartidas: el concepto, sin planta. Es lo único que una sección guarda. */
+const SHARED = [
+  { id: '55555555-5555-4555-8555-555555555555', code: 'guarding', name: 'Guarding' },
+  { id: '66666666-6666-4666-8666-666666666666', code: 'storage', name: 'Storage' },
+  { id: '77777777-7777-4777-8777-777777777777', code: 'machines', name: 'Machines' },
+];
+
+/**
+ * Las físicas, una por planta. `guarding` y `storage` están tickeadas en las dos plantas;
+ * `machines` SOLO en St. Thomas, que es el caso que el recorte tiene que atrapar.
+ */
+const PHYSICAL = [
+  physical('p1', ST_THOMAS, 'guarding', 'Guarding line'),
+  physical('p2', GLENCOE, 'guarding', 'Guarding bay'),
+  physical('p3', ST_THOMAS, 'storage', 'Storage room'),
+  physical('p4', GLENCOE, 'storage', 'Storage shed'),
+  physical('p5', ST_THOMAS, 'machines', 'Machine shop'),
+];
+
+function physical(id: string, siteId: string, code: string, name: string) {
+  return {
+    id,
+    site_id: siteId,
+    code: name.toLowerCase().replace(/\s+/g, '-'),
+    name,
+    deactivated_at: null,
+    organization_location_code: code,
+  };
+}
 
 /** Un borrador con una sección y una pregunta: publicable, para que los issues sean señal. */
 function draft(overrides: Partial<TemplateDraft> = {}): TemplateDraft {
@@ -81,6 +108,7 @@ function draft(overrides: Partial<TemplateDraft> = {}): TemplateDraft {
     name: 'Monthly electrical inspection',
     revision: 4,
     updated_at: '2026-08-14T10:00:00.000Z',
+    site_ids: [ST_THOMAS, GLENCOE],
     document,
     issues: draftIssues(document),
     publishable: draftIssues(document).length === 0,
@@ -101,10 +129,26 @@ function renderRoute(): void {
 /** Espera a que el editor esté montado con el borrador cargado. */
 async function ready(): Promise<void> {
   await screen.findByLabelText('Template name');
+  // El alcance depende de `listSites`, que llega en su propia consulta: sin esperarla, el
+  // selector todavía no existe y las aserciones sobre el recorte miran una pantalla a medio
+  // resolver.
+  await screen.findByRole('button', { name: /Both plants/ });
+}
+
+/** Abre el menú «⋮» que se llama `name` y devuelve su contenedor. */
+async function openMenu(name: string): Promise<HTMLElement> {
+  fireEvent.click(screen.getByRole('button', { name }));
+
+  return screen.getByRole('menu');
 }
 
 /** El cuerpo del último `saveTemplateDraft`. */
-function lastSave(): { name: string; document: unknown; revision: number } {
+function lastSave(): {
+  name: string;
+  document: unknown;
+  revision: number;
+  site_ids: string[];
+} {
   const call = saveTemplateDraft.mock.calls.at(-1);
 
   if (!call) throw new Error('No se llamó a saveTemplateDraft.');
@@ -115,11 +159,15 @@ function lastSave(): { name: string; document: unknown; revision: number } {
 beforeEach(() => {
   useAppSession.mockReset().mockReturnValue(session('hs_coordinator'));
   getTemplateDraft.mockReset().mockResolvedValue(draft());
-  listOrganizationLocations.mockReset().mockResolvedValue(LOCATIONS);
+  listOrganizationLocations.mockReset().mockResolvedValue(SHARED);
+  listCatalogLocations.mockReset().mockResolvedValue(PHYSICAL);
+  listSites.mockReset().mockResolvedValue(SITES);
+  discardTemplateDraft.mockReset().mockResolvedValue(undefined);
   saveTemplateDraft
     .mockReset()
-    .mockImplementation(async (_id: string, body: { name: string; document: never }) =>
-      draft({ ...body, revision: 5 }),
+    .mockImplementation(
+      async (_id: string, body: { name: string; document: never; site_ids: string[] }) =>
+        draft({ ...body, revision: 5 }),
     );
 });
 
@@ -155,7 +203,7 @@ describe('escribir la plantilla', () => {
     fireEvent.change(sections[1]!, { target: { value: 'storage' } });
     fireEvent.click(screen.getAllByRole('button', { name: 'Add question' })[1]!);
 
-    expect(screen.getAllByLabelText('Question')).toHaveLength(2);
+    expect(screen.getAllByRole('textbox', { name: /^Question / })).toHaveLength(2);
   });
 
   it('no muestra claves técnicas de secciones ni preguntas', async () => {
@@ -165,13 +213,153 @@ describe('escribir la plantilla', () => {
     expect(screen.queryByLabelText('Key')).toBeNull();
   });
 
-  it('quita una pregunta', async () => {
+  it('quita una pregunta desde su menú', async () => {
     renderRoute();
     await ready();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Remove Is the guard fitted?' }));
+    const menu = await openMenu('More actions for Is the guard fitted?');
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Remove question' }));
 
-    expect(screen.queryByLabelText('Question')).toBeNull();
+    expect(screen.queryByRole('textbox', { name: /^Question / })).toBeNull();
+  });
+});
+
+describe('el alcance de plantas', () => {
+  it('ofrece una opción por planta más las dos juntas', async () => {
+    renderRoute();
+    await ready();
+
+    expect(screen.getByRole('button', { name: /St\. Thomas only/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Glencoe only/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Both plants/ })).toBeTruthy();
+  });
+
+  it('marca el alcance que el borrador ya tiene', async () => {
+    renderRoute();
+    await ready();
+
+    expect(screen.getByRole('button', { name: /Both plants/ }).getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+  });
+
+  it('viaja en el guardado, con la revisión sobre la que se editó', async () => {
+    renderRoute();
+    await ready();
+
+    fireEvent.click(screen.getByRole('button', { name: /St\. Thomas only/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+
+    await waitFor(() => expect(saveTemplateDraft).toHaveBeenCalled());
+
+    expect(lastSave().site_ids).toEqual([ST_THOMAS]);
+    expect(lastSave().revision).toBe(4);
+  });
+
+  it('cambiarlo cuenta como un cambio sin guardar', async () => {
+    renderRoute();
+    await ready();
+
+    expect(screen.getByRole('button', { name: 'Saved' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /Glencoe only/ }));
+
+    expect(screen.getByRole('button', { name: 'Save draft' })).toBeTruthy();
+  });
+
+  /** Con una sola planta administrada no hay nada que elegir, y «only» sería una mentira. */
+  it('no se dibuja cuando la cuenta administra una sola planta', async () => {
+    useAppSession.mockReturnValue({
+      account: { ...session('hs_coordinator').account, siteScope: [ST_THOMAS] },
+    });
+    getTemplateDraft.mockResolvedValue(draft({ site_ids: [ST_THOMAS] }));
+
+    renderRoute();
+    await screen.findByLabelText('Template name');
+
+    expect(screen.queryByRole('button', { name: /Both plants/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /St\. Thomas only/ })).toBeNull();
+  });
+});
+
+describe('las ubicaciones que una sección puede nombrar', () => {
+  const codes = (): string[] =>
+    [...(screen.getAllByLabelText('Location')[0] as HTMLSelectElement).options]
+      .map((option) => option.value)
+      .filter(Boolean);
+
+  it('con las dos plantas solo ofrece las mapeadas en las dos', async () => {
+    renderRoute();
+    await ready();
+
+    expect(codes()).toEqual(['guarding', 'storage']);
+  });
+
+  it('al achicar el alcance aparece la que solo esa planta tiene', async () => {
+    renderRoute();
+    await ready();
+
+    fireEvent.click(screen.getByRole('button', { name: /St\. Thomas only/ }));
+
+    expect(codes()).toEqual(['guarding', 'storage', 'machines']);
+  });
+
+  /**
+   * Recortar la oferta NO puede convertirse en una edición: el valor guardado sigue en el
+   * `<select>` aunque el alcance nuevo lo dejaría afuera.
+   */
+  it('conserva la ubicación ya elegida aunque el alcance la deje afuera, y lo avisa', async () => {
+    getTemplateDraft.mockResolvedValue(
+      draft({
+        site_ids: [ST_THOMAS],
+        document: {
+          sections: [
+            {
+              section_key: 'machines',
+              section_title: 'Machines',
+              organization_location_code: 'machines',
+              items: [
+                {
+                  item_key: 'guard.fitted',
+                  prompt: 'Is the guard fitted?',
+                  required: true,
+                  response_type: 'yes_no' as const,
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    renderRoute();
+    await screen.findByLabelText('Template name');
+    await screen.findByRole('button', { name: /Both plants/ });
+
+    fireEvent.click(screen.getByRole('button', { name: /Both plants/ }));
+
+    expect((screen.getAllByLabelText('Location')[0] as HTMLSelectElement).value).toBe('machines');
+    expect(screen.getByText(/not mapped at every plant in scope/)).toBeTruthy();
+  });
+
+  it('muestra a qué lugar físico resuelve en cada planta, sin ofrecerlo como campo', async () => {
+    renderRoute();
+    await ready();
+
+    expect(screen.getByText('Guarding line')).toBeTruthy();
+    expect(screen.getByText('Guarding bay')).toBeTruthy();
+    expect(screen.queryByLabelText('St. Thomas location')).toBeNull();
+  });
+
+  it('dibuja el hueco de la planta que no tiene esa ubicación', async () => {
+    renderRoute();
+    await ready();
+
+    fireEvent.click(screen.getByRole('button', { name: /St\. Thomas only/ }));
+    fireEvent.change(screen.getAllByLabelText('Location')[0]!, { target: { value: 'machines' } });
+    fireEvent.click(screen.getByRole('button', { name: /Both plants/ }));
+
+    expect(screen.getByText('Not mapped here')).toBeTruthy();
   });
 });
 
@@ -184,32 +372,30 @@ describe('reordenar', () => {
     fireEvent.change(screen.getAllByLabelText('Location')[1]!, { target: { value: 'storage' } });
   }
 
-  it('sube una sección', async () => {
+  /** El menú es el camino de teclado de ADR-010; el arrastre es el atajo, no la garantía. */
+  it('sube una sección desde el menú', async () => {
     await twoSections();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Move section Storage up' }));
+    const menu = await openMenu('More actions for section Storage');
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Move up' }));
 
-    const titles = (screen.getAllByLabelText('Location') as HTMLSelectElement[]).map(
+    const codes = (screen.getAllByLabelText('Location') as HTMLSelectElement[]).map(
       (input) => input.value,
     );
-    expect(titles).toEqual(['storage', 'guarding']);
+    expect(codes).toEqual(['storage', 'guarding']);
   });
 
-  /**
-   * Deshabilitados y no ocultos: un botón que aparece y desaparece mueve los de al lado
-   * bajo el dedo, que en una tablet con guantes es cómo se toca el equivocado.
-   */
-  it('los botones de los extremos están deshabilitados, no ausentes', async () => {
+  it('los movimientos de los extremos están deshabilitados, no ausentes', async () => {
     await twoSections();
 
+    const menu = await openMenu('More actions for section Guarding');
+
     expect(
-      (screen.getByRole('button', { name: 'Move section Guarding up' }) as HTMLButtonElement)
-        .disabled,
+      (within(menu).getByRole('menuitem', { name: 'Move up' }) as HTMLButtonElement).disabled,
     ).toBe(true);
     expect(
-      (screen.getByRole('button', { name: 'Move section Storage down' }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true);
+      (within(menu).getByRole('menuitem', { name: 'Move down' }) as HTMLButtonElement).disabled,
+    ).toBe(false);
   });
 
   it('sube una pregunta dentro de su sección', async () => {
@@ -217,25 +403,51 @@ describe('reordenar', () => {
     await ready();
 
     fireEvent.click(screen.getByRole('button', { name: 'Add question' }));
-    fireEvent.change(screen.getAllByLabelText('Question')[1]!, {
+    fireEvent.change(screen.getAllByRole('textbox', { name: /^Question / })[1]!, {
       target: { value: 'Is the exit clear?' },
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Move Is the exit clear? up' }));
+    const menu = await openMenu('More actions for Is the exit clear?');
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Move up' }));
 
-    const prompts = (screen.getAllByLabelText('Question') as HTMLInputElement[]).map(
-      (input) => input.value,
-    );
+    const prompts = (
+      screen.getAllByRole('textbox', { name: /^Question / }) as HTMLInputElement[]
+    ).map((input) => input.value);
     expect(prompts).toEqual(['Is the exit clear?', 'Is the guard fitted?']);
   });
 });
 
-describe('el tipo de respuesta', () => {
+describe('duplicar', () => {
+  it('una pregunta queda justo debajo, con el mismo texto', async () => {
+    renderRoute();
+    await ready();
+
+    const menu = await openMenu('More actions for Is the guard fitted?');
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Duplicate question' }));
+
+    const prompts = (
+      screen.getAllByRole('textbox', { name: /^Question / }) as HTMLInputElement[]
+    ).map((input) => input.value);
+    expect(prompts).toEqual(['Is the guard fitted?', 'Is the guard fitted?']);
+  });
+
+  it('una sección se copia entera y el documento no gana ningún problema', async () => {
+    renderRoute();
+    await ready();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Duplicate section Guarding' }));
+
+    expect(screen.getAllByLabelText('Location')).toHaveLength(2);
+    expect(screen.getByText(/Nothing left to fill in/)).toBeTruthy();
+  });
+});
+
+describe('la configuración del tipo de respuesta', () => {
   it('cambiar de tipo reemplaza los campos de configuración', async () => {
     renderRoute();
     await ready();
 
-    const type = screen.getByLabelText('Answered with');
+    const type = screen.getByLabelText('Answer type');
 
     fireEvent.change(type, { target: { value: 'text' } });
     expect(screen.getByLabelText('Maximum length')).toBeTruthy();
@@ -245,11 +457,27 @@ describe('el tipo de respuesta', () => {
     expect(screen.getByRole('button', { name: 'Add option' })).toBeTruthy();
   });
 
+  /**
+   * El renglón compacto del mockup esconde la configuración, así que tiene que abrirse sola
+   * al elegir un tipo que la necesita: descubrirlo en la lista de pendientes mandaría al
+   * autor a buscar dónde se configura.
+   */
+  it('se despliega sola al elegir un tipo que la necesita', async () => {
+    renderRoute();
+    await ready();
+
+    expect(screen.queryByLabelText('Decimal places')).toBeNull();
+
+    fireEvent.change(screen.getByLabelText('Answer type'), { target: { value: 'number' } });
+
+    expect(screen.getByLabelText('Decimal places')).toBeTruthy();
+  });
+
   it('un tipo sin configuración no muestra ningún campo de más', async () => {
     renderRoute();
     await ready();
 
-    const type = screen.getByLabelText('Answered with');
+    const type = screen.getByLabelText('Answer type');
 
     fireEvent.change(type, { target: { value: 'number' } });
     expect(screen.getByLabelText('Decimal places')).toBeTruthy();
@@ -263,7 +491,7 @@ describe('el tipo de respuesta', () => {
     renderRoute();
     await ready();
 
-    fireEvent.change(screen.getByLabelText('Answered with'), {
+    fireEvent.change(screen.getByLabelText('Answer type'), {
       target: { value: 'single_choice' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Add option' }));
@@ -303,9 +531,49 @@ describe('lo que falta para publicar', () => {
     renderRoute();
     await ready();
 
-    fireEvent.change(screen.getByLabelText('Question'), { target: { value: '' } });
+    fireEvent.change(screen.getByRole('textbox', { name: /^Question / }), {
+      target: { value: '' },
+    });
 
     expect(screen.getByText(/has no question text/)).toBeTruthy();
+  });
+});
+
+describe('el panel de resumen', () => {
+  it('cuenta secciones, preguntas y ubicaciones enlazadas', async () => {
+    renderRoute();
+    await ready();
+
+    const summary = screen.getByText('Template summary').closest('section') as HTMLElement;
+
+    expect(within(summary).getByText('Sections').nextElementSibling?.textContent).toBe('1');
+    expect(within(summary).getByText('Questions').nextElementSibling?.textContent).toBe('1');
+    expect(within(summary).getByText('Locations linked').nextElementSibling?.textContent).toBe('1');
+  });
+
+  it('desglosa cada sección con el lugar de cada planta', async () => {
+    renderRoute();
+    await ready();
+
+    const summary = screen.getByText('Template summary').closest('section') as HTMLElement;
+
+    expect(within(summary).getByText('St. Thomas: Guarding line')).toBeTruthy();
+    expect(within(summary).getByText('Glencoe: Guarding bay')).toBeTruthy();
+  });
+
+  it('sigue el alcance elegido', async () => {
+    renderRoute();
+    await ready();
+
+    fireEvent.click(screen.getByRole('button', { name: /Glencoe only/ }));
+
+    const summary = screen.getByText('Template summary').closest('section') as HTMLElement;
+
+    // El alcance de la plantilla, no el de la sección: los dos dicen «Glencoe only» ahora
+    // mismo, y buscar el texto suelto no distinguiría cuál de los dos siguió al selector.
+    expect(within(summary).getByText('Scope').nextElementSibling?.textContent).toContain(
+      'Glencoe only',
+    );
   });
 });
 
@@ -314,14 +582,14 @@ describe('guardar', () => {
     renderRoute();
     await ready();
 
-    fireEvent.change(screen.getAllByLabelText('Location')[0]!, { target: { value: 'machines' } });
+    fireEvent.change(screen.getAllByLabelText('Location')[0]!, { target: { value: 'storage' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
 
     await waitFor(() => expect(saveTemplateDraft).toHaveBeenCalledWith(DRAFT, expect.anything()));
 
     const body = lastSave();
     expect(body.revision).toBe(4);
-    expect(JSON.stringify(body.document)).toContain('"section_title":"Machines"');
+    expect(JSON.stringify(body.document)).toContain('"section_title":"Storage"');
   });
 
   it('el botón dice "Saved" mientras no haya cambios', async () => {
@@ -334,16 +602,18 @@ describe('guardar', () => {
     );
   });
 
-  it('después de guardar avanza la revisión y vuelve a "Saved"', async () => {
+  /** No hay autosave: el encabezado dice la revisión guardada, no «Auto-saved hace N». */
+  it('después de guardar avanza la revisión y no anuncia ningún autoguardado', async () => {
     renderRoute();
     await ready();
 
-    fireEvent.change(screen.getAllByLabelText('Location')[0]!, { target: { value: 'machines' } });
+    fireEvent.change(screen.getAllByLabelText('Location')[0]!, { target: { value: 'storage' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
 
     await screen.findByRole('button', { name: 'Saved' });
 
-    expect(screen.getByText(/saved revision 5/)).toBeTruthy();
+    expect(screen.getByText('Saved revision 5')).toBeTruthy();
+    expect(screen.queryByText(/Auto-saved/)).toBeNull();
   });
 
   /**
@@ -358,12 +628,12 @@ describe('guardar', () => {
     renderRoute();
     await ready();
 
-    fireEvent.change(screen.getAllByLabelText('Location')[0]!, { target: { value: 'machines' } });
+    fireEvent.change(screen.getAllByLabelText('Location')[0]!, { target: { value: 'storage' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
 
     expect(await screen.findByText(/changed somewhere else/)).toBeTruthy();
     expect(screen.getByText(/Nothing you typed has been lost/)).toBeTruthy();
-    expect((screen.getAllByLabelText('Location')[0] as HTMLSelectElement).value).toBe('machines');
+    expect((screen.getAllByLabelText('Location')[0] as HTMLSelectElement).value).toBe('storage');
   });
 
   it('sin conexión no monta el editor sobre un documento que no llegó', async () => {
@@ -377,15 +647,6 @@ describe('guardar', () => {
 });
 
 describe('la cabecera', () => {
-  it('cuenta secciones y preguntas', async () => {
-    renderRoute();
-    await ready();
-
-    const header = screen.getByText(/section\(s\)/);
-
-    expect(within(header).getByText(/1 question/)).toBeTruthy();
-  });
-
   /**
    * Se MUESTRA pero no se edita. El autor no la eligió —la derivó el servidor del nombre— y
    * renombrar no la mueve, así que un borrador renombrado queda con una clave que ya no se
@@ -397,7 +658,16 @@ describe('la cabecera', () => {
     await ready();
 
     expect(screen.getByText('monthly-electrical')).toBeTruthy();
-
     expect(screen.queryByLabelText('Key')).toBeNull();
+  });
+
+  it('descarta el borrador desde el menú', async () => {
+    renderRoute();
+    await ready();
+
+    const menu = await openMenu('More template actions');
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Discard this draft' }));
+
+    await waitFor(() => expect(discardTemplateDraft).toHaveBeenCalledWith(DRAFT));
   });
 });

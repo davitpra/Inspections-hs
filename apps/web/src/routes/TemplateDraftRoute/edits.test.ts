@@ -7,6 +7,8 @@ import {
   addSection,
   allItemKeys,
   changeResponseType,
+  duplicateItem,
+  duplicateSection,
   freeKey,
   moveItem,
   moveSection,
@@ -19,7 +21,7 @@ import {
   setPrompt,
   setRequired,
 } from './edits';
-import { newKey } from './newKey';
+import { newKey, newKeys } from './newKey';
 
 /** Dos secciones con dos ítems cada una, para que mover tenga a dónde. */
 function document(): TemplateDraftDocument {
@@ -57,6 +59,8 @@ describe('las operaciones no mutan su entrada', () => {
 
     const results = [
       addSection(original, 'new-section'),
+      duplicateSection(original, 0, { section: 'copy', items: ['a2', 'b2'] }),
+      duplicateItem(original, 0, 0, 'a2'),
       renameSection(original, 0, 'Renamed'),
       moveSection(original, 1, -1),
       removeSection(original, 0),
@@ -357,3 +361,126 @@ function setConditionOnSecondItem(draft: TemplateDraftDocument): TemplateDraftDo
     ),
   };
 }
+
+describe('duplicar', () => {
+  /** Un documento con configuración y condición, que es donde duplicar tiene filo. */
+  function rich(): TemplateDraftDocument {
+    return {
+      sections: [
+        {
+          section_key: 'intake',
+          section_title: 'Intake',
+          organization_location_code: 'dock',
+          items: [
+            { item_key: 'a', prompt: 'A', required: true, response_type: 'yes_no' },
+            {
+              item_key: 'b',
+              prompt: 'How bad?',
+              required: false,
+              response_type: 'scale',
+              min: 1,
+              max: 5,
+              visible_when: { item_key: 'a', operator: 'equals', value: true },
+            },
+          ],
+        },
+      ],
+    };
+  }
+
+  describe('duplicateItem', () => {
+    it('copia el contenido y toma una identidad nueva', () => {
+      const next = duplicateItem(rich(), 0, 1, 'b-copy');
+      const copy = next.sections[0]!.items[2]!;
+
+      expect(copy).toMatchObject({
+        item_key: 'b-copy',
+        prompt: 'How bad?',
+        required: false,
+        response_type: 'scale',
+        min: 1,
+        max: 5,
+      });
+      expect(allItemKeys(next)).toEqual(['a', 'b', 'b-copy']);
+    });
+
+    it('queda justo debajo del original, no al final', () => {
+      const next = duplicateItem(rich(), 0, 0, 'a-copy');
+
+      expect(next.sections[0]!.items.map((item) => item.item_key)).toEqual(['a', 'a-copy', 'b']);
+    });
+
+    it('NO arrastra la condición de visibilidad', () => {
+      const next = duplicateItem(rich(), 0, 1, 'b-copy');
+
+      expect(next.sections[0]!.items[2]).not.toHaveProperty('visible_when');
+      // Y el original la conserva: duplicar no edita lo que se duplicó.
+      expect(next.sections[0]!.items[1]).toHaveProperty('visible_when');
+    });
+
+    it('un índice que no existe deja el documento igual', () => {
+      const original = rich();
+
+      expect(duplicateItem(original, 0, 9, 'nope')).toEqual(original);
+    });
+  });
+
+  describe('duplicateSection', () => {
+    it('copia las preguntas en el mismo orden y con identidades nuevas', () => {
+      const next = duplicateSection(rich(), 0, { section: 'intake-copy', items: ['a2', 'b2'] });
+
+      expect(sectionKeys(next)).toEqual(['intake', 'intake-copy']);
+      expect(next.sections[1]!.items.map((item) => item.prompt)).toEqual(['A', 'How bad?']);
+      expect(new Set(allItemKeys(next)).size).toBe(allItemKeys(next).length);
+    });
+
+    it('conserva el título y la ubicación, que son lo que la sección ES', () => {
+      const next = duplicateSection(rich(), 0, { section: 'intake-copy', items: ['a2', 'b2'] });
+
+      expect(next.sections[1]).toMatchObject({
+        section_title: 'Intake',
+        organization_location_code: 'dock',
+      });
+    });
+
+    it('queda justo debajo de la original', () => {
+      const three: TemplateDraftDocument = {
+        sections: [
+          { section_key: 'one', section_title: 'One', items: [] },
+          { section_key: 'two', section_title: 'Two', items: [] },
+          { section_key: 'three', section_title: 'Three', items: [] },
+        ],
+      };
+
+      const next = duplicateSection(three, 0, { section: 'one-copy', items: [] });
+
+      expect(sectionKeys(next)).toEqual(['one', 'one-copy', 'two', 'three']);
+    });
+
+    it('el duplicado no hereda ninguna condición de visibilidad', () => {
+      const next = duplicateSection(rich(), 0, { section: 'intake-copy', items: ['a2', 'b2'] });
+
+      expect(next.sections[1]!.items[1]).not.toHaveProperty('visible_when');
+    });
+
+    /**
+     * La razón por la que existe `newKeys`: duplicar tiene que producir un documento que
+     * `draftIssues` acepte, y dos claves repetidas son exactamente lo que reporta.
+     */
+    it('con claves de `newKeys` el documento no gana ni un issue', () => {
+      const original = rich();
+      const before = draftIssues(original).length;
+      const keys = newKeys(3, [...allItemKeys(original), ...sectionKeys(original)]);
+
+      const next = duplicateSection(original, 0, { section: keys[0]!, items: keys.slice(1) });
+
+      expect(draftIssues(next).length).toBe(before);
+    });
+
+    it('una sección que no existe deja el documento igual', () => {
+      const original = rich();
+
+      expect(duplicateSection(original, 9, { section: 'x', items: [] })).toEqual(original);
+    });
+  });
+});

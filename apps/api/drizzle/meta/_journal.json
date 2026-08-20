@@ -134,6 +134,13 @@
       "when": 1754524800018,
       "tag": "0019_nullable_finding_locations",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1754524800019,
+      "tag": "0020_template_draft_site_scope",
+      "breakpoints": true
     }
   ]
 }

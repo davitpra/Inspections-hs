@@ -771,3 +771,88 @@ describe('dar de alta desde la consola', () => {
     }
   });
 });
+
+describe('retirar una ubicación compartida desde la consola', () => {
+  const asCoordinator = (siteIds: string[] = [SITE_A, SITE_B]) => ({
+    userId: ACTOR,
+    role: 'hs_coordinator',
+    siteIds,
+  });
+
+  it('retira la compartida y las físicas de las dos plantas', async () => {
+    const shared = await locations.createOrganizationLocation(asCoordinator(), {
+      code: uniqueCode('retire-shared'),
+      name: 'Retire from both plants',
+    });
+    const physicalA = await locations.createLocation(asCoordinator(), SITE_A, {
+      code: uniqueCode('retire-a'),
+      name: 'Retire physical A',
+    });
+    const physicalB = await locations.createLocation(asCoordinator(), SITE_B, {
+      code: uniqueCode('retire-b'),
+      name: 'Retire physical B',
+    });
+
+    await locations.mapLocation(asCoordinator(), physicalA.id, shared.id);
+    await locations.mapLocation(asCoordinator(), physicalB.id, shared.id);
+    await locations.deactivateOrganizationLocation(asCoordinator(), shared.id);
+
+    const sharedRows = await inScope<{ deactivated_at: Date | null }>(
+      db.migrator,
+      [],
+      'SELECT deactivated_at FROM organization_location WHERE id = $1',
+      [shared.id],
+    );
+    const physicalRows = await inScope<{ id: string; deactivated_at: Date | null }>(
+      db.migrator,
+      [SITE_A, SITE_B],
+      'SELECT id, deactivated_at FROM location WHERE id = ANY($1::uuid[]) ORDER BY id',
+      [[physicalA.id, physicalB.id]],
+    );
+
+    expect(one(sharedRows).deactivated_at).not.toBeNull();
+    expect(physicalRows).toHaveLength(2);
+    expect(physicalRows.every((row) => row.deactivated_at !== null)).toBe(true);
+    expect((await locations.listOrganizationLocations(asCoordinator())).map((row) => row.id)).not.toContain(
+      shared.id,
+    );
+    expect((await locations.listLocations(asCoordinator())).map((row) => row.id)).not.toEqual(
+      expect.arrayContaining([physicalA.id, physicalB.id]),
+    );
+  });
+
+  it('rechaza al supervisor y deja activa la compartida', async () => {
+    const shared = await locations.createOrganizationLocation(asCoordinator(), {
+      code: uniqueCode('supervisor-retire'),
+      name: 'Supervisor cannot retire',
+    });
+
+    await expect(
+      locations.deactivateOrganizationLocation(
+        { userId: ACTOR, role: 'supervisor', siteIds: [SITE_A] },
+        shared.id,
+      ),
+    ).rejects.toThrow(/coordinator/);
+
+    const rows = await inScope<{ deactivated_at: Date | null }>(
+      db.migrator,
+      [],
+      'SELECT deactivated_at FROM organization_location WHERE id = $1',
+      [shared.id],
+    );
+    expect(one(rows).deactivated_at).toBeNull();
+  });
+
+  it('devuelve 404 al retirar una compartida ya retirada', async () => {
+    const shared = await locations.createOrganizationLocation(asCoordinator(), {
+      code: uniqueCode('already-retired'),
+      name: 'Already retired',
+    });
+
+    await locations.deactivateOrganizationLocation(asCoordinator(), shared.id);
+
+    await expect(
+      locations.deactivateOrganizationLocation(asCoordinator(), shared.id),
+    ).rejects.toThrow(/not found/);
+  });
+});

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createLocationSchema,
   createOrganizationLocationSchema,
+  deactivateOrganizationLocationSchema,
   locationOptionSchema,
   locationSchema,
   siteSchema,
@@ -154,6 +155,19 @@ describe('createOrganizationLocationSchema', () => {
   it('rechaza un nombre en blancos', () => {
     expect(
       createOrganizationLocationSchema.safeParse({ code: 'loading-dock', name: '   ' }).success,
+    ).toBe(false);
+  });
+});
+
+describe('deactivateOrganizationLocationSchema', () => {
+  it('acepta únicamente la baja', () => {
+    expect(deactivateOrganizationLocationSchema.safeParse({ deactivated: true }).success).toBe(true);
+  });
+
+  it('rechaza la reactivación y campos adicionales', () => {
+    expect(deactivateOrganizationLocationSchema.safeParse({ deactivated: false }).success).toBe(false);
+    expect(
+      deactivateOrganizationLocationSchema.safeParse({ deactivated: true, name: 'Other' }).success,
     ).toBe(false);
   });
 });

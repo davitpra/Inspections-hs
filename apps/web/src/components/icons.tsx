@@ -153,3 +153,95 @@ export function MenuIcon({ size = 24 }: { size?: number }): React.JSX.Element {
     </svg>
   );
 }
+
+export function SearchIcon({ size = 16 }: { size?: number }): React.JSX.Element {
+  return (
+    <svg {...svgProps(size)}>
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.5-3.5" />
+    </svg>
+  );
+}
+
+export function PlusIcon({ size = 16 }: { size?: number }): React.JSX.Element {
+  return (
+    <svg {...svgProps(size)}>
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
+/** La hoja del builder: identifica el encabezado de «Template builder». */
+export function DocumentIcon({ size = 20 }: { size?: number }): React.JSX.Element {
+  return (
+    <svg {...svgProps(size)}>
+      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+      <path d="M14 3v5h5" />
+      <path d="M9 13h6M9 17h4" />
+    </svg>
+  );
+}
+
+/**
+ * Una planta. Va donde se habla de St. Thomas o Glencoe —el alcance de la plantilla, la
+ * ubicación que resuelve en cada una— y NO donde se habla de un lugar dentro de la planta:
+ * eso es `PinIcon`, y confundirlos haría que el alcance y la ubicación se lean iguales.
+ */
+export function BuildingIcon({ size = 18 }: { size?: number }): React.JSX.Element {
+  return (
+    <svg {...svgProps(size)}>
+      <path d="M4 21V6a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v15" />
+      <path d="M12 10h7a1 1 0 0 1 1 1v10" />
+      <path d="M3 21h18" />
+      <path d="M7 9h2M7 13h2M15 14h2M15 17h2" />
+    </svg>
+  );
+}
+
+/** Duplicar: dos hojas, una detrás de la otra. */
+export function CopyIcon({ size = 16 }: { size?: number }): React.JSX.Element {
+  return (
+    <svg {...svgProps(size)}>
+      <rect x="9" y="9" width="12" height="12" rx="2" />
+      <path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" />
+    </svg>
+  );
+}
+
+/** Quitar. El color lo pone la clase del botón, no el ícono. */
+export function TrashIcon({ size = 16 }: { size?: number }): React.JSX.Element {
+  return (
+    <svg {...svgProps(size)}>
+      <path d="M4 7h16" />
+      <path d="M10 11v6M14 11v6" />
+      <path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" />
+      <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+    </svg>
+  );
+}
+
+/**
+ * El chevron de plegar. Apunta hacia arriba cuando la sección está abierta, y quien lo usa
+ * lo rota por CSS: una sola forma, para que la animación exista sin dos SVG.
+ */
+export function ChevronIcon({ size = 18 }: { size?: number }): React.JSX.Element {
+  return (
+    <svg {...svgProps(size)}>
+      <path d="m6 15 6-6 6 6" />
+    </svg>
+  );
+}
+
+/**
+ * La manija de arrastre. Es lo único de este archivo que NO es decorativo del todo: marca
+ * dónde agarrar. Aun así va `aria-hidden`, porque el botón que lo envuelve lleva el
+ * `aria-label` que lo nombra, y el camino de teclado no es este — es «Move up» / «Move
+ * down» en el menú de la fila (ADR-010).
+ */
+export function GripIcon({ size = 16 }: { size?: number }): React.JSX.Element {
+  return (
+    <svg {...svgProps(size)} strokeWidth={2.4}>
+      <path d="M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01" />
+    </svg>
+  );
+}

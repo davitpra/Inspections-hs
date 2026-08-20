@@ -145,6 +145,16 @@ export const templateDraft = pgTable(
 
     revision: integer('revision').notNull().default(1),
 
+    // DÓNDE SE USA LA PLANTILLA, que no es de quién es (migración 0020 §1). No es
+    // `site_id`, no hay política RLS y no la va a haber: el alcance es contenido
+    // —para qué plantas se escribe— y no tenencia. Existe para poder recortar qué
+    // ubicaciones compartidas puede nombrar una sección, porque el catálogo se
+    // mapea por planta.
+    //
+    // Sin FK: PostgreSQL no la admite sobre el elemento de un arreglo. Que estos
+    // uuid sean sitios lo comprueba el servicio contra el alcance de la sesión.
+    siteIds: uuid('site_ids').array().notNull(),
+
     // Sin referencia, igual que `templateVersion.publishedBy`: es autoría, no una
     // relación que alguien navegue.
     createdBy: uuid('created_by').notNull(),

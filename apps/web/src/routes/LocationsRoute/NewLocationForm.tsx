@@ -1,8 +1,11 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useId, useState } from 'react';
 
+import type { Site } from '@hs/contracts';
+
 import { createLocation, createOrganizationLocation } from '../../api/catalog';
 import { queryKeys } from '../../api/query-keys';
+import { SitePicker } from '../../components/SitePicker';
 import { canCreate, suggestCode } from './presentation';
 
 /**
@@ -19,25 +22,34 @@ import { canCreate, suggestCode } from './presentation';
  *
  * Para una compartida el código pesa más que para una física: es lo que la sección de una
  * plantilla guarda, así que cambiarlo después rompería esa referencia.
+ *
+ * **El alta de planta trae su propio selector.** Antes heredaba la planta del picker de la
+ * página; ahora la página muestra todas a la vez y no hay ninguna «elegida», así que la
+ * elección tiene que estar acá. El tick de la tabla ya cubre el caso normal —crear el lugar
+ * con el nombre de la compartida—; este formulario queda para el otro, el de una física con
+ * nombre propio que después alguien apunta a una compartida.
  */
 export function NewLocationForm({
   scope,
-  siteId,
-  siteName,
+  sites,
 }: {
   scope: 'shared' | 'plant';
-  siteId: string;
-  siteName: string;
+  sites: readonly Site[];
 }): React.JSX.Element {
   const queryClient = useQueryClient();
   const controlId = useId();
 
+  // `null` hasta que alguien elija: `sites` llega por una query, así que fijarlo en el
+  // primer render lo dejaría vacío para siempre.
+  const [chosenSite, setChosenSite] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [codeTouched, setCodeTouched] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const shared = scope === 'shared';
+  const siteId = chosenSite ?? sites[0]?.id ?? '';
+  const siteName = (id: string): string => sites.find((site) => site.id === id)?.name ?? id;
 
   const create = useMutation({
     mutationFn: () =>
@@ -50,7 +62,7 @@ export function NewLocationForm({
       setCodeTouched(false);
       setError(null);
 
-      // Un alta compartida cambia el listado; una física cambia las opciones de cada fila.
+      // Un alta compartida suma una fila; una física suma una huérfana en su planta.
       void queryClient.invalidateQueries({ queryKey: queryKeys.organizationLocations() });
       void queryClient.invalidateQueries({ queryKey: queryKeys.catalogLocations() });
     },
@@ -65,14 +77,20 @@ export function NewLocationForm({
   return (
     <div className="card">
       <div className="card__head">
-        <h3>{shared ? 'Add a shared location' : `Add a location to ${siteName}`}</h3>
+        <h3>{shared ? 'Add a shared location' : 'Add a location to one plant'}</h3>
       </div>
 
       <p className="note">
         {shared
-          ? 'A place every plant has. Template sections are written against these, and each plant then points one of its own locations at it.'
-          : 'A real place in this plant. It becomes selectable above, and findings recorded here will name it.'}
+          ? 'A place every plant has. Template sections are written against these, and each plant then gets its own place for it.'
+          : 'A real place in one plant, named however that plant names it. It will not belong to any shared location until one of them is pointed at it.'}
       </p>
+
+      {shared ? null : (
+        <div className="site-card">
+          <SitePicker sites={sites} value={siteId} onChange={setChosenSite} siteName={siteName} />
+        </div>
+      )}
 
       <div className="filters">
         <label htmlFor={`${controlId}-name`}>Name</label>

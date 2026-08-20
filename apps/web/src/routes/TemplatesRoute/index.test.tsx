@@ -70,6 +70,7 @@ function draft(overrides: Partial<TemplateDraftSummary> = {}): TemplateDraftSumm
     revision: 3,
     updated_at: '2026-08-14T10:00:00.000Z',
     publishable: false,
+    site_ids: [SITE],
     ...overrides,
   };
 }
