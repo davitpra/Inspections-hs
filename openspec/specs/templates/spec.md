@@ -598,8 +598,9 @@ coordinator, and SHALL refuse every other role with a code the interface can act
 message it must parse.
 
 The restriction SHALL be by role and not by site scope, because a template carries no `site_id` by
-design and a draft carries none either: it is organisation reference content, and narrowing it by
-plant would reintroduce the per-plant duplication the model exists to avoid.
+design and a draft's `site_ids` describes where it is intended to be used rather than whose data
+it is. A draft remains organisation reference content, and restricting visibility by plant would
+reintroduce the per-plant duplication the model exists to avoid.
 
 #### Scenario: A non-coordinator cannot read drafts
 
@@ -690,27 +691,37 @@ so that divergence is legible rather than hidden.
 - **THEN** the request succeeds
 - **AND** its `key` is `compressor-check`
 
-### Requirement: Saving over a draft that has moved is refused
+### Requirement: The last save of a live draft wins
 
-The system SHALL carry a `revision` on every draft, increment it on every save, and refuse a save
-that declares a `revision` other than the stored one, leaving the stored document untouched.
+The system SHALL apply every save submitted against a draft that has not been discarded,
+without comparing the submitted document to what the draft held when it was read. Where two
+saves reach a draft one after the other, the later one SHALL be the stored document, and the
+earlier one SHALL be gone.
 
-Two windows open on the same draft is the ordinary case for one author, not a concurrency edge:
-without this, the second save silently discards everything the first one wrote.
+The system SHALL NOT report concurrent authorship. A save is refused only when the draft
+does not exist or has been discarded, when the account is not a coordinator, when the name
+collides with another live draft, or when `site_ids` is empty or names a plant outside the
+account's scope. None of those refusals describes a draft that moved.
 
-#### Scenario: A stale save is refused and changes nothing
+This is the same bargain ADR-001 makes everywhere else in the product: one owner, one
+device, and losing a draft is accepted. A draft under authorship carries no guarantee that
+a second window is not overwriting it, and the system does not pretend otherwise.
 
-- **GIVEN** a draft read at `revision` 4 and then saved by another window, leaving it at `revision` 5
-- **WHEN** a save declaring `revision` 4 is submitted
-- **THEN** the request is refused as `template_draft_stale`
-- **AND** the stored document is the one written at `revision` 5
+#### Scenario: A save against a draft that moved is applied anyway
 
-#### Scenario: A save at the current revision succeeds and advances it
-
-- **GIVEN** a draft at `revision` 5
-- **WHEN** a save declaring `revision` 5 is submitted
+- **GIVEN** a draft read by two windows
+- **AND** the first window has saved a document naming the section `Loading dock`
+- **WHEN** the second window saves a document naming the section `Compressor room`, having
+  never seen the first window's save
 - **THEN** the save succeeds
-- **AND** reading the draft reports `revision` 6
+- **AND** reading the draft reports the section named `Compressor room`
+- **AND** nothing written by the first window survives
+
+#### Scenario: A save against a discarded draft is still refused
+
+- **GIVEN** a draft that has been discarded
+- **WHEN** a save is submitted against it
+- **THEN** the request is refused as `template_draft_not_found`
 
 ### Requirement: A draft is discarded, never deleted
 
@@ -766,6 +777,143 @@ once published, because both are `template` and `template_version` rows written 
 - **WHEN** the migration sequence and the seed command run against an empty database
 - **THEN** the templates available for scheduling include the seeded template
 - **AND** no `template_draft` row exists
+
+### Requirement: A draft declares the plants it is written for
+
+The system SHALL carry on every `template_draft` a non-empty `site_ids` list naming the
+plants the template is being written for, and SHALL expose it on every read of a draft, both
+in the list of drafts and in a single draft.
+
+A draft created without a stated scope SHALL receive the full site scope of the account that
+created it. The scope SHALL be editable for as long as the draft is a draft, and SHALL travel
+inside the same save that carries the `document` and the `name`, because changing where a
+template is meant to be used is an edit like any other and is not worth a second write that
+could interleave with the first.
+
+The system SHALL refuse a save whose `site_ids` is empty, and SHALL refuse a save naming a
+plant outside the site scope of the requesting account, leaving the stored draft untouched in
+both cases. This is selection, not isolation: a template still carries no `site_id`, still
+has no row-level policy, and is still organisation reference content. `site_ids` states
+**where the template is meant to be used**, not whose data it is.
+
+#### Scenario: A new draft is scoped to the whole account
+
+- **WHEN** a coordinator whose scope covers both plants creates a draft
+- **THEN** reading the draft reports `site_ids` naming both plants
+
+#### Scenario: The scope narrows and survives the save
+
+- **GIVEN** a draft scoped to both plants
+- **WHEN** a save declaring a `site_ids` naming only St. Thomas is submitted
+- **THEN** the save succeeds
+- **AND** reading the draft reports `site_ids` naming only St. Thomas
+
+#### Scenario: An empty scope is refused
+
+- **WHEN** a save is submitted with an empty `site_ids`
+- **THEN** the request is refused
+- **AND** the stored draft is unchanged
+
+#### Scenario: A plant outside the account's scope is refused
+
+- **GIVEN** a coordinator account whose site scope covers only Glencoe
+- **WHEN** that account saves a draft whose `site_ids` names St. Thomas
+- **THEN** the request is refused as `template_draft_site_out_of_scope`
+- **AND** the stored draft is unchanged
+
+#### Scenario: The scope is not a site isolation boundary
+
+- **WHEN** two coordinator accounts whose scopes cover different plants list the drafts
+- **THEN** both receive the same entries, whatever each draft's `site_ids` says
+
+### Requirement: A section may only name a location every plant in scope has
+
+The authoring interface SHALL offer, for a section's `organization_location_code`, only those
+organization locations that are mapped to an active location at **every** plant in the draft's
+`site_ids`. An organization location mapped at one plant of a two-plant scope SHALL NOT be
+offered, because a section naming it cannot resolve at the other plant, and a finding raised
+there would be stored with no location at all.
+
+The interface SHALL show, for each plant in scope, the location that the section's chosen
+organization location resolves to at that plant. That resolution SHALL be read-only: a section
+names one organization location, and the per-plant pairing is the mapping's business, not the
+author's.
+
+Narrowing or widening the scope SHALL NOT silently rewrite a section. When a section already
+names an organization location that is not mapped at every plant in the new scope, the interface
+SHALL report that section as needing attention and SHALL keep the stored code, so that the author
+decides whether to remap the location or choose another.
+
+This narrowing is an interface affordance, not a guarantee: the authoritative refusal is the
+document schema at publication time, and the fallback for an unmapped section at ingestion time
+is unchanged.
+
+#### Scenario: A location mapped at only one plant is not offered to a both-plant draft
+
+- **GIVEN** a draft scoped to both plants
+- **AND** an organization location mapped to a location at St. Thomas and at no other plant
+- **WHEN** the author opens the location choices for a section
+- **THEN** that organization location is not among them
+
+#### Scenario: The same location is offered once the scope narrows
+
+- **GIVEN** the draft and organization location of the previous scenario
+- **WHEN** the scope is narrowed to St. Thomas only
+- **THEN** that organization location is among the choices
+
+#### Scenario: The per-plant resolution is shown for the chosen location
+
+- **GIVEN** a draft scoped to both plants
+- **AND** a section naming an organization location mapped to `Shipping dock` at St. Thomas
+  and to `Receiving dock` at Glencoe
+- **WHEN** the section is read in the editor
+- **THEN** it shows `Shipping dock` for St. Thomas and `Receiving dock` for Glencoe
+- **AND** neither is offered as an editable choice
+
+#### Scenario: Narrowing the scope reports a section it leaves stranded, and changes nothing
+
+- **GIVEN** a draft scoped to St. Thomas only with a section naming an organization location
+  mapped only at St. Thomas
+- **WHEN** the scope is widened to both plants
+- **THEN** that section is reported as needing attention
+- **AND** its stored `organization_location_code` is unchanged
+
+### Requirement: A section or a question can be duplicated
+
+The authoring interface SHALL let the author duplicate a section or a question. A duplicate
+SHALL copy everything that describes the content — the prompt or the location, the response
+type and its configuration, and whether an answer is required — and SHALL receive a fresh
+`section_key` or `item_key` that collides with nothing in the document.
+
+A duplicate SHALL be placed immediately after its original, because the author duplicates to
+write a variation of what they are looking at, and appending it to the end would move the work
+away from the place they are working in.
+
+An item's `visible_when` SHALL NOT be carried onto a duplicate. Copying it would produce a
+second item answering to the same condition, which is almost never what was meant and which can
+silently break the strictly-backwards reference rule when the duplicate is later moved.
+
+#### Scenario: Duplicating a question keeps its content and takes a new identity
+
+- **GIVEN** a section whose second item is a required `scale` question with `min` 1 and `max` 5
+- **WHEN** that item is duplicated
+- **THEN** the section has a third item carrying the same `prompt`, `response_type`, `min`,
+  `max` and `required`
+- **AND** its `item_key` differs from every other `item_key` in the document
+- **AND** it sits immediately after the item it was duplicated from
+
+#### Scenario: Duplicating a section copies its questions
+
+- **GIVEN** a section with three items
+- **WHEN** the section is duplicated
+- **THEN** the new section has three items whose prompts match, in the same order
+- **AND** no `section_key` or `item_key` appears twice in the document
+
+#### Scenario: A duplicate does not inherit a visibility condition
+
+- **GIVEN** an item carrying a `visible_when` condition
+- **WHEN** it is duplicated
+- **THEN** the duplicate carries no `visible_when`
 
 ### Requirement: The templates offered for scheduling are those with a published version
 

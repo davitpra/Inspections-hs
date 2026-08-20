@@ -1,13 +1,13 @@
 ## 1. Esquema
 
 - [x] 1.1 Escribir `apps/api/drizzle/0020_template_draft_site_scope.sql` a mano: `ADD COLUMN
-      site_ids uuid[] NOT NULL DEFAULT '{}'::uuid[]`, backfill con los sitios activos,
+    site_ids uuid[] NOT NULL DEFAULT '{}'::uuid[]`, backfill con los sitios activos,
       `CHECK (cardinality(site_ids) >= 1)`, y `GRANT UPDATE (site_ids) ON template_draft TO
-      hs_app` sumado a la lista de 0016 §4. Cabecera que declare que **no toca ninguna tabla
+    hs_app` sumado a la lista de 0016 §4. Cabecera que declare que **no toca ninguna tabla
       inmutable** y que la tabla sigue **sin `site_id` y sin RLS** (ver design.md, decisión 1).
 - [x] 1.2 Agregar `site_ids` al esquema Drizzle de `template_draft` en `apps/api/src/db/schema/`.
 - [x] 1.3 Correr `pnpm db:migrate` contra la base local y comprobar a mano que `UPDATE
-      template_draft SET site_ids = '{}'` falla por el CHECK y que `UPDATE … SET key = …`
+    template_draft SET site_ids = '{}'` falla por el CHECK y que `UPDATE … SET key = …`
       sigue fallando por privilegio.
 
 ## 2. Contratos
@@ -79,6 +79,6 @@
       alcance, ver el recorte de ubicaciones y la resolución por planta, duplicar y quitar, y
       conservar el caso de guardado rechazado que no borra lo escrito.
 - [x] 7.2 `pnpm -r build && pnpm typecheck && pnpm lint && pnpm test && pnpm --filter api
-      test:int`, y comprobar que el precache sigue bajo los 900 KiB.
-- [ ] 7.3 Revisar la consola contra `docs/mock/template builder desktop.png` en `pnpm dev`, y
+    test:int`, y comprobar que el precache sigue bajo los 900 KiB.
+- [x] 7.3 Revisar la consola contra `docs/mock/template builder desktop.png` en `pnpm dev`, y
       en una ventana angosta que el panel derecho baje debajo del editor.
