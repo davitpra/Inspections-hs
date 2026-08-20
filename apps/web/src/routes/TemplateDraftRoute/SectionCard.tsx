@@ -149,17 +149,19 @@ export function SectionCard({
         </div>
 
         <div className="builder__section-actions">
-          <button type="button" onClick={onDuplicate} aria-label={`Duplicate ${label}`}>
-            <CopyIcon /> Duplicate section
-          </button>
-          <button
-            type="button"
-            className="button--danger-quiet"
-            onClick={onRemove}
-            aria-label={`Remove ${label}`}
-          >
-            <TrashIcon /> Remove section
-          </button>
+          <div className="builder__section-primary-actions">
+            <button type="button" onClick={onDuplicate} aria-label={`Duplicate ${label}`}>
+              <CopyIcon /> <span className="builder__action-label">Duplicate section</span>
+            </button>
+            <button
+              type="button"
+              className="button--danger-quiet"
+              onClick={onRemove}
+              aria-label={`Remove ${label}`}
+            >
+              <TrashIcon /> <span className="builder__action-label">Remove section</span>
+            </button>
+          </div>
           <button
             type="button"
             className={open ? 'builder__collapse' : 'builder__collapse is-closed'}

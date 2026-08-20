@@ -1,9 +1,7 @@
-import type { Site } from '@hs/contracts';
-import { useId } from 'react';
+import type { Site } from "@hs/contracts";
+import { useId } from "react";
 
-import { InfoIcon } from '../../components/icons';
-import { ScopePicker } from './ScopePicker';
-import { scopeNotice } from './presentation';
+import { ScopePicker } from "./ScopePicker";
 
 /**
  * Lo que la plantilla ES antes de tener una sola pregunta: cómo se llama y dónde se usa.
@@ -50,24 +48,12 @@ export function TemplateIdentity({
             onChange={(event) => onName(event.target.value)}
           />
           <p className="note">
-            Give your template a clear name so it&apos;s easy to find. Key <code>{templateKey}</code>
+            Give your template a clear name so it&apos;s easy to find. Key{" "}
+            <code>{templateKey}</code>
           </p>
         </div>
 
         <ScopePicker sites={sites} value={siteIds} onChange={onScope} />
-      </div>
-
-      {/*
-        Lo que el selector no puede decir por sí solo, y que es la mitad del change: el
-        alcance no solo dice dónde corre la plantilla, decide qué lugares puede nombrar.
-      */}
-      <div className="notice-card">
-        <div className="notice-card__body">
-          <span className="notice-card__icon">
-            <InfoIcon size={20} />
-          </span>
-          <p className="notice-card__text">{scopeNotice(siteIds, sites)}</p>
-        </div>
       </div>
     </section>
   );
