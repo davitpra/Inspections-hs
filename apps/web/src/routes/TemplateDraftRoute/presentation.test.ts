@@ -11,6 +11,7 @@ import {
   locationCoverage,
   offerableLocations,
   saveButtonLabel,
+  saveStateLabel,
   saveErrorNotice,
   scopeLabel,
   sectionAppliesTo,
@@ -79,6 +80,13 @@ describe('saveButtonLabel', () => {
     expect(saveButtonLabel(true, true)).toBe('Saving…');
     expect(saveButtonLabel(false, true)).toBe('Save draft');
     expect(saveButtonLabel(false, false)).toBe('Saved');
+  });
+});
+
+describe('saveStateLabel', () => {
+  it('dice Saved o Unsaved changes sin numerar el estado', () => {
+    expect(saveStateLabel(false)).toBe('Saved');
+    expect(saveStateLabel(true)).toBe('Unsaved changes');
   });
 });
 

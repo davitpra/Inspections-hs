@@ -17,12 +17,11 @@ export interface TemplateDraftRecord extends Record<string, unknown> {
   key: string;
   name: string;
   document: TemplateDraftDocument;
-  revision: number;
   updated_at: Date;
   site_ids: string[];
 }
 
-const DRAFT_COLUMNS = 'id, key, name, document, revision, updated_at, site_ids';
+const DRAFT_COLUMNS = 'id, key, name, document, updated_at, site_ids';
 
 /** Los borradores vivos, el más trabajado primero. */
 export async function findDrafts(client: PoolClient): Promise<TemplateDraftRecord[]> {
@@ -157,19 +156,15 @@ export async function insertDraft(
 }
 
 /**
- * El guardado, con el lock optimista adentro del `WHERE`.
+ * El guardado de un borrador vivo.
  *
- * `revision = revision + 1` y `revision = $4` en la misma sentencia: no hay lectura previa
- * que pueda quedar vieja entre el chequeo y la escritura. Cero filas significa una de dos
- * cosas —la revisión ya no es esa, o el borrador fue descartado— y el servicio las
- * distingue con una lectura de seguimiento, porque el autor merece saber cuál de las dos le
- * pasó.
+ * Cero filas solo significa que el borrador no existe o fue descartado. El último guardado
+ * de una fila viva gana, incluso si el documento se leyó antes en otra ventana.
  *
  * `key` no se toca, y tampoco podría: no está en el `GRANT UPDATE` de 0016 §4.
  *
- * `site_ids` sí entra, y va en ESTA sentencia y no en otra: cambiar el alcance es una
- * edición como cualquiera y tiene que caer bajo el mismo lock. Dos escrituras separadas se
- * pueden intercalar, y la segunda no sabría contra qué revisión se decidió la primera.
+ * `site_ids` sí entra en ESTA sentencia: cambiar el alcance es una edición como cualquiera y
+ * el autor la confirma con el mismo guardado que el documento.
  */
 export async function updateDraft(
   client: PoolClient,
@@ -177,7 +172,6 @@ export async function updateDraft(
     id: string;
     name: string;
     document: TemplateDraftDocument;
-    revision: number;
     siteIds: readonly string[];
   },
 ): Promise<TemplateDraftRecord | null> {
@@ -185,18 +179,15 @@ export async function updateDraft(
     `UPDATE template_draft
         SET name = $2,
             document = $3,
-            revision = revision + 1,
-            updated_at = now(),
-            site_ids = $5::uuid[]
-      WHERE id = $1
-        AND revision = $4
-        AND discarded_at IS NULL
+             updated_at = now(),
+             site_ids = $4::uuid[]
+       WHERE id = $1
+         AND discarded_at IS NULL
   RETURNING ${DRAFT_COLUMNS}`,
     [
       update.id,
       update.name,
       JSON.stringify(update.document),
-      update.revision,
       update.siteIds,
     ],
   );

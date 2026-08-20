@@ -129,7 +129,6 @@ export const templateVersionItem = pgTable(
  * segunda mitad de la etapa 8. Por eso `template_draft` no aparece en ninguna
  * consulta de `templateOption`: son dos poblaciones que no se tocan.
  *
- * `revision` es el lock optimista; el UPDATE lo incrementa y filtra por él.
  * `key` y `createdBy` no están en el `GRANT UPDATE` de la migración, así que
  * escribirlos falla en el motor aunque este espejo los deje tipar.
  */
@@ -142,8 +141,6 @@ export const templateDraft = pgTable(
 
     // La forma laxa: `templateDraftDocumentSchema` de @hs/forms, sin `position`.
     document: jsonb('document').$type<TemplateDraftDocument>().notNull(),
-
-    revision: integer('revision').notNull().default(1),
 
     // DÓNDE SE USA LA PLANTILLA, que no es de quién es (migración 0020 §1). No es
     // `site_id`, no hay política RLS y no la va a haber: el alcance es contenido

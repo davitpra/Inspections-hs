@@ -65,13 +65,11 @@ export function hasConfiguration(responseType: ResponseType): boolean {
 /**
  * Lo que el encabezado dice al lado de la píldora «Draft».
  *
- * NO DICE «Auto-saved», que es lo que dibuja el mockup: no hay autosave —el lock de
- * revisión y el guardado automático se contradicen— y anunciarlo sería la peor clase de
- * mentira, la que tranquiliza. Dice la revisión guardada, que es el dato que el autor
- * necesita cuando el servidor le rechaza un guardado por obsoleto.
+ * NO DICE «Auto-saved», que es lo que dibuja el mockup: no hay autosave y anunciarlo
+ * sería la peor clase de mentira, la que tranquiliza.
  */
-export function saveStateLabel(revision: number, dirty: boolean): string {
-  return dirty ? 'Unsaved changes' : `Saved revision ${revision}`;
+export function saveStateLabel(dirty: boolean): string {
+  return dirty ? 'Unsaved changes' : 'Saved';
 }
 
 /** El texto del botón de guardar según en qué está. */
@@ -83,10 +81,8 @@ export function saveButtonLabel(pending: boolean, dirty: boolean): string {
 /**
  * Qué decir cuando el guardado fue rechazado.
  *
- * `request.ts` pierde el `code` a propósito y deja solo el mensaje, y para este caso alcanza:
- * el mensaje de `template_draft_stale` ya dice qué hacer —recargar antes de volver a
- * guardar—. Lo que agrega esta función es no perder lo escrito: el aviso aclara que el
- * documento sigue en pantalla.
+ * `request.ts` pierde el `code` a propósito y deja solo el mensaje. Lo que agrega esta
+ * función es no perder lo escrito: el aviso aclara que el documento sigue en pantalla.
  */
 export function saveErrorNotice(message: string): string {
   return `${message} Nothing you typed has been lost — copy anything you need before reloading.`;

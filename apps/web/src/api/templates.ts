@@ -44,10 +44,9 @@ export async function createTemplateDraft(body: CreateTemplateDraft): Promise<Te
  * `PUT` y el documento entero: reordenar dos secciones y agregar un ítem no es una secuencia
  * de parches que tenga sentido aplicar a medias.
  *
- * `body.revision` es la revisión sobre la que se editó. Si el servidor la rechaza, el error
- * llega como un `Error` con el mensaje de `template_draft_stale` —`request.ts` pierde el
- * código a propósito— y la pantalla lo muestra tal cual, que para este caso alcanza: el
- * mensaje del servidor ya dice qué hacer.
+ * El documento y el alcance viajan juntos: cambiar cualquiera de los dos es una edición
+ * completa que el autor confirma con un solo guardado. Si el borrador ya no existe o fue
+ * descartado, el servidor devuelve el mismo error de no encontrado que para cualquier lectura.
  */
 export async function saveTemplateDraft(
   id: string,

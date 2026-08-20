@@ -10,22 +10,16 @@ import { saveButtonLabel, saveStateLabel } from './presentation';
  * general y duplicarlo con otro prefijo habría dejado dos encabezados que hay que mantener
  * parecidos a mano.
  *
- * **DICE «Saved revision N», NO «Auto-saved».** El mockup escribe lo segundo y no se
- * implementa: no hay autosave, y no lo hay porque el lock de revisión y el guardado
- * automático se contradicen —dos ventanas del mismo autor es el caso normal, y una de las
- * dos empezaría a perder contra la otra sin que nadie toque un botón—. Un encabezado que
- * dijera «Auto-saved 2 min ago» sobre un editor que no guarda solo sería la peor clase de
- * mentira: la que tranquiliza.
+ * **DICE «Saved» / «Unsaved changes», NO «Auto-saved».** El mockup escribe lo segundo y
+ * no se implementa: el guardado es explícito.
  */
 export function DraftHeader({
-  revision,
   dirty,
   saving,
   canSave,
   onSave,
   onDiscard,
 }: {
-  revision: number;
   dirty: boolean;
   saving: boolean;
   canSave: boolean;
@@ -49,7 +43,7 @@ export function DraftHeader({
       <div className="builder__actions">
         <div className="builder__state">
           <span className="status-pill status-pill--draft">Draft</span>
-          <span className="note">{saveStateLabel(revision, dirty)}</span>
+          <span className="note">{saveStateLabel(dirty)}</span>
         </div>
 
         <button

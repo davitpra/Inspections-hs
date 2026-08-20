@@ -20,8 +20,7 @@ export type TemplateDraftErrorCode =
   | 'template_draft_not_found'
   | 'template_draft_name_taken'
   | 'template_draft_name_unusable'
-  | 'template_draft_site_out_of_scope'
-  | 'template_draft_stale';
+  | 'template_draft_site_out_of_scope';
 
 export class TemplateDraftException extends HttpException {
   constructor(
@@ -115,18 +114,4 @@ export const templateDraftSiteOutOfScope = (): TemplateDraftException =>
     'template_draft_site_out_of_scope',
     'A template can only be scoped to the plants your account administers',
     HttpStatus.UNPROCESSABLE_ENTITY,
-  );
-
-/**
- * El borrador cambió desde que este cliente lo leyó.
- *
- * Dos ventanas del mismo autor sobre el mismo borrador es el caso normal, no el raro. Sin
- * este rechazo, la segunda en guardar se lleva puesto todo lo que escribió la primera y
- * nadie se entera hasta que falta media plantilla.
- */
-export const templateDraftStale = (): TemplateDraftException =>
-  new TemplateDraftException(
-    'template_draft_stale',
-    'This draft was changed somewhere else. Reload it before saving again.',
-    HttpStatus.CONFLICT,
   );

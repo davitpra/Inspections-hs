@@ -19,7 +19,6 @@ import {
   templateDraftNameUnusable,
   templateDraftNotFound,
   templateDraftSiteOutOfScope,
-  templateDraftStale,
 } from './templates.errors';
 import {
   discardDraft,
@@ -184,9 +183,7 @@ export class TemplatesService {
    * campo que le sobra al tipo—, y lo rechazó `saveTemplateDraftSchema` en el
    * controller.
    *
-   * Cero filas afectadas son dos cosas distintas y el autor merece saber cuál:
-   * si el borrador sigue vivo, la revisión quedó vieja; si no está, lo descartaron
-   * mientras editaba. Por eso la lectura de seguimiento.
+   * Cero filas afectadas solo significa que el borrador no existe o fue descartado.
    */
   async saveDraft(
     session: SessionScope,
@@ -211,7 +208,6 @@ export class TemplatesService {
         id,
         name,
         document: input.document,
-        revision: input.revision,
         siteIds: input.site_ids,
       }).catch((caught: unknown) => {
         if (isDraftUniqueViolation(caught)) throw templateDraftNameTaken(name);
@@ -221,9 +217,7 @@ export class TemplatesService {
 
       if (saved) return toDraft(saved);
 
-      const current = await findDraft(client, id);
-
-      throw current ? templateDraftStale() : templateDraftNotFound();
+      throw templateDraftNotFound();
     });
   }
 
@@ -273,7 +267,6 @@ function toSummary(row: TemplateDraftRecord): TemplateDraftSummary {
     id: row.id,
     key: row.key,
     name: row.name,
-    revision: row.revision,
     updated_at: row.updated_at.toISOString(),
     publishable: draftIssues(row.document).length === 0,
     site_ids: row.site_ids,

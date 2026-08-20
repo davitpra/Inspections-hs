@@ -141,6 +141,13 @@
       "when": 1754524800019,
       "tag": "0020_template_draft_site_scope",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1754524800020,
+      "tag": "0021_retire_template_draft_revision",
+      "breakpoints": true
     }
   ]
 }

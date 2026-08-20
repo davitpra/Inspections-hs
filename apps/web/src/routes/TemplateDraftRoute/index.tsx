@@ -61,10 +61,8 @@ import { useSortable } from "./useSortable";
  * §7 etapa 8 — Escribir una plantilla: para qué plantas vale, qué secciones tiene, qué
  * preguntas van en cada una y en qué orden.
  *
- * EL DOCUMENTO VIVE EN ESTADO LOCAL Y SE GUARDA A PEDIDO. Sin autosave y sin actualización
- * optimista, que es como trabaja el resto de este cliente y lo único compatible con el lock:
- * cada guardado declara la revisión sobre la que se editó, y el servidor rechaza si ya no es
- * esa. Dos pestañas del mismo autor es el caso normal, no el raro.
+ * EL DOCUMENTO VIVE EN ESTADO LOCAL Y SE GUARDA A PEDIDO. No hay autosave ni actualización
+ * optimista: el autor decide cuándo se escribe el documento completo.
  *
  * **Un rechazo NO borra lo escrito.** El documento sigue en el `useState`; el aviso dice qué
  * pasó y que nada se perdió. Descartar el trabajo del autor para volver a mostrar lo que el
@@ -174,7 +172,6 @@ function DraftEditor({
    *
    * `key` es el id y NO el borrador entero: un refetch de fondo devuelve un objeto nuevo con
    * el mismo id, así que el formulario no se remonta y lo que se está escribiendo sobrevive.
-   * Para eso está el lock de revisión — avisa en el guardado en vez de borrar sin preguntar.
    *
    * Las plantas se recortan por el alcance de la CUENTA: `listSites` puede devolver alguna
    * que esta no administra, y ofrecerla como opción de alcance sería ofrecer un rechazo —el
@@ -208,12 +205,11 @@ function DraftForm({
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
-  /** El documento, el nombre y el alcance en edición, y la revisión sobre la que se editó. */
+  /** El documento, el nombre y el alcance en edición. */
   const [edited, setEdited] = useState(() => ({
     document: loaded.document,
     name: loaded.name,
     siteIds: loaded.site_ids,
-    revision: loaded.revision,
     savedDocument: loaded.document,
     savedName: loaded.name,
     savedSiteIds: loaded.site_ids,
@@ -225,14 +221,12 @@ function DraftForm({
         name: edited.name.trim(),
         document: edited.document,
         site_ids: [...edited.siteIds],
-        revision: edited.revision,
       }),
     onSuccess: (saved) => {
       setEdited({
         document: saved.document,
         name: saved.name,
         siteIds: saved.site_ids,
-        revision: saved.revision,
         savedDocument: saved.document,
         savedName: saved.name,
         savedSiteIds: saved.site_ids,
@@ -256,7 +250,7 @@ function DraftForm({
 
   const { document, siteIds } = edited;
 
-  /** Escribe el documento editado sin tocar lo guardado ni la revisión. */
+  /** Escribe el documento editado sin tocar lo que ya fue guardado. */
   const write = (next: TemplateDraftDocument): void =>
     setEdited((current) => ({ ...current, document: next }));
 
@@ -283,7 +277,6 @@ function DraftForm({
       </Link>
 
       <DraftHeader
-        revision={edited.revision}
         dirty={dirty}
         saving={save.isPending}
         canSave={

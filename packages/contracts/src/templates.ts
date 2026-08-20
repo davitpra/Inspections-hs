@@ -102,7 +102,6 @@ export const templateDraftSummarySchema = z.strictObject({
   id: z.uuid(),
   key: templateKeySchema,
   name: z.string().min(1),
-  revision: z.int().positive(),
   updated_at: z.string(),
   publishable: z.boolean(),
   site_ids: siteScopeSchema,
@@ -151,10 +150,6 @@ export type CreateTemplateDraft = z.infer<typeof createTemplateDraftSchema>;
 /**
  * Guardar un borrador.
  *
- * `revision` es el lock: el cliente declara sobre qué revisión editó y el servidor
- * rechaza si ya no es esa. Sin él, dos pestañas del mismo autor —el caso normal, no el
- * raro— hacen que la segunda pise a la primera sin que nadie se entere.
- *
  * `key` NO está, y no es un olvido: se deriva del nombre al crear y después es write-once
  * (`0016` §4 no la incluye en el GRANT UPDATE). Renombrar un borrador NO la mueve, así que
  * uno renombrado puede quedar con una clave que ya no se le parece — deliberado, porque un
@@ -162,14 +157,12 @@ export type CreateTemplateDraft = z.infer<typeof createTemplateDraftSchema>;
  * editor la muestra de solo lectura en vez de esconderla del todo.
  *
  * `site_ids` SÍ está, y viaja en el mismo guardado que el documento a propósito: cambiar
- * el alcance es una edición como cualquier otra y tiene que quedar bajo el mismo lock.
- * Un endpoint aparte para el alcance dejaría dos escrituras que se pueden intercalar, y
- * la segunda no sabría contra qué revisión se decidió la primera.
+ * el alcance es una edición como cualquier otra y el autor la confirma con un solo botón.
+ * Un endpoint aparte dividiría una edición en dos escrituras que podrían intercalarse.
  */
 export const saveTemplateDraftSchema = z.strictObject({
   name: z.string().min(1),
   document: templateDraftDocumentSchema,
-  revision: z.int().positive(),
   site_ids: siteScopeSchema,
 });
 

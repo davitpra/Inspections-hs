@@ -19,9 +19,8 @@ import { inScope, one, sqlstate, startTestDatabase, type TestDatabase } from './
  *   - **Borrar sigue prohibido**, para el rol de la app por privilegio y para el migrador
  *     por trigger. Es el invariante de ADR-002 sobre una tabla que, por lo demás, se
  *     reescribe cien veces.
- *   - **El lock optimista está en el `WHERE`.** Un guardado con revisión vieja tiene que
- *     rechazarse sin escribir nada, y eso depende de que el `UPDATE` y su condición sean la
- *     misma sentencia.
+ *   - **El último guardado de un borrador vivo gana.** Dos guardados completos se aplican en
+ *     orden y el segundo deja el documento que escribió, sin una regla especial de concurrencia.
  *
  * Y una cuarta, que es el requisito entero: **un borrador incompleto se guarda igual** y
  * dice qué le falta.
@@ -104,21 +103,21 @@ afterAll(async () => {
 });
 
 describe('lo que el motor permite y lo que no', () => {
-  it('deja actualizar el documento, el nombre y la revisión', async () => {
+  it('deja actualizar el documento y el nombre', async () => {
     const draft = await newDraft();
 
-    const rows = await inScope<{ name: string; revision: number }>(
+    const rows = await inScope<{ name: string; document: TemplateDraftDocument }>(
       db.app,
       [SITE],
       `UPDATE template_draft
-          SET name = 'Renamed', document = $2::jsonb, revision = revision + 1, updated_at = now()
+          SET name = 'Renamed', document = $2::jsonb, updated_at = now()
         WHERE id = $1
-    RETURNING name, revision`,
+    RETURNING name, document`,
       [draft.id, JSON.stringify(usableDocument())],
     );
 
     expect(one(rows).name).toBe('Renamed');
-    expect(one(rows).revision).toBe(2);
+    expect(one(rows).document).toEqual(usableDocument());
   });
 
   it('NO deja reescribir la key: no está en el GRANT UPDATE de 0016 §4', async () => {
@@ -230,7 +229,6 @@ describe('quién puede escribir plantillas', () => {
           name: 'Nope',
           document: usableDocument(),
           site_ids: [SITE],
-          revision: 1,
         }),
       ).rejects.toMatchObject(rejected);
       await expect(templates.discardDraft(other, coordinatorId)).rejects.toMatchObject(rejected);
@@ -256,7 +254,6 @@ describe('el borrador incompleto', () => {
     const draft = await newDraft();
 
     expect(draft.document).toEqual({ sections: [] });
-    expect(draft.revision).toBe(1);
     expect(draft.publishable).toBe(false);
     expect(draft.issues.map((issue) => issue.message).join()).toContain('no sections');
   });
@@ -268,7 +265,6 @@ describe('el borrador incompleto', () => {
       name: draft.name,
       document: { sections: [{ section_key: 'guarding', section_title: 'Guarding', items: [] }] },
       site_ids: [SITE],
-      revision: draft.revision,
     });
 
     expect(saved.publishable).toBe(false);
@@ -302,7 +298,6 @@ describe('el borrador incompleto', () => {
         ],
       },
       site_ids: [SITE],
-      revision: draft.revision,
     });
 
     expect(saved.publishable).toBe(false);
@@ -316,7 +311,6 @@ describe('el borrador incompleto', () => {
       name: draft.name,
       document: usableDocument(),
       site_ids: [SITE],
-      revision: draft.revision,
     });
 
     expect(saved.publishable).toBe(true);
@@ -330,7 +324,6 @@ describe('el borrador incompleto', () => {
       name: draft.name,
       document: usableDocument(),
       site_ids: [SITE],
-      revision: draft.revision,
     });
 
     const listed = (await templates.listDrafts(asCoordinator())).find(
@@ -342,52 +335,26 @@ describe('el borrador incompleto', () => {
   });
 });
 
-describe('el lock optimista', () => {
-  it('avanza la revisión en cada guardado', async () => {
+describe('el último guardado gana', () => {
+  it('aplica el segundo guardado aunque ambas ventanas leyeran el mismo borrador', async () => {
     const draft = await newDraft();
 
-    const first = await templates.saveDraft(asCoordinator(), draft.id, {
-      name: draft.name,
-      document: usableDocument(),
-      site_ids: [SITE],
-      revision: draft.revision,
-    });
-
-    expect(first.revision).toBe(2);
-
-    const second = await templates.saveDraft(asCoordinator(), draft.id, {
-      name: 'Second pass',
-      document: usableDocument(),
-      site_ids: [SITE],
-      revision: first.revision,
-    });
-
-    expect(second.revision).toBe(3);
-  });
-
-  it('rechaza el guardado con revisión vieja y no pisa nada', async () => {
-    const draft = await newDraft();
-
-    const winner = await templates.saveDraft(asCoordinator(), draft.id, {
+    await templates.saveDraft(asCoordinator(), draft.id, {
       name: 'Written by the first window',
       document: usableDocument(),
       site_ids: [SITE],
-      revision: draft.revision,
     });
 
-    await expect(
-      templates.saveDraft(asCoordinator(), draft.id, {
-        name: 'Written by the second window',
-        document: { sections: [] },
-        site_ids: [SITE],
-        revision: draft.revision,
-      }),
-    ).rejects.toMatchObject({ response: { code: 'template_draft_stale' } });
+    await templates.saveDraft(asCoordinator(), draft.id, {
+      name: 'Written by the second window',
+      document: { sections: [] },
+      site_ids: [SITE],
+    });
 
     const current = await templates.getDraft(asCoordinator(), draft.id);
 
-    expect(current.name).toBe('Written by the first window');
-    expect(current.revision).toBe(winner.revision);
+    expect(current.name).toBe('Written by the second window');
+    expect(current.document).toEqual({ sections: [] });
   });
 });
 
@@ -423,7 +390,6 @@ describe('descartar', () => {
         name: draft.name,
         document: usableDocument(),
         site_ids: [SITE],
-        revision: draft.revision,
       }),
     ).rejects.toMatchObject(rejected);
     await expect(templates.discardDraft(asCoordinator(), draft.id)).rejects.toMatchObject(rejected);
@@ -515,7 +481,6 @@ describe('renombrar', () => {
       name: 'Annual boiler check',
       document: usableDocument(),
       site_ids: [SITE],
-      revision: draft.revision,
     });
 
     expect(saved.name).toBe('Annual boiler check');
@@ -531,7 +496,6 @@ describe('renombrar', () => {
         name: first.name,
         document: usableDocument(),
         site_ids: [SITE],
-        revision: second.revision,
       }),
     ).rejects.toMatchObject({ response: { code: 'template_draft_name_taken' } });
   });
@@ -543,7 +507,6 @@ describe('renombrar', () => {
       name: draft.name,
       document: usableDocument(),
       site_ids: [SITE],
-      revision: draft.revision,
     });
 
     expect(saved.name).toBe('Ladder inspection');
@@ -558,7 +521,6 @@ describe('las dos poblaciones no se tocan', () => {
       name: draft.name,
       document: usableDocument(),
       site_ids: [SITE],
-      revision: draft.revision,
     });
 
     const offered = await templates.list(asCoordinator());
@@ -574,7 +536,6 @@ describe('las dos poblaciones no se tocan', () => {
       name: draft.name,
       document: usableDocument(),
       site_ids: [SITE],
-      revision: draft.revision,
     });
 
     expect(await countPublished()).toEqual(before);
@@ -602,8 +563,7 @@ async function countPublished(): Promise<Record<string, string>> {
  * plantas distintas siguen viendo los mismos borradores, alcance o no alcance.
  *
  * Lo que sí hay que probar contra Postgres de verdad: que el CHECK de cardinalidad existe
- * (ningún mock lo tiene) y que `site_ids` viaja DENTRO del UPDATE con lock, es decir que un
- * guardado obsoleto tampoco mueve el alcance.
+ * (ningún mock lo tiene) y que `site_ids` viaja dentro del mismo UPDATE que el documento.
  */
 describe('el alcance de plantas de un borrador', () => {
   it('nace con todo el alcance de la cuenta que lo creó', async () => {
@@ -615,7 +575,7 @@ describe('el alcance de plantas de un borrador', () => {
     expect([...draft.site_ids].sort()).toEqual([SITE, OTHER_SITE].sort());
   });
 
-  it('se puede achicar, y el guardado lo devuelve con la revisión avanzada', async () => {
+   it('se puede achicar y el guardado lo devuelve', async () => {
     const draft = await templates.createDraft(
       { userId: coordinatorId, role: 'hs_coordinator', siteIds: [SITE, OTHER_SITE] },
       { name: 'Narrowed to one plant' },
@@ -628,12 +588,10 @@ describe('el alcance de plantas de un borrador', () => {
         name: draft.name,
         document: usableDocument(),
         site_ids: [SITE],
-        revision: draft.revision,
       },
     );
 
     expect(saved.site_ids).toEqual([SITE]);
-    expect(saved.revision).toBe(draft.revision + 1);
   });
 
   it('viaja en el listado, no solo en el detalle', async () => {
@@ -652,14 +610,12 @@ describe('el alcance de plantas de un borrador', () => {
         name: draft.name,
         document: usableDocument(),
         site_ids: [SITE, OTHER_SITE],
-        revision: draft.revision,
       }),
     ).rejects.toMatchObject({ response: { code: 'template_draft_site_out_of_scope' } });
 
     const unchanged = await templates.getDraft(asCoordinator(), draft.id);
 
     expect(unchanged.site_ids).toEqual([SITE]);
-    expect(unchanged.revision).toBe(draft.revision);
   });
 
   /**
@@ -676,32 +632,6 @@ describe('el alcance de plantas de un borrador', () => {
     ).rejects.toSatisfy((error) => sqlstate(error) === CHECK_VIOLATION);
   });
 
-  it('un guardado con revisión vieja tampoco mueve el alcance', async () => {
-    const draft = await templates.createDraft(
-      { userId: coordinatorId, role: 'hs_coordinator', siteIds: [SITE, OTHER_SITE] },
-      { name: 'Stale save keeps the scope' },
-    );
-    const wide = { userId: coordinatorId, role: 'hs_coordinator', siteIds: [SITE, OTHER_SITE] };
-
-    await templates.saveDraft(wide, draft.id, {
-      name: draft.name,
-      document: usableDocument(),
-      site_ids: [SITE],
-      revision: draft.revision,
-    });
-
-    await expect(
-      templates.saveDraft(wide, draft.id, {
-        name: draft.name,
-        document: usableDocument(),
-        site_ids: [OTHER_SITE],
-        revision: draft.revision,
-      }),
-    ).rejects.toMatchObject({ response: { code: 'template_draft_stale' } });
-
-    expect((await templates.getDraft(wide, draft.id)).site_ids).toEqual([SITE]);
-  });
-
   it('el alcance NO recorta quién ve el borrador: no es aislamiento', async () => {
     const narrowed = await templates.createDraft(
       { userId: coordinatorId, role: 'hs_coordinator', siteIds: [SITE, OTHER_SITE] },
@@ -715,7 +645,6 @@ describe('el alcance de plantas de un borrador', () => {
         name: narrowed.name,
         document: usableDocument(),
         site_ids: [OTHER_SITE],
-        revision: narrowed.revision,
       },
     );
 

@@ -106,7 +106,6 @@ function draft(overrides: Partial<TemplateDraft> = {}): TemplateDraft {
     id: DRAFT,
     key: 'monthly-electrical',
     name: 'Monthly electrical inspection',
-    revision: 4,
     updated_at: '2026-08-14T10:00:00.000Z',
     site_ids: [ST_THOMAS, GLENCOE],
     document,
@@ -146,7 +145,6 @@ async function openMenu(name: string): Promise<HTMLElement> {
 function lastSave(): {
   name: string;
   document: unknown;
-  revision: number;
   site_ids: string[];
 } {
   const call = saveTemplateDraft.mock.calls.at(-1);
@@ -167,7 +165,7 @@ beforeEach(() => {
     .mockReset()
     .mockImplementation(
       async (_id: string, body: { name: string; document: never; site_ids: string[] }) =>
-        draft({ ...body, revision: 5 }),
+        draft({ ...body }),
     );
 });
 
@@ -243,7 +241,7 @@ describe('el alcance de plantas', () => {
     );
   });
 
-  it('viaja en el guardado, con la revisión sobre la que se editó', async () => {
+  it('viaja en el guardado', async () => {
     renderRoute();
     await ready();
 
@@ -253,7 +251,6 @@ describe('el alcance de plantas', () => {
     await waitFor(() => expect(saveTemplateDraft).toHaveBeenCalled());
 
     expect(lastSave().site_ids).toEqual([ST_THOMAS]);
-    expect(lastSave().revision).toBe(4);
   });
 
   it('cambiarlo cuenta como un cambio sin guardar', async () => {
@@ -619,7 +616,7 @@ describe('el panel de resumen', () => {
 });
 
 describe('guardar', () => {
-  it('manda el documento y la revisión sobre la que se editó', async () => {
+  it('manda el documento completo', async () => {
     renderRoute();
     await ready();
 
@@ -629,7 +626,6 @@ describe('guardar', () => {
     await waitFor(() => expect(saveTemplateDraft).toHaveBeenCalledWith(DRAFT, expect.anything()));
 
     const body = lastSave();
-    expect(body.revision).toBe(4);
     expect(JSON.stringify(body.document)).toContain('"section_title":"Storage"');
   });
 
@@ -643,8 +639,8 @@ describe('guardar', () => {
     );
   });
 
-  /** No hay autosave: el encabezado dice la revisión guardada, no «Auto-saved hace N». */
-  it('después de guardar avanza la revisión y no anuncia ningún autoguardado', async () => {
+  /** No hay autosave: el encabezado confirma el último guardado explícito. */
+  it('después de guardar dice Saved y no anuncia ningún autoguardado', async () => {
     renderRoute();
     await ready();
 
@@ -653,17 +649,13 @@ describe('guardar', () => {
 
     await screen.findByRole('button', { name: 'Saved' });
 
-    expect(screen.getByText('Saved revision 5')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Saved' })).toBeTruthy();
     expect(screen.queryByText(/Auto-saved/)).toBeNull();
   });
 
-  /**
-   * El caso que justifica el lock: dos pestañas del mismo autor. El rechazo NO puede
-   * descartar lo escrito para volver a mostrar lo que el servidor tiene.
-   */
-  it('un guardado rechazado se avisa y no pierde lo editado', async () => {
+  it('un error de guardado se avisa y no pierde lo editado', async () => {
     saveTemplateDraft.mockRejectedValue(
-      new Error('This draft was changed somewhere else. Reload it before saving again.'),
+      new Error('The draft could not be saved.'),
     );
 
     renderRoute();
@@ -672,7 +664,7 @@ describe('guardar', () => {
     fireEvent.change(screen.getAllByLabelText('Location')[0]!, { target: { value: 'storage' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
 
-    expect(await screen.findByText(/changed somewhere else/)).toBeTruthy();
+    expect(await screen.findByText(/could not be saved/)).toBeTruthy();
     expect(screen.getByText(/Nothing you typed has been lost/)).toBeTruthy();
     expect((screen.getAllByLabelText('Location')[0] as HTMLSelectElement).value).toBe('storage');
   });
