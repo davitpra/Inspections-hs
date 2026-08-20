@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useId, useState } from "react";
 import type {
   ChoiceOption,
   Location,
@@ -6,9 +6,9 @@ import type {
   ResponseType,
   Site,
   TemplateDraftSection,
-} from '@hs/contracts';
+} from "@hs/contracts";
 
-import { RowMenu } from '../../components/RowMenu';
+import { RowMenu } from "../../components/RowMenu";
 import {
   BuildingIcon,
   ChevronIcon,
@@ -18,10 +18,14 @@ import {
   PinIcon,
   PlusIcon,
   TrashIcon,
-} from '../../components/icons';
-import { ItemRow } from './ItemRow';
-import { locationCoverage, offerableLocations, sectionAppliesTo } from './presentation';
-import { useSortable } from './useSortable';
+} from "../../components/icons";
+import { ItemRow } from "./ItemRow";
+import {
+  locationCoverage,
+  offerableLocations,
+  sectionAppliesTo,
+} from "./presentation";
+import { useSortable } from "./useSortable";
 
 /**
  * Una sección: un bloque de preguntas con su lugar y su orden.
@@ -78,7 +82,11 @@ export function SectionCard({
     required: (itemIndex: number, required: boolean) => void;
     responseType: (itemIndex: number, responseType: ResponseType) => void;
     number: (itemIndex: number, field: string, value: number) => void;
-    optionChange: (itemIndex: number, optionIndex: number, change: Partial<ChoiceOption>) => void;
+    optionChange: (
+      itemIndex: number,
+      optionIndex: number,
+      change: Partial<ChoiceOption>,
+    ) => void;
     optionAdd: (itemIndex: number) => void;
     optionRemove: (itemIndex: number, optionIndex: number) => void;
     move: (itemIndex: number, delta: number) => void;
@@ -105,19 +113,23 @@ export function SectionCard({
     siteIds,
     section.organization_location_code,
   );
-  const coverage = locationCoverage(section.organization_location_code, locations, siteIds);
+  const coverage = locationCoverage(
+    section.organization_location_code,
+    locations,
+    siteIds,
+  );
 
   return (
     <section
       className={[
-        'card',
-        'builder__section',
-        stranded ? 'builder__section--stranded' : '',
-        sortable.dragging === index ? 'is-dragging' : '',
-        sortable.isDropTarget(index) ? 'is-drop-target' : '',
+        "card",
+        "builder__section",
+        stranded ? "builder__section--stranded" : "",
+        sortable.dragging === index ? "is-dragging" : "",
+        sortable.isDropTarget(index) ? "is-drop-target" : "",
       ]
         .filter(Boolean)
-        .join(' ')}
+        .join(" ")}
       data-sortable-group={sortable.group}
       data-sortable-index={index}
       aria-labelledby={`${controlId}-section-title`}
@@ -142,16 +154,26 @@ export function SectionCard({
               {section.section_title.trim() || `Section ${index + 1}`}
             </h2>
             {stranded ? (
-              <span className="status-pill status-pill--not-ready">Needs mapping</span>
+              <span className="status-pill status-pill--not-ready">
+                Needs mapping
+              </span>
             ) : null}
           </div>
-          <p className="note">Section applies to: {sectionAppliesTo(section, locations, siteIds, sites)}</p>
+          <p className="note">
+            Section applies to:{" "}
+            {sectionAppliesTo(section, locations, siteIds, sites)}
+          </p>
         </div>
 
         <div className="builder__section-actions">
           <div className="builder__section-primary-actions">
-            <button type="button" onClick={onDuplicate} aria-label={`Duplicate ${label}`}>
-              <CopyIcon /> <span className="builder__action-label">Duplicate section</span>
+            <button
+              type="button"
+              onClick={onDuplicate}
+              aria-label={`Duplicate ${label}`}
+            >
+              <CopyIcon />{" "}
+              <span className="builder__action-label">Duplicate</span>
             </button>
             <button
               type="button"
@@ -159,12 +181,15 @@ export function SectionCard({
               onClick={onRemove}
               aria-label={`Remove ${label}`}
             >
-              <TrashIcon /> <span className="builder__action-label">Remove section</span>
+              <TrashIcon />{" "}
+              <span className="builder__action-label">Remove</span>
             </button>
           </div>
           <button
             type="button"
-            className={open ? 'builder__collapse' : 'builder__collapse is-closed'}
+            className={
+              open ? "builder__collapse" : "builder__collapse is-closed"
+            }
             aria-expanded={open}
             aria-label={open ? `Collapse ${label}` : `Expand ${label}`}
             onClick={() => setOpen((wasOpen) => !wasOpen)}
@@ -181,8 +206,16 @@ export function SectionCard({
         <RowMenu
           label={`More actions for ${label}`}
           actions={[
-            { label: 'Move up', disabled: index === 0, onSelect: () => onMove(-1) },
-            { label: 'Move down', disabled: index === count - 1, onSelect: () => onMove(1) },
+            {
+              label: "Move up",
+              disabled: index === 0,
+              onSelect: () => onMove(-1),
+            },
+            {
+              label: "Move down",
+              disabled: index === count - 1,
+              onSelect: () => onMove(1),
+            },
           ]}
         />
       </div>
@@ -195,7 +228,7 @@ export function SectionCard({
             </label>
             <select
               id={`${controlId}-location`}
-              value={section.organization_location_code ?? ''}
+              value={section.organization_location_code ?? ""}
               onChange={(event) => onLocation(event.target.value)}
             >
               <option value="">Choose a location…</option>
@@ -206,7 +239,8 @@ export function SectionCard({
               ))}
             </select>
             <p className="note">
-              Locations are pulled from the places defined for each plant in Location mapping.
+              Locations are pulled from the places defined for each plant in
+              Location mapping.
             </p>
           </div>
 
@@ -223,12 +257,19 @@ export function SectionCard({
                 return (
                   <div
                     key={siteId}
-                    className={resolved ? 'builder__plant' : 'builder__plant builder__plant--gap'}
+                    className={
+                      resolved
+                        ? "builder__plant"
+                        : "builder__plant builder__plant--gap"
+                    }
                   >
                     <p className="note">
-                      <BuildingIcon size={16} /> {site?.name ?? 'Plant'} location
+                      <BuildingIcon size={16} /> {site?.name ?? "Plant"}{" "}
+                      location
                     </p>
-                    <p className="builder__plant-name">{resolved?.name ?? 'Not mapped here'}</p>
+                    <p className="builder__plant-name">
+                      {resolved?.name ?? "Not mapped here"}
+                    </p>
                   </div>
                 );
               })}
@@ -237,21 +278,27 @@ export function SectionCard({
 
           {stranded ? (
             <p className="notice notice--warn">
-              <InfoIcon size={16} /> This location is not mapped at every plant in scope, so this
-              section will not resolve everywhere. Map it in Location mapping, or choose another
-              location.
+              <InfoIcon size={16} /> This location is not mapped at every plant
+              in scope, so this section will not resolve everywhere. Map it in
+              Location mapping, or choose another location.
             </p>
           ) : null}
 
-          <p className="builder__questions-label">Questions ({section.items.length})</p>
+          <p className="builder__questions-label">
+            Questions ({section.items.length})
+          </p>
 
           {section.items.length === 0 ? (
             <p className="note">
-              A section needs at least one question before the template can be published.
+              A section needs at least one question before the template can be
+              published.
             </p>
           ) : null}
 
-          <ul className="list list--items builder__questions" {...items.listProps}>
+          <ul
+            className="list list--items builder__questions"
+            {...items.listProps}
+          >
             {section.items.map((each, itemIndex) => (
               // La clave es el índice y no `item_key`: la identidad técnica no forma parte
               // de la interfaz y el índice mantiene estable el foco mientras se edita.
@@ -263,12 +310,18 @@ export function SectionCard({
                 sortable={items}
                 onPrompt={(prompt) => item.prompt(itemIndex, prompt)}
                 onRequired={(required) => item.required(itemIndex, required)}
-                onResponseType={(responseType) => item.responseType(itemIndex, responseType)}
-                onNumber={(field, value) => item.number(itemIndex, field, value)}
+                onResponseType={(responseType) =>
+                  item.responseType(itemIndex, responseType)
+                }
+                onNumber={(field, value) =>
+                  item.number(itemIndex, field, value)
+                }
                 onOptions={{
-                  change: (optionIndex, change) => item.optionChange(itemIndex, optionIndex, change),
+                  change: (optionIndex, change) =>
+                    item.optionChange(itemIndex, optionIndex, change),
                   add: () => item.optionAdd(itemIndex),
-                  remove: (optionIndex) => item.optionRemove(itemIndex, optionIndex),
+                  remove: (optionIndex) =>
+                    item.optionRemove(itemIndex, optionIndex),
                 }}
                 onMove={(delta) => item.move(itemIndex, delta)}
                 onDuplicate={() => item.duplicate(itemIndex)}

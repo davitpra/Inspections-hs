@@ -2665,6 +2665,7 @@ select:disabled {
   display: flex;
   gap: 0.5rem;
   align-items: center;
+  justify-content: flex-end;
   grid-column: 3;
   min-width: 0;
 }
