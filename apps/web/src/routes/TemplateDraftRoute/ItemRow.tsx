@@ -143,15 +143,20 @@ export function ItemRow({
             Required
           </label>
 
-          {hasConfiguration(item.response_type) && !open ? (
+          {/*
+            EL TOGGLE NO SE MUEVE. Es el mismo botón en el mismo lugar abierto y cerrado:
+            si el de cerrar viviera dentro del panel, abrir movería el control lejos del
+            cursor y habría que ir a buscarlo para deshacer el click recién hecho.
+          */}
+          {hasConfiguration(item.response_type) ? (
             <button
               type="button"
               className="item-editor__settings-toggle"
               aria-expanded={open}
               aria-controls={`${controlId}-settings`}
-              onClick={() => setOpen(true)}
+              onClick={() => setOpen((wasOpen) => !wasOpen)}
             >
-              Edit settings
+              {open ? "Hide settings" : "Edit settings"}
             </button>
           ) : null}
         </div>
@@ -187,19 +192,8 @@ export function ItemRow({
       {open && hasConfiguration(item.response_type) ? (
         <div className="item-editor__settings" id={`${controlId}-settings`}>
           <div className="item-editor__settings-head">
-            <div>
-              <p className="item-editor__settings-title">Answer settings</p>
-              <p className="note">{RESPONSE_TYPE_HINTS[item.response_type]}</p>
-            </div>
-            <button
-              type="button"
-              className="item-editor__settings-toggle"
-              aria-expanded={open}
-              aria-controls={`${controlId}-settings`}
-              onClick={() => setOpen(false)}
-            >
-              Hide settings
-            </button>
+            <p className="item-editor__settings-title">Answer settings</p>
+            <p className="note">{RESPONSE_TYPE_HINTS[item.response_type]}</p>
           </div>
           <ResponseTypeConfig
             item={item}

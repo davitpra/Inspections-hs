@@ -2934,10 +2934,6 @@ select:disabled {
 }
 
 .item-editor__settings-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
   margin-bottom: 0.75rem;
 }
 
@@ -3004,11 +3000,6 @@ select:disabled {
 
   .item-editor__settings {
     margin-left: 0;
-  }
-
-  .item-editor__settings-head {
-    flex-direction: column;
-    gap: 0.5rem;
   }
 
   .item-editor__type {
