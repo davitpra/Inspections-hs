@@ -16,15 +16,18 @@ const DOCK_ST = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const SPARE_ST = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const DOCK_GL = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 const NEW_COLD_ST = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+const NEW_SITE = '99999999-9999-4999-8999-999999999999';
 
 const listOrganizationLocations = vi.hoisted(() => vi.fn());
 const listCatalogLocations = vi.hoisted(() => vi.fn());
 const mapLocation = vi.hoisted(() => vi.fn());
 const createOrganizationLocation = vi.hoisted(() => vi.fn());
 const createLocation = vi.hoisted(() => vi.fn());
+const createSite = vi.hoisted(() => vi.fn());
 const deactivateOrganizationLocation = vi.hoisted(() => vi.fn());
 const listSites = vi.hoisted(() => vi.fn());
 const useAppSession = vi.hoisted(() => vi.fn());
+const reloadSession = vi.hoisted(() => vi.fn());
 
 vi.mock('../../api/catalog', () => ({
   listOrganizationLocations,
@@ -32,10 +35,14 @@ vi.mock('../../api/catalog', () => ({
   mapLocation,
   createOrganizationLocation,
   createLocation,
+  createSite,
   deactivateOrganizationLocation,
 }));
 vi.mock('../../api/inspections', () => ({ listSites }));
 vi.mock('../../app/session-context', () => ({ useAppSession }));
+
+let currentSiteScope: string[] = [];
+let currentSites: Site[] = [];
 
 function session(role: Session['role']): { account: Session } {
   return {
@@ -43,7 +50,7 @@ function session(role: Session['role']): { account: Session } {
       userId: USER,
       personId: PERSON,
       role,
-      siteScope: [ST_THOMAS, GLENCOE],
+      siteScope: currentSiteScope,
       recordsFrom: null,
       recordsTo: null,
     },
@@ -54,6 +61,13 @@ const sites: Site[] = [
   { id: ST_THOMAS, code: 'st-thomas', name: 'St. Thomas', deactivated_at: null },
   { id: GLENCOE, code: 'glencoe', name: 'Glencoe', deactivated_at: null },
 ];
+
+const newSite: Site = {
+  id: NEW_SITE,
+  code: 'north-plant',
+  name: 'North plant',
+  deactivated_at: null,
+};
 
 const shared: OrganizationLocation[] = [
   { id: DOCK_SHARED, code: 'loading-dock', name: 'Loading dock', deactivated_at: null },
@@ -106,13 +120,17 @@ function renderRoute(): void {
 }
 
 beforeEach(() => {
-  useAppSession.mockReset().mockReturnValue(session('hs_coordinator'));
-  listSites.mockReset().mockResolvedValue(sites);
+  currentSiteScope = [ST_THOMAS, GLENCOE];
+  currentSites = [...sites];
+  useAppSession.mockReset().mockImplementation(() => ({ ...session('hs_coordinator'), reload: reloadSession }));
+  listSites.mockReset().mockImplementation(() => Promise.resolve(currentSites));
   listOrganizationLocations.mockReset().mockResolvedValue(shared);
   listCatalogLocations.mockReset().mockResolvedValue(locations);
   mapLocation.mockReset().mockResolvedValue(locations[0]);
   createOrganizationLocation.mockReset().mockResolvedValue(shared[0]);
   createLocation.mockReset().mockResolvedValue(locations[1]);
+  createSite.mockReset().mockResolvedValue(newSite);
+  reloadSession.mockReset().mockResolvedValue(undefined);
   deactivateOrganizationLocation.mockReset().mockResolvedValue(undefined);
 });
 
@@ -130,6 +148,7 @@ describe('quién puede administrar el catálogo', () => {
       renderRoute();
 
       expect(screen.getByText(/Only the H&S coordinator can administer locations/)).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Add site' })).toBeNull();
       expect(listCatalogLocations).not.toHaveBeenCalled();
     },
   );
@@ -396,6 +415,55 @@ describe('retirar una ubicación compartida', () => {
 });
 
 describe('dar de alta', () => {
+  it('muestra el panel de site y crea la columna nueva', async () => {
+    createSite.mockImplementation(async () => {
+      currentSites = [...currentSites, newSite];
+      currentSiteScope.push(NEW_SITE);
+      return newSite;
+    });
+
+    renderRoute();
+    fireEvent.click(await screen.findByRole('button', { name: 'Add site' }));
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'North plant' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+
+    await waitFor(() =>
+      expect(createSite).toHaveBeenCalledWith({ code: 'north-plant', name: 'North plant' }),
+    );
+    expect(reloadSession).toHaveBeenCalled();
+    expect((await screen.findAllByText('North plant')).length).toBeGreaterThan(0);
+  });
+
+  it('mantiene independientes los toggles de site y ubicaciones', async () => {
+    renderRoute();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Add site' }));
+    expect(screen.getByRole('heading', { name: 'Add a site' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Add a shared location' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add location' }));
+    expect(screen.getByRole('heading', { name: 'Add a site' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Add a shared location' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add site' }));
+    expect(screen.queryByRole('heading', { name: 'Add a site' })).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Add a shared location' })).toBeTruthy();
+  });
+
+  it('no vacía el formulario cuando el code de site ya está usado', async () => {
+    createSite.mockRejectedValue(new Error('The code "north-plant" is already in use'));
+
+    renderRoute();
+    fireEvent.click(await screen.findByRole('button', { name: 'Add site' }));
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'North plant' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+
+    expect(await screen.findByText(/already in use/)).toBeTruthy();
+    expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('North plant');
+    expect((screen.getByLabelText('Code') as HTMLInputElement).value).toBe('north-plant');
+  });
+
   it('propone el code desde el nombre', async () => {
     renderRoute();
 

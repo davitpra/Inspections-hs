@@ -14,8 +14,8 @@ import { sql } from 'drizzle-orm';
  */
 
 /**
- * Las dos plantas. Dato de referencia de la organización: sin política RLS, y sin
- * INSERT para hs_app — se siembran.
+ * Las plantas. Dato de referencia de la organización: sin política RLS. `hs_app` puede
+ * insertar una planta desde la consola, pero no puede actualizarla ni borrarla.
  */
 export const site = pgTable('site', {
   id: uuid('id').defaultRandom().primaryKey(),

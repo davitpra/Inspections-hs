@@ -1,12 +1,15 @@
 import {
+  createSiteSchema,
   createLocationSchema,
   createOrganizationLocationSchema,
   deactivateOrganizationLocationSchema,
   locationOrganizationMappingSchema,
   locationSchema,
   organizationLocationSchema,
+  siteSchema,
   type Location,
   type OrganizationLocation,
+  type Site,
 } from '@hs/contracts';
 import { z } from 'zod';
 
@@ -20,6 +23,11 @@ export async function listOrganizationLocations(): Promise<OrganizationLocation[
 
 export async function listCatalogLocations(): Promise<Location[]> {
   return get('/locations', (value) => z.array(locationSchema).parse(value));
+}
+
+/** Alta de una planta. El código se escribe acá y queda permanente en el catálogo. */
+export async function createSite(input: { code: string; name: string }): Promise<Site> {
+  return send('POST', '/sites', createSiteSchema.parse(input), (value) => siteSchema.parse(value));
 }
 
 export async function mapLocation(

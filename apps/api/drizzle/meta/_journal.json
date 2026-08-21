@@ -148,6 +148,13 @@
       "when": 1754524800020,
       "tag": "0021_retire_template_draft_revision",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1754524800021,
+      "tag": "0022_register_site_from_console",
+      "breakpoints": true
     }
   ]
 }

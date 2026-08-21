@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  createSiteSchema,
   createLocationSchema,
   createOrganizationLocationSchema,
   deactivateOrganizationLocationSchema,
@@ -45,6 +46,31 @@ describe('siteSchema', () => {
     });
 
     expect(result.success).toBe(false);
+  });
+});
+
+describe('createSiteSchema', () => {
+  it('acepta code y nombre', () => {
+    expect(createSiteSchema.safeParse({ code: 'north-plant', name: 'North plant' }).success).toBe(
+      true,
+    );
+  });
+
+  it('rechaza un code que no respeta el patrón del catálogo', () => {
+    expect(createSiteSchema.safeParse({ code: 'North Plant', name: 'North plant' }).success).toBe(
+      false,
+    );
+  });
+
+  it('rechaza campos de la fila o del estado', () => {
+    expect(
+      createSiteSchema.safeParse({
+        code: 'north-plant',
+        name: 'North plant',
+        id: SITE_ID,
+        deactivated_at: null,
+      }).success,
+    ).toBe(false);
   });
 });
 

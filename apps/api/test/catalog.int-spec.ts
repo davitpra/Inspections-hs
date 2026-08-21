@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { applySeeds } from '../scripts/seed.mjs';
 import { DbService } from '../src/db/db.service';
 import { LocationsService } from '../src/catalog/locations.service';
+import { SitesService } from '../src/catalog/sites.service';
 import { withSiteScope } from '../src/db/site-scope';
 import {
   createLocation,
@@ -51,6 +52,7 @@ const FOREIGN_KEY_VIOLATION = '23503';
 let db: TestDatabase;
 let dbService: DbService;
 let locations: LocationsService;
+let sites: SitesService;
 
 /** Una ubicación de cada sitio, creadas una vez y reusadas por los tests de lectura. */
 let dockA: string;
@@ -72,6 +74,7 @@ beforeAll(async () => {
   process.env.DATABASE_URL = previous;
 
   locations = new LocationsService(dbService);
+  sites = new SitesService(dbService);
 
   const fixture = resolve(dirname(__filename), 'fixtures/finding_stub.sql');
   await db.migrator.query(await readFile(fixture, 'utf8'));
@@ -184,9 +187,33 @@ describe('el sitio tiene identidad estable y no se borra', () => {
     ).rejects.toSatisfy((error) => sqlstate(error) === APPEND_ONLY);
   });
 
-  it('la aplicación no puede dar de alta una planta', async () => {
+  it('la aplicación puede dar de alta una planta desde el servicio', async () => {
+    const created = await sites.create(
+      { userId: ACTOR, role: 'hs_coordinator', siteIds: [SITE_A, SITE_B] },
+      { code: 'catalog-c', name: 'Catalog C' },
+    );
+
+    expect(created.code).toBe('catalog-c');
+    expect(created.name).toBe('Catalog C');
+    expect(created.deactivated_at).toBeNull();
+
+    const scope = await inScope<{ site_id: string }>(
+      db.migrator,
+      [],
+      'SELECT site_id FROM user_site_scope WHERE user_id = $1 AND site_id = $2',
+      [ACTOR, created.id],
+    );
+
+    expect(scope).toHaveLength(1);
+  });
+
+  it('la aplicación no puede renombrar ni borrar una planta', async () => {
     await expect(
-      inScope(db.app, [], 'INSERT INTO site (code, name) VALUES ($1, $2)', ['catalog-c', 'C']),
+      inScope(db.app, [], 'UPDATE site SET name = $1 WHERE id = $2', ['Renamed', SITE_B]),
+    ).rejects.toSatisfy((error) => sqlstate(error) === INSUFFICIENT_PRIVILEGE);
+
+    await expect(
+      inScope(db.app, [], 'DELETE FROM site WHERE id = $1', [SITE_B]),
     ).rejects.toSatisfy((error) => sqlstate(error) === INSUFFICIENT_PRIVILEGE);
   });
 });
@@ -659,6 +686,88 @@ describe('dar de alta desde la consola', () => {
     userId: ACTOR,
     role: 'hs_coordinator',
     siteIds: [SITE_A, SITE_B],
+  });
+
+  it('da alcance solo al coordinador que la registra', async () => {
+    const other = await createAccount(db.migrator, {
+      role: 'hs_coordinator',
+      siteIds: [SITE_A],
+    });
+    const created = await sites.create(asCoordinator(), {
+      code: uniqueCode('site-scope'),
+      name: 'Scoped plant',
+    });
+
+    expect(await inScope<{ site_id: string }>(
+      db.migrator,
+      [],
+      'SELECT site_id FROM user_site_scope WHERE user_id = $1 AND site_id = $2 AND revoked_at IS NULL',
+      [ACTOR, created.id],
+    )).toHaveLength(1);
+    expect(await inScope<{ site_id: string }>(
+      db.migrator,
+      [],
+      'SELECT site_id FROM user_site_scope WHERE user_id = $1 AND site_id = $2 AND revoked_at IS NULL',
+      [other.accountId, created.id],
+    )).toHaveLength(0);
+    expect((await sites.list({ userId: other.accountId, role: 'hs_coordinator', siteIds: [SITE_A] }))
+      .map((site) => site.id)).not.toContain(created.id);
+  });
+
+  it('escribe site.created y user.scope_granted solo en la cadena nueva', async () => {
+    const created = await sites.create(asCoordinator(), {
+      code: uniqueCode('site-audit'),
+      name: 'Audited plant',
+    });
+    const entries = await inScope<{ event_type: string; payload: Record<string, unknown> }>(
+      db.migrator,
+      [created.id],
+      'SELECT event_type, payload FROM audit_log WHERE site_id = $1 ORDER BY seq',
+      [created.id],
+    );
+
+    expect(entries.map((entry) => entry.event_type)).toEqual([
+      'site.created',
+      'user.scope_granted',
+    ]);
+    expect(entries[0]!.payload.code).toBe(created.code);
+    expect(entries[1]!.payload.account_id).toBe(ACTOR);
+
+    const otherSiteEntries = await inScope<{ event_type: string }>(
+      db.migrator,
+      [SITE_A, SITE_B],
+      `SELECT event_type
+         FROM audit_log
+        WHERE event_type = 'site.created' AND payload ->> 'site_id' = $1`,
+      [created.id],
+    );
+
+    expect(otherSiteEntries).toHaveLength(0);
+  });
+
+  it('rechaza al supervisor, el code duplicado y no deja una fila sin alcance', async () => {
+    const code = uniqueCode('site-duplicate');
+    await sites.create(asCoordinator(), { code, name: 'First plant' });
+
+    await expect(
+      sites.create({ userId: ACTOR, role: 'supervisor', siteIds: [SITE_A, SITE_B] }, {
+        code: uniqueCode('site-supervisor'),
+        name: 'Forbidden plant',
+      }),
+    ).rejects.toThrow(/coordinator/);
+
+    await expect(sites.create(asCoordinator(), { code, name: 'Second plant' })).rejects.toThrow(
+      new RegExp(`code "${code}"`),
+    );
+
+    const rows = await inScope<{ id: string }>(
+      db.migrator,
+      [],
+      'SELECT s.id FROM site s JOIN user_site_scope sc ON sc.site_id = s.id WHERE s.code = $1 AND sc.user_id = $2',
+      [code, ACTOR],
+    );
+
+    expect(rows).toHaveLength(1);
   });
 
   it('crea una ubicación compartida, sin planta', async () => {

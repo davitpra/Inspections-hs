@@ -157,7 +157,7 @@ describe('aislamiento por sitio', () => {
     ),
     );
 
-    expect(row.count).toBe('2');
+    expect(row.count).toBe('3');
     expect(Number(all.count)).toBeGreaterThan(2);
   });
 
@@ -195,7 +195,7 @@ describe('aislamiento por sitio', () => {
     ),
     );
 
-    expect(row.count).toBe('2');
+    expect(row.count).toBe('3');
   });
 
   // SET LOCAL, no SET: el alcance muere con la transacción. Si sobreviviera, una

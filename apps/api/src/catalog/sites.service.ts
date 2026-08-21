@@ -1,5 +1,5 @@
-import { Injectable } from '@nestjs/common';
-import type { Site } from '@hs/contracts';
+import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
+import type { CreateSite, Site } from '@hs/contracts';
 
 import { DbService } from '../db/db.service';
 import type { SessionScope } from '../db/site-scope';
@@ -54,6 +54,56 @@ export class SitesService {
       }));
     });
   }
+
+  /**
+   * Registra una planta y da alcance a quien la registró, en una sola transacción.
+   *
+   * El sitio nuevo todavía no está en `app.site_ids`, pero el trigger de `site.created`
+   * y el de `user.scope_granted` necesitan verlo para escribir en la cadena protegida.
+   * Por eso se ensancha el alcance de esta transacción antes del INSERT: solo se agrega
+   * el id generado acá, su fila de `user_site_scope` se inserta antes del COMMIT, y el
+   * `true` de `set_config` lo hace SET LOCAL. Es la única excepción a que el guard
+   * produzca el alcance; no alcanza ningún sitio existente fuera de esta operación.
+   */
+  async create(session: SessionScope, input: CreateSite): Promise<Site> {
+    this.requireCoordinator(session);
+
+    return this.db.withSessionClient(session, async (client) => {
+      try {
+        const generated = await client.query<{ id: string }>('SELECT gen_random_uuid() AS id');
+        const siteId = generated.rows[0]!.id;
+        const siteIds = [...new Set([...session.siteIds, siteId])];
+
+        await client.query('SELECT set_config($1, $2, true)', ['app.site_ids', siteIds.join(',')]);
+
+        const { rows } = await client.query<SiteRow>(
+          `INSERT INTO site (id, code, name)
+                VALUES ($1, $2, $3)
+             RETURNING id, code, name, deactivated_at`,
+          [siteId, input.code, input.name],
+        );
+
+        await client.query(
+          'INSERT INTO user_site_scope (user_id, site_id) VALUES ($1, $2)',
+          [session.userId, siteId],
+        );
+
+        return toSite(rows[0] as SiteRow);
+      } catch (error) {
+        if (isUniqueViolation(error)) {
+          throw new BadRequestException(`The code "${input.code}" is already in use`);
+        }
+
+        throw error;
+      }
+    });
+  }
+
+  private requireCoordinator(session: SessionScope): void {
+    if (session.role !== 'hs_coordinator') {
+      throw new ForbiddenException('Only the H&S coordinator can administer sites');
+    }
+  }
 }
 
 interface SiteRow extends Record<string, unknown> {
@@ -61,4 +111,17 @@ interface SiteRow extends Record<string, unknown> {
   code: string;
   name: string;
   deactivated_at: Date | null;
+}
+
+function toSite(row: SiteRow): Site {
+  return {
+    id: row.id,
+    code: row.code,
+    name: row.name,
+    deactivated_at: row.deactivated_at?.toISOString() ?? null,
+  };
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  return (error as { code?: string }).code === '23505';
 }

@@ -48,6 +48,17 @@ export const siteSchema = z.strictObject({
 
 export type Site = z.infer<typeof siteSchema>;
 
+/**
+ * Alta de una planta desde la consola. `code` se escribe, no se genera en el servidor, y
+ * queda permanente porque identifica la planta en seeds, fixtures y reportes.
+ */
+export const createSiteSchema = z.strictObject({
+  code: codeSchema,
+  name: labelSchema,
+});
+
+export type CreateSite = z.infer<typeof createSiteSchema>;
+
 /** Una entrada del catálogo, tal como la devuelve la API. */
 export const locationSchema = z.strictObject({
   id: z.uuid(),

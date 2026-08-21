@@ -57,21 +57,38 @@ describe('la cadena de hashes es por sitio', () => {
     const second = await insertEvent(db.app, SITE_A, { payload: { n: 2 } });
     const third = await insertEvent(db.app, SITE_A, { payload: { n: 3 } });
 
-    expect(first.prev_hash).toBeNull();
+    const createdA = one(
+      await inScope<{ hash: Buffer }>(
+        db.app,
+        [SITE_A],
+        "SELECT hash FROM audit_log WHERE event_type = 'site.created'",
+      ),
+    );
+
+    expect(first.prev_hash?.equals(createdA.hash)).toBe(true);
     expect(first.hash).not.toBeNull();
 
     expect(second.prev_hash?.equals(first.hash)).toBe(true);
     expect(third.prev_hash?.equals(second.hash)).toBe(true);
 
-    expect([first.seq, second.seq, third.seq]).toEqual(['1', '2', '3']);
+    expect([first.seq, second.seq, third.seq]).toEqual(['2', '3', '4']);
   });
 
   it('mantiene cadenas independientes entre sitios', async () => {
-    // SITE_A ya tiene eventos: la cadena de B igual arranca de cero.
+    // La cadena de B ya tiene el evento `site.created`; sus eventos de dominio siguen
+    // siendo independientes de los de A.
     const firstOfB = await insertEvent(db.app, SITE_B, { payload: { n: 1 } });
     const secondOfB = await insertEvent(db.app, SITE_B, { payload: { n: 2 } });
 
-    expect(firstOfB.prev_hash).toBeNull();
+    const createdB = one(
+      await inScope<{ hash: Buffer }>(
+        db.app,
+        [SITE_B],
+        "SELECT hash FROM audit_log WHERE event_type = 'site.created'",
+      ),
+    );
+
+    expect(firstOfB.prev_hash?.equals(createdB.hash)).toBe(true);
     expect(secondOfB.prev_hash?.equals(firstOfB.hash)).toBe(true);
 
     const hashesOfA = await inScope<{ hash: Buffer }>(
@@ -148,8 +165,8 @@ describe('escrituras concurrentes del mismo sitio', () => {
       'SELECT id, seq, hash, prev_hash FROM audit_log ORDER BY seq',
     );
 
-    expect(rows).toHaveLength(8);
-    expect(rows.map((row) => row.seq)).toEqual(['1', '2', '3', '4', '5', '6', '7', '8']);
+    expect(rows).toHaveLength(9);
+    expect(rows.map((row) => row.seq)).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9']);
 
     let previous = one(rows);
     expect(previous.prev_hash).toBeNull();
@@ -207,7 +224,7 @@ describe('verificación de la cadena', () => {
       await inScope<{ id: string }>(
       db.app,
       [SITE_GAP],
-      'SELECT id FROM audit_log WHERE site_id = $1 AND seq = 2',
+       "SELECT id FROM audit_log WHERE site_id = $1 AND payload ->> 'n' = '2'",
       [SITE_GAP],
     ),
     );

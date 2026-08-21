@@ -10,6 +10,7 @@ import { canAdministerCatalog } from '../../permissions/session';
 import { MappingTable } from './MappingTable';
 import { MappingToolbar } from './MappingToolbar';
 import { NewLocationForm } from './NewLocationForm';
+import { NewSiteForm } from './NewSiteForm';
 import { Orphans } from './Orphans';
 import { RetireLocationDialog } from './RetireLocationDialog';
 import { visibleLocations, type CoverageFilter, type SortDirection } from './presentation';
@@ -60,6 +61,7 @@ function LocationCatalog({ siteScope }: { siteScope: readonly string[] }): React
   const [direction, setDirection] = useState<SortDirection>('asc');
   const [query, setQuery] = useState('');
   const [adding, setAdding] = useState(false);
+  const [addingSite, setAddingSite] = useState(false);
   const [retiring, setRetiring] = useState<OrganizationLocation | null>(null);
 
   const sites = useQuery({ queryKey: queryKeys.sites(), queryFn: listSites, retry: false });
@@ -102,6 +104,14 @@ function LocationCatalog({ siteScope }: { siteScope: readonly string[] }): React
 
         <button
           type="button"
+          className="button--outline mapping__add-site"
+          aria-expanded={addingSite}
+          onClick={() => setAddingSite((open) => !open)}
+        >
+          <PlusIcon /> Add site
+        </button>
+        <button
+          type="button"
           className="button--primary mapping__add"
           aria-expanded={adding}
           onClick={() => setAdding((open) => !open)}
@@ -126,6 +136,8 @@ function LocationCatalog({ siteScope }: { siteScope: readonly string[] }): React
           </p>
         </div>
       </div>
+
+      {addingSite ? <NewSiteForm /> : null}
 
       {adding ? (
         <>
