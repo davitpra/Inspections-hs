@@ -18,6 +18,7 @@ import {
   strandedSections,
   summaryCounts,
   totalItems,
+  type DraftEdits,
 } from './presentation';
 
 function document(): TemplateDraftDocument {
@@ -47,19 +48,37 @@ describe('totalItems', () => {
 });
 
 describe('hasUnsavedChanges', () => {
-  it('no hay cambios cuando el documento y el nombre son los mismos', () => {
-    expect(hasUnsavedChanges(document(), document(), 'Name', 'Name')).toBe(false);
+  function edits(overrides: Partial<DraftEdits> = {}): DraftEdits {
+    return { document: document(), name: 'Name', siteIds: ['st-thomas'], ...overrides };
+  }
+
+  it('no hay cambios cuando el documento, el nombre y el alcance son los mismos', () => {
+    expect(hasUnsavedChanges(edits(), edits())).toBe(false);
   });
 
   it('detecta un cambio en el documento', () => {
     const edited = document();
     edited.sections[0]!.section_title = 'Changed';
 
-    expect(hasUnsavedChanges(edited, document(), 'Name', 'Name')).toBe(true);
+    expect(hasUnsavedChanges(edits({ document: edited }), edits())).toBe(true);
   });
 
   it('detecta un cambio solo en el nombre', () => {
-    expect(hasUnsavedChanges(document(), document(), 'Renamed', 'Name')).toBe(true);
+    expect(hasUnsavedChanges(edits({ name: 'Renamed' }), edits())).toBe(true);
+  });
+
+  it('detecta un cambio solo en el alcance', () => {
+    expect(hasUnsavedChanges(edits({ siteIds: ['st-thomas', 'glencoe'] }), edits())).toBe(
+      true,
+    );
+  });
+
+  /** El alcance es un conjunto: el mismo par de plantas en otro orden no es un cambio. */
+  it('el orden del alcance no cuenta como cambio', () => {
+    const edited = edits({ siteIds: ['glencoe', 'st-thomas'] });
+    const saved = edits({ siteIds: ['st-thomas', 'glencoe'] });
+
+    expect(hasUnsavedChanges(edited, saved)).toBe(false);
   });
 
   /**
@@ -71,7 +90,7 @@ describe('hasUnsavedChanges', () => {
     edited.sections[0]!.section_title = 'Changed';
     edited.sections[0]!.section_title = 'A';
 
-    expect(hasUnsavedChanges(edited, document(), 'Name', 'Name')).toBe(false);
+    expect(hasUnsavedChanges(edits({ document: edited }), edits())).toBe(false);
   });
 });
 

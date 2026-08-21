@@ -19,23 +19,36 @@ export function totalItems(document: TemplateDraftDocument): number {
 }
 
 /**
+ * Lo que el editor tiene en la mano: el documento, el nombre y el alcance. Los tres viajan
+ * juntos porque se guardan juntos —el alcance es una edición como cualquier otra— y porque
+ * comparar lo editado contra lo guardado es comparar los tres a la vez.
+ */
+export type DraftEdits = {
+  document: TemplateDraftDocument;
+  name: string;
+  siteIds: readonly string[];
+};
+
+/**
  * Si hay algo sin guardar.
  *
- * Se compara el documento CONTRA EL ÚLTIMO GUARDADO y no se lleva un flag `dirty`: un flag
- * queda en `true` después de deshacer a mano lo que se acababa de escribir, y le dice al
- * autor que tiene cambios pendientes cuando ya no los tiene.
+ * Se compara CONTRA EL ÚLTIMO GUARDADO y no se lleva un flag `dirty`: un flag queda en
+ * `true` después de deshacer a mano lo que se acababa de escribir, y le dice al autor que
+ * tiene cambios pendientes cuando ya no los tiene.
  *
- * `JSON.stringify` alcanza porque los dos lados salen del mismo esquema y no llevan claves
- * fuera de orden: el guardado viene del servidor, que lo devolvió tal como lo recibió, y el
- * editado sale de `edits.ts`, que solo copia con spread.
+ * `JSON.stringify` alcanza para el documento porque los dos lados salen del mismo esquema y
+ * no llevan claves fuera de orden: el guardado viene del servidor, que lo devolvió tal como
+ * lo recibió, y el editado sale de `edits.ts`, que solo copia con spread. El alcance se
+ * ordena antes de comparar: es un conjunto, y tickear y destickear la misma planta no es un
+ * cambio pendiente aunque devuelva la lista en otro orden.
  */
-export function hasUnsavedChanges(
-  edited: TemplateDraftDocument,
-  saved: TemplateDraftDocument,
-  editedName: string,
-  savedName: string,
-): boolean {
-  return editedName !== savedName || JSON.stringify(edited) !== JSON.stringify(saved);
+export function hasUnsavedChanges(edited: DraftEdits, saved: DraftEdits): boolean {
+  return (
+    edited.name !== saved.name ||
+    JSON.stringify(edited.document) !== JSON.stringify(saved.document) ||
+    JSON.stringify([...edited.siteIds].sort()) !==
+      JSON.stringify([...saved.siteIds].sort())
+  );
 }
 
 /**

@@ -3,10 +3,8 @@ import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useState } from "react";
 import {
   draftIssues,
-  type ChoiceOption,
   type Location,
   type OrganizationLocation,
-  type ResponseType,
   type Site,
   type TemplateDraft,
   type TemplateDraftDocument,
@@ -24,38 +22,13 @@ import {
 } from "../../api/templates";
 import { queryKeys } from "../../api/query-keys";
 import { useAppSession } from "../../app/session-context";
-import { InfoIcon, PlusIcon } from "../../components/icons";
+import { InfoIcon } from "../../components/icons";
 import { canAuthorTemplates } from "../../permissions/session";
 import { DraftHeader } from "./DraftHeader";
-import {
-  addItem,
-  addOption,
-  addSection,
-  allItemKeys,
-  changeResponseType,
-  duplicateItem,
-  duplicateSection,
-  moveItem,
-  moveSection,
-  removeItem,
-  removeOption,
-  removeSection,
-  setConfig,
-  setOption,
-  setPrompt,
-  setRequired,
-  setSectionLocation,
-} from "./edits";
-import { newKey, newKeys } from "./newKey";
-import {
-  hasUnsavedChanges,
-  saveErrorNotice,
-  strandedSections,
-} from "./presentation";
-import { SectionCard } from "./SectionCard";
+import { hasUnsavedChanges, saveErrorNotice } from "./presentation";
+import { SectionList } from "./SectionList";
 import { TemplateIdentity } from "./TemplateIdentity";
 import { TemplateSummary } from "./TemplateSummary";
-import { useSortable } from "./useSortable";
 
 /**
  * §7 etapa 8 — Escribir una plantilla: para qué plantas vale, qué secciones tiene, qué
@@ -205,32 +178,37 @@ function DraftForm({
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
-  /** El documento, el nombre y el alcance en edición. */
-  const [edited, setEdited] = useState(() => ({
-    document: loaded.document,
-    name: loaded.name,
-    siteIds: loaded.site_ids,
-    savedDocument: loaded.document,
-    savedName: loaded.name,
-    savedSiteIds: loaded.site_ids,
-  }));
+  /**
+   * Lo editado y lo último guardado, uno al lado del otro: el documento, el nombre y el
+   * alcance se guardan de una sola vez, y comparar los dos lados es lo que dice si queda
+   * algo pendiente.
+   */
+  const [edits, setEdits] = useState(() => {
+    const loadedEdits = {
+      document: loaded.document,
+      name: loaded.name,
+      siteIds: loaded.site_ids as readonly string[],
+    };
+
+    return { edited: loadedEdits, saved: loadedEdits };
+  });
+  const { document, name, siteIds } = edits.edited;
 
   const save = useMutation({
     mutationFn: () =>
       saveTemplateDraft(id, {
-        name: edited.name.trim(),
-        document: edited.document,
-        site_ids: [...edited.siteIds],
+        name: name.trim(),
+        document,
+        site_ids: [...siteIds],
       }),
     onSuccess: (saved) => {
-      setEdited({
+      const savedEdits = {
         document: saved.document,
         name: saved.name,
-        siteIds: saved.site_ids,
-        savedDocument: saved.document,
-        savedName: saved.name,
-        savedSiteIds: saved.site_ids,
-      });
+        siteIds: saved.site_ids as readonly string[],
+      };
+
+      setEdits({ edited: savedEdits, saved: savedEdits });
 
       void queryClient.invalidateQueries({
         queryKey: queryKeys.templateDrafts(),
@@ -248,27 +226,15 @@ function DraftForm({
     },
   });
 
-  const { document, siteIds } = edited;
+  /** Escribe una edición sin tocar lo que ya fue guardado. */
+  const edit = (change: Partial<typeof edits.edited>): void =>
+    setEdits((current) => ({
+      ...current,
+      edited: { ...current.edited, ...change },
+    }));
 
-  /** Escribe el documento editado sin tocar lo que ya fue guardado. */
-  const write = (next: TemplateDraftDocument): void =>
-    setEdited((current) => ({ ...current, document: next }));
-
-  const dirty =
-    hasUnsavedChanges(
-      edited.document,
-      edited.savedDocument,
-      edited.name,
-      edited.savedName,
-    ) ||
-    JSON.stringify([...edited.siteIds].sort()) !==
-      JSON.stringify([...edited.savedSiteIds].sort());
-
+  const dirty = hasUnsavedChanges(edits.edited, edits.saved);
   const issues = draftIssues(document);
-  const stranded = new Set(strandedSections(document, locations, siteIds));
-  const sections = useSortable("sections", (index, delta) =>
-    write(moveSection(document, index, delta)),
-  );
 
   return (
     <>
@@ -280,10 +246,7 @@ function DraftForm({
         dirty={dirty}
         saving={save.isPending}
         canSave={
-          dirty &&
-          !save.isPending &&
-          edited.name.trim() !== "" &&
-          siteIds.length > 0
+          dirty && !save.isPending && name.trim() !== "" && siteIds.length > 0
         }
         onSave={() => save.mutate()}
         onDiscard={() => discard.mutate()}
@@ -298,176 +261,22 @@ function DraftForm({
       <div className="builder__layout">
         <div>
           <TemplateIdentity
-            name={edited.name}
+            name={name}
             templateKey={loaded.key}
             sites={sites}
             siteIds={siteIds}
-            onName={(name) => setEdited((current) => ({ ...current, name }))}
-            onScope={(next) =>
-              setEdited((current) => ({ ...current, siteIds: next }))
-            }
+            onName={(next) => edit({ name: next })}
+            onScope={(next) => edit({ siteIds: next })}
           />
 
-          <section className="builder__sections" aria-labelledby="builder-sections-title">
-            <div className="builder__sections-head">
-              <div>
-                <h2 id="builder-sections-title">Inspection flow</h2>
-                <p className="note">
-                  Arrange the sections and questions in the order inspectors will follow.
-                </p>
-              </div>
-              <span className="status-pill status-pill--draft">
-                {document.sections.length}{" "}
-                {document.sections.length === 1 ? "section" : "sections"}
-              </span>
-            </div>
-
-            {document.sections.length === 0 ? (
-              <div className="builder__empty-sections">
-                <p className="builder__empty-sections-title">Your flow is empty</p>
-                <p className="note">
-                  Start with a section for the first area an inspector will check.
-                </p>
-              </div>
-            ) : null}
-
-            {document.sections.map((section, sectionIndex) => (
-              // Índice como clave: las identidades técnicas no forman parte de la interfaz y
-              // el índice mantiene estable el foco mientras se edita.
-              <SectionCard
-                key={sectionIndex}
-                section={section}
-                index={sectionIndex}
-                count={document.sections.length}
-                locations={locations}
-                organizationLocations={organizationLocations}
-                sites={sites}
-                siteIds={siteIds}
-                stranded={stranded.has(sectionIndex)}
-                sortable={sections}
-                onLocation={(code) => {
-                  const location = organizationLocations.find(
-                    (each) => each.code === code,
-                  );
-                  write(
-                    setSectionLocation(
-                      document,
-                      sectionIndex,
-                      code,
-                      location?.name ?? "",
-                    ),
-                  );
-                }}
-                onMove={(delta) =>
-                  write(moveSection(document, sectionIndex, delta))
-                }
-                onDuplicate={() => {
-                  const taken = [
-                    ...allItemKeys(document),
-                    ...document.sections.map((each) => each.section_key),
-                  ];
-                  const minted = newKeys(section.items.length + 1, taken);
-
-                  write(
-                    duplicateSection(document, sectionIndex, {
-                      section: minted[0]!,
-                      items: minted.slice(1),
-                    }),
-                  );
-                }}
-                onRemove={() => write(removeSection(document, sectionIndex))}
-                onAddItem={() =>
-                  write(
-                    addItem(
-                      document,
-                      sectionIndex,
-                      newKey(allItemKeys(document)),
-                    ),
-                  )
-                }
-                item={{
-                  /** La identidad se mantiene aunque la pregunta se reformule. */
-                  prompt: (itemIndex, prompt) =>
-                    write(setPrompt(document, sectionIndex, itemIndex, prompt)),
-                  required: (itemIndex, required) =>
-                    write(
-                      setRequired(document, sectionIndex, itemIndex, required),
-                    ),
-                  responseType: (itemIndex, responseType: ResponseType) =>
-                    write(
-                      changeResponseType(
-                        document,
-                        sectionIndex,
-                        itemIndex,
-                        responseType,
-                      ),
-                    ),
-                  number: (itemIndex, field, value) =>
-                    write(
-                      setConfig(document, sectionIndex, itemIndex, field, value),
-                    ),
-                  optionChange: (
-                    itemIndex,
-                    optionIndex,
-                    change: Partial<ChoiceOption>,
-                  ) =>
-                    write(
-                      setOption(
-                        document,
-                        sectionIndex,
-                        itemIndex,
-                        optionIndex,
-                        change,
-                      ),
-                    ),
-                  optionAdd: (itemIndex) =>
-                    write(addOption(document, sectionIndex, itemIndex)),
-                  optionRemove: (itemIndex, optionIndex) =>
-                    write(
-                      removeOption(
-                        document,
-                        sectionIndex,
-                        itemIndex,
-                        optionIndex,
-                      ),
-                    ),
-                  move: (itemIndex, delta) =>
-                    write(moveItem(document, sectionIndex, itemIndex, delta)),
-                  duplicate: (itemIndex) =>
-                    write(
-                      duplicateItem(
-                        document,
-                        sectionIndex,
-                        itemIndex,
-                        newKey(allItemKeys(document)),
-                      ),
-                    ),
-                  remove: (itemIndex) =>
-                    write(removeItem(document, sectionIndex, itemIndex)),
-                }}
-              />
-            ))}
-
-            <div className="builder__add builder__add--section">
-              <button
-                type="button"
-                className="button--primary"
-                onClick={() =>
-                  write(
-                    addSection(
-                      document,
-                      newKey(
-                        document.sections.map((section) => section.section_key),
-                      ),
-                    ),
-                  )
-                }
-              >
-                <PlusIcon />{" "}
-                {document.sections.length === 0 ? "Add your first section" : "Add section"}
-              </button>
-            </div>
-          </section>
+          <SectionList
+            document={document}
+            locations={locations}
+            organizationLocations={organizationLocations}
+            sites={sites}
+            siteIds={siteIds}
+            write={(next: TemplateDraftDocument) => edit({ document: next })}
+          />
         </div>
 
         <TemplateSummary
