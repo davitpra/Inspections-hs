@@ -1,6 +1,18 @@
 import type { Session } from '@hs/contracts';
 
 import {
+  CalendarIcon,
+  CheckIcon,
+  ClockIcon,
+  DocumentIcon,
+  InboxIcon,
+  ListIcon,
+  LockIcon,
+  OutboxIcon,
+  PersonIcon,
+  PinIcon,
+} from '../components/icons';
+import {
   canAdministerRoster,
   canAdministerCatalog,
   canAdministerScheduling,
@@ -38,9 +50,13 @@ export type NavPath =
   | '/inbox'
   | '/outbox';
 
+export type NavIcon = (props: { size?: number }) => React.JSX.Element;
+
 export type NavItem = {
   readonly to: NavPath;
   readonly label: string;
+  /** El icono del destino. Evita que la navegación ancha mantenga una lista separada. */
+  readonly icon: NavIcon;
   /** Sin `visible`, el destino es de todos. */
   readonly visible?: (account: Session) => boolean;
 };
@@ -70,16 +86,26 @@ export type NavItem = {
  * serían el peor de los desacuerdos posibles.
  */
 export const NAV_ITEMS: readonly NavItem[] = [
-  { to: '/', label: 'Inspections' },
-  { to: '/actions', label: 'Corrective actions' },
-  { to: '/recurrence', label: 'Recurring findings' },
-  { to: '/compliance', label: 'Compliance' },
-  { to: '/scheduling', label: 'Scheduling', visible: canAdministerScheduling },
-  { to: '/roster', label: 'Roster', visible: canAdministerRoster },
-  { to: '/templates', label: 'Templates', visible: canAuthorTemplates },
-  { to: '/catalog/locations', label: 'Locations', visible: canAdministerCatalog },
-  { to: '/inbox', label: 'Inbox' },
-  { to: '/outbox', label: 'Waiting to be sent' },
+  { to: '/', label: 'Inspections', icon: ListIcon },
+  { to: '/actions', label: 'Corrective actions', icon: CheckIcon },
+  { to: '/recurrence', label: 'Recurring findings', icon: ClockIcon },
+  { to: '/compliance', label: 'Compliance', icon: LockIcon },
+  {
+    to: '/scheduling',
+    label: 'Scheduling',
+    icon: CalendarIcon,
+    visible: canAdministerScheduling,
+  },
+  { to: '/roster', label: 'Roster', icon: PersonIcon, visible: canAdministerRoster },
+  { to: '/templates', label: 'Templates', icon: DocumentIcon, visible: canAuthorTemplates },
+  {
+    to: '/catalog/locations',
+    label: 'Locations',
+    icon: PinIcon,
+    visible: canAdministerCatalog,
+  },
+  { to: '/inbox', label: 'Inbox', icon: InboxIcon },
+  { to: '/outbox', label: 'Waiting to be sent', icon: OutboxIcon },
 ];
 
 export function visibleNavItems(account: Session): readonly NavItem[] {

@@ -6,7 +6,7 @@ import type {
 } from "@hs/contracts";
 
 import { RowMenu } from "../../components/RowMenu";
-import { GripIcon } from "../../components/icons";
+import { GearIcon, GripIcon } from "../../components/icons";
 import {
   RESPONSE_TYPE_HINTS,
   RESPONSE_TYPE_OPTIONS,
@@ -104,6 +104,19 @@ export function ItemRow({
         />
 
         <div className="item-editor__controls">
+          {/*
+            `<label>` envolvente es lo correcto para un checkbox y es la excepción a la regla
+            de `htmlFor`/`id` que sigue el resto del archivo: el texto de un checkbox ES su
+            área de click, y separarlos achica el objetivo a 13 píxeles en una tablet.
+          */}
+          <label className="item-editor__required">
+            <input
+              type="checkbox"
+              checked={item.required}
+              onChange={(event) => onRequired(event.target.checked)}
+            />
+            Required
+          </label>
           <div className="item-editor__type">
             <label className="field-label" htmlFor={`${controlId}-type`}>
               Answer type
@@ -129,34 +142,17 @@ export function ItemRow({
             </select>
           </div>
 
-          {/*
-            `<label>` envolvente es lo correcto para un checkbox y es la excepción a la regla
-            de `htmlFor`/`id` que sigue el resto del archivo: el texto de un checkbox ES su
-            área de click, y separarlos achica el objetivo a 13 píxeles en una tablet.
-          */}
-          <label className="item-editor__required">
-            <input
-              type="checkbox"
-              checked={item.required}
-              onChange={(event) => onRequired(event.target.checked)}
-            />
-            Required
-          </label>
-
-          {/*
-            EL TOGGLE NO SE MUEVE. Es el mismo botón en el mismo lugar abierto y cerrado:
-            si el de cerrar viviera dentro del panel, abrir movería el control lejos del
-            cursor y habría que ir a buscarlo para deshacer el click recién hecho.
-          */}
           {hasConfiguration(item.response_type) ? (
             <button
               type="button"
               className="item-editor__settings-toggle"
               aria-expanded={open}
               aria-controls={`${controlId}-settings`}
+              title={open ? "Hide settings" : "Edit settings"}
+              aria-label={open ? "Hide settings" : "Edit settings"}
               onClick={() => setOpen((wasOpen) => !wasOpen)}
             >
-              {open ? "Hide settings" : "Edit settings"}
+              <GearIcon size={18} />
             </button>
           ) : null}
         </div>

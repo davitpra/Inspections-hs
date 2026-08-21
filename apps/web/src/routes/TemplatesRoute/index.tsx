@@ -1,3 +1,4 @@
+import { DocumentIcon, LockIcon } from '../../components/icons';
 import { useAppSession } from '../../app/session-context';
 import { canAuthorTemplates } from '../../permissions/session';
 import { TemplateDrafts } from './TemplateDrafts';
@@ -29,10 +30,26 @@ export function TemplatesRoute(): React.JSX.Element {
   if (!canAuthorTemplates(account)) {
     // Y sin disparar ninguna consulta: pedir algo que el servidor va a negar solo sirve
     // para llenar el log de 403. Mismo criterio que `RosterRoute`.
+    //
+    // El encabezado se dibuja igual que en la pantalla completa: quien llega acá tiene que
+    // saber en qué pantalla está antes de leer por qué no puede usarla. El aviso es un
+    // `.status-card` y no un `.status-card--error`: no falló nada, esta pantalla no es suya.
     return (
       <>
-        <h1>Templates</h1>
-        <p className="notice">Only the H&amp;S coordinator can write templates.</p>
+        <header className="scheduling__top">
+          <div className="scheduling__header">
+            <div className="scheduling__title">
+              <span className="scheduling__icon">
+                <DocumentIcon size={22} />
+              </span>
+              <h1>Templates</h1>
+            </div>
+          </div>
+        </header>
+
+        <p className="status-card">
+          <LockIcon size={20} /> Only the H&amp;S coordinator can write templates.
+        </p>
       </>
     );
   }

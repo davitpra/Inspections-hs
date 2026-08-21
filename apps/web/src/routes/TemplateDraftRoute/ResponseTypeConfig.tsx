@@ -61,10 +61,10 @@ export function ResponseTypeConfig({
   switch (item.response_type) {
     case 'scale':
       return (
-        <>
+        <div className="item-editor__fields">
           {number('Lowest', 'min', item.min)}
           {number('Highest', 'max', item.max, 'Whole numbers, and the lowest must be lower.')}
-        </>
+        </div>
       );
 
     case 'text':
@@ -72,11 +72,11 @@ export function ResponseTypeConfig({
 
     case 'number':
       return (
-        <>
+        <div className="item-editor__fields">
           {number('Minimum', 'min', item.min)}
           {number('Maximum', 'max', item.max)}
           {number('Decimal places', 'decimals', item.decimals, 'Use 0 for whole numbers.')}
-        </>
+        </div>
       );
 
     case 'single_choice':
@@ -110,10 +110,10 @@ export function ResponseTypeConfig({
 
     case 'photo':
       return (
-        <>
+        <div className="item-editor__fields">
           {number('Fewest photos', 'min_count', item.min_count)}
           {number('Most photos', 'max_count', item.max_count)}
-        </>
+        </div>
       );
 
     default:

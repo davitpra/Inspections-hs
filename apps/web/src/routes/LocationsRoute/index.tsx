@@ -7,18 +7,12 @@ import { queryKeys } from '../../api/query-keys';
 import { useAppSession } from '../../app/session-context';
 import { InfoIcon, PinIcon, PlusIcon } from '../../components/icons';
 import { canAdministerCatalog } from '../../permissions/session';
-import { LocationRow } from './LocationRow';
+import { MappingTable } from './MappingTable';
 import { MappingToolbar } from './MappingToolbar';
 import { NewLocationForm } from './NewLocationForm';
 import { Orphans } from './Orphans';
 import { RetireLocationDialog } from './RetireLocationDialog';
-import {
-  progressLabel,
-  siteProgress,
-  visibleLocations,
-  type CoverageFilter,
-  type SortDirection,
-} from './presentation';
+import { visibleLocations, type CoverageFilter, type SortDirection } from './presentation';
 
 /**
  * §6 — El catálogo de ubicaciones: qué lugares nombran las plantillas y cuál de ellos existe
@@ -163,78 +157,15 @@ function LocationCatalog({ siteScope }: { siteScope: readonly string[] }): React
             total={allShared.length}
           />
 
-          {allShared.length === 0 ? (
-            <p className="note">
-              No shared locations yet. Add one, then tick the plants where it exists.
-            </p>
-          ) : null}
-
-          {allShared.length > 0 && rows.length === 0 ? (
-            <p className="note">No locations match this filter. Try another name, or All.</p>
-          ) : null}
-
-          {/*
-            Roles de tabla sobre la lista: es una tabla de datos dibujada con flex, y sin
-            declararlo `aria-sort` no significa nada —solo vale sobre un `columnheader`—. El
-            encabezado tampoco puede ser `aria-hidden`: tiene adentro un botón, y un foco
-            dentro de algo escondido es un foco que el lector de pantalla no anuncia.
-          */}
-          {rows.length > 0 ? (
-            <ul className="mapping__table" role="table" aria-label="Locations by plant">
-              <li className="mapping__row mapping__row--head" role="row">
-                <div
-                  className="mapping__cell mapping__cell--name"
-                  role="columnheader"
-                  aria-sort={direction === 'asc' ? 'ascending' : 'descending'}
-                >
-                  <button
-                    type="button"
-                    className="mapping__sort"
-                    onClick={() => setDirection((was) => (was === 'asc' ? 'desc' : 'asc'))}
-                  >
-                    Location <span aria-hidden>{direction === 'asc' ? '↑' : '↓'}</span>
-                    <span className="mapping__sr">
-                      {direction === 'asc' ? 'sorted A to Z' : 'sorted Z to A'}
-                    </span>
-                  </button>
-                </div>
-                {columns.map((site) => (
-                  <div
-                    key={site.id}
-                    className="mapping__cell mapping__cell--plant"
-                    role="columnheader"
-                  >
-                    {site.name}
-                    {/*
-                      El único número que importa, y va acá porque ya no hay una planta
-                      elegida a la que ponérselo arriba: sin él hay que contar los ticks de
-                      la columna a ojo para saber si falta algo.
-                    */}
-                    <span className="mapping__progress">
-                      {progressLabel(siteProgress(allShared, allLocations, site.id))}
-                    </span>
-                  </div>
-                ))}
-                <div
-                  className="mapping__cell mapping__cell--actions"
-                  role="columnheader"
-                  aria-label="Actions"
-                >
-                  <span className="mapping__sr">Actions</span>
-                </div>
-              </li>
-
-              {rows.map((each) => (
-                <LocationRow
-                  key={each.id}
-                  shared={each}
-                  locations={allLocations}
-                  sites={columns}
-                  onRetire={setRetiring}
-                />
-              ))}
-            </ul>
-          ) : null}
+          <MappingTable
+            sites={columns}
+            shared={allShared}
+            rows={rows}
+            locations={allLocations}
+            direction={direction}
+            onDirection={setDirection}
+            onRetire={setRetiring}
+          />
         </section>
       ) : null}
 

@@ -432,10 +432,22 @@ describe('duplicar', () => {
     renderRoute();
     await ready();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Duplicate section Guarding' }));
+    const menu = await openMenu('More actions for section Guarding');
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Duplicate section' }));
 
     expect(screen.getAllByLabelText('Location')).toHaveLength(2);
     expect(screen.getByText(/Nothing left to fill in/)).toBeTruthy();
+  });
+
+  it('elimina una sección desde su menú', async () => {
+    renderRoute();
+    await ready();
+
+    const menu = await openMenu('More actions for section Guarding');
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Remove section' }));
+
+    expect(screen.queryByLabelText('Location')).toBeNull();
+    expect(screen.getByText('Your flow is empty')).toBeTruthy();
   });
 });
 

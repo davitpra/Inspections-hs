@@ -12,12 +12,10 @@ import { RowMenu } from "../../components/RowMenu";
 import {
   BuildingIcon,
   ChevronIcon,
-  CopyIcon,
   GripIcon,
   InfoIcon,
   PinIcon,
   PlusIcon,
-  TrashIcon,
 } from "../../components/icons";
 import { ItemRow } from "./ItemRow";
 import {
@@ -161,30 +159,13 @@ export function SectionCard({
           </div>
           <p className="note">
             Section applies to:{" "}
-            {sectionAppliesTo(section, locations, siteIds, sites)}
+            <span className="builder__section-scope">
+              {sectionAppliesTo(section, locations, siteIds, sites)}
+            </span>
           </p>
         </div>
 
         <div className="builder__section-actions">
-          <div className="builder__section-primary-actions">
-            <button
-              type="button"
-              onClick={onDuplicate}
-              aria-label={`Duplicate ${label}`}
-            >
-              <CopyIcon />{" "}
-              <span className="builder__action-label">Duplicate</span>
-            </button>
-            <button
-              type="button"
-              className="button--danger-quiet"
-              onClick={onRemove}
-              aria-label={`Remove ${label}`}
-            >
-              <TrashIcon />{" "}
-              <span className="builder__action-label">Remove</span>
-            </button>
-          </div>
           <button
             type="button"
             className={
@@ -216,6 +197,8 @@ export function SectionCard({
               disabled: index === count - 1,
               onSelect: () => onMove(1),
             },
+            { label: "Duplicate section", onSelect: onDuplicate },
+            { label: "Remove section", tone: "danger", onSelect: onRemove },
           ]}
         />
       </div>

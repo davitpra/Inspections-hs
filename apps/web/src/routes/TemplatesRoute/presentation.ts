@@ -32,3 +32,13 @@ export function sortDrafts(drafts: readonly TemplateDraftSummary[]): TemplateDra
 export function canCreate(name: string): boolean {
   return name.trim().length > 0;
 }
+
+/**
+ * Cuántos borradores hay, en el encabezado de la tarjeta que los lista.
+ *
+ * En palabras y no un número suelto: "3" al lado de un título es un número sin unidad, y
+ * el singular importa porque el primer borrador es el caso que más veces se ve.
+ */
+export function draftCountLabel(count: number): string {
+  return count === 1 ? '1 draft' : `${count} drafts`;
+}

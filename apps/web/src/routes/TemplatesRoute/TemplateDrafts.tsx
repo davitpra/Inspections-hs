@@ -3,11 +3,11 @@ import { useState } from 'react';
 
 import { listTemplateDrafts } from '../../api/templates';
 import { queryKeys } from '../../api/query-keys';
-import { GridIcon, InfoIcon } from '../../components/icons';
+import { DocumentIcon, GridIcon, InfoIcon } from '../../components/icons';
 import { DiscardDraftDialog } from './DiscardDraftDialog';
 import { DraftList } from './DraftList';
 import { NewDraftForm } from './NewDraftForm';
-import { sortDrafts } from './presentation';
+import { draftCountLabel, sortDrafts } from './presentation';
 
 export function TemplateDrafts(): React.JSX.Element {
   /**
@@ -27,17 +27,48 @@ export function TemplateDrafts(): React.JSX.Element {
 
   return (
     <>
-      <h1>Templates</h1>
+      {/*
+        El mismo encabezado que la consola de programación y que el builder: el coordinador
+        se mueve entre las tres, y tres títulos con tres formas distintas se leen como tres
+        aplicaciones. Ver `DraftHeader` en `TemplateDraftRoute`.
+      */}
+      <header className="scheduling__top">
+        <div className="scheduling__header">
+          <div className="scheduling__title">
+            <span className="scheduling__icon">
+              <DocumentIcon size={22} />
+            </span>
+            <h1>Templates</h1>
+          </div>
+          <p className="scheduling__subtitle">
+            Write the questions an inspection asks, and keep working on them until they are
+            ready.
+          </p>
+        </div>
+      </header>
 
       {/**
         Lo que esta pantalla NO hace, dicho arriba y no escondido en un botón deshabilitado:
         sin esta línea, el coordinador escribe una plantilla entera y recién al final
         descubre que no puede usarla.
+
+        Es un `.notice-card` y no un `.notice`: enmarcado y tintado se lee antes que el
+        formulario que tiene debajo, que es exactamente el orden en que hace falta.
       */}
-      <p className="note">
-        These are drafts. Publishing a template so it can be scheduled is not available yet —
-        a draft is saved, reordered and reviewed here, and published in a later release.
-      </p>
+      <div className="notice-card">
+        <div className="notice-card__body">
+          <span className="notice-card__icon">
+            <InfoIcon size={20} />
+          </span>
+          <div>
+            <p className="notice-card__title">These are drafts</p>
+            <p className="notice-card__text">
+              Publishing a template so it can be scheduled is not available yet — a draft is
+              saved, reordered and reviewed here, and published in a later release.
+            </p>
+          </div>
+        </div>
+      </div>
 
       <NewDraftForm />
 
@@ -53,10 +84,30 @@ export function TemplateDrafts(): React.JSX.Element {
       ) : null}
 
       {drafts.isSuccess && visible.length === 0 ? (
-        <p>No drafts yet. Start one above.</p>
+        <div className="drafts-empty">
+          <span className="drafts-empty__icon">
+            <DocumentIcon size={22} />
+          </span>
+          <p className="drafts-empty__title">No drafts yet</p>
+          <p className="note">Start one above. You can rename it later.</p>
+        </div>
       ) : null}
 
-      {visible.length > 0 ? <DraftList drafts={visible} onDiscard={setDiscarding} /> : null}
+      {/*
+        La lista dentro de una tarjeta, con el conteo en el encabezado: es la única forma
+        de saber de un vistazo cuánto hay sin contar renglones, y en una pantalla que
+        crece hasta doce o quince borradores eso deja de ser obvio enseguida.
+      */}
+      {visible.length > 0 ? (
+        <div className="card drafts-card">
+          <div className="card__head">
+            <h3>Your drafts</h3>
+            <span className="note">{draftCountLabel(visible.length)}</span>
+          </div>
+
+          <DraftList drafts={visible} onDiscard={setDiscarding} />
+        </div>
+      ) : null}
 
       {/**
         Montaje condicional: cada apertura crea el diálogo de nuevo, así que `showModal()`

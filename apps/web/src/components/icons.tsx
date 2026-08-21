@@ -117,6 +117,26 @@ export function CheckIcon({ size = 18 }: { size?: number }): React.JSX.Element {
   );
 }
 
+/** La bandeja que recibe trabajo desde el servidor. */
+export function InboxIcon({ size = 18 }: { size?: number }): React.JSX.Element {
+  return (
+    <svg {...svgProps(size)}>
+      <path d="M4 5h16l1 10H3L4 5Z" />
+      <path d="M3 15h5l1.5 2h5L16 15h5M12 8v4M9.5 10.5 12 13l2.5-2.5" />
+    </svg>
+  );
+}
+
+/** La bandeja que espera trabajo para enviar al servidor. */
+export function OutboxIcon({ size = 18 }: { size?: number }): React.JSX.Element {
+  return (
+    <svg {...svgProps(size)}>
+      <path d="M4 19h16l1-10H3l1 10Z" />
+      <path d="M3 9h5l1.5-2h5L16 9h5M12 16V12M9.5 13.5 12 11l2.5 2.5" />
+    </svg>
+  );
+}
+
 export function PlayIcon({ size = 18 }: { size?: number }): React.JSX.Element {
   return (
     <svg {...svgProps(size)}>
@@ -150,6 +170,18 @@ export function MenuIcon({ size = 24 }: { size?: number }): React.JSX.Element {
   return (
     <svg {...svgProps(size)}>
       <path d="M4 7h16M4 12h16M4 17h16" />
+    </svg>
+  );
+}
+
+/**
+ * Cerrar. Como `MenuIcon`, es el contenido entero de un botón y no acompaña a un texto: el
+ * nombre accesible lo pone quien lo usa (`Sheet` escribe "Close menu"), no el dibujo.
+ */
+export function CloseIcon({ size = 24 }: { size?: number }): React.JSX.Element {
+  return (
+    <svg {...svgProps(size)}>
+      <path d="M6 6l12 12M18 6 6 18" />
     </svg>
   );
 }
@@ -199,11 +231,35 @@ export function BuildingIcon({ size = 18 }: { size?: number }): React.JSX.Elemen
 }
 
 /** Duplicar: dos hojas, una detrás de la otra. */
-export function CopyIcon({ size = 16 }: { size?: number }): React.JSX.Element {
+/**
+ * La configuración de la respuesta. El engranaje y no un lápiz: lo que abre no es editar
+ * el texto de la pregunta —eso se hace en el campo de al lado, sin abrir nada— sino los
+ * parámetros con los que se responde.
+ */
+export function GearIcon({ size = 16 }: { size?: number }): React.JSX.Element {
+  return (
+    <svg {...svgProps(size)}>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+    </svg>
+  );
+}
+
+/**
+ * Duplicar, no copiar: la hoja detrás de la hoja lleva un «+» encima. Sin él el dibujo es
+ * el de «copiar al portapapeles», y en un botón sin texto eso deja al autor esperando un
+ * lugar donde pegar algo que en realidad ya quedó creado acá abajo.
+ */
+export function DuplicateIcon({
+  size = 16,
+}: {
+  size?: number;
+}): React.JSX.Element {
   return (
     <svg {...svgProps(size)}>
       <rect x="9" y="9" width="12" height="12" rx="2" />
       <path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" />
+      <path d="M15 12v6M12 15h6" />
     </svg>
   );
 }

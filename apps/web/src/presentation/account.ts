@@ -17,3 +17,21 @@ export function displayName(account: Session): string {
 
   return full || account.email || ROLE_LABELS[account.role];
 }
+
+/**
+ * Las iniciales del avatar de la barra: dos letras cuando hay nombre y apellido, una
+ * cuando no.
+ *
+ * Se apoya en `displayName` para el respaldo y por eso nunca queda vacío — un círculo en
+ * blanco al lado del nombre se leería como un error de carga, no como una cuenta sin
+ * nombre. El avatar es decorativo (`aria-hidden` en `Sidebar`): el nombre entero está
+ * escrito al lado, y deletrearle "AR" a un lector de pantalla no agrega nada.
+ */
+export function initials(account: Session): string {
+  const first = account.firstName?.trim();
+  const last = account.lastName?.trim();
+
+  if (first && last) return `${first.charAt(0)}${last.charAt(0)}`.toUpperCase();
+
+  return displayName(account).charAt(0).toUpperCase();
+}

@@ -1,7 +1,7 @@
 import type { Session } from '@hs/contracts';
 import { describe, expect, it } from 'vitest';
 
-import { sectionTitle, visibleNavItems } from './nav-items';
+import { NAV_ITEMS, sectionTitle, visibleNavItems } from './nav-items';
 
 function account(role: Session['role']): Session {
   return {
@@ -15,6 +15,10 @@ function account(role: Session['role']): Session {
 }
 
 describe('visibleNavItems', () => {
+  it('todos los destinos tienen un icono', () => {
+    expect(NAV_ITEMS.every((item) => typeof item.icon === 'function')).toBe(true);
+  });
+
   it('ofrece programación y roster solo al coordinador', () => {
     const labels = visibleNavItems(account('hs_coordinator')).map((item) => item.label);
 

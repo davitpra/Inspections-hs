@@ -1,5 +1,4 @@
 import {
-  Link,
   Outlet,
   createRootRoute,
   createRoute,
@@ -8,7 +7,6 @@ import {
 } from '@tanstack/react-router';
 import { z } from 'zod';
 
-import { AccountChip } from '../components/AccountChip';
 import { AcceptInvitationRoute } from '../routes/AcceptInvitationRoute';
 import { ActionRoute } from '../routes/ActionRoute';
 import { ActionsRoute } from '../routes/ActionsRoute';
@@ -33,8 +31,8 @@ import { TemplateDraftRoute } from '../routes/TemplateDraftRoute';
 import { TemplatesRoute } from '../routes/TemplatesRoute';
 import { LocationsRoute } from '../routes/LocationsRoute';
 import { AppBar } from './AppBar';
-import { visibleNavItems } from './nav-items';
 import { SessionProvider, useAppSession } from './session-context';
+import { Sidebar } from './Sidebar';
 
 /**
  * ADR-003 — TanStack Router, definido en código y no por archivos.
@@ -92,7 +90,7 @@ function Shell(): React.JSX.Element {
   // todavía no tiene a dónde navegar.
   if (PUBLIC_ROUTES.includes(pathname)) {
     return (
-      <div className="shell">
+      <div className="shell shell--plain">
         <main className="shell__main">
           <Outlet />
         </main>
@@ -102,7 +100,7 @@ function Shell(): React.JSX.Element {
 
   if (!account) {
     return (
-      <div className="shell">
+      <div className="shell shell--plain">
         <main className="shell__main">
           <SignInRoute />
         </main>
@@ -113,58 +111,21 @@ function Shell(): React.JSX.Element {
   return (
     <div className="shell">
       {/*
-        DOS BARRAS, UNA SOLA VISIBLE, Y ES CSS EL QUE ELIGE (ver `.shell__nav` y `.appbar`).
-        Las dos se montan siempre y no se conmutan con un `matchMedia` en JavaScript: el
-        ancho de la ventana no es estado de la aplicación, y una barra que se monta y se
-        desmonta al girar el teléfono perdería el foco del teclado en el giro.
+         DOS BARRAS, UNA SOLA VISIBLE, Y ES CSS EL QUE ELIGE (ver `.sidebar` y `.appbar`).
+         Las dos se montan siempre y no se conmutan con un `matchMedia` en JavaScript: el
+         ancho de la ventana no es estado de la aplicación, y una barra que se monta y se
+         desmonta al girar el teléfono perdería el foco del teclado en el giro.
 
-        Arriba de 48rem, las pestañas: caben, y tener los ocho destinos a la vista con el
-        actual subrayado es mejor que esconderlos detrás de un botón.
+         Arriba de 48rem, el sidebar queda en su propia columna y mantiene los destinos a la
+         vista con el actual marcado por forma, sin quitarle alto vertical al contenido.
 
-        Debajo, `AppBar`: menú, título y cuenta. El porqué de que no sean las mismas pestañas
-        achicadas está escrito en `AppBar.tsx`, junto al componente que lo resuelve.
+          Debajo, `AppBar`: menú, título y cuenta. El porqué de que no sean las mismas pestañas
+          achicadas está escrito en `AppBar.tsx`, junto al componente que lo resuelve.
 
-        No es `position: sticky` —ninguna de las dos—: el indicador de trabajo sin enviar
-        (ADR-010) ya se pega arriba, y dos barras pegadas se tapan entre sí. Se elige la que
-        no puede perderse.
-      */}
-      <nav className="shell__nav" aria-label="Main">
-        {/*
-          La barra tiene DOS grupos y no una fila de elementos sueltos: a la izquierda a dónde
-          se puede ir, a la derecha quién está adentro. Con un solo grupo, el `flex-wrap` de
-          una ventana angosta terminaba bajando el chip a un renglón propio o dejando "Sign
-          out" colgado entre dos links.
-
-          Los destinos salen de `NAV_ITEMS` y no están escritos acá: son los mismos ocho que
-          dibuja el menú del teléfono, y dos listas a mano se separan en el primer destino
-          nuevo. Ahí está también por qué dos de ellos dependen del rol.
-        */}
-        <div className="shell__nav-links">
-          {visibleNavItems(account).map((item) => (
-            <Link
-              key={item.to}
-              className="navlink"
-              to={item.to}
-              // Sin `exact`, la raíz es prefijo de todo y quedaría marcada en cada pantalla.
-              activeOptions={item.to === '/' ? { exact: true } : undefined}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </div>
-
-        {/*
-          El chip y "Sign out" quedan juntos al final de la barra, y en un grupo propio: el
-          `margin-left: auto` que empujaba primero al botón y después al chip vive acá, así
-          el par se mantiene junto cuando los links de la izquierda pasan a dos renglones.
-        */}
-        <div className="shell__account">
-          <AccountChip account={account} />
-          <button type="button" className="shell__signout" onClick={() => void signOut()}>
-            Sign out
-          </button>
-        </div>
-      </nav>
+         El sidebar sí puede ser `position: sticky`: al ocupar su propia columna no compite con
+         `.unsynced`, que se pega con `z-index: 10` dentro de `.shell__main`.
+       */}
+      <Sidebar account={account} onSignOut={() => void signOut()} />
 
       <AppBar account={account} pathname={pathname} onSignOut={() => void signOut()} />
 

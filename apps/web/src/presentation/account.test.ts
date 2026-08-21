@@ -1,7 +1,7 @@
 import type { Session } from '@hs/contracts';
 import { describe, expect, it } from 'vitest';
 
-import { displayName } from './account';
+import { displayName, initials } from './account';
 
 const USER = '11111111-1111-4111-8111-111111111111';
 const PERSON = '22222222-2222-4222-8222-222222222222';
@@ -37,5 +37,25 @@ describe('displayName', () => {
     expect(
       displayName(session({ firstName: undefined, lastName: undefined, email: undefined })),
     ).toBe('H&S coordinator');
+  });
+});
+
+describe('initials', () => {
+  it('toma la primera letra del nombre y la del apellido', () => {
+    expect(initials(session())).toBe('AR');
+  });
+
+  it('cae a una sola letra cuando falta el apellido', () => {
+    expect(initials(session({ lastName: undefined }))).toBe('A');
+  });
+
+  it('cae a la primera letra del email cuando no hay nombre', () => {
+    expect(initials(session({ firstName: undefined, lastName: undefined }))).toBe('A');
+  });
+
+  it('cae a la primera letra del rol cuando no hay ni nombre ni email', () => {
+    expect(
+      initials(session({ firstName: undefined, lastName: undefined, email: undefined })),
+    ).toBe('H');
   });
 });

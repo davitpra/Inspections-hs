@@ -18,7 +18,11 @@ export function DraftRow({
           El nombre es el link: abrir el borrador es lo que se hace con él el 95% de las veces,
           y un botón "Edit" al costado pondría dos objetivos donde hay uno.
         */}
-        <Link to="/templates/drafts/$id" params={{ id: draft.id }}>
+        <Link
+          className="draft-name"
+          to="/templates/drafts/$id"
+          params={{ id: draft.id }}
+        >
           {draft.name}
         </Link>
         {/**

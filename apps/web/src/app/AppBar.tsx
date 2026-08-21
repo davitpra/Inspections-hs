@@ -83,8 +83,8 @@ export function AppBar({
       </div>
 
       {open === 'nav' ? (
-        <Sheet side="start" label="Main" onClose={() => setOpen(null)}>
-          <nav className="sheet__nav">
+        <Sheet side="start" label="Menu" onClose={() => setOpen(null)}>
+          <nav className="sheet__nav" aria-label="Main">
             {visibleNavItems(account).map((item) => (
               <Link
                 key={item.to}
@@ -94,7 +94,10 @@ export function AppBar({
                 activeOptions={item.to === '/' ? { exact: true } : undefined}
                 onClick={() => setOpen(null)}
               >
-                {item.label}
+                <span className="sheet__link-icon">
+                  <item.icon size={20} />
+                </span>
+                <span>{item.label}</span>
               </Link>
             ))}
           </nav>

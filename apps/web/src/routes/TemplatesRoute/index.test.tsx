@@ -169,7 +169,8 @@ describe('el listado', () => {
 
     renderRoute();
 
-    expect(await screen.findByText('No drafts yet. Start one above.')).toBeTruthy();
+    expect(await screen.findByText('No drafts yet')).toBeTruthy();
+    expect(screen.getByText(/Start one above/)).toBeTruthy();
   });
 
   it('sin conexión lo dice en vez de mostrar una lista vacía', async () => {
