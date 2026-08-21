@@ -471,9 +471,9 @@ describe('la configuración del tipo de respuesta', () => {
     await ready();
 
     expect(screen.queryByText('Answer settings')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Edit answer settings' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Edit settings' })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Edit answer settings' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }));
 
     expect(screen.getByText('Answer settings')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Hide answer settings' })).toBeNull();

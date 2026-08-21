@@ -149,9 +149,9 @@ export function ItemRow({
               className="item-editor__settings-toggle"
               aria-expanded={open}
               aria-controls={`${controlId}-settings`}
-              onClick={() => setOpen((wasOpen) => !wasOpen)}
+              onClick={() => setOpen(true)}
             >
-              {open ? "Hide answer settings" : "Edit answer settings"}
+              Edit settings
             </button>
           ) : null}
         </div>
