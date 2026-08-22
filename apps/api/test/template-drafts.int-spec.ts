@@ -317,6 +317,44 @@ describe('el borrador incompleto', () => {
     expect(saved.issues).toEqual([]);
   });
 
+  it('conserva la prescripción y el umbral al atravesar jsonb', async () => {
+    const draft = await newDraft();
+    const document: TemplateDraftDocument = {
+      sections: [
+        {
+          section_key: 'guarding',
+          section_title: 'Guarding',
+          items: [
+            {
+              item_key: 'guard.temperature',
+              prompt: 'Is the machine temperature within limits?',
+              required: true,
+              response_type: 'number',
+              min: 0,
+              max: 100,
+              decimals: 0,
+              finding: {
+                corrective_action: 'Stop the machine and investigate the temperature.',
+                control_level: 'engineering',
+                fails_when: { operator: 'gt', value: 80 },
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    await templates.saveDraft(asCoordinator(), draft.id, {
+      name: draft.name,
+      document,
+      site_ids: [SITE],
+    });
+
+    const reread = await templates.getDraft(asCoordinator(), draft.id);
+
+    expect(reread.document).toEqual(document);
+  });
+
   it('el listado informa publishable sin traer el documento', async () => {
     const draft = await newDraft();
 

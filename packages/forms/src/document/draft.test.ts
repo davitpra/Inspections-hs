@@ -227,6 +227,85 @@ describe('draftIssues', () => {
     expect(draftIssues(draft())).toEqual([]);
   });
 
+  it('un borrador completo con una prescripción válida no reporta nada', () => {
+    expect(
+      draftIssues(
+        draft({
+          sections: [
+            {
+              section_key: 'guarding',
+              section_title: 'Guarding',
+              items: [
+                item({
+                  finding: {
+                    corrective_action: 'Refit the machine guard before use.',
+                    control_level: 'engineering',
+                  },
+                }),
+              ],
+            },
+          ],
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  it('reporta una acción correctiva en blanco', () => {
+    const issues = draftIssues(
+      withItem(
+        item({
+          finding: { corrective_action: '  ', control_level: 'administrative' },
+        }),
+      ),
+    );
+
+    expect(issues[0]?.path).toEqual(['sections', 0, 'items', 0]);
+    expect(issues.map((each) => each.message)).toContain(
+      'Item "Is the guard fitted?" in section "Guarding": the corrective action cannot be blank.',
+    );
+  });
+
+  it('reporta un umbral en un tipo que no es medido', () => {
+    const issues = draftIssues(
+      withItem(
+        item({
+          finding: {
+            corrective_action: 'Refit the machine guard.',
+            control_level: 'engineering',
+            fails_when: { operator: 'gt', value: 1 },
+          },
+        }),
+      ),
+    );
+
+    expect(issues[0]?.path).toEqual(['sections', 0, 'items', 0]);
+    expect(issues.map((each) => each.message)).toContain(
+      'Item "Is the guard fitted?" in section "Guarding": a failure threshold only applies to scale and number questions.',
+    );
+  });
+
+  it('reporta un umbral fuera de los límites del ítem', () => {
+    const issues = draftIssues(
+      withItem(
+        item({
+          response_type: 'scale',
+          min: 1,
+          max: 5,
+          finding: {
+            corrective_action: 'Review the scale result.',
+            control_level: 'administrative',
+            fails_when: { operator: 'gt', value: 9 },
+          },
+        }),
+      ),
+    );
+
+    expect(issues[0]?.path).toEqual(['sections', 0, 'items', 0]);
+    expect(issues.map((each) => each.message)).toContain(
+      'Item "Is the guard fitted?" in section "Guarding": the failure threshold (9) must be between 1 and 5.',
+    );
+  });
+
   it('reporta un borrador sin secciones', () => {
     expect(messages(emptyDraftDocument())).toContain('no sections');
   });

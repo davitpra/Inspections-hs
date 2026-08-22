@@ -7,6 +7,10 @@ import type {
 import { describe, expect, it } from 'vitest';
 
 import {
+  CONTROL_LEVEL_OPTIONS,
+  defaultFinding,
+  FAILURE_OPERATOR_LABELS,
+  findingButtonLabel,
   hasUnsavedChanges,
   locationCoverage,
   offerableLocations,
@@ -45,6 +49,34 @@ describe('totalItems', () => {
 
   it('un documento vacío no tiene ninguna', () => {
     expect(totalItems({ sections: [] })).toBe(0);
+  });
+});
+
+describe('prescripciones', () => {
+  it('ofrece los cinco niveles en el orden de la jerarquía', () => {
+    expect(CONTROL_LEVEL_OPTIONS).toEqual([
+      { value: 'elimination', label: 'Elimination' },
+      { value: 'substitution', label: 'Substitution' },
+      { value: 'engineering', label: 'Engineering' },
+      { value: 'administrative', label: 'Administrative' },
+      { value: 'ppe', label: 'PPE' },
+    ]);
+  });
+
+  it('nombra los operadores en inglés', () => {
+    expect(FAILURE_OPERATOR_LABELS).toEqual({
+      lt: 'Less than',
+      lte: 'Less than or equal to',
+      gt: 'Greater than',
+      gte: 'Greater than or equal to',
+    });
+  });
+
+  it('agrega umbral solo a los tipos medidos', () => {
+    expect(defaultFinding('yes_no')).not.toHaveProperty('fails_when');
+    expect(defaultFinding('number')).toHaveProperty('fails_when');
+    expect(findingButtonLabel(false)).toBe('Add finding');
+    expect(findingButtonLabel(true)).toBe('Edit finding');
   });
 });
 

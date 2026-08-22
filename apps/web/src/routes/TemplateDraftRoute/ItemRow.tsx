@@ -12,7 +12,7 @@ import {
   RESPONSE_TYPE_OPTIONS,
 } from "../../presentation/templates";
 import { ResponseTypeConfig } from "./ResponseTypeConfig";
-import { hasConfiguration } from "./presentation";
+import { findingButtonLabel, hasConfiguration } from "./presentation";
 import type { useSortable } from "./useSortable";
 
 /**
@@ -43,6 +43,7 @@ export function ItemRow({
   onMove,
   onDuplicate,
   onRemove,
+  onAddFinding,
 }: {
   item: TemplateDraftItem;
   index: number;
@@ -60,6 +61,8 @@ export function ItemRow({
   onMove: (delta: number) => void;
   onDuplicate: () => void;
   onRemove: () => void;
+  // Opcional: la fila se dibuja igual donde todavía no hay a qué colgar la acción.
+  onAddFinding?: () => void;
 }): React.JSX.Element {
   const controlId = useId();
   // Las opciones son configuración avanzada: mantenerlas cerradas hace legible la lista de
@@ -153,6 +156,16 @@ export function ItemRow({
               onClick={() => setOpen((wasOpen) => !wasOpen)}
             >
               <GearIcon size={18} />
+            </button>
+          ) : null}
+
+          {onAddFinding ? (
+            <button
+              type="button"
+              className="item-editor__corrective"
+              onClick={onAddFinding}
+            >
+              {findingButtonLabel(item.finding !== undefined)}
             </button>
           ) : null}
         </div>

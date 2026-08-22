@@ -5,6 +5,7 @@ import type {
   OrganizationLocationOption,
   ResponseType,
   Site,
+  TemplateDraftItem,
   TemplateDraftSection,
 } from "@hs/contracts";
 
@@ -18,6 +19,7 @@ import {
   PlusIcon,
 } from "../../components/icons";
 import { ItemRow } from "./ItemRow";
+import { FindingSheet } from "./FindingSheet";
 import {
   locationCoverage,
   offerableLocations,
@@ -87,6 +89,10 @@ export function SectionCard({
     ) => void;
     optionAdd: (itemIndex: number) => void;
     optionRemove: (itemIndex: number, optionIndex: number) => void;
+    finding: (
+      itemIndex: number,
+      finding: NonNullable<TemplateDraftItem["finding"]> | null,
+    ) => void;
     move: (itemIndex: number, delta: number) => void;
     duplicate: (itemIndex: number) => void;
     remove: (itemIndex: number) => void;
@@ -94,6 +100,7 @@ export function SectionCard({
 }): React.JSX.Element {
   const controlId = useId();
   const [open, setOpen] = useState(true);
+  const [findingItem, setFindingItem] = useState<number | null>(null);
   const items = useSortable(`${controlId}-items`, item.move);
 
   /**
@@ -309,6 +316,7 @@ export function SectionCard({
                 onMove={(delta) => item.move(itemIndex, delta)}
                 onDuplicate={() => item.duplicate(itemIndex)}
                 onRemove={() => item.remove(itemIndex)}
+                onAddFinding={() => setFindingItem(itemIndex)}
               />
             ))}
           </ul>
@@ -319,6 +327,17 @@ export function SectionCard({
             </button>
           </div>
         </>
+      ) : null}
+
+      {findingItem !== null && section.items[findingItem] ? (
+        <FindingSheet
+          item={section.items[findingItem]}
+          onClose={() => setFindingItem(null)}
+          onSave={(finding) => {
+            item.finding(findingItem, finding);
+            setFindingItem(null);
+          }}
+        />
       ) : null}
     </section>
   );

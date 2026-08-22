@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { referencedItemKeys, visibleWhenSchema } from './conditions.js';
+import { findingSchema, type FindingPrescription } from './controls.js';
 import { ITEM_KEY_PATTERN, SECTION_KEY_PATTERN } from './keys.js';
 import { templateDocumentSchema, type ResponseType, type TemplateDocument } from './schema.js';
 
@@ -51,6 +52,8 @@ const draftItemBase = {
   prompt: z.string(),
   required: z.boolean(),
   visible_when: visibleWhenSchema.optional(),
+  // Un bloque mantiene junta la acción y su nivel; así no existen prescripciones a medias.
+  finding: findingSchema.optional(),
 };
 
 const draftItemSchema = z.discriminatedUnion('response_type', [
@@ -284,6 +287,8 @@ function checkItemConfig(
   path: (string | number)[],
   issues: DraftIssue[],
 ): void {
+  checkFinding(item.finding, item, where, path, issues);
+
   switch (item.response_type) {
     case 'scale':
       if (!isWholeNumber(item.min) || !isWholeNumber(item.max)) {
@@ -387,6 +392,37 @@ function checkItemConfig(
 
     default:
       break;
+  }
+}
+
+function checkFinding(
+  finding: FindingPrescription | undefined,
+  item: TemplateDraftItem,
+  where: string,
+  path: (string | number)[],
+  issues: DraftIssue[],
+): void {
+  if (!finding) return;
+
+  if (finding.corrective_action.trim().length === 0) {
+    issues.push({ path, message: `${where}: the corrective action cannot be blank.` });
+  }
+
+  if (!finding.fails_when) return;
+
+  if (item.response_type !== 'scale' && item.response_type !== 'number') {
+    issues.push({
+      path,
+      message: `${where}: a failure threshold only applies to scale and number questions.`,
+    });
+    return;
+  }
+
+  if (finding.fails_when.value < item.min || finding.fails_when.value > item.max) {
+    issues.push({
+      path,
+      message: `${where}: the failure threshold (${finding.fails_when.value}) must be between ${item.min} and ${item.max}.`,
+    });
   }
 }
 
@@ -509,6 +545,7 @@ function checkVisibility(draft: TemplateDraftDocument, issues: DraftIssue[]): vo
  * del documento publicado, meses después y lejos de quien lo escribió.
  */
 export function defaultItemConfig(responseType: ResponseType): Record<string, unknown> {
+  // `finding` es una prescripción autoral, no configuración de respuesta: los ítems nacen sin ella.
   switch (responseType) {
     case 'scale':
       return { min: 1, max: 5 };

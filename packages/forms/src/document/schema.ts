@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { referencedItemKeys, visibleWhenSchema, type VisibleWhen } from './conditions.js';
+import { findingSchema } from './controls.js';
 import { ITEM_KEY_PATTERN, SECTION_KEY_PATTERN } from './keys.js';
 
 /**
@@ -60,6 +61,8 @@ const itemBase = {
   position: z.number().int().positive(),
   required: z.boolean(),
   visible_when: visibleWhenSchema.optional(),
+  // El esquema estricto también debe conocerlo: de lo contrario draftIssues lo marcaría como genérico.
+  finding: findingSchema.optional(),
 };
 
 /** Una opción de un ítem de selección. `value` es lo que se guarda; `label`, lo que se lee. */

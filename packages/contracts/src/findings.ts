@@ -1,5 +1,11 @@
-import { ITEM_KEY_PATTERN } from '@hs/forms';
+import { controlLevelSchema, ITEM_KEY_PATTERN } from '@hs/forms';
 import { z } from 'zod';
+
+export {
+  CONTROL_LEVELS,
+  controlLevelSchema,
+  type ControlLevel,
+} from '@hs/forms';
 
 /**
  * Requisitos §7 etapa 4 — El hallazgo y su clasificación de riesgo.
@@ -44,29 +50,13 @@ export const SEVERITIES = ['negligible', 'minor', 'moderate', 'major', 'catastro
 /** Derivado de los dos anteriores. **Nunca viaja en un request** (design D5). */
 export const RISK_LEVELS = ['low', 'medium', 'high', 'critical'] as const;
 
-/**
- * La jerarquía de controles de R2, de la más efectiva a la menos. El sistema
- * registra el nivel de la solución propuesta y **no la juzga**: que la respuesta
- * a un riesgo crítico haya sido un par de guantes es exactamente el dato que
- * hace falta poder ver después.
- */
-export const CONTROL_LEVELS = [
-  'elimination',
-  'substitution',
-  'engineering',
-  'administrative',
-  'ppe',
-] as const;
-
 export const probabilitySchema = z.enum(PROBABILITIES);
 export const severitySchema = z.enum(SEVERITIES);
 export const riskLevelSchema = z.enum(RISK_LEVELS);
-export const controlLevelSchema = z.enum(CONTROL_LEVELS);
 
 export type Probability = z.infer<typeof probabilitySchema>;
 export type Severity = z.infer<typeof severitySchema>;
 export type RiskLevel = z.infer<typeof riskLevelSchema>;
-export type ControlLevel = z.infer<typeof controlLevelSchema>;
 
 /** De dónde nació el hallazgo. Determina si tiene `item_key` o no. */
 export const FINDING_ORIGINS = ['inspection', 'manual'] as const;

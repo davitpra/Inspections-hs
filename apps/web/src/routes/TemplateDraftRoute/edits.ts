@@ -322,14 +322,44 @@ export function changeResponseType(
   return withItem(document, sectionIndex, itemIndex, (item) => {
     if (item.response_type === responseType) return item;
 
+    const finding = item.finding
+      ? responseType === 'scale' || responseType === 'number' || !item.finding.fails_when
+        ? item.finding
+        : {
+            corrective_action: item.finding.corrective_action,
+            control_level: item.finding.control_level,
+          }
+      : undefined;
+
     return {
       item_key: item.item_key,
       prompt: item.prompt,
       required: item.required,
       ...(item.visible_when ? { visible_when: item.visible_when } : {}),
+      ...(finding ? { finding } : {}),
       response_type: responseType,
       ...defaultItemConfig(responseType),
     } as TemplateDraftItem;
+  });
+}
+
+/** Escribe o quita la prescripción sin tocar la configuración de la pregunta. */
+export function setFinding(
+  document: TemplateDraftDocument,
+  sectionIndex: number,
+  itemIndex: number,
+  finding: NonNullable<TemplateDraftItem['finding']> | null,
+): TemplateDraftDocument {
+  return withItem(document, sectionIndex, itemIndex, (item) => {
+    const next = { ...item };
+
+    if (finding === null) {
+      delete next.finding;
+    } else {
+      next.finding = finding;
+    }
+
+    return next;
   });
 }
 

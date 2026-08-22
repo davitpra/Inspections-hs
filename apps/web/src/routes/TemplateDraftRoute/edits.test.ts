@@ -17,6 +17,7 @@ import {
   removeSection,
   renameSection,
   setConfig,
+  setFinding,
   setOption,
   setPrompt,
   setRequired,
@@ -213,6 +214,49 @@ describe('changeResponseType', () => {
     );
   });
 
+  it('conserva la prescripción al cambiar el tipo', () => {
+    const withFinding = setFinding(document(), 0, 0, {
+      corrective_action: 'Refit the guard.',
+      control_level: 'engineering',
+      fails_when: { operator: 'gt', value: 80 },
+    });
+    const changed = changeResponseType(withFinding, 0, 0, 'number');
+
+    expect(changed.sections[0]?.items[0]).toHaveProperty('finding', {
+      corrective_action: 'Refit the guard.',
+      control_level: 'engineering',
+      fails_when: { operator: 'gt', value: 80 },
+    });
+  });
+
+  it('recorta solo el umbral cuando el nuevo tipo no es medido', () => {
+    const withFinding = setFinding(changeResponseType(document(), 0, 0, 'number'), 0, 0, {
+      corrective_action: 'Refit the guard.',
+      control_level: 'engineering',
+      fails_when: { operator: 'gt', value: 80 },
+    });
+    const changed = changeResponseType(withFinding, 0, 0, 'yes_no');
+    const item = changed.sections[0]?.items[0];
+
+    expect(item).toHaveProperty('finding', {
+      corrective_action: 'Refit the guard.',
+      control_level: 'engineering',
+    });
+  });
+
+  it('no crea un umbral al cambiar a un tipo medido', () => {
+    const withFinding = setFinding(document(), 0, 0, {
+      corrective_action: 'Refit the guard.',
+      control_level: 'engineering',
+    });
+    const changed = changeResponseType(withFinding, 0, 0, 'number');
+
+    expect(changed.sections[0]?.items[0]).toHaveProperty('finding', {
+      corrective_action: 'Refit the guard.',
+      control_level: 'engineering',
+    });
+  });
+
   /**
    * La razón de ser de la función: cada tipo nace con una configuración que su propio
    * esquema acepta, así que cambiar de tipo nunca deja el documento con basura del anterior.
@@ -328,6 +372,17 @@ describe('los campos que no dependen del tipo', () => {
     expect(renamed.sections[0]?.section_title).toBe('Receiving');
     expect(renamed.sections[0]?.section_key).toBe('intake');
   });
+
+  it('setFinding escribe y elimina el bloque sin mutar el documento', () => {
+    const original = document();
+    const finding = { corrective_action: 'Refit the guard.', control_level: 'engineering' as const };
+    const withFinding = setFinding(original, 0, 0, finding);
+    const withoutFinding = setFinding(withFinding, 0, 0, null);
+
+    expect(withFinding.sections[0]?.items[0]).toHaveProperty('finding', finding);
+    expect(withoutFinding.sections[0]?.items[0]).not.toHaveProperty('finding');
+    expect(original.sections[0]?.items[0]).not.toHaveProperty('finding');
+  });
 });
 
 describe('freeKey', () => {
@@ -402,6 +457,20 @@ describe('duplicar', () => {
         max: 5,
       });
       expect(allItemKeys(next)).toEqual(['a', 'b', 'b-copy']);
+    });
+
+    it('arrastra la prescripción y genera una identidad propia', () => {
+      const source = setFinding(rich(), 0, 1, {
+        corrective_action: 'Review the guard.',
+        control_level: 'administrative',
+      });
+      const next = duplicateItem(source, 0, 1, 'b-copy');
+
+      expect(next.sections[0]?.items[2]).toHaveProperty('finding', {
+        corrective_action: 'Review the guard.',
+        control_level: 'administrative',
+      });
+      expect(next.sections[0]?.items[2]?.item_key).toBe('b-copy');
     });
 
     it('queda justo debajo del original, no al final', () => {

@@ -3416,6 +3416,83 @@ select:disabled {
   border-color: var(--brand);
 }
 
+/* Acción secundaria de la fila: quieta —sin relleno ni borde macizo— porque compite con
+   el tipo de respuesta, que es lo que hay que decidir primero. El piso de 48px lo pone el
+   `button` base (ADR-010). */
+.item-editor__corrective {
+  min-height: 48px;
+  padding: 0 0.75rem;
+  border-color: var(--line-control);
+  background: var(--paper);
+  color: var(--brand);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.finding-sheet__question,
+.finding-sheet__field,
+.finding-sheet__threshold {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.finding-sheet__question {
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--tint-bg);
+}
+
+.finding-sheet__question p {
+  margin: 0;
+}
+
+.finding-sheet__threshold {
+  min-width: 0;
+  margin: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.finding-sheet__threshold legend {
+  padding: 0 0.25rem;
+  font-weight: 600;
+}
+
+.finding-sheet__check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.finding-sheet__check input {
+  width: auto;
+}
+
+.finding-sheet__threshold-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  gap: 0.75rem;
+}
+
+.finding-sheet__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: auto;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+@media (max-width: 30rem) {
+  .finding-sheet__threshold-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* La configuración queda separada de la pregunta y solo ocupa espacio cuando se solicita.
    Su caja arranca en la columna del número —2.5rem, el ancho de la manija más el hueco—
    para que se lea colgada de ESTA pregunta y no del borde de la tarjeta. */

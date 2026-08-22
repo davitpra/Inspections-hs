@@ -22,6 +22,7 @@ import {
   removeOption,
   removeSection,
   setConfig,
+  setFinding,
   setOption,
   setPrompt,
   setRequired,
@@ -170,6 +171,8 @@ function itemHandlers(
       write(changeResponseType(document, sectionIndex, itemIndex, responseType)),
     number: (itemIndex, field, value) =>
       write(setConfig(document, sectionIndex, itemIndex, field, value)),
+    finding: (itemIndex, finding) =>
+      write(setFinding(document, sectionIndex, itemIndex, finding)),
     optionChange: (itemIndex, optionIndex, change: Partial<ChoiceOption>) =>
       write(setOption(document, sectionIndex, itemIndex, optionIndex, change)),
     optionAdd: (itemIndex) => write(addOption(document, sectionIndex, itemIndex)),

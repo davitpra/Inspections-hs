@@ -135,6 +135,41 @@ describe('templateDocumentSchema', () => {
     expect(errors(document)).toContain('weight');
   });
 
+  it('acepta un ítem con y sin prescripción', () => {
+    const document = validDocument();
+    document.sections[0]!.items[0] = {
+      ...document.sections[0]!.items[0]!,
+      finding: {
+        corrective_action: 'Refit the machine guard before use.',
+        control_level: 'engineering',
+      },
+    };
+
+    expect(templateDocumentSchema.safeParse(document).success).toBe(true);
+    expect(templateDocumentSchema.safeParse(validDocument()).success).toBe(true);
+  });
+
+  it('rechaza una jerarquía de controles desconocida', () => {
+    const document = validDocument();
+    (document.sections[0]!.items[0] as Record<string, unknown>).finding = {
+      corrective_action: 'Refit the guard.',
+      control_level: 'training',
+    };
+
+    expect(errors(document)).toContain('control_level');
+  });
+
+  it('rechaza un operador de umbral desconocido', () => {
+    const document = validDocument();
+    (document.sections[0]!.items[0] as Record<string, unknown>).finding = {
+      corrective_action: 'Refit the guard.',
+      control_level: 'engineering',
+      fails_when: { operator: 'equals', value: 1 },
+    };
+
+    expect(errors(document)).toContain('operator');
+  });
+
   it('rechaza un documento sin secciones', () => {
     expect(errors({ sections: [] })).toContain('sections');
   });

@@ -1,11 +1,14 @@
-import type {
-  Location,
-  OrganizationLocationOption,
-  ResponseType,
-  Site,
-  TemplateDraftDocument,
-  TemplateDraftSection,
+import {
+  CONTROL_LEVELS,
+  type ControlLevel,
+  type Location,
+  type OrganizationLocationOption,
+  type ResponseType,
+  type Site,
+  type TemplateDraftDocument,
+  type TemplateDraftSection,
 } from '@hs/contracts';
+import { FAILURE_OPERATORS, type FailureOperator } from '@hs/forms';
 
 /**
  * La lógica pura de presentación del editor. Lo que EDITA el documento vive en `edits.ts`:
@@ -73,6 +76,39 @@ const TYPES_WITH_CONFIG: readonly ResponseType[] = [
 
 export function hasConfiguration(responseType: ResponseType): boolean {
   return TYPES_WITH_CONFIG.includes(responseType);
+}
+
+export const CONTROL_LEVEL_OPTIONS: readonly { value: ControlLevel; label: string }[] =
+  CONTROL_LEVELS.map((value) => ({
+    value,
+    label: value === 'ppe' ? 'PPE' : value.charAt(0).toUpperCase() + value.slice(1),
+  }));
+
+export const FAILURE_OPERATOR_LABELS: Record<FailureOperator, string> = {
+  lt: 'Less than',
+  lte: 'Less than or equal to',
+  gt: 'Greater than',
+  gte: 'Greater than or equal to',
+};
+
+export const FAILURE_OPERATOR_OPTIONS: readonly { value: FailureOperator; label: string }[] =
+  FAILURE_OPERATORS.map((value) => ({ value, label: FAILURE_OPERATOR_LABELS[value] }));
+
+/** Prescripción inicial: el autor completa la acción y ajusta el umbral medido. */
+export function defaultFinding(
+  responseType: ResponseType,
+): NonNullable<TemplateDraftDocument['sections'][number]['items'][number]['finding']> {
+  return {
+    corrective_action: '',
+    control_level: 'administrative',
+    ...(responseType === 'scale' || responseType === 'number'
+      ? { fails_when: { operator: 'lt' as const, value: responseType === 'scale' ? 1 : 0 } }
+      : {}),
+  };
+}
+
+export function findingButtonLabel(hasFinding: boolean): string {
+  return hasFinding ? 'Edit finding' : 'Add finding';
 }
 
 /**

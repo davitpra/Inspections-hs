@@ -557,6 +557,55 @@ describe('la configuración del tipo de respuesta', () => {
   });
 });
 
+describe('la prescripción de un hallazgo', () => {
+  it('abre el sheet, muestra la pregunta y guarda la acción como cambio local', async () => {
+    renderRoute();
+    await ready();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add finding' }));
+
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toBeTruthy();
+    expect(within(dialog).getByText('Is the guard fitted?')).toBeTruthy();
+    expect(within(dialog).getByText('Yes / No')).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText('Corrective action'), {
+      target: { value: 'Refit the machine guard before use.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save finding' }));
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Edit finding' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Save draft' })).toBeTruthy();
+  });
+
+  it('cancela con Escape sin ensuciar el borrador', async () => {
+    renderRoute();
+    await ready();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add finding' }));
+    const dialog = screen.getByRole('dialog');
+    fireEvent(dialog, new Event('cancel', { bubbles: false, cancelable: true }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByRole('button', { name: 'Add finding' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Save draft' })).toBeNull();
+  });
+
+  it('muestra el umbral en number y no en yes_no', async () => {
+    renderRoute();
+    await ready();
+
+    expect(screen.queryByLabelText('Operator')).toBeNull();
+    fireEvent.change(screen.getByLabelText('Answer type'), { target: { value: 'number' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add finding' }));
+
+    expect(screen.getByLabelText('Operator')).toBeTruthy();
+    expect(screen.getByLabelText('Threshold value')).toBeTruthy();
+    expect(screen.getByText(/does not create a finding yet/)).toBeTruthy();
+  });
+});
+
 describe('lo que falta para publicar', () => {
   it('se muestra siempre y no bloquea el guardado', async () => {
     renderRoute();
