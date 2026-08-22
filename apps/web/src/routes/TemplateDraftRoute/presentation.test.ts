@@ -13,6 +13,7 @@ import {
   saveButtonLabel,
   saveStateLabel,
   saveErrorNotice,
+  scopeOptions,
   scopeLabel,
   sectionAppliesTo,
   strandedSections,
@@ -260,6 +261,17 @@ describe('scopeLabel', () => {
 
   it('un alcance vacío se dice, no se esconde', () => {
     expect(scopeLabel([], SITES)).toBe('No plants');
+  });
+});
+
+describe('scopeOptions', () => {
+  it('ofrece solo la planta activa y la nombra sin "only"', () => {
+    const options = scopeOptions([
+      SITES[0]!,
+      { ...SITES[1]!, deactivated_at: '2026-08-21T00:00:00.000Z' },
+    ]);
+
+    expect(options).toEqual([{ label: 'St. Thomas', siteIds: [ST_THOMAS] }]);
   });
 });
 

@@ -657,4 +657,87 @@ describe('el alcance de plantas de un borrador', () => {
 
     expect(listed.map((each) => each.id)).toContain(narrowed.id);
   });
+
+  it('rechaza una planta dada de baja y no escribe nada', async () => {
+    const draft = await templates.createDraft(
+      { userId: coordinatorId, role: 'hs_coordinator', siteIds: [SITE, OTHER_SITE] },
+      { name: 'Deactivated plant save' },
+    );
+
+    await inScope(db.migrator, [OTHER_SITE], 'UPDATE site SET deactivated_at = now() WHERE id = $1', [
+      OTHER_SITE,
+    ]);
+
+    try {
+      await expect(
+        templates.saveDraft(
+          { userId: coordinatorId, role: 'hs_coordinator', siteIds: [SITE, OTHER_SITE] },
+          draft.id,
+          {
+            name: draft.name,
+            document: usableDocument(),
+            site_ids: [SITE, OTHER_SITE],
+          },
+        ),
+      ).rejects.toMatchObject({ response: { code: 'template_draft_site_deactivated' } });
+
+      expect((await templates.getDraft(asCoordinator(), draft.id)).site_ids.sort()).toEqual(
+        [SITE, OTHER_SITE].sort(),
+      );
+    } finally {
+      await inScope(db.migrator, [OTHER_SITE], 'UPDATE site SET deactivated_at = NULL WHERE id = $1', [
+        OTHER_SITE,
+      ]);
+    }
+  });
+
+  it('crea un borrador solo con las plantas activas del alcance', async () => {
+    await inScope(db.migrator, [OTHER_SITE], 'UPDATE site SET deactivated_at = now() WHERE id = $1', [
+      OTHER_SITE,
+    ]);
+
+    try {
+      const draft = await templates.createDraft(
+        { userId: coordinatorId, role: 'hs_coordinator', siteIds: [SITE, OTHER_SITE] },
+        { name: 'Active plants only' },
+      );
+
+      expect(draft.site_ids).toEqual([SITE]);
+    } finally {
+      await inScope(db.migrator, [OTHER_SITE], 'UPDATE site SET deactivated_at = NULL WHERE id = $1', [
+        OTHER_SITE,
+      ]);
+    }
+  });
+
+  it('sigue leyendo el alcance guardado aunque después se dé de baja una planta', async () => {
+    const draft = await templates.createDraft(
+      { userId: coordinatorId, role: 'hs_coordinator', siteIds: [SITE, OTHER_SITE] },
+      { name: 'Reads retired plant scope' },
+    );
+
+    await templates.saveDraft(
+      { userId: coordinatorId, role: 'hs_coordinator', siteIds: [SITE, OTHER_SITE] },
+      draft.id,
+      {
+        name: draft.name,
+        document: usableDocument(),
+        site_ids: [SITE, OTHER_SITE],
+      },
+    );
+
+    await inScope(db.migrator, [OTHER_SITE], 'UPDATE site SET deactivated_at = now() WHERE id = $1', [
+      OTHER_SITE,
+    ]);
+
+    try {
+      expect((await templates.getDraft(asCoordinator(), draft.id)).site_ids.sort()).toEqual(
+        [SITE, OTHER_SITE].sort(),
+      );
+    } finally {
+      await inScope(db.migrator, [OTHER_SITE], 'UPDATE site SET deactivated_at = NULL WHERE id = $1', [
+        OTHER_SITE,
+      ]);
+    }
+  });
 });

@@ -18,9 +18,11 @@ import {
   templateDraftNameTaken,
   templateDraftNameUnusable,
   templateDraftNotFound,
+  templateDraftSiteDeactivated,
   templateDraftSiteOutOfScope,
 } from './templates.errors';
 import {
+  activeSiteIds,
   discardDraft,
   findDraft,
   findDrafts,
@@ -133,6 +135,8 @@ export class TemplatesService {
     if (key === null) throw templateDraftNameUnusable();
 
     return this.db.withSessionClient(session, async (client) => {
+      const siteIds = await activeSiteIds(client, session.siteIds);
+
       if (await isNameTaken(client, name, key)) {
         // Si el nombre solo no choca, chocó la clave derivada: dos nombres distintos
         // que producen la misma. El mensaje lo dice, porque son cosas distintas de
@@ -146,10 +150,11 @@ export class TemplatesService {
           name,
           document: emptyDraftDocument(),
           createdBy: session.userId,
-          // TODO EL ALCANCE DE LA CUENTA, y el autor lo achica después si quiere.
-          // Pedirlo al crear sería pedir la decisión más difícil —«¿esto vale para
-          // las dos plantas?»— antes de haber escrito una sola pregunta.
-          siteIds: session.siteIds,
+          // TODO EL ALCANCE ACTIVO DE LA CUENTA, y el autor lo achica después si quiere.
+          // Una planta dada de baja ya no se puede inspeccionar, y pedir la decisión más
+          // difícil —«¿esto vale para las dos plantas?»— antes de escribir una pregunta
+          // sigue siendo la pregunta equivocada.
+          siteIds,
         });
 
         return toDraft(created);
@@ -196,6 +201,12 @@ export class TemplatesService {
     const name = input.name.trim();
 
     return this.db.withSessionClient(session, async (client) => {
+      const activeIds = new Set(await activeSiteIds(client, input.site_ids));
+
+      if (input.site_ids.some((siteId) => !activeIds.has(siteId))) {
+        throw templateDraftSiteDeactivated();
+      }
+
       // Renombrar tiene que respetar la misma unicidad que crear: el nombre es la
       // identidad de un borrador (0017), y dos renglones iguales en el listado no se
       // distinguen por nada que el autor vea. La `key` no se revisa porque no se

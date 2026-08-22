@@ -254,6 +254,11 @@ export function scopeNotice(siteIds: readonly string[], sites: readonly Site[]):
 /**
  * Las opciones del selector de alcance: una por planta, más «todas» cuando hay más de una.
  *
+ * La baja no saca la planta de `user_site_scope`, así que el selector filtra por su cuenta.
+ * El filtro no sube a `index.tsx`: rompería el «Both plants» de `scopeLabel` y dejaría un
+ * `site_ids` viejo sin nombre. `SitePicker` resuelve lo mismo al revés —muestra las cerradas
+ * para poder mirar historia—, y ambas decisiones son correctas para su pantalla.
+ *
  * El orden es «cada planta sola» y después «las dos», que es el del mockup y también el
  * orden en que se decide: primero se pregunta si esto es de una planta, y «las dos» es la
  * respuesta por descarte. Con una sola planta configurada devuelve una sola opción, y el
@@ -262,7 +267,9 @@ export function scopeNotice(siteIds: readonly string[], sites: readonly Site[]):
 export function scopeOptions(
   sites: readonly Site[],
 ): { label: string; siteIds: readonly string[] }[] {
-  const ordered = [...sites].sort((a, b) => a.name.localeCompare(b.name));
+  const ordered = sites
+    .filter((site) => site.deactivated_at === null)
+    .sort((a, b) => a.name.localeCompare(b.name));
   const single = ordered.map((site) => ({
     label: scopeLabel([site.id], ordered),
     siteIds: [site.id],

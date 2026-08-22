@@ -50,6 +50,24 @@ export async function findDraft(
 }
 
 /**
+ * Las plantas activas dentro de un conjunto declarado.
+ *
+ * Es la misma lectura que `roster/apply-roster.ts:116`. `site` no tiene política RLS
+ * (0004), así que este `WHERE` es selección de plantas activas, no aislamiento por sitio.
+ */
+export async function activeSiteIds(
+  client: PoolClient,
+  siteIds: readonly string[],
+): Promise<string[]> {
+  const { rows } = await client.query<{ id: string }>(
+    'SELECT id FROM site WHERE id = ANY($1::uuid[]) AND deactivated_at IS NULL',
+    [[...siteIds]],
+  );
+
+  return rows.map((row) => row.id);
+}
+
+/**
  * ¿Está tomado este nombre, o la clave que se deriva de él?
  *
  * Mira las dos poblaciones: los borradores vivos y las plantillas publicadas, por nombre y

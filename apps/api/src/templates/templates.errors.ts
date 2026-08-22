@@ -20,7 +20,8 @@ export type TemplateDraftErrorCode =
   | 'template_draft_not_found'
   | 'template_draft_name_taken'
   | 'template_draft_name_unusable'
-  | 'template_draft_site_out_of_scope';
+  | 'template_draft_site_out_of_scope'
+  | 'template_draft_site_deactivated';
 
 export class TemplateDraftException extends HttpException {
   constructor(
@@ -113,5 +114,16 @@ export const templateDraftSiteOutOfScope = (): TemplateDraftException =>
   new TemplateDraftException(
     'template_draft_site_out_of_scope',
     'A template can only be scoped to the plants your account administers',
+    HttpStatus.UNPROCESSABLE_ENTITY,
+  );
+
+/**
+ * El alcance nombra una planta que la cuenta sí administra, pero que ya no existe: no es
+ * «esa planta no es tuya» (`templateDraftSiteOutOfScope`), sino «esa planta ya no existe».
+ */
+export const templateDraftSiteDeactivated = (): TemplateDraftException =>
+  new TemplateDraftException(
+    'template_draft_site_deactivated',
+    'A template cannot be scoped to a plant that has been removed',
     HttpStatus.UNPROCESSABLE_ENTITY,
   );
