@@ -15,7 +15,8 @@ import { sql } from 'drizzle-orm';
 
 /**
  * Las plantas. Dato de referencia de la organización: sin política RLS. `hs_app` puede
- * insertar una planta desde la consola, pero no puede actualizarla ni borrarla.
+ * insertar una planta desde la consola y actualizar solo `name`/`deactivated_at`; no puede
+ * cambiar su identidad ni borrarla.
  */
 export const site = pgTable('site', {
   id: uuid('id').defaultRandom().primaryKey(),

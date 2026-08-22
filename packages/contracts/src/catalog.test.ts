@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import {
   createSiteSchema,
+  deactivateSiteSchema,
   createLocationSchema,
   createOrganizationLocationSchema,
   deactivateOrganizationLocationSchema,
   locationOptionSchema,
   locationSchema,
   siteSchema,
+  updateSiteSchema,
   updateLocationSchema,
 } from './catalog.js';
 
@@ -71,6 +73,31 @@ describe('createSiteSchema', () => {
         deactivated_at: null,
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('updateSiteSchema', () => {
+  it('acepta solo un nombre válido', () => {
+    expect(updateSiteSchema.safeParse({ name: 'St. Thomas Plant' }).success).toBe(true);
+  });
+
+  it('rechaza identidad y estado', () => {
+    expect(
+      updateSiteSchema.safeParse({ name: 'Other', code: 'other', deactivated_at: null }).success,
+    ).toBe(false);
+    expect(updateSiteSchema.safeParse({ name: '   ' }).success).toBe(false);
+  });
+});
+
+describe('deactivateSiteSchema', () => {
+  it('acepta un cuerpo vacío', () => {
+    expect(deactivateSiteSchema.safeParse({}).success).toBe(true);
+  });
+
+  it('rechaza una fecha o campos adicionales', () => {
+    expect(deactivateSiteSchema.safeParse({ deactivated_at: '2026-08-21T00:00:00.000Z' }).success).toBe(
+      false,
+    );
   });
 });
 

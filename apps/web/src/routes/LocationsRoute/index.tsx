@@ -1,19 +1,27 @@
-import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
-import type { OrganizationLocation } from '@hs/contracts';
-import { listCatalogLocations, listOrganizationLocations } from '../../api/catalog';
-import { listSites } from '../../api/inspections';
-import { queryKeys } from '../../api/query-keys';
-import { useAppSession } from '../../app/session-context';
-import { InfoIcon, PinIcon, PlusIcon } from '../../components/icons';
-import { canAdministerCatalog } from '../../permissions/session';
-import { MappingTable } from './MappingTable';
-import { MappingToolbar } from './MappingToolbar';
-import { NewLocationForm } from './NewLocationForm';
-import { NewSiteForm } from './NewSiteForm';
-import { Orphans } from './Orphans';
-import { RetireLocationDialog } from './RetireLocationDialog';
-import { visibleLocations, type CoverageFilter, type SortDirection } from './presentation';
+import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import type { OrganizationLocation } from "@hs/contracts";
+import {
+  listCatalogLocations,
+  listOrganizationLocations,
+} from "../../api/catalog";
+import { listSites } from "../../api/inspections";
+import { queryKeys } from "../../api/query-keys";
+import { useAppSession } from "../../app/session-context";
+import { InfoIcon, PinIcon, PlusIcon } from "../../components/icons";
+import { canAdministerCatalog } from "../../permissions/session";
+import { MappingTable } from "./MappingTable";
+import { MappingToolbar } from "./MappingToolbar";
+import { ManageSitesSheet } from "./ManageSitesSheet";
+import { NewLocationForm } from "./NewLocationForm";
+import { NewSiteForm } from "./NewSiteForm";
+import { Orphans } from "./Orphans";
+import { RetireLocationDialog } from "./RetireLocationDialog";
+import {
+  visibleLocations,
+  type CoverageFilter,
+  type SortDirection,
+} from "./presentation";
 
 /**
  * §6 — El catálogo de ubicaciones: qué lugares nombran las plantillas y cuál de ellos existe
@@ -48,7 +56,9 @@ export function LocationsRoute(): React.JSX.Element {
     return (
       <>
         <h1>Locations</h1>
-        <p className="notice">Only the H&amp;S coordinator can administer locations.</p>
+        <p className="notice">
+          Only the H&amp;S coordinator can administer locations.
+        </p>
       </>
     );
   }
@@ -56,15 +66,24 @@ export function LocationsRoute(): React.JSX.Element {
   return <LocationCatalog siteScope={account.siteScope} />;
 }
 
-function LocationCatalog({ siteScope }: { siteScope: readonly string[] }): React.JSX.Element {
-  const [filter, setFilter] = useState<CoverageFilter>('all');
-  const [direction, setDirection] = useState<SortDirection>('asc');
-  const [query, setQuery] = useState('');
+function LocationCatalog({
+  siteScope,
+}: {
+  siteScope: readonly string[];
+}): React.JSX.Element {
+  const [filter, setFilter] = useState<CoverageFilter>("all");
+  const [direction, setDirection] = useState<SortDirection>("asc");
+  const [query, setQuery] = useState("");
   const [adding, setAdding] = useState(false);
   const [addingSite, setAddingSite] = useState(false);
+  const [managingSites, setManagingSites] = useState(false);
   const [retiring, setRetiring] = useState<OrganizationLocation | null>(null);
 
-  const sites = useQuery({ queryKey: queryKeys.sites(), queryFn: listSites, retry: false });
+  const sites = useQuery({
+    queryKey: queryKeys.sites(),
+    queryFn: listSites,
+    retry: false,
+  });
   const shared = useQuery({
     queryKey: queryKeys.organizationLocations(),
     queryFn: listOrganizationLocations,
@@ -80,12 +99,18 @@ function LocationCatalog({ siteScope }: { siteScope: readonly string[] }): React
   // cuenta no administra.
   const columns = (sites.data ?? [])
     .filter((site) => siteScope.includes(site.id))
+    .filter((site) => site.deactivated_at === null)
     .sort((a, b) => a.name.localeCompare(b.name));
 
   const allShared = shared.data ?? [];
   const allLocations = locations.data ?? [];
   const siteIds = columns.map((site) => site.id);
-  const rows = visibleLocations(allShared, allLocations, { filter, query, siteIds, direction });
+  const rows = visibleLocations(allShared, allLocations, {
+    filter,
+    query,
+    siteIds,
+    direction,
+  });
 
   return (
     <>
@@ -98,26 +123,37 @@ function LocationCatalog({ siteScope }: { siteScope: readonly string[] }): React
             <h1>Locations</h1>
           </div>
           <p className="scheduling__subtitle">
-            Define each place you inspect once, then tick the plants where it exists.
+            Define each place you inspect once, then tick the plants where it
+            exists.
           </p>
         </div>
 
-        <button
-          type="button"
-          className="button--outline mapping__add-site"
-          aria-expanded={addingSite}
-          onClick={() => setAddingSite((open) => !open)}
-        >
-          <PlusIcon /> Add site
-        </button>
-        <button
-          type="button"
-          className="button--primary mapping__add"
-          aria-expanded={adding}
-          onClick={() => setAdding((open) => !open)}
-        >
-          <PlusIcon /> Add location
-        </button>
+        <div className="mapping__actions">
+          <button
+            type="button"
+            className="button--outline mapping__add"
+            aria-expanded={managingSites}
+            onClick={() => setManagingSites((open) => !open)}
+          >
+            Manage sites
+          </button>
+          <button
+            type="button"
+            className="button--outline mapping__add"
+            aria-expanded={addingSite}
+            onClick={() => setAddingSite((open) => !open)}
+          >
+            <PlusIcon /> Add site
+          </button>
+          <button
+            type="button"
+            className="button--primary mapping__add"
+            aria-expanded={adding}
+            onClick={() => setAdding((open) => !open)}
+          >
+            <PlusIcon /> Add location
+          </button>
+        </div>
       </header>
 
       {/*
@@ -130,21 +166,17 @@ function LocationCatalog({ siteScope }: { siteScope: readonly string[] }): React
             <InfoIcon size={20} />
           </span>
           <p className="notice-card__text">
-            A location ticked for every plant is one name with a separate physical place at each
-            site, so a template written for both can pair them. A template section can only name
-            a location where the plant it runs in has ticked it.
+            A location ticked for every plant is one name with a separate
+            physical place at each site, so a template written for both can pair
+            them. A template section can only name a location where the plant it
+            runs in has ticked it.
           </p>
         </div>
       </div>
 
       {addingSite ? <NewSiteForm /> : null}
 
-      {adding ? (
-        <>
-          <NewLocationForm scope="shared" sites={columns} />
-          <NewLocationForm scope="plant" sites={columns} />
-        </>
-      ) : null}
+      {adding ? <NewLocationForm /> : null}
 
       {shared.isError || locations.isError ? (
         <p className="status-card status-card--error">
@@ -190,7 +222,19 @@ function LocationCatalog({ siteScope }: { siteScope: readonly string[] }): React
         <Orphans sites={columns} locations={allLocations} />
       ) : null}
 
-      {retiring ? <RetireLocationDialog location={retiring} onClose={() => setRetiring(null)} /> : null}
+      {retiring ? (
+        <RetireLocationDialog
+          location={retiring}
+          onClose={() => setRetiring(null)}
+        />
+      ) : null}
+      {managingSites ? (
+        <ManageSitesSheet
+          sites={sites.data ?? []}
+          locations={allLocations}
+          onClose={() => setManagingSites(false)}
+        />
+      ) : null}
     </>
   );
 }

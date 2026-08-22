@@ -2,11 +2,13 @@ import {
   createSiteSchema,
   createLocationSchema,
   createOrganizationLocationSchema,
+  deactivateSiteSchema,
   deactivateOrganizationLocationSchema,
   locationOrganizationMappingSchema,
   locationSchema,
   organizationLocationSchema,
   siteSchema,
+  updateSiteSchema,
   type Location,
   type OrganizationLocation,
   type Site,
@@ -28,6 +30,18 @@ export async function listCatalogLocations(): Promise<Location[]> {
 /** Alta de una planta. El código se escribe acá y queda permanente en el catálogo. */
 export async function createSite(input: { code: string; name: string }): Promise<Site> {
   return send('POST', '/sites', createSiteSchema.parse(input), (value) => siteSchema.parse(value));
+}
+
+export async function renameSite(siteId: string, name: string): Promise<Site> {
+  return send('PATCH', `/sites/${siteId}`, updateSiteSchema.parse({ name }), (value) =>
+    siteSchema.parse(value),
+  );
+}
+
+export async function deactivateSite(siteId: string): Promise<Site> {
+  return send('POST', `/sites/${siteId}/deactivate`, deactivateSiteSchema.parse({}), (value) =>
+    siteSchema.parse(value),
+  );
 }
 
 export async function mapLocation(

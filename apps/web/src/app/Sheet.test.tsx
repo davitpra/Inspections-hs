@@ -1,9 +1,12 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Sheet } from './Sheet';
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 /**
  * Lo que se prueba acá es la SALIDA del panel, que es lo único que el componente aporta
@@ -12,10 +15,11 @@ afterEach(cleanup);
  *
  * `onClose` se avisa por el evento `close` del `<dialog>` y no por el `onClick` del botón:
  * así el mismo camino cubre a las tres formas de salir, y una de ellas —Escape— nunca pasa
- * por el botón.
+ * por el botón. La suite adelanta el reloj para dejar terminar la transición de salida.
  */
 describe('Sheet', () => {
   it('cierra desde el botón del encabezado', () => {
+    vi.useFakeTimers();
     const onClose = vi.fn();
 
     render(
@@ -25,6 +29,7 @@ describe('Sheet', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Close menu' }));
+    act(() => vi.runAllTimers());
 
     expect(onClose).toHaveBeenCalledTimes(1);
   });

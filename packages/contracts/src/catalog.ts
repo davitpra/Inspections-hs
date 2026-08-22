@@ -59,6 +59,18 @@ export const createSiteSchema = z.strictObject({
 
 export type CreateSite = z.infer<typeof createSiteSchema>;
 
+/** Renombra una planta sin exponer su code ni ninguna columna de identidad. */
+export const updateSiteSchema = z.strictObject({
+  name: labelSchema,
+});
+
+export type UpdateSite = z.infer<typeof updateSiteSchema>;
+
+/** La baja de una planta no acepta una fecha fabricada por el cliente. */
+export const deactivateSiteSchema = z.strictObject({});
+
+export type DeactivateSite = z.infer<typeof deactivateSiteSchema>;
+
 /** Una entrada del catálogo, tal como la devuelve la API. */
 export const locationSchema = z.strictObject({
   id: z.uuid(),

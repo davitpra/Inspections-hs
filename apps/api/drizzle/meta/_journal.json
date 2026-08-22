@@ -155,6 +155,13 @@
       "when": 1754524800021,
       "tag": "0022_register_site_from_console",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1754524800022,
+      "tag": "0023_manage_sites_from_locations_console",
+      "breakpoints": true
     }
   ]
 }

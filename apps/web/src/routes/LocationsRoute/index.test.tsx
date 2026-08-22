@@ -24,6 +24,8 @@ const mapLocation = vi.hoisted(() => vi.fn());
 const createOrganizationLocation = vi.hoisted(() => vi.fn());
 const createLocation = vi.hoisted(() => vi.fn());
 const createSite = vi.hoisted(() => vi.fn());
+const renameSite = vi.hoisted(() => vi.fn());
+const deactivateSite = vi.hoisted(() => vi.fn());
 const deactivateOrganizationLocation = vi.hoisted(() => vi.fn());
 const listSites = vi.hoisted(() => vi.fn());
 const useAppSession = vi.hoisted(() => vi.fn());
@@ -36,6 +38,8 @@ vi.mock('../../api/catalog', () => ({
   createOrganizationLocation,
   createLocation,
   createSite,
+  renameSite,
+  deactivateSite,
   deactivateOrganizationLocation,
 }));
 vi.mock('../../api/inspections', () => ({ listSites }));
@@ -103,10 +107,10 @@ const locations: Location[] = [
 ];
 
 /** El alta vive detrás del botón primario, así que todo test que la use lo abre primero. */
-async function openAddPanel(): Promise<HTMLInputElement[]> {
+async function openAddPanel(): Promise<HTMLInputElement> {
   fireEvent.click(await screen.findByRole('button', { name: 'Add location' }));
 
-  return (await screen.findAllByLabelText('Name')) as HTMLInputElement[];
+  return (await screen.findByLabelText('Name')) as HTMLInputElement;
 }
 
 function renderRoute(): void {
@@ -130,6 +134,16 @@ beforeEach(() => {
   createOrganizationLocation.mockReset().mockResolvedValue(shared[0]);
   createLocation.mockReset().mockResolvedValue(locations[1]);
   createSite.mockReset().mockResolvedValue(newSite);
+  renameSite.mockReset().mockImplementation(async (siteId: string, name: string) => {
+    const renamed = { ...currentSites.find((site) => site.id === siteId)!, name };
+    currentSites = currentSites.map((site) => (site.id === siteId ? renamed : site));
+    return renamed;
+  });
+  deactivateSite.mockReset().mockImplementation(async (siteId: string) => {
+    const removed = { ...currentSites.find((site) => site.id === siteId)!, deactivated_at: '2026-08-21T12:00:00.000Z' };
+    currentSites = currentSites.map((site) => (site.id === siteId ? removed : site));
+    return removed;
+  });
   reloadSession.mockReset().mockResolvedValue(undefined);
   deactivateOrganizationLocation.mockReset().mockResolvedValue(undefined);
 });
@@ -149,6 +163,7 @@ describe('quién puede administrar el catálogo', () => {
 
       expect(screen.getByText(/Only the H&S coordinator can administer locations/)).toBeTruthy();
       expect(screen.queryByRole('button', { name: 'Add site' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Manage sites' })).toBeNull();
       expect(listCatalogLocations).not.toHaveBeenCalled();
     },
   );
@@ -440,15 +455,15 @@ describe('dar de alta', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Add site' }));
     expect(screen.getByRole('heading', { name: 'Add a site' })).toBeTruthy();
-    expect(screen.queryByRole('heading', { name: 'Add a shared location' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Add a location' })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Add location' }));
     expect(screen.getByRole('heading', { name: 'Add a site' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Add a shared location' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Add a location' })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Add site' }));
     expect(screen.queryByRole('heading', { name: 'Add a site' })).toBeNull();
-    expect(screen.getByRole('heading', { name: 'Add a shared location' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Add a location' })).toBeTruthy();
   });
 
   it('no vacía el formulario cuando el code de site ya está usado', async () => {
@@ -464,24 +479,49 @@ describe('dar de alta', () => {
     expect((screen.getByLabelText('Code') as HTMLInputElement).value).toBe('north-plant');
   });
 
-  it('propone el code desde el nombre', async () => {
+  /** Lo que se nombra es un lugar; el código es consecuencia del alta, no una decisión. */
+  it('no pide el código: lo deriva del nombre', async () => {
     renderRoute();
 
-    const names = await openAddPanel();
-    fireEvent.change(names[0]!, { target: { value: 'Loading dock' } });
+    const name = await openAddPanel();
+    expect(screen.queryByLabelText('Code')).toBeNull();
 
-    expect((screen.getAllByLabelText('Code')[0] as HTMLInputElement).value).toBe('loading-dock');
+    fireEvent.change(name, { target: { value: 'Loading dock' } });
+
+    expect(screen.queryByLabelText('Code')).toBeNull();
+    expect((screen.getByRole('button', { name: 'Add' }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
+  });
+
+  /** Un nombre que no produce ningún código no puede quedar en un botón gris sin explicación. */
+  it('muestra el campo cuando el nombre no produce código', async () => {
+    renderRoute();
+
+    const name = await openAddPanel();
+    fireEvent.change(name, { target: { value: '???' } });
+
+    expect(screen.getByLabelText('Code')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Add' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('deja de proponerlo en cuanto se lo edita', async () => {
+    createOrganizationLocation.mockRejectedValue(
+      new Error('The code "loading" is already in use'),
+    );
+
     renderRoute();
 
-    const names = await openAddPanel();
-    fireEvent.change(names[0]!, { target: { value: 'Loading' } });
+    const name = await openAddPanel();
+    fireEvent.change(name, { target: { value: 'Loading' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
 
-    const code = screen.getAllByLabelText('Code')[0]!;
+    // El campo sale a la luz recién acá, que es cuando hay algo que decidir.
+    const code = await screen.findByLabelText('Code');
+    expect((code as HTMLInputElement).value).toBe('loading');
+
     fireEvent.change(code, { target: { value: 'chosen-by-hand' } });
-    fireEvent.change(names[0]!, { target: { value: 'Loading dock' } });
+    fireEvent.change(name, { target: { value: 'Loading dock' } });
 
     expect((code as HTMLInputElement).value).toBe('chosen-by-hand');
   });
@@ -489,9 +529,9 @@ describe('dar de alta', () => {
   it('crea una ubicación compartida sin planta', async () => {
     renderRoute();
 
-    const names = await openAddPanel();
-    fireEvent.change(names[0]!, { target: { value: 'Boiler room' } });
-    fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0]!);
+    const name = await openAddPanel();
+    fireEvent.change(name, { target: { value: 'Boiler room' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
 
     await waitFor(() =>
       expect(createOrganizationLocation).toHaveBeenCalledWith({
@@ -503,35 +543,16 @@ describe('dar de alta', () => {
   });
 
   /**
-   * El alta de planta ya no hereda la planta del picker de la página —no hay picker—, así
-   * que la elección está en el propio formulario.
+   * El alta de una física en una planta elegida ya no existe: crear el lugar y declarar
+   * dónde está son dos actos, y el segundo es el tick de la tabla.
    */
-  it('el formulario de planta trae su propio selector', async () => {
+  it('no ofrece un alta por planta', async () => {
     renderRoute();
     await openAddPanel();
 
-    expect(screen.getByText('Add a location to one plant')).toBeTruthy();
-    expect(screen.getByLabelText('Site')).toBeTruthy();
-  });
-
-  it('crea la física en la planta que se elige en el formulario', async () => {
-    renderRoute();
-    const names = await openAddPanel();
-
-    // Arranca en la primera columna —Glencoe, por orden alfabético—, así que elegir la otra
-    // es lo que prueba que el selector hace algo.
-    expect((screen.getByLabelText('Site') as HTMLSelectElement).value).toBe(GLENCOE);
-
-    fireEvent.change(screen.getByLabelText('Site'), { target: { value: ST_THOMAS } });
-    fireEvent.change(names[1]!, { target: { value: 'Boiler room' } });
-    fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[1]!);
-
-    await waitFor(() =>
-      expect(createLocation).toHaveBeenCalledWith(ST_THOMAS, {
-        code: 'boiler-room',
-        name: 'Boiler room',
-      }),
-    );
+    expect(screen.queryByText('Add a location to one plant')).toBeNull();
+    expect(screen.queryByLabelText('Site')).toBeNull();
+    expect(screen.getAllByLabelText('Name')).toHaveLength(1);
   });
 
   it('no deja crear sin nombre', async () => {
@@ -539,7 +560,7 @@ describe('dar de alta', () => {
 
     await openAddPanel();
 
-    expect((screen.getAllByRole('button', { name: 'Add' })[0] as HTMLButtonElement).disabled).toBe(
+    expect((screen.getByRole('button', { name: 'Add' }) as HTMLButtonElement).disabled).toBe(
       true,
     );
   });
@@ -551,11 +572,68 @@ describe('dar de alta', () => {
 
     renderRoute();
 
-    const names = await openAddPanel();
-    fireEvent.change(names[0]!, { target: { value: 'Boiler room' } });
-    fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0]!);
+    const name = await openAddPanel();
+    fireEvent.change(name, { target: { value: 'Boiler room' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
 
     expect(await screen.findByText(/already in use/)).toBeTruthy();
-    expect((screen.getAllByLabelText('Name')[0] as HTMLInputElement).value).toBe('Boiler room');
+    expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('Boiler room');
+    expect((screen.getByLabelText('Code') as HTMLInputElement).value).toBe('boiler-room');
+  });
+});
+
+describe('gestionar plantas', () => {
+  it('abre la hoja, renombra una planta y conserva su code visible', async () => {
+    renderRoute();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage sites' }));
+    expect(await screen.findByRole('heading', { name: 'Manage sites' })).toBeTruthy();
+    expect(screen.getByText('st-thomas')).toBeTruthy();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Edit name' })[0]!);
+    const name = screen.getByLabelText('Name') as HTMLInputElement;
+    fireEvent.change(name, { target: { value: 'St. Thomas Plant' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(renameSite).toHaveBeenCalledWith(ST_THOMAS, 'St. Thomas Plant'));
+    expect(screen.getByText('st-thomas')).toBeTruthy();
+  });
+
+  it('mantiene el formulario abierto cuando falla el rename', async () => {
+    renameSite.mockRejectedValue(new Error('The site name could not be saved'));
+
+    renderRoute();
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage sites' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Edit name' })[0]!);
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'New name' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByText('The site name could not be saved')).toBeTruthy();
+    expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('New name');
+  });
+
+  it('confirma Remove y deja la planta retirada fuera de las columnas', async () => {
+    renderRoute();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage sites' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove' })[1]!);
+    expect(screen.getByText(/This cannot be undone/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove site' }));
+
+    await waitFor(() => expect(deactivateSite).toHaveBeenCalledWith(GLENCOE));
+    expect(screen.getByText('Removed')).toBeTruthy();
+    await waitFor(() => expect(screen.queryByLabelText('Loading dock in Glencoe')).toBeNull());
+  });
+
+  it('mantiene independientes las tres acciones del encabezado', async () => {
+    renderRoute();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage sites' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add site' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add location' }));
+
+    expect(screen.getByRole('heading', { name: 'Manage sites' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Add a site' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Add a location' })).toBeTruthy();
   });
 });

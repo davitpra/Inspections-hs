@@ -141,7 +141,11 @@ button,
   color: var(--paper);
 }
 
-input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+/* Los `:not()` van dentro de `:where()` a propósito: excluyen casillas, radios y archivos sin
+   aportar especificidad. Sueltos suman (0,3,1) y este reset le gana a quien lo quiera pisar
+   —`input:disabled`, `[aria-invalid="true"]`, el input sin borde de `.mapping__search`—, que
+   es justo lo contrario de lo que hace un reset. */
+input:where(:not([type="checkbox"]):not([type="radio"]):not([type="file"])),
 textarea {
   min-height: 48px;
   width: 100%;
@@ -197,14 +201,7 @@ input[type="checkbox"]::after {
   width: 0.75rem;
   height: 0.75rem;
   background: var(--paper);
-  clip-path: polygon(
-    14% 47%,
-    0 61%,
-    36% 96%,
-    100% 21%,
-    85% 8%,
-    35% 68%
-  );
+  clip-path: polygon(14% 47%, 0 61%, 36% 96%, 100% 21%, 85% 8%, 35% 68%);
   transform: scale(0);
 }
 
@@ -598,7 +595,7 @@ select:disabled {
  * retrae: con `vh`, el último link del menú quedaba debajo de ella.
  */
 .sheet {
-  width: min(20rem, 82vw);
+  width: min(35rem, 92vw);
   max-width: 100%;
   height: 100dvh;
   max-height: 100dvh;
@@ -611,6 +608,11 @@ select:disabled {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  opacity: 0;
+  transform: translateX(-100%);
+  transition:
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 180ms ease;
 }
 
 .sheet--start {
@@ -623,10 +625,37 @@ select:disabled {
   margin: 0 0 0 auto;
   border-left: 1px solid var(--line);
   padding-right: max(1rem, env(safe-area-inset-right));
+  transform: translateX(100%);
+}
+
+/* El panel permanece en el top layer mientras sale para que la transición no se corte. */
+.sheet[data-state="open"] {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.sheet--start[data-state="closing"] {
+  transform: translateX(-100%);
+}
+
+.sheet--end[data-state="closing"] {
+  transform: translateX(100%);
 }
 
 .sheet::backdrop {
+  background: transparent;
+  transition: background-color 180ms ease;
+}
+
+.sheet[data-state="open"]::backdrop {
   background: var(--scrim);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet,
+  .sheet::backdrop {
+    transition-duration: 0ms;
+  }
 }
 
 /*
@@ -1511,8 +1540,13 @@ select:disabled {
   margin: 0;
 }
 
+/* Envuelve como GRUPO, y cada botón entero: hay segmentados cuya etiqueta sale de los datos
+   —una por planta, «St. Thomas only»—, y sin esto los cuatro se comprimían en una sola línea
+   partiendo cada etiqueta en tres renglones. Un chip que se lee de una es más importante que
+   que entren todos en un renglón. */
 .view-toggle {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.4rem;
 }
 
@@ -1522,6 +1556,7 @@ select:disabled {
   display: flex;
   align-items: center;
   gap: 0.4rem;
+  white-space: nowrap;
 }
 
 .view-toggle__button[aria-pressed="true"] {
@@ -2206,6 +2241,18 @@ select:disabled {
   overflow: hidden;
 }
 
+/*
+ * Las dos acciones son un solo bloque a la derecha del encabezado: «Add site» y «Add
+ * location» se leen juntas porque una es el paso previo de la otra. Sueltas, el
+ * `space-between` del encabezado las separaba y la de sitio quedaba flotando al medio.
+ */
+.mapping__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 .mapping__add {
   display: inline-flex;
   align-items: center;
@@ -2216,14 +2263,56 @@ select:disabled {
   white-space: nowrap;
 }
 
-.mapping__add-site {
-  display: inline-flex;
+.manage-sites__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.manage-sites__item {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+}
+
+.manage-sites__summary,
+.manage-sites__actions {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   gap: 0.5rem;
-  min-height: 48px;
+}
+
+.manage-sites__summary h3,
+.manage-sites__coverage,
+.manage-sites__code,
+.manage-sites__confirm p {
+  margin: 0;
+}
+
+.manage-sites__code,
+.manage-sites__coverage {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.manage-sites__form,
+.manage-sites__confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.manage-sites__actions {
+  justify-content: flex-start;
+}
+
+.manage-sites__actions .button--primary {
   width: auto;
-  white-space: nowrap;
 }
 
 .mapping__toolbar {
@@ -2317,21 +2406,6 @@ select:disabled {
   border-bottom: 1px solid var(--line);
 }
 
-.mapping__cell--name {
-  flex: 1 1 12rem;
-}
-
-.mapping__cell--plant {
-  flex: 0 0 11rem;
-}
-
-.mapping__cell--actions {
-  flex: 0 0 3.5rem;
-  border-left: 1px solid var(--line);
-  text-align: center;
-  padding-inline: 0.25rem;
-}
-
 .mapping__row:last-child {
   border-bottom: 0;
 }
@@ -2345,17 +2419,50 @@ select:disabled {
   font-weight: 600;
 }
 
+/*
+ * La celda base ANTES que sus modificadores, que es lo único que hace que un modificador
+ * pueda ajustar el padding: el shorthand `padding` de acá gana por orden contra cualquier
+ * `padding-inline` de la misma especificidad escrito más arriba —así se comía el de la celda
+ * de acciones—.
+ *
+ * `border-box` porque los anchos de abajo son anchos de COLUMNA, no de contenido: en
+ * `content-box` cada uno cargaba además su padding y la tabla medía casi 2rem más de lo que
+ * dicen sus `flex-basis`, que es justo lo que hay que poder sumar para elegir el corte.
+ */
 .mapping__cell {
+  box-sizing: border-box;
   padding: 0.6rem 1rem;
   min-width: 0;
 }
 
-/* La divisoria vertical solo entre plantas: separa lo que se compara —una columna contra la
-   otra— y no el nombre de su propia fila. */
+.mapping__cell--name {
+  flex: 1 1 12rem;
+  min-width: 10rem;
+}
+
+/*
+ * `0 1 11rem`: la columna no CRECE —lo que sobra es del nombre, que es lo que se lee— pero sí
+ * encoge. Sin encoger, tres plantas piden 12+33+3.5rem de ancho ÚTIL, y el ancho útil no es el
+ * de la ventana: el sidebar y los márgenes se llevan ~21rem, así que entre el corte y una
+ * ventana muy ancha la fila no entraba en la tarjeta y `overflow: hidden` recortaba la columna
+ * de acciones. El piso de 5.5rem es lo que mide un tick con su etiqueta recortada.
+ *
+ * La divisoria vertical solo entre plantas: separa lo que se compara —una columna contra la
+ * otra— y no el nombre de su propia fila.
+ */
 .mapping__cell--plant {
+  flex: 0 1 11rem;
+  min-width: 5.5rem;
   border-left: 1px solid var(--line);
   text-align: center;
   padding-inline: 0.4rem;
+}
+
+.mapping__cell--actions {
+  flex: 0 0 3.5rem;
+  border-left: 1px solid var(--line);
+  text-align: center;
+  padding-inline: 0.25rem;
 }
 
 .mapping__name {
@@ -2366,12 +2473,25 @@ select:disabled {
   font-weight: 600;
 }
 
+/* El badge de cobertura nombra hasta todas las plantas —«Department, St. Thomas only»— y como
+   `.status-pill` es `nowrap`, es lo ÚNICO de la fila que no puede encoger. Sin esto se sale de
+   su celda y pinta sobre el tick de la columna vecina; y como `.mapping` es `overflow: hidden`,
+   no aparece ni una barra que lo delate. La garantía que hace falta no es que el badge entre,
+   es que ninguna celda pueda dibujar sobre la de al lado. Por eso va acá y no dentro del
+   media query del apilado, que es justo el ancho donde el problema NO pasa. */
+.mapping__name .status-pill {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 /* El código debajo del nombre y un paso por debajo en contraste: es lo que la sección de
    una plantilla guarda, así que tiene que estar a la vista, pero no compite con el nombre. */
 .mapping__code {
   display: block;
   font-size: var(--text-xs);
   color: var(--muted);
+  overflow-wrap: anywhere;
 }
 
 /* El «9 of 21» de la columna, en su encabezado. Fuera de las mayúsculas del resto del
@@ -2468,11 +2588,23 @@ select:disabled {
 }
 
 /*
- * En un teléfono la fila deja de ser una fila: el nombre arriba y las celdas de planta
- * envolviendo debajo, con su rótulo, porque el encabezado de columna ya no está. `flex-wrap`
- * y no `grid-template-areas`: las áreas habría que escribirlas de a una por planta.
+ * En un teléfono y en una tablet chica la fila deja de ser una fila: el nombre y su acción
+ * arriba, y las celdas de planta envolviendo debajo con su rótulo, porque el encabezado de
+ * columna ya no está. `flex-wrap` y no `grid-template-areas`: las áreas habría que escribirlas
+ * de a una por planta.
+ *
+ * EL CORTE SALE DEL ANCHO QUE PIDE LA TABLA, NO DEL DISPOSITIVO: es
+ * `nombre + n × columna + acciones`, o sea 12rem + n × 11rem + 3.5rem —y son anchos de columna
+ * de verdad porque `.mapping__cell` es `border-box`—. Con las dos plantas de hoy son 37.5rem
+ * de ancho ÚTIL, y el útil no es el de la ventana: arriba de 48rem el sidebar y los márgenes
+ * se llevan otras ~21rem. De ahí sale el 58rem, medido y no elegido. El 44rem anterior dejaba
+ * una banda —entre el corte y lo que la tabla necesita— donde la fila seguía siendo fila sin
+ * lugar para serlo, y las celdas se aplastaban hasta partir el nombre en dos líneas.
+ *
+ * Con más plantas el corte queda corto, y por eso la columna de planta ENCOGE (ver su regla):
+ * la tabla se aprieta en vez de desbordar la tarjeta.
  */
-@media (max-width: 44rem) {
+@media (max-width: 58rem) {
   .mapping__row {
     display: flex;
     flex-wrap: wrap;
@@ -2483,27 +2615,68 @@ select:disabled {
     display: none;
   }
 
+  /*
+   * El nombre y el «…» arriba, las plantas abajo, Y SIEMPRE ASÍ. El corte de línea está
+   * FORZADO por este pseudo-elemento y no librado al `wrap`: con `wrap` a secas, el ancho de
+   * la celda de nombre lo decidía su texto, así que en «Cold storage» o «Yard» subía un tick a
+   * la línea del nombre y el otro caía solo a una tercera —dos layouts distintos en la misma
+   * tabla, según el largo del nombre—.
+   *
+   * Y de paso es la divisoria: la línea que separa lo que la fila ES de lo que se está
+   * marcando en ella. `order` la deja entre las dos, sin tocar el DOM —en el markup las
+   * acciones van últimas, que es el orden que la tabla declara y el que recorre el teclado— y
+   * sin agregar nada al árbol de accesibilidad, porque su contenido es vacío.
+   */
+  .mapping__row::after {
+    content: "";
+    order: 1;
+    flex-basis: 100%;
+    height: 0;
+    border-top: 1px solid var(--line);
+  }
+
   .mapping__cell--name {
-    flex: 1 1 100%;
+    flex: 1 1 auto;
     padding-bottom: 0;
   }
 
+  /* El badge puede ser más largo que el nombre: en una fila mobile crece hacia abajo. Que no
+     invada la columna vecina lo garantiza `.mapping__name .status-pill`, a todo ancho. */
+  .mapping__name {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  /*
+   * Las plantas se reparten la línea en columnas iguales (`1 1 0`, no `1 1 8rem`): así el tick
+   * de una queda a la misma altura y en la misma posición que el de la fila de arriba, que es
+   * lo que permite recorrer la columna con la vista. Sin divisoria vertical: entre dos ticks
+   * centrados es ruido, y la única separación que hace falta ya la dibuja el `::after`.
+   */
   .mapping__cell--plant {
-    flex: 1 1 8rem;
+    order: 2;
+    flex: 1 1 0;
+    min-width: 6rem;
+    padding-block: 0.25rem;
     border-left: 0;
   }
 
-  .mapping__cell--actions {
-    flex: 0 0 3.5rem;
-    border-left: 1px solid var(--line);
-  }
-
-  .mapping__cell--plant:first-of-type {
-    border-left: 0;
-  }
-
+  /* Sin el encabezado de columna, este rótulo es el encabezado: se viste como él. */
   .mapping__plant-label {
     display: block;
+    line-height: 1.2;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+  }
+
+  /* `margin-left: auto` y no el sobrante del nombre: el «…» se ancla a la derecha aunque el
+     nombre sea corto. */
+  .mapping__cell--actions {
+    flex: 0 0 3.5rem;
+    margin-left: auto;
+    align-self: center;
+    border-left: 0;
   }
 }
 

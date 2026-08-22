@@ -1,5 +1,11 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
-import { createSiteSchema, type CreateSite, type Site } from '@hs/contracts';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common';
+import {
+  createSiteSchema,
+  deactivateSiteSchema,
+  type CreateSite,
+  type Site,
+  updateSiteSchema,
+} from '@hs/contracts';
 
 import { CurrentSession } from '../auth/session.decorator';
 import type { SessionContext } from '../auth/session.service';
@@ -21,5 +27,24 @@ export class SitesController {
     @Body() body: unknown,
   ): Promise<Site> {
     return this.sites.create(session, createSiteSchema.parse(body) as CreateSite);
+  }
+
+  @Patch(':siteId')
+  update(
+    @CurrentSession() session: SessionContext,
+    @Param('siteId', new ParseUUIDPipe()) siteId: string,
+    @Body() body: unknown,
+  ): Promise<Site> {
+    return this.sites.update(session, siteId, updateSiteSchema.parse(body));
+  }
+
+  @Post(':siteId/deactivate')
+  deactivate(
+    @CurrentSession() session: SessionContext,
+    @Param('siteId', new ParseUUIDPipe()) siteId: string,
+    @Body() body: unknown,
+  ): Promise<Site> {
+    deactivateSiteSchema.parse(body);
+    return this.sites.deactivate(session, siteId);
   }
 }

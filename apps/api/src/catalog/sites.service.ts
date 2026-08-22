@@ -1,5 +1,5 @@
-import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
-import type { CreateSite, Site } from '@hs/contracts';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import type { CreateSite, Site, UpdateSite } from '@hs/contracts';
 
 import { DbService } from '../db/db.service';
 import type { SessionScope } from '../db/site-scope';
@@ -96,6 +96,75 @@ export class SitesService {
 
         throw error;
       }
+    });
+  }
+
+  async update(session: SessionScope, siteId: string, input: UpdateSite): Promise<Site> {
+    this.requireCoordinator(session);
+
+    return this.db.withSessionClient(session, async (client) => {
+      const { rows } = await client.query<SiteRow>(
+        `UPDATE site
+            SET name = $1
+          WHERE id = $2
+            AND id = ANY($3::uuid[])
+          RETURNING id, code, name, deactivated_at`,
+        [input.name, siteId, [...session.siteIds]],
+      );
+
+      if (rows.length === 0) {
+        throw new NotFoundException('Site not found in the current scope');
+      }
+
+      return toSite(rows[0] as SiteRow);
+    });
+  }
+
+  async deactivate(session: SessionScope, siteId: string): Promise<Site> {
+    this.requireCoordinator(session);
+
+    return this.db.withSessionClient(session, async (client) => {
+      // Sin SELECT ... FOR UPDATE: el motor solo concede UPDATE por columna sobre
+      // `site` (0023), y el bloqueo de fila exige el privilegio de tabla completo.
+      // La propia baja es la que arbitra la carrera: solo una transacción encuentra
+      // la fila todavía activa.
+      const updated = await client.query<SiteRow>(
+        `UPDATE site
+            SET deactivated_at = now()
+          WHERE id = $1
+            AND id = ANY($2::uuid[])
+            AND deactivated_at IS NULL
+          RETURNING id, code, name, deactivated_at`,
+        [siteId, [...session.siteIds]],
+      );
+
+      if (updated.rows.length === 0) {
+        const current = await client.query<SiteRow>(
+          `SELECT id, code, name, deactivated_at
+             FROM site
+            WHERE id = $1
+              AND id = ANY($2::uuid[])`,
+          [siteId, [...session.siteIds]],
+        );
+
+        if (current.rows.length === 0) {
+          throw new NotFoundException('Site not found in the current scope');
+        }
+
+        throw new BadRequestException('Site is already deactivated');
+      }
+
+      // RLS sigue siendo el límite de esta actualización: el site_id selecciona la
+      // operación, pero la política decide qué filas físicas puede tocar la sesión.
+      await client.query(
+        `UPDATE location
+            SET organization_location_id = NULL
+          WHERE site_id = $1
+            AND organization_location_id IS NOT NULL`,
+        [siteId],
+      );
+
+      return toSite(updated.rows[0] as SiteRow);
     });
   }
 

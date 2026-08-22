@@ -157,7 +157,7 @@ describe('el sitio tiene identidad estable y no se borra', () => {
   });
 
   it('el nombre sí se puede corregir', async () => {
-    await inScope(db.migrator, [], 'UPDATE site SET name = $1 WHERE id = $2', [
+    await inScope(db.migrator, [SITE_A], 'UPDATE site SET name = $1 WHERE id = $2', [
       'Catalog A (renamed)',
       SITE_A,
     ]);
@@ -207,10 +207,19 @@ describe('el sitio tiene identidad estable y no se borra', () => {
     expect(scope).toHaveLength(1);
   });
 
-  it('la aplicación no puede renombrar ni borrar una planta', async () => {
-    await expect(
-      inScope(db.app, [], 'UPDATE site SET name = $1 WHERE id = $2', ['Renamed', SITE_B]),
-    ).rejects.toSatisfy((error) => sqlstate(error) === INSUFFICIENT_PRIVILEGE);
+  it('la aplicación puede renombrar, pero no borrar una planta', async () => {
+    await inScope(db.app, [SITE_B], 'UPDATE site SET name = $1 WHERE id = $2', [
+      'Renamed by the catalogue console',
+      SITE_B,
+    ]);
+
+    const renamed = await inScope<{ name: string }>(
+      db.migrator,
+      [],
+      'SELECT name FROM site WHERE id = $1',
+      [SITE_B],
+    );
+    expect(one(renamed).name).toBe('Renamed by the catalogue console');
 
     await expect(
       inScope(db.app, [], 'DELETE FROM site WHERE id = $1', [SITE_B]),
@@ -963,5 +972,139 @@ describe('retirar una ubicación compartida desde la consola', () => {
     await expect(
       locations.deactivateOrganizationLocation(asCoordinator(), shared.id),
     ).rejects.toThrow(/not found/);
+  });
+});
+
+describe('gestionar una planta desde la consola de ubicaciones', () => {
+  const coordinator = { userId: ACTOR, role: 'hs_coordinator', siteIds: [SITE_A, SITE_B] };
+
+  it('renombra solo al coordinador y conserva el code', async () => {
+    const renamed = await sites.update(coordinator, SITE_A, { name: 'Catalog A managed' });
+
+    expect(renamed).toMatchObject({
+      id: SITE_A,
+      code: 'catalog-a',
+      name: 'Catalog A managed',
+    });
+
+    await expect(
+      sites.update({ ...coordinator, role: 'supervisor' }, SITE_A, { name: 'Not allowed' }),
+    ).rejects.toThrow(/coordinator/);
+
+    await expect(
+      sites.update({ ...coordinator, siteIds: [SITE_A] }, SITE_B, { name: 'Outside scope' }),
+    ).rejects.toThrow(/not found/);
+  });
+
+  it('revierte la baja completa si falla el unlink de una física', async () => {
+    await db.superuser.query(`
+      CREATE OR REPLACE FUNCTION test_fail_site_unlink()
+      RETURNS trigger
+      LANGUAGE plpgsql
+      AS $fn$
+      BEGIN
+        IF NEW.site_id = '${SITE_A}'::uuid
+           AND OLD.organization_location_id IS NOT NULL
+           AND NEW.organization_location_id IS NULL THEN
+          RAISE EXCEPTION 'forced unlink failure';
+        END IF;
+        RETURN NEW;
+      END;
+      $fn$;
+    `);
+    await db.superuser.query(
+      'CREATE TRIGGER test_fail_site_unlink AFTER UPDATE OF organization_location_id ON location FOR EACH ROW EXECUTE FUNCTION test_fail_site_unlink()',
+    );
+
+    try {
+      await expect(sites.deactivate(coordinator, SITE_A)).rejects.toThrow(/forced unlink failure/);
+    } finally {
+      await db.superuser.query('DROP TRIGGER test_fail_site_unlink ON location');
+      await db.superuser.query('DROP FUNCTION test_fail_site_unlink()');
+    }
+
+    const site = await inScope<{ deactivated_at: Date | null }>(
+      db.migrator,
+      [],
+      'SELECT deactivated_at FROM site WHERE id = $1',
+      [SITE_A],
+    );
+    const physical = await inScope<{ organization_location_id: string | null }>(
+      db.migrator,
+      [SITE_A],
+      'SELECT organization_location_id FROM location WHERE id = $1',
+      [dockA],
+    );
+
+    expect(one(site).deactivated_at).toBeNull();
+    expect(one(physical).organization_location_id).toBe(ORGANIZATION_LOCATION);
+  });
+
+  it('desactiva la planta, conserva sus filas y deshace solo sus mappings', async () => {
+    const before = await inScope<{ seq: number }>(
+      db.migrator,
+      [SITE_B],
+      'SELECT COALESCE(MAX(seq), 0)::int AS seq FROM audit_log WHERE site_id = $1',
+      [SITE_B],
+    );
+    const beforeOtherSite = await inScope<{ seq: number }>(
+      db.migrator,
+      [SITE_A],
+      'SELECT COALESCE(MAX(seq), 0)::int AS seq FROM audit_log WHERE site_id = $1',
+      [SITE_A],
+    );
+    const organization = await inScope<{ id: string; name: string }>(
+      db.migrator,
+      [],
+      'SELECT id, name FROM organization_location WHERE id = $1',
+      [ORGANIZATION_LOCATION],
+    );
+
+    const deactivated = await sites.deactivate(coordinator, SITE_B);
+
+    expect(deactivated.deactivated_at).not.toBeNull();
+
+    const physical = await inScope<{
+      site_id: string;
+      organization_location_id: string | null;
+    }>(db.migrator, [SITE_B], 'SELECT site_id, organization_location_id FROM location WHERE id = $1', [dockB]);
+    expect(one(physical)).toEqual({ site_id: SITE_B, organization_location_id: null });
+
+    const shared = await inScope<{ id: string; name: string }>(
+      db.migrator,
+      [],
+      'SELECT id, name FROM organization_location WHERE id = $1',
+      [ORGANIZATION_LOCATION],
+    );
+    expect(shared).toEqual(organization);
+
+    const scope = await inScope<{ revoked_at: Date | null }>(
+      db.migrator,
+      [],
+      'SELECT revoked_at FROM user_site_scope WHERE user_id = $1 AND site_id = $2 AND revoked_at IS NULL',
+      [ACTOR, SITE_B],
+    );
+    expect(scope).toHaveLength(1);
+
+    const events = await inScope<{ event_type: string; actor_user_id: string | null }>(
+      db.migrator,
+      [SITE_B],
+      'SELECT event_type, actor_user_id FROM audit_log WHERE site_id = $1 AND seq > $2 ORDER BY seq',
+      [SITE_B, one(before).seq],
+    );
+    expect(events[0]?.event_type).toBe('site.deactivated');
+    expect(events.slice(1).length).toBeGreaterThanOrEqual(1);
+    expect(events.slice(1).every((event) => event.event_type === 'location.unlinked')).toBe(true);
+    expect(events.every((event) => event.actor_user_id === ACTOR)).toBe(true);
+
+    const otherSiteEvents = await inScope<{ event_type: string }>(
+      db.migrator,
+      [SITE_A],
+      'SELECT event_type FROM audit_log WHERE site_id = $1 AND seq > $2',
+      [SITE_A, one(beforeOtherSite).seq],
+    );
+    expect(otherSiteEvents).toHaveLength(0);
+
+    await expect(sites.deactivate(coordinator, SITE_B)).rejects.toThrow(/already deactivated/);
   });
 });
