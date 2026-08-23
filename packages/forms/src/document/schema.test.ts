@@ -141,7 +141,6 @@ describe('templateDocumentSchema', () => {
       ...document.sections[0]!.items[0]!,
       finding: {
         corrective_action: 'Refit the machine guard before use.',
-        control_level: 'engineering',
       },
     };
 
@@ -149,11 +148,11 @@ describe('templateDocumentSchema', () => {
     expect(templateDocumentSchema.safeParse(validDocument()).success).toBe(true);
   });
 
-  it('rechaza una jerarquía de controles desconocida', () => {
+  it('rechaza control_level aunque el valor de la jerarquía sea válido', () => {
     const document = validDocument();
     (document.sections[0]!.items[0] as Record<string, unknown>).finding = {
       corrective_action: 'Refit the guard.',
-      control_level: 'training',
+      control_level: 'engineering',
     };
 
     expect(errors(document)).toContain('control_level');
@@ -163,7 +162,6 @@ describe('templateDocumentSchema', () => {
     const document = validDocument();
     (document.sections[0]!.items[0] as Record<string, unknown>).finding = {
       corrective_action: 'Refit the guard.',
-      control_level: 'engineering',
       fails_when: { operator: 'equals', value: 1 },
     };
 

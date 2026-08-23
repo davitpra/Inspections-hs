@@ -1,6 +1,4 @@
 import {
-  CONTROL_LEVELS,
-  type ControlLevel,
   type Location,
   type OrganizationLocationOption,
   type ResponseType,
@@ -78,12 +76,6 @@ export function hasConfiguration(responseType: ResponseType): boolean {
   return TYPES_WITH_CONFIG.includes(responseType);
 }
 
-export const CONTROL_LEVEL_OPTIONS: readonly { value: ControlLevel; label: string }[] =
-  CONTROL_LEVELS.map((value) => ({
-    value,
-    label: value === 'ppe' ? 'PPE' : value.charAt(0).toUpperCase() + value.slice(1),
-  }));
-
 export const FAILURE_OPERATOR_LABELS: Record<FailureOperator, string> = {
   lt: 'Less than',
   lte: 'Less than or equal to',
@@ -100,7 +92,6 @@ export function defaultFinding(
 ): NonNullable<TemplateDraftDocument['sections'][number]['items'][number]['finding']> {
   return {
     corrective_action: '',
-    control_level: 'administrative',
     ...(responseType === 'scale' || responseType === 'number'
       ? { fails_when: { operator: 'lt' as const, value: responseType === 'scale' ? 1 : 0 } }
       : {}),

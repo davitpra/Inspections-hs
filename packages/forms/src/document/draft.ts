@@ -52,7 +52,7 @@ const draftItemBase = {
   prompt: z.string(),
   required: z.boolean(),
   visible_when: visibleWhenSchema.optional(),
-  // Un bloque mantiene junta la acción y su nivel; así no existen prescripciones a medias.
+  // Un bloque mantiene junta la acción y su umbral; así no existen prescripciones a medias.
   finding: findingSchema.optional(),
 };
 

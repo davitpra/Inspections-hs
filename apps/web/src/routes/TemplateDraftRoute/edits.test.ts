@@ -217,14 +217,12 @@ describe('changeResponseType', () => {
   it('conserva la prescripción al cambiar el tipo', () => {
     const withFinding = setFinding(document(), 0, 0, {
       corrective_action: 'Refit the guard.',
-      control_level: 'engineering',
       fails_when: { operator: 'gt', value: 80 },
     });
     const changed = changeResponseType(withFinding, 0, 0, 'number');
 
     expect(changed.sections[0]?.items[0]).toHaveProperty('finding', {
       corrective_action: 'Refit the guard.',
-      control_level: 'engineering',
       fails_when: { operator: 'gt', value: 80 },
     });
   });
@@ -232,7 +230,6 @@ describe('changeResponseType', () => {
   it('recorta solo el umbral cuando el nuevo tipo no es medido', () => {
     const withFinding = setFinding(changeResponseType(document(), 0, 0, 'number'), 0, 0, {
       corrective_action: 'Refit the guard.',
-      control_level: 'engineering',
       fails_when: { operator: 'gt', value: 80 },
     });
     const changed = changeResponseType(withFinding, 0, 0, 'yes_no');
@@ -240,20 +237,17 @@ describe('changeResponseType', () => {
 
     expect(item).toHaveProperty('finding', {
       corrective_action: 'Refit the guard.',
-      control_level: 'engineering',
     });
   });
 
   it('no crea un umbral al cambiar a un tipo medido', () => {
     const withFinding = setFinding(document(), 0, 0, {
       corrective_action: 'Refit the guard.',
-      control_level: 'engineering',
     });
     const changed = changeResponseType(withFinding, 0, 0, 'number');
 
     expect(changed.sections[0]?.items[0]).toHaveProperty('finding', {
       corrective_action: 'Refit the guard.',
-      control_level: 'engineering',
     });
   });
 
@@ -375,7 +369,7 @@ describe('los campos que no dependen del tipo', () => {
 
   it('setFinding escribe y elimina el bloque sin mutar el documento', () => {
     const original = document();
-    const finding = { corrective_action: 'Refit the guard.', control_level: 'engineering' as const };
+    const finding = { corrective_action: 'Refit the guard.' };
     const withFinding = setFinding(original, 0, 0, finding);
     const withoutFinding = setFinding(withFinding, 0, 0, null);
 
@@ -462,13 +456,11 @@ describe('duplicar', () => {
     it('arrastra la prescripción y genera una identidad propia', () => {
       const source = setFinding(rich(), 0, 1, {
         corrective_action: 'Review the guard.',
-        control_level: 'administrative',
       });
       const next = duplicateItem(source, 0, 1, 'b-copy');
 
       expect(next.sections[0]?.items[2]).toHaveProperty('finding', {
         corrective_action: 'Review the guard.',
-        control_level: 'administrative',
       });
       expect(next.sections[0]?.items[2]?.item_key).toBe('b-copy');
     });

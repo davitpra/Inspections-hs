@@ -325,10 +325,9 @@ export function changeResponseType(
     const finding = item.finding
       ? responseType === 'scale' || responseType === 'number' || !item.finding.fails_when
         ? item.finding
-        : {
-            corrective_action: item.finding.corrective_action,
-            control_level: item.finding.control_level,
-          }
+          : {
+              corrective_action: item.finding.corrective_action,
+            }
       : undefined;
 
     return {

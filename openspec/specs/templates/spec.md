@@ -505,8 +505,18 @@ prevent.
 
 The system SHALL let a draft question carry an optional `finding` block that records what the
 organization has already decided about that question's failure: a `corrective_action` describing
-the work to be done, and a `control_level` naming where that work sits in the hierarchy of
-controls — `elimination`, `substitution`, `engineering`, `administrative` or `ppe`.
+the work to be done.
+
+The block SHALL NOT record where that work sits in the hierarchy of controls. The hierarchy
+describes a control chosen against a hazard that exists, and the system already asks for it at the
+only moment it can be answered honestly — when a real finding is classified, with its probability
+and its severity in front of the coordinator. A level authored months earlier, against a question
+and no hazard, is a value nobody chose, and a value nobody chose is worse than an absent one
+because it reads as evidence.
+
+The system SHALL refuse a `finding` block that names a `control_level`, in a draft document and in
+a published one alike, rather than accepting and ignoring it: a field that is stored and never read
+would leave two answers to the same question in the record.
 
 The block SHALL be optional on every response type. A question without it SHALL remain publishable,
 because most questions carry no standing answer to their own failure and inventing one would make
@@ -516,17 +526,31 @@ The block SHALL travel inside the draft document, alongside the prompt and the a
 the question it belongs to, so that duplicating a question or moving it between positions carries
 the prescription with it and never leaves it behind.
 
-The system SHALL NOT judge the prescription. A `ppe` answer to a question about a missing machine
-guard SHALL be stored exactly as authored: that the proposed control was a pair of gloves is
-precisely the fact that has to remain visible afterwards.
+The system SHALL NOT judge the prescription. A corrective action of "issue gloves" against a
+question about a missing machine guard SHALL be stored exactly as authored: that this was the
+proposed response is precisely the fact that has to remain visible afterwards.
 
 #### Scenario: A question is saved with its prescription
 
 - **WHEN** a draft is saved with a `yes_no` item whose `finding` block carries a
-  `corrective_action` and a `control_level` of `engineering`
+  `corrective_action`
 - **THEN** the save succeeds
-- **AND** reading the draft returns that item with the same `corrective_action` and
+- **AND** reading the draft returns that item with the same `corrective_action`
+
+#### Scenario: A prescription naming a control level is refused outright
+
+- **WHEN** a draft is saved with a `finding` block that carries a `control_level`, whatever its
+  value
+- **THEN** the save is rejected
+- **AND** the draft's stored document is unchanged
+
+#### Scenario: A draft authored before the field was retired can still be saved
+
+- **GIVEN** a draft stored before this change whose document carries a `finding` block with a
   `control_level`
+- **WHEN** the draft is read and saved again without editing the prescription
+- **THEN** the save succeeds
+- **AND** the stored document no longer carries a `control_level`
 
 #### Scenario: A question without a prescription is still publishable
 
@@ -548,15 +572,8 @@ precisely the fact that has to remain visible afterwards.
 
 - **GIVEN** a draft item with a `finding` block
 - **WHEN** that item is duplicated
-- **THEN** the copy carries the same `corrective_action` and `control_level`
+- **THEN** the copy carries the same `corrective_action`
 - **AND** the copy carries its own `item_key`
-
-#### Scenario: An unknown control level is refused outright
-
-- **WHEN** a draft is saved with a `finding` block whose `control_level` is not one of the five
-  levels of the hierarchy
-- **THEN** the save is rejected
-- **AND** the draft's stored document is unchanged
 
 ### Requirement: A measured question declares the answer that counts as a failure
 
@@ -600,7 +617,7 @@ no finding whether or not the question declares a threshold.
 
 - **GIVEN** a draft item of type `number` whose `finding` block carries a `fails_when`
 - **WHEN** its response type is changed to `yes_no`
-- **THEN** the item keeps its `corrective_action` and its `control_level`
+- **THEN** the item keeps its `corrective_action`
 - **AND** the item no longer carries a `fails_when`
 
 ### Requirement: An incomplete draft is saved and reports what it lacks
@@ -644,8 +661,7 @@ shows a draft as ready that the server would then refuse.
 #### Scenario: A complete draft carrying a prescription reports itself as publishable
 
 - **GIVEN** a draft whose document has one section with one `yes_no` item carrying a non-empty
-  `prompt`, a valid `item_key` and a `finding` block with a non-empty `corrective_action` and a
-  valid `control_level`
+  `prompt`, a valid `item_key` and a `finding` block with a non-empty `corrective_action`
 - **WHEN** the draft is read
 - **THEN** it is reported as publishable
 - **AND** no issues are reported

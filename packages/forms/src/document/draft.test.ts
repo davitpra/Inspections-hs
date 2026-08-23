@@ -239,7 +239,6 @@ describe('draftIssues', () => {
                 item({
                   finding: {
                     corrective_action: 'Refit the machine guard before use.',
-                    control_level: 'engineering',
                   },
                 }),
               ],
@@ -254,7 +253,7 @@ describe('draftIssues', () => {
     const issues = draftIssues(
       withItem(
         item({
-          finding: { corrective_action: '  ', control_level: 'administrative' },
+          finding: { corrective_action: '  ' },
         }),
       ),
     );
@@ -271,7 +270,6 @@ describe('draftIssues', () => {
         item({
           finding: {
             corrective_action: 'Refit the machine guard.',
-            control_level: 'engineering',
             fails_when: { operator: 'gt', value: 1 },
           },
         }),
@@ -293,7 +291,6 @@ describe('draftIssues', () => {
           max: 5,
           finding: {
             corrective_action: 'Review the scale result.',
-            control_level: 'administrative',
             fails_when: { operator: 'gt', value: 9 },
           },
         }),

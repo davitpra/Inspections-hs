@@ -1,4 +1,4 @@
-import type { TemplateDraftDocument } from '@hs/contracts';
+import { saveTemplateDraftSchema, type TemplateDraftDocument } from '@hs/contracts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { DbService } from '../src/db/db.service';
@@ -335,7 +335,6 @@ describe('el borrador incompleto', () => {
               decimals: 0,
               finding: {
                 corrective_action: 'Stop the machine and investigate the temperature.',
-                control_level: 'engineering',
                 fails_when: { operator: 'gt', value: 80 },
               },
             },
@@ -353,6 +352,39 @@ describe('el borrador incompleto', () => {
     const reread = await templates.getDraft(asCoordinator(), draft.id);
 
     expect(reread.document).toEqual(document);
+  });
+
+  it('rechaza una prescripción que todavía nombra control_level', async () => {
+    const draft = await newDraft();
+    const document = {
+      ...usableDocument(),
+      sections: [
+        {
+          ...usableDocument().sections[0]!,
+          items: [
+            {
+              ...usableDocument().sections[0]!.items[0]!,
+              finding: {
+                corrective_action: 'Refit the machine guard.',
+                control_level: 'engineering',
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(() =>
+      saveTemplateDraftSchema.parse({
+        name: draft.name,
+        document,
+        site_ids: [SITE],
+      }),
+    ).toThrow();
+
+    expect((await templates.getDraft(asCoordinator(), draft.id)).document).toEqual({
+      sections: [],
+    });
   });
 
   it('el listado informa publishable sin traer el documento', async () => {

@@ -7,7 +7,6 @@ import type {
 import { describe, expect, it } from 'vitest';
 
 import {
-  CONTROL_LEVEL_OPTIONS,
   defaultFinding,
   FAILURE_OPERATOR_LABELS,
   findingButtonLabel,
@@ -53,16 +52,6 @@ describe('totalItems', () => {
 });
 
 describe('prescripciones', () => {
-  it('ofrece los cinco niveles en el orden de la jerarquía', () => {
-    expect(CONTROL_LEVEL_OPTIONS).toEqual([
-      { value: 'elimination', label: 'Elimination' },
-      { value: 'substitution', label: 'Substitution' },
-      { value: 'engineering', label: 'Engineering' },
-      { value: 'administrative', label: 'Administrative' },
-      { value: 'ppe', label: 'PPE' },
-    ]);
-  });
-
   it('nombra los operadores en inglés', () => {
     expect(FAILURE_OPERATOR_LABELS).toEqual({
       lt: 'Less than',

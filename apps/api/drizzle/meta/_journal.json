@@ -162,6 +162,13 @@
       "when": 1754524800022,
       "tag": "0023_manage_sites_from_locations_console",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1754524800023,
+      "tag": "0024_retire_prescribed_control_level",
+      "breakpoints": true
     }
   ]
 }

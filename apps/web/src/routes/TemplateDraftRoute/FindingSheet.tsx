@@ -4,7 +4,6 @@ import type { ResponseType, TemplateDraftItem } from "@hs/contracts";
 import { Sheet } from "../../app/Sheet";
 import { RESPONSE_TYPE_LABELS } from "../../presentation/templates";
 import {
-  CONTROL_LEVEL_OPTIONS,
   defaultFinding,
   FAILURE_OPERATOR_OPTIONS,
 } from "./presentation";
@@ -120,27 +119,6 @@ export function FindingSheet({
           </p>
         </fieldset>
       ) : null}
-
-      <div className="finding-sheet__field">
-        <label className="field-label" htmlFor={`${controlId}-level`}>
-          Control level
-        </label>
-        <select
-          id={`${controlId}-level`}
-          value={finding.control_level}
-          onChange={(event) =>
-            update({
-              control_level: event.target.value as Finding["control_level"],
-            })
-          }
-        >
-          {CONTROL_LEVEL_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </div>
 
       <div className="finding-sheet__field">
         <label className="field-label" htmlFor={`${controlId}-action`}>
