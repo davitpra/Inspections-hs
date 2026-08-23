@@ -38,6 +38,22 @@ export class TemplateDraftException extends HttpException {
   }
 }
 
+export type TemplateVersionErrorCode = 'template_version_not_found';
+
+export class TemplateVersionException extends HttpException {
+  constructor(readonly code: TemplateVersionErrorCode, message: string, status: HttpStatus) {
+    super({ code, message }, status);
+  }
+}
+
+/** Una versión publicada inexistente no tiene documento parcial que se pueda mostrar. */
+export const templateVersionNotFound = (): TemplateVersionException =>
+  new TemplateVersionException(
+    'template_version_not_found',
+    'That published template version does not exist',
+    HttpStatus.NOT_FOUND,
+  );
+
 /**
  * Escribir plantillas es del coordinador, y leer los borradores también.
  *

@@ -41,11 +41,17 @@ vi.mock('@tanstack/react-router', () => ({
   }: {
     children: React.ReactNode;
     to: string;
-    params?: { id: string };
+    params?: Record<string, string>;
   }) => (
     // `href` de verdad: sin él, `getAllByRole('link')` no encuentra nada y el orden de la
     // lista dejaría de ser comprobable. `to`/`params` se recortan para no llegar al DOM.
-    <a href={params ? to.replace('$id', params.id) : to} {...rest}>
+    <a
+      href={Object.entries(params ?? {}).reduce(
+        (path, [key, value]) => path.replace(`$${key}`, value),
+        to,
+      )}
+      {...rest}
+    >
       {children}
     </a>
   ),
@@ -219,6 +225,18 @@ describe('las plantillas publicadas', () => {
     expect(within(publishedBlock!).queryByText('Monthly electrical inspection')).toBeNull();
   });
 
+  it('enlaza la publicada a la versión que la fila nombra', async () => {
+    listTemplates.mockResolvedValue([published()]);
+
+    renderRoute();
+
+    const link = await screen.findByRole('link', { name: 'Published electrical inspection' });
+
+    expect(link.getAttribute('href')).toBe(
+      `/templates/versions/${published().latest_version_id}`,
+    );
+  });
+
   it('explica cómo llenar la lista cuando no hay publicadas', async () => {
     listTemplates.mockResolvedValue([]);
 
@@ -249,6 +267,43 @@ describe('las plantillas publicadas', () => {
 
     expect(within(publishedBlock!).getByText('Monthly electrical inspection')).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Your drafts' })).toBeNull();
+  });
+});
+
+/**
+ * Las fichas del encabezado no son un adorno: son la comparación que el coordinador hace
+ * de verdad —cuánto empezó contra cuánto llegó a publicar—, y tienen que decir el mismo
+ * número que los encabezados de las dos tarjetas de abajo.
+ */
+describe('los conteos del encabezado', () => {
+  function count(label: string): string | null {
+    const term = screen.getByText(label, { selector: 'dt' });
+
+    return within(term.parentElement!).getByRole('definition').textContent;
+  }
+
+  it('cuenta las dos poblaciones por separado', async () => {
+    listTemplateDrafts.mockResolvedValue([draft(), draft({ id: OTHER_DRAFT })]);
+    listTemplates.mockResolvedValue([published()]);
+
+    renderRoute();
+
+    await screen.findByText('Published electrical inspection');
+
+    expect(count('Drafts')).toBe('2');
+    expect(count('Published')).toBe('1');
+  });
+
+  /** "0 drafts" mientras la consulta falla es una afirmación falsa sobre el trabajo de alguien. */
+  it('no dice cero cuando lo que hay es un error', async () => {
+    listTemplates.mockRejectedValue(new Error('offline'));
+
+    renderRoute();
+
+    await screen.findByText('Monthly electrical inspection');
+
+    expect(count('Drafts')).toBe('1');
+    await waitFor(() => expect(count('Published')).toBe('—'));
   });
 });
 

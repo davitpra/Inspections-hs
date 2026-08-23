@@ -45,6 +45,7 @@ let templates: TemplatesService;
 
 let coordinatorId: string;
 let supervisorId: string;
+let otherSupervisorId: string;
 
 const asCoordinator = () => ({ userId: coordinatorId, role: 'hs_coordinator', siteIds: [SITE] });
 
@@ -95,6 +96,11 @@ beforeAll(async () => {
 
   const supervisor = await createAccount(db.app, { siteIds: [SITE], role: 'supervisor' });
   supervisorId = supervisor.accountId;
+  const otherSupervisor = await createAccount(db.app, {
+    siteIds: [OTHER_SITE],
+    role: 'supervisor',
+  });
+  otherSupervisorId = otherSupervisor.accountId;
 }, 120_000);
 
 afterAll(async () => {
@@ -696,6 +702,47 @@ describe('publicar un borrador', () => {
     expect((await templates.listDrafts(asCoordinator())).map((each) => each.id)).not.toContain(
       draft.id,
     );
+  });
+
+  it('lee la versión publicada por id para cualquier rol y alcance', async () => {
+    const draft = await newDraft('Read published template version');
+    const document = usableDocument('readback.item');
+
+    await templates.saveDraft(asCoordinator(), draft.id, {
+      name: draft.name,
+      document,
+      site_ids: [SITE],
+    });
+
+    const published = await templates.publishDraft(asCoordinator(), draft.id);
+    const coordinatorRead = await templates.getPublishedVersion(
+      asCoordinator(),
+      published.template_version_id,
+    );
+    const supervisorRead = await templates.getPublishedVersion(
+      { userId: supervisorId, role: 'supervisor', siteIds: [SITE] },
+      published.template_version_id,
+    );
+    const otherPlantRead = await templates.getPublishedVersion(
+      { userId: otherSupervisorId, role: 'supervisor', siteIds: [OTHER_SITE] },
+      published.template_version_id,
+    );
+
+    expect(coordinatorRead).toMatchObject({
+      template_id: published.template_id,
+      template_version_id: published.template_version_id,
+      key: draft.key,
+      name: draft.name,
+      version: 1,
+      document,
+    });
+    expect(coordinatorRead.published_at).toEqual(expect.any(String));
+    expect(supervisorRead).toEqual(coordinatorRead);
+    expect(otherPlantRead).toEqual(coordinatorRead);
+
+    await expect(
+      templates.getPublishedVersion(asCoordinator(), '00000000-0000-4000-8000-000000000099'),
+    ).rejects.toMatchObject({ response: { code: 'template_version_not_found' } });
   });
 
   it('rechaza un borrador incompleto sin escribir nada y devuelve sus issues', async () => {

@@ -2,18 +2,20 @@ import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Put } from '@
 import {
   createTemplateDraftSchema,
   type PublishedTemplate,
+  type PublishedTemplateVersion,
   saveTemplateDraftSchema,
   type TemplateDraft,
   type TemplateDraftSummary,
   type TemplateOption,
 } from '@hs/contracts';
+import { z } from 'zod';
 
 import { CurrentSession } from '../auth/session.decorator';
 import type { SessionContext } from '../auth/session.service';
 import { TemplatesService } from './templates.service';
 
 /**
- * Las plantillas: elegir las publicadas, y escribir las que todavía no lo son.
+ * Las plantillas: elegir, leer las publicadas, y escribir las que todavía no lo son.
  *
  * `GET /templates` es de siempre y responde lo de siempre —las plantillas PUBLICADAS, para
  * que el coordinador elija una al programar—, y lo puede llamar cualquiera. No se le agregó
@@ -28,6 +30,9 @@ import { TemplatesService } from './templates.service';
  * Las cinco rutas de borrador son del coordinador, el `GET` incluido. El servicio lo
  * comprueba, y ahí está la única defensa que hay: `template_draft` no lleva `site_id` y por
  * lo tanto no tiene política RLS detrás (migración 0016 §5).
+ *
+ * La lectura de una versión publicada no es autoría: como `GET /templates`, está disponible
+ * para cualquier cuenta autenticada y se resuelve por el id congelado que pidió el cliente.
  */
 @Controller('templates')
 export class TemplatesController {
@@ -36,6 +41,14 @@ export class TemplatesController {
   @Get()
   async list(@CurrentSession() session: SessionContext): Promise<TemplateOption[]> {
     return this.templates.list(session);
+  }
+
+  @Get('versions/:versionId')
+  async getPublishedVersion(
+    @CurrentSession() session: SessionContext,
+    @Param('versionId') versionId: string,
+  ): Promise<PublishedTemplateVersion> {
+    return this.templates.getPublishedVersion(session, z.uuid().parse(versionId));
   }
 
   @Get('drafts')

@@ -1,6 +1,10 @@
 import { z } from 'zod';
 
-import { SECTION_KEY_PATTERN, templateDraftDocumentSchema } from './template-document.js';
+import {
+  SECTION_KEY_PATTERN,
+  templateDocumentSchema,
+  templateDraftDocumentSchema,
+} from './template-document.js';
 
 /**
  * Requisitos §7 — Las plantillas, tal como se ELIGEN y tal como se ESCRIBEN.
@@ -62,6 +66,24 @@ export const publishedTemplateSchema = z.strictObject({
 });
 
 export type PublishedTemplate = z.infer<typeof publishedTemplateSchema>;
+
+/**
+ * La versión publicada completa: las dos identidades viajan con el documento porque una
+ * versión sola no se puede nombrar ni enlazar sin volver a resolver su plantilla. La fecha
+ * queda como `string` para conservar el timestamp que guardó PostgreSQL sin reinterpretarlo
+ * en el huso horario del dispositivo.
+ */
+export const publishedTemplateVersionSchema = z.strictObject({
+  template_id: z.uuid(),
+  template_version_id: z.uuid(),
+  key: z.string().min(1),
+  name: z.string().min(1),
+  version: z.int().positive(),
+  published_at: z.string(),
+  document: templateDocumentSchema,
+});
+
+export type PublishedTemplateVersion = z.infer<typeof publishedTemplateVersionSchema>;
 
 /**
  * La `key` de un borrador. Mismo patrón que `template.key`, porque es la que va a

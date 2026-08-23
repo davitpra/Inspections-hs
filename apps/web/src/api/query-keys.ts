@@ -42,6 +42,8 @@ export const queryKeys = {
   organizationLocations: () => key('organization-locations'),
   catalogLocations: () => key('catalog-locations'),
   templates: () => key('templates'),
+  /** Documento congelado pedido por su versión; no comparte caché con el catálogo ni campo. */
+  publishedTemplateVersion: (id?: string) => key('published-template-version', id),
 
   /**
    * Los borradores de plantilla. NO cuelgan de `templates()`: aquello son las publicadas,

@@ -29,6 +29,7 @@ import { SchedulingRoute } from '../routes/SchedulingRoute';
 import { SignInRoute } from '../routes/SignInRoute';
 import { TemplateDraftRoute } from '../routes/TemplateDraftRoute';
 import { TemplatesRoute } from '../routes/TemplatesRoute';
+import { PublishedTemplateRoute } from '../routes/PublishedTemplateRoute';
 import { LocationsRoute } from '../routes/LocationsRoute';
 import { AppBar } from './AppBar';
 import { SessionProvider, useAppSession } from './session-context';
@@ -332,6 +333,12 @@ const templateDraftRoute = createRoute({
   component: TemplateDraftRoute,
 });
 
+const publishedTemplateRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/templates/versions/$versionId',
+  component: PublishedTemplateRoute,
+});
+
 const locationsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/catalog/locations',
@@ -361,6 +368,7 @@ const routeTree = rootRoute.addChildren([
   rosterRoute,
   templatesRoute,
   templateDraftRoute,
+  publishedTemplateRoute,
   locationsRoute,
   actionsRoute,
   actionRoute,

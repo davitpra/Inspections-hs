@@ -1,10 +1,12 @@
 import { z } from 'zod';
 import {
   publishedTemplateSchema,
+  publishedTemplateVersionSchema,
   templateDraftSchema,
   templateDraftSummarySchema,
   type CreateTemplateDraft,
   type PublishedTemplate,
+  type PublishedTemplateVersion,
   type SaveTemplateDraft,
   type TemplateDraft,
   type TemplateDraftSummary,
@@ -66,6 +68,11 @@ export async function publishTemplateDraft(id: string): Promise<PublishedTemplat
   return post(`/templates/drafts/${id}/publish`, undefined, (value) =>
     publishedTemplateSchema.parse(value),
   );
+}
+
+/** La lectura de plantillas publicadas también es online, como el resto de este archivo. */
+export async function getPublishedTemplateVersion(id: string): Promise<PublishedTemplateVersion> {
+  return get(`/templates/versions/${id}`, (value) => publishedTemplateVersionSchema.parse(value));
 }
 
 export type { TemplateDraft, TemplateDraftSummary };

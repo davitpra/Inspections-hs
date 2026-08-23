@@ -1,6 +1,25 @@
 import { describe, expect, it } from 'vitest';
 
-import { publishedTemplateSchema } from './templates.js';
+import { publishedTemplateSchema, publishedTemplateVersionSchema } from './templates.js';
+
+const document = {
+  sections: [
+    {
+      section_key: 'guarding',
+      section_title: 'Machine guarding',
+      position: 1,
+      items: [
+        {
+          item_key: 'guarding.installed',
+          prompt: 'Are all guards installed?',
+          position: 1,
+          required: true,
+          response_type: 'yes_no' as const,
+        },
+      ],
+    },
+  ],
+};
 
 describe('publishedTemplateSchema', () => {
   it('acepta la identidad de la versión publicada', () => {
@@ -26,5 +45,40 @@ describe('publishedTemplateSchema', () => {
         name: 'Unexpected',
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('publishedTemplateVersionSchema', () => {
+  it('acepta una versión completa con su identidad y documento', () => {
+    expect(
+      publishedTemplateVersionSchema.parse({
+        template_id: '11111111-1111-4111-8111-111111111111',
+        template_version_id: '22222222-2222-4222-8222-222222222222',
+        key: 'machine-guarding',
+        name: 'Machine guarding',
+        version: 1,
+        published_at: '2026-08-22 10:00:00+00',
+        document,
+      }),
+    ).toMatchObject({ key: 'machine-guarding', document });
+  });
+
+  it.each([
+    ['document without sections', { document: { sections: [] } }],
+    ['version zero', { version: 0 }],
+    ['an extra key', { extra: true }],
+  ])('rechaza %s', (_label, override) => {
+    const result = publishedTemplateVersionSchema.safeParse({
+      template_id: '11111111-1111-4111-8111-111111111111',
+      template_version_id: '22222222-2222-4222-8222-222222222222',
+      key: 'machine-guarding',
+      name: 'Machine guarding',
+      version: 1,
+      published_at: '2026-08-22 10:00:00+00',
+      document,
+      ...override,
+    });
+
+    expect(result.success).toBe(false);
   });
 });

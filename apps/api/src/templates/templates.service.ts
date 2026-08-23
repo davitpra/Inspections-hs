@@ -6,6 +6,7 @@ import {
   templateDocumentSchema,
   type CreateTemplateDraft,
   type PublishedTemplate,
+  type PublishedTemplateVersion,
   type SaveTemplateDraft,
   type TemplateDraft,
   type TemplateDraftSummary,
@@ -26,6 +27,7 @@ import {
   templateDraftSiteOutOfScope,
   templateItemKeyTaken,
   templateKeyTaken,
+  templateVersionNotFound,
 } from './templates.errors';
 import {
   activeSiteIds,
@@ -96,6 +98,38 @@ export class TemplatesService {
       );
 
       return rows;
+    });
+  }
+
+  /**
+   * Lee la versión por su propio id y nunca resuelve "la más alta publicada", para que un
+   * enlace guardado siga mostrando el mismo documento. Vive acá y no en `templates.repository.ts`
+   * porque ese archivo está deliberadamente limitado a la autoría del borrador y sus SELECT
+   * de unicidad.
+   */
+  async getPublishedVersion(
+    session: SessionScope,
+    versionId: string,
+  ): Promise<PublishedTemplateVersion> {
+    return this.db.withSessionClient(session, async (client) => {
+      const { rows } = await client.query<PublishedTemplateVersion>(
+        `SELECT tv.template_id,
+                tv.id AS template_version_id,
+                t.key,
+                t.name,
+                tv.version,
+                tv.published_at::text AS published_at,
+                tv.document
+           FROM template_version tv
+           JOIN template t ON t.id = tv.template_id
+          WHERE tv.id = $1`,
+        [versionId],
+      );
+
+      const row = rows[0];
+      if (!row) throw templateVersionNotFound();
+
+      return row;
     });
   }
 

@@ -3614,6 +3614,44 @@ select:disabled {
    es lo que comprueba `scripts/check-tokens.mjs` en el build.
    --------------------------------------------------------------------------- */
 
+/*
+ * Las dos poblaciones contadas al costado del título.
+ *
+ * Misma ficha que `.builder__counts` —borde, número grande arriba de su etiqueta— porque
+ * es el mismo dato en la pantalla de al lado. Lo que cambia es el reparto: allá son tres
+ * en una grilla que llena una columna angosta, acá son dos que se apoyan contra el borde
+ * derecho del encabezado y no crecen más que su contenido.
+ */
+.templates__counts {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.templates__counts > div {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  min-width: 5.5rem;
+  padding: 0.65rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.templates__counts dt {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+.templates__counts dd {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
 /* La lista deja de flotar en la página y pasa a ser el cuerpo de la tarjeta: sin el
    margen inferior de `.list`, y sin la divisoria de la última fila, que dentro de un
    borde se lee como una fila vacía de más. */
@@ -3795,4 +3833,190 @@ select:disabled {
   outline: 2px solid currentColor;
   outline-offset: 2px;
   border-radius: var(--radius);
+}
+
+/* ---------------------------------------------------------------------------
+   La lectura de una versión publicada.
+
+   Es un registro congelado, no una variante del editor: tarjetas y filas de lectura tienen
+   su propia silueta para que ningún borde o control sugiera que el documento se puede tocar.
+   Todo color pasa por los tokens semánticos, también en los avisos de condición y hallazgo.
+   --------------------------------------------------------------------------- */
+
+.published-name {
+  display: inline-block;
+  max-width: 100%;
+  color: var(--brand);
+  font-weight: 600;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.published-name:hover,
+.published-name:focus-visible {
+  text-decoration: underline;
+}
+
+.published-name:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+  border-radius: var(--radius);
+}
+
+.published-template__header {
+  margin: 1rem 0;
+}
+
+.published-template__eyebrow,
+.published-template__section-number,
+.published-template__detail-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.published-template__header h1 {
+  margin: 0.15rem 0 0;
+}
+
+.published-template__identity {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+}
+
+.published-template__frozen {
+  margin-bottom: 1.5rem;
+}
+
+.published-template__document {
+  display: grid;
+  gap: 1rem;
+}
+
+.published-template__section {
+  padding: 1rem;
+}
+
+.published-template__section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.published-template__section-head h2 {
+  margin: 0.1rem 0 0;
+}
+
+.published-template__location {
+  margin: 0;
+  color: var(--muted);
+  text-align: right;
+}
+
+.published-template__condition {
+  margin: 0.85rem 0 0;
+  border-left: 3px solid var(--line-control);
+  padding: 0.55rem 0.75rem;
+  color: var(--muted);
+  background: var(--tint-bg);
+}
+
+.published-template__items {
+  display: grid;
+  gap: 0;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.published-template__item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.75rem;
+  border-top: 1px solid var(--line);
+  padding: 1rem 0 0;
+}
+
+.published-template__item + .published-template__item {
+  margin-top: 1rem;
+}
+
+.published-template__item-number {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.published-template__item-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.published-template__item-head h3 {
+  margin: 0;
+}
+
+.published-template__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  margin: 0.65rem 0 0;
+}
+
+.published-template__facts div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+}
+
+.published-template__facts dt {
+  color: var(--muted);
+}
+
+.published-template__facts dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.published-template__details,
+.published-template__finding {
+  margin-top: 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+}
+
+.published-template__details ul,
+.published-template__finding ul {
+  margin: 0.35rem 0 0;
+  padding-left: 1.2rem;
+}
+
+.published-template__finding {
+  border-color: var(--line-control);
+  background: var(--warn-bg);
+}
+
+@media (max-width: 48rem) {
+  .published-template__section-head,
+  .published-template__item-head {
+    display: block;
+  }
+
+  .published-template__location {
+    margin-top: 0.6rem;
+    text-align: left;
+  }
+
+  .published-template__item-head .status-pill {
+    display: inline-block;
+    margin-top: 0.5rem;
+  }
 }

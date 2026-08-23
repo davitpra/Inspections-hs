@@ -7,6 +7,7 @@ import {
 } from './presentation';
 import { PublishedRow } from './PublishedRow';
 
+/** Las publicadas son registros congelados: la fila abre su documento, no un editor. */
 export function PublishedTemplates({
   templates,
   isLoading,
