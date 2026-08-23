@@ -17,6 +17,16 @@
 --
 -- `site` no lleva política RLS (ver el comentario de la migración 0004), así que
 -- este archivo no declara alcance. `003_locations.sql` sí.
+--
+-- LO QUE SÍ QUEDA DECLARADO AL SALIR SON LAS DOS PLANTAS, y no una: el trigger
+-- `site_audit` agrega cada planta recién insertada a `app.site_ids` para poder
+-- escribir su entrada en la cadena, que lleva RLS con FORCE. Hasta la migración
+-- 0027 ese `set_config` PISABA el valor entero, así que la segunda fila de este
+-- INSERT tapaba la declaración de la primera y el archivo terminaba con un
+-- alcance que nadie eligió. No rompía nada porque `scripts/seed.mjs` corre un
+-- archivo por transacción y los de abajo declaran el suyo; era una trampa
+-- esperando a un seed que insertara una planta y después escribiera filas con
+-- alcance de sitio.
 
 INSERT INTO site (id, code, name)
 VALUES

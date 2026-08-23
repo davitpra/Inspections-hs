@@ -26,6 +26,7 @@ export const LATEST_PUBLISHED_VERSION_CTE = `
   SELECT DISTINCT ON (tv.template_id)
          tv.template_id,
          tv.id      AS version_id,
-         tv.version AS version
+         tv.version AS version,
+         tv.published_at::text AS published_at
     FROM template_version tv
    ORDER BY tv.template_id, tv.version DESC`;

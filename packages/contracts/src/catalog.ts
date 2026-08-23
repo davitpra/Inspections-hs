@@ -71,6 +71,11 @@ export const deactivateSiteSchema = z.strictObject({});
 
 export type DeactivateSite = z.infer<typeof deactivateSiteSchema>;
 
+/** La reactivación tampoco acepta una fecha fabricada por el cliente. */
+export const reactivateSiteSchema = z.strictObject({});
+
+export type ReactivateSite = z.infer<typeof reactivateSiteSchema>;
+
 /** Una entrada del catálogo, tal como la devuelve la API. */
 export const locationSchema = z.strictObject({
   id: z.uuid(),

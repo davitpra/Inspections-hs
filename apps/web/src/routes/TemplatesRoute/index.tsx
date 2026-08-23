@@ -11,9 +11,9 @@ import { TemplateDrafts } from './TemplateDrafts';
  * de código, una revisión de migración y un despliegue, y el coordinador —que es quien sabe
  * qué hay que preguntar— dependía del desarrollador para cada palabra.
  *
- * **ESTO SON BORRADORES, NO PLANTILLAS.** Nada de lo que se lista acá puede programarse
- * todavía: publicar es la segunda mitad de la etapa 8 y no existe ningún endpoint que lo
- * haga. La distinción no es un detalle de implementación — es la que permite que escribir
+ * **BORRADORES Y PUBLICADAS SON DOS POBLACIONES.** Un borrador todavía puede cambiar y no
+ * puede programarse; una publicación es un registro congelado que aparece en la tarjeta de
+ * abajo. La distinción no es un detalle de implementación — es la que permite que escribir
  * una plantilla no toque ni una fila del modelo inmutable.
  *
  * **El rol se comprueba también en la LECTURA**, al revés que `/scheduling` y como

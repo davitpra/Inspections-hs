@@ -1,6 +1,6 @@
 import { RowMenu } from '../../components/RowMenu';
 import { DocumentIcon } from '../../components/icons';
-import { saveButtonLabel, saveStateLabel } from './presentation';
+import { publishButtonLabel, saveButtonLabel, saveStateLabel } from './presentation';
 
 /**
  * El encabezado de la consola: qué pantalla es, cómo está el borrador, y el guardado.
@@ -17,13 +17,19 @@ export function DraftHeader({
   dirty,
   saving,
   canSave,
+  canPublish,
+  publishing,
   onSave,
+  onPublish,
   onDiscard,
 }: {
   dirty: boolean;
   saving: boolean;
   canSave: boolean;
+  canPublish: boolean;
+  publishing: boolean;
   onSave: () => void;
+  onPublish: () => void;
   onDiscard: () => void;
 }): React.JSX.Element {
   return (
@@ -53,6 +59,15 @@ export function DraftHeader({
           disabled={!canSave}
         >
           {saveButtonLabel(saving, dirty)}
+        </button>
+
+        <button
+          type="button"
+          className="button--primary builder__publish"
+          onClick={onPublish}
+          disabled={!canPublish || publishing}
+        >
+          {publishButtonLabel(publishing)}
         </button>
 
         {/*

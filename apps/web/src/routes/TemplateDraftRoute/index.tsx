@@ -18,14 +18,16 @@ import { listSites } from "../../api/inspections";
 import {
   discardTemplateDraft,
   getTemplateDraft,
+  publishTemplateDraft,
   saveTemplateDraft,
 } from "../../api/templates";
 import { queryKeys } from "../../api/query-keys";
 import { useAppSession } from "../../app/session-context";
 import { InfoIcon } from "../../components/icons";
-import { canAuthorTemplates } from "../../permissions/session";
+import { canAuthorTemplates, canPublishTemplates } from "../../permissions/session";
 import { DraftHeader } from "./DraftHeader";
-import { hasUnsavedChanges, saveErrorNotice } from "./presentation";
+import { PublishDialog } from "./PublishDialog";
+import { canPublish as canPublishDraft, hasUnsavedChanges, saveErrorNotice } from "./presentation";
 import { SectionList } from "./SectionList";
 import { TemplateIdentity } from "./TemplateIdentity";
 import { TemplateSummary } from "./TemplateSummary";
@@ -79,15 +81,24 @@ export function TemplateDraftRoute(): React.JSX.Element {
 
   // `key` remonta el editor entero al cambiar de borrador: el estado local es del documento
   // que se está editando, y arrastrarlo de uno a otro escribiría en el equivocado.
-  return <DraftEditor key={id} id={id} siteScope={account.siteScope} />;
+  return (
+    <DraftEditor
+      key={id}
+      id={id}
+      siteScope={account.siteScope}
+      canPublish={canPublishTemplates(account)}
+    />
+  );
 }
 
 function DraftEditor({
   id,
   siteScope,
+  canPublish,
 }: {
   id: string;
   siteScope: readonly string[];
+  canPublish: boolean;
 }): React.JSX.Element {
   const draft = useQuery({
     queryKey: queryKeys.templateDraft(id),
@@ -151,14 +162,15 @@ function DraftEditor({
    * servidor la niega con `template_draft_site_out_of_scope`.
    */
   return (
-    <DraftForm
+      <DraftForm
       key={draft.data.id}
       id={id}
       loaded={draft.data}
       organizationLocations={organizationLocations.data ?? []}
       locations={locations.data ?? []}
-      sites={(sites.data ?? []).filter((site) => siteScope.includes(site.id))}
-    />
+        sites={(sites.data ?? []).filter((site) => siteScope.includes(site.id))}
+        canPublish={canPublish}
+      />
   );
 }
 
@@ -168,15 +180,18 @@ function DraftForm({
   organizationLocations,
   locations,
   sites,
+  canPublish: canPublishPermission,
 }: {
   id: string;
   loaded: TemplateDraft;
   organizationLocations: readonly OrganizationLocation[];
   locations: readonly Location[];
   sites: readonly Site[];
+  canPublish: boolean;
 }): React.JSX.Element {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const [publishDialog, setPublishDialog] = useState(false);
 
   /**
    * Lo editado y lo último guardado, uno al lado del otro: el documento, el nombre y el
@@ -226,6 +241,17 @@ function DraftForm({
     },
   });
 
+  const publish = useMutation({
+    mutationFn: () => publishTemplateDraft(id),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.templateDrafts() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.templates() }),
+      ]);
+      void navigate({ to: "/templates" });
+    },
+  });
+
   /** Escribe una edición sin tocar lo que ya fue guardado. */
   const edit = (change: Partial<typeof edits.edited>): void =>
     setEdits((current) => ({
@@ -248,9 +274,22 @@ function DraftForm({
         canSave={
           dirty && !save.isPending && name.trim() !== "" && siteIds.length > 0
         }
+        canPublish={canPublishPermission && canPublishDraft(dirty, issues)}
+        publishing={publish.isPending}
         onSave={() => save.mutate()}
+        onPublish={() => setPublishDialog(true)}
         onDiscard={() => discard.mutate()}
       />
+
+      {publishDialog ? (
+        <PublishDialog
+          draftName={name}
+          publishing={publish.isPending}
+          error={publish.isError ? (publish.error as Error).message : null}
+          onClose={() => setPublishDialog(false)}
+          onConfirm={() => publish.mutate()}
+        />
+      ) : null}
 
       {save.isError ? (
         <p className="notice notice--warn">

@@ -7,6 +7,7 @@ import {
   locationOrganizationMappingSchema,
   locationSchema,
   organizationLocationSchema,
+  reactivateSiteSchema,
   siteSchema,
   updateSiteSchema,
   type Location,
@@ -40,6 +41,12 @@ export async function renameSite(siteId: string, name: string): Promise<Site> {
 
 export async function deactivateSite(siteId: string): Promise<Site> {
   return send('POST', `/sites/${siteId}/deactivate`, deactivateSiteSchema.parse({}), (value) =>
+    siteSchema.parse(value),
+  );
+}
+
+export async function reactivateSite(siteId: string): Promise<Site> {
+  return send('POST', `/sites/${siteId}/reactivate`, reactivateSiteSchema.parse({}), (value) =>
     siteSchema.parse(value),
   );
 }

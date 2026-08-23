@@ -2,12 +2,12 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Location, Site } from '@hs/contracts';
 import { useState } from 'react';
 
-import { deactivateSite, renameSite } from '../../api/catalog';
+import { deactivateSite, reactivateSite, renameSite } from '../../api/catalog';
 import { Sheet } from '../../app/Sheet';
 import { queryKeys } from '../../api/query-keys';
 
 /**
- * Gestión de la etiqueta y la baja lógica de las plantas. El code se muestra como
+ * Gestión de la etiqueta y del ciclo de vida lógico de las plantas. El code se muestra como
  * identidad, pero no se convierte en un control editable.
  */
 export function ManageSitesSheet({
@@ -23,6 +23,7 @@ export function ManageSitesSheet({
   const [editing, setEditing] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [confirming, setConfirming] = useState<string | null>(null);
+  const [restoring, setRestoring] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = async (): Promise<void> => {
@@ -50,11 +51,22 @@ export function ManageSitesSheet({
     onError: (caught: Error) => setError(caught.message),
   });
 
+  const restore = useMutation({
+    mutationFn: (siteId: string) => reactivateSite(siteId),
+    onSuccess: async () => {
+      setRestoring(null);
+      setError(null);
+      await refresh();
+    },
+    onError: (caught: Error) => setError(caught.message),
+  });
+
   return (
     <Sheet side="end" label="Manage sites" onClose={onClose}>
       <p className="note">
         Site codes are permanent. Removing a site keeps its history and unlinks its physical
-        locations from the shared catalogue.
+        locations from the shared catalogue. The site can be restored, but its physical locations
+        return unmapped until they are mapped again.
       </p>
 
       <div className="manage-sites__list">
@@ -63,6 +75,7 @@ export function ManageSitesSheet({
           const mapped = physical.filter((location) => location.organization_location_code !== null);
           const isEditing = editing === site.id;
           const isConfirming = confirming === site.id;
+          const isRestoring = restoring === site.id;
 
           return (
             <article className="manage-sites__item" key={site.id}>
@@ -132,9 +145,26 @@ export function ManageSitesSheet({
                 </div>
               ) : null}
 
+              {site.deactivated_at && !isRestoring ? (
+                <div className="manage-sites__actions">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRestoring(site.id);
+                      setError(null);
+                    }}
+                  >
+                    Restore
+                  </button>
+                </div>
+              ) : null}
+
               {isConfirming ? (
                 <div className="manage-sites__confirm">
-                  <p>Remove {site.name}? This cannot be undone.</p>
+                  <p>
+                    Remove {site.name}? The site can be restored later, but its physical locations
+                    will remain unmapped until you map them again.
+                  </p>
                   <div className="manage-sites__actions">
                     <button
                       type="button"
@@ -146,6 +176,28 @@ export function ManageSitesSheet({
                     </button>
                     <button type="button" onClick={() => setConfirming(null)} disabled={remove.isPending}>
                       Keep site
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              {isRestoring ? (
+                <div className="manage-sites__confirm">
+                  <p>
+                    Restore {site.name}? Its physical locations will return unmapped until you map
+                    them again.
+                  </p>
+                  <div className="manage-sites__actions">
+                    <button
+                      type="button"
+                      className="button--primary"
+                      onClick={() => restore.mutate(site.id)}
+                      disabled={restore.isPending}
+                    >
+                      {restore.isPending ? 'Restoring…' : 'Restore site'}
+                    </button>
+                    <button type="button" onClick={() => setRestoring(null)} disabled={restore.isPending}>
+                      Keep removed
                     </button>
                   </div>
                 </div>

@@ -2,7 +2,10 @@ import { Injectable } from '@nestjs/common';
 import {
   draftIssues,
   emptyDraftDocument,
+  normalizeDraft,
+  templateDocumentSchema,
   type CreateTemplateDraft,
+  type PublishedTemplate,
   type SaveTemplateDraft,
   type TemplateDraft,
   type TemplateDraftSummary,
@@ -15,11 +18,14 @@ import { LATEST_PUBLISHED_VERSION_CTE } from './published-version.sql';
 import { templateKeyFromName } from './template-key';
 import {
   templateDraftForbidden,
+  templateDraftNotPublishable,
   templateDraftNameTaken,
   templateDraftNameUnusable,
   templateDraftNotFound,
   templateDraftSiteDeactivated,
   templateDraftSiteOutOfScope,
+  templateItemKeyTaken,
+  templateKeyTaken,
 } from './templates.errors';
 import {
   activeSiteIds,
@@ -27,9 +33,15 @@ import {
   findDraft,
   findDrafts,
   insertDraft,
+  insertTemplate,
+  insertVersion,
   isDraftUniqueViolation,
+  isTemplateItemKeyUniqueViolation,
+  isTemplateKeyUniqueViolation,
   isNameTaken,
   isNameTakenByAnother,
+  markDraftPublished,
+  registerItems,
   updateDraft,
   type TemplateDraftRecord,
 } from './templates.repository';
@@ -39,7 +51,7 @@ import {
  *
  * Las dos mitades no se tocan. `list` responde por `template` + `template_version`; los
  * borradores viven en `template_draft` y no escriben una fila allá hasta que alguien
- * publique, que es la segunda mitad de la etapa 8 y otro change. Un borrador nunca aparece
+ * publique. Un borrador nunca aparece
  * en `list`, y eso no es un filtro: es que no hay de dónde sacarlo.
  *
  * Lo que sigue describe `list`.
@@ -71,10 +83,12 @@ export class TemplatesService {
     return this.db.withSessionClient(session, async (client) => {
       const { rows } = await client.query<TemplateOption>(
         `WITH latest AS (${LATEST_PUBLISHED_VERSION_CTE})
-         SELECT t.id,
-                t.name,
-                latest.version    AS latest_version,
-                latest.version_id AS latest_version_id
+          SELECT t.id,
+                 t.key,
+                 t.name,
+                 latest.version    AS latest_version,
+                 latest.version_id AS latest_version_id,
+                 latest.published_at AS latest_published_at
            FROM template t
            JOIN latest ON latest.template_id = t.id
           WHERE t.deactivated_at IS NULL
@@ -88,9 +102,8 @@ export class TemplatesService {
   // -------------------------------------------------------------------------
   // Los borradores (etapa 8, primera mitad).
   //
-  // Ninguno de estos métodos escribe en `template`, `template_item` ni
-  // `template_version`, y por eso ninguno necesita un permiso que la migración
-  // 0003 haya revocado. Publicar es otro change.
+  // Los métodos de autoría mantienen separado el borrador del modelo publicado. Publicar es
+  // la única excepción y escribe las cuatro consecuencias dentro de una transacción.
   //
   // Los cinco abren igual, con la comprobación de rol: `template_draft` no lleva
   // `site_id` y por lo tanto no tiene política RLS que la respalde (0016 §5), así
@@ -179,6 +192,63 @@ export class TemplatesService {
   }
 
   /**
+   * Publica la versión 1 que describe el borrador y consume el borrador en la misma transacción.
+   * `draftIssues` y `templateDocumentSchema` son las mismas reglas que usa el builder y el motor.
+   */
+  async publishDraft(session: SessionScope, id: string): Promise<PublishedTemplate> {
+    requireCoordinator(session);
+
+    return this.db.withSessionClient(session, async (client) => {
+      const draft = await findDraft(client, id);
+
+      if (!draft) throw templateDraftNotFound();
+
+      const issues = draftIssues(draft.document);
+
+      if (issues.length > 0) throw templateDraftNotPublishable(issues);
+
+      const document = templateDocumentSchema.parse(normalizeDraft(draft.document));
+      const itemKeys = document.sections.flatMap((section) =>
+        section.items.map((item) => item.item_key),
+      );
+
+      let template: { id: string };
+
+      try {
+        template = await insertTemplate(client, { key: draft.key, name: draft.name });
+      } catch (caught) {
+        if (isTemplateKeyUniqueViolation(caught)) throw templateKeyTaken();
+
+        throw caught;
+      }
+
+      try {
+        await registerItems(client, template.id, itemKeys);
+      } catch (caught) {
+        if (isTemplateItemKeyUniqueViolation(caught)) throw templateItemKeyTaken();
+
+        throw caught;
+      }
+
+      const version = await insertVersion(client, {
+        templateId: template.id,
+        document,
+        publishedBy: session.userId,
+      });
+
+      if (!(await markDraftPublished(client, id, version.id))) {
+        throw templateDraftNotFound();
+      }
+
+      return {
+        template_id: template.id,
+        template_version_id: version.id,
+        version: version.version,
+      };
+    });
+  }
+
+  /**
    * Guardar.
    *
    * El documento NO se rechaza por estar incompleto: una sección sin ítems o un
@@ -206,6 +276,11 @@ export class TemplatesService {
       if (input.site_ids.some((siteId) => !activeIds.has(siteId))) {
         throw templateDraftSiteDeactivated();
       }
+
+      // Primero se comprueba que el borrador siga vivo. Así un borrador publicado o descartado
+      // siempre devuelve `template_draft_not_found`, sin que una colisión de nombre oculte su
+      // estado terminal.
+      if (!(await findDraft(client, id))) throw templateDraftNotFound();
 
       // Renombrar tiene que respetar la misma unicidad que crear: el nombre es la
       // identidad de un borrador (0017), y dos renglones iguales en el listado no se

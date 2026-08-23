@@ -1,12 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 
+import { listTemplates } from '../../api/inspections';
 import { listTemplateDrafts } from '../../api/templates';
 import { queryKeys } from '../../api/query-keys';
 import { DocumentIcon, GridIcon, InfoIcon } from '../../components/icons';
 import { DiscardDraftDialog } from './DiscardDraftDialog';
 import { DraftList } from './DraftList';
 import { NewDraftForm } from './NewDraftForm';
+import { PublishedTemplates } from './PublishedTemplates';
 import { draftCountLabel, sortDrafts } from './presentation';
 
 export function TemplateDrafts(): React.JSX.Element {
@@ -20,6 +22,12 @@ export function TemplateDrafts(): React.JSX.Element {
   const drafts = useQuery({
     queryKey: queryKeys.templateDrafts(),
     queryFn: listTemplateDrafts,
+    retry: false,
+  });
+
+  const published = useQuery({
+    queryKey: queryKeys.templates(),
+    queryFn: listTemplates,
     retry: false,
   });
 
@@ -61,10 +69,11 @@ export function TemplateDrafts(): React.JSX.Element {
             <InfoIcon size={20} />
           </span>
           <div>
-            <p className="notice-card__title">These are drafts</p>
+            <p className="notice-card__title">Drafts become published templates</p>
             <p className="notice-card__text">
-              Publishing a template so it can be scheduled is not available yet — a draft is
-              saved, reordered and reviewed here, and published in a later release.
+              Publish a completed draft to make it available for scheduling. Published versions
+              are frozen, so review the questions carefully before you publish. Your published
+              templates appear below.
             </p>
           </div>
         </div>
@@ -120,6 +129,12 @@ export function TemplateDrafts(): React.JSX.Element {
           onClose={() => setDiscarding(null)}
         />
       ) : null}
+
+      <PublishedTemplates
+        templates={published.data ?? []}
+        isLoading={published.isLoading}
+        isError={published.isError}
+      />
     </>
   );
 }

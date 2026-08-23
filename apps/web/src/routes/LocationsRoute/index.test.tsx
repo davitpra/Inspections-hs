@@ -26,6 +26,7 @@ const createLocation = vi.hoisted(() => vi.fn());
 const createSite = vi.hoisted(() => vi.fn());
 const renameSite = vi.hoisted(() => vi.fn());
 const deactivateSite = vi.hoisted(() => vi.fn());
+const reactivateSite = vi.hoisted(() => vi.fn());
 const deactivateOrganizationLocation = vi.hoisted(() => vi.fn());
 const listSites = vi.hoisted(() => vi.fn());
 const useAppSession = vi.hoisted(() => vi.fn());
@@ -40,6 +41,7 @@ vi.mock('../../api/catalog', () => ({
   createSite,
   renameSite,
   deactivateSite,
+  reactivateSite,
   deactivateOrganizationLocation,
 }));
 vi.mock('../../api/inspections', () => ({ listSites }));
@@ -47,6 +49,7 @@ vi.mock('../../app/session-context', () => ({ useAppSession }));
 
 let currentSiteScope: string[] = [];
 let currentSites: Site[] = [];
+let currentLocations: Location[] = [];
 
 function session(role: Session['role']): { account: Session } {
   return {
@@ -126,10 +129,11 @@ function renderRoute(): void {
 beforeEach(() => {
   currentSiteScope = [ST_THOMAS, GLENCOE];
   currentSites = [...sites];
+  currentLocations = [...locations];
   useAppSession.mockReset().mockImplementation(() => ({ ...session('hs_coordinator'), reload: reloadSession }));
   listSites.mockReset().mockImplementation(() => Promise.resolve(currentSites));
   listOrganizationLocations.mockReset().mockResolvedValue(shared);
-  listCatalogLocations.mockReset().mockResolvedValue(locations);
+  listCatalogLocations.mockReset().mockImplementation(() => Promise.resolve(currentLocations));
   mapLocation.mockReset().mockResolvedValue(locations[0]);
   createOrganizationLocation.mockReset().mockResolvedValue(shared[0]);
   createLocation.mockReset().mockResolvedValue(locations[1]);
@@ -143,6 +147,11 @@ beforeEach(() => {
     const removed = { ...currentSites.find((site) => site.id === siteId)!, deactivated_at: '2026-08-21T12:00:00.000Z' };
     currentSites = currentSites.map((site) => (site.id === siteId ? removed : site));
     return removed;
+  });
+  reactivateSite.mockReset().mockImplementation(async (siteId: string) => {
+    const restored = { ...currentSites.find((site) => site.id === siteId)!, deactivated_at: null };
+    currentSites = currentSites.map((site) => (site.id === siteId ? restored : site));
+    return restored;
   });
   reloadSession.mockReset().mockResolvedValue(undefined);
   deactivateOrganizationLocation.mockReset().mockResolvedValue(undefined);
@@ -617,12 +626,35 @@ describe('gestionar plantas', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Manage sites' }));
     fireEvent.click(screen.getAllByRole('button', { name: 'Remove' })[1]!);
-    expect(screen.getByText(/This cannot be undone/)).toBeTruthy();
+    expect(screen.getByText(/can be restored later/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Remove site' }));
 
     await waitFor(() => expect(deactivateSite).toHaveBeenCalledWith(GLENCOE));
     expect(screen.getByText('Removed')).toBeTruthy();
     await waitFor(() => expect(screen.queryByLabelText('Loading dock in Glencoe')).toBeNull());
+  });
+
+  it('ofrece Restore para una planta removida y la devuelve con ubicaciones sin mapear', async () => {
+    currentSites = [
+      sites[0]!,
+      { ...sites[1]!, deactivated_at: '2026-08-21T12:00:00.000Z' },
+    ];
+    currentLocations = locations.map((location) =>
+      location.site_id === GLENCOE ? { ...location, organization_location_code: null } : location,
+    );
+
+    renderRoute();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage sites' }));
+    expect(screen.getByRole('button', { name: 'Restore' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
+    expect(screen.getByText(/Restore Glencoe\?/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Restore site' }));
+
+    await waitFor(() => expect(reactivateSite).toHaveBeenCalledWith(GLENCOE));
+    expect((await screen.findByLabelText('Loading dock in Glencoe')).getAttribute('aria-checked')).toBe(
+      'false',
+    );
   });
 
   it('mantiene independientes las tres acciones del encabezado', async () => {

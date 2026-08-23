@@ -1,5 +1,5 @@
 import type { PoolClient } from 'pg';
-import type { TemplateDraftDocument } from '@hs/contracts';
+import type { TemplateDocument, TemplateDraftDocument } from '@hs/contracts';
 
 /**
  * Los accesos a `template_draft`.
@@ -28,7 +28,8 @@ export async function findDrafts(client: PoolClient): Promise<TemplateDraftRecor
   const { rows } = await client.query<TemplateDraftRecord>(
     `SELECT ${DRAFT_COLUMNS}
        FROM template_draft
-      WHERE discarded_at IS NULL
+       WHERE discarded_at IS NULL
+         AND published_at IS NULL
       ORDER BY updated_at DESC`,
   );
 
@@ -42,7 +43,7 @@ export async function findDraft(
   const { rows } = await client.query<TemplateDraftRecord>(
     `SELECT ${DRAFT_COLUMNS}
        FROM template_draft
-      WHERE id = $1 AND discarded_at IS NULL`,
+       WHERE id = $1 AND discarded_at IS NULL AND published_at IS NULL`,
     [id],
   );
 
@@ -90,7 +91,8 @@ export async function isNameTaken(
   const { rows } = await client.query<{ taken: boolean }>(
     `SELECT EXISTS (
               SELECT 1 FROM template_draft
-               WHERE discarded_at IS NULL
+                WHERE discarded_at IS NULL
+                  AND published_at IS NULL
                  AND (lower(btrim(name)) = lower(btrim($1)) OR key = $2)
               UNION ALL
               SELECT 1 FROM template
@@ -118,7 +120,8 @@ export async function isNameTakenByAnother(
   const { rows } = await client.query<{ taken: boolean }>(
     `SELECT EXISTS (
               SELECT 1 FROM template_draft
-               WHERE discarded_at IS NULL
+                WHERE discarded_at IS NULL
+                  AND published_at IS NULL
                  AND ($2::uuid IS NULL OR id <> $2::uuid)
                  AND lower(btrim(name)) = lower(btrim($1))
               UNION ALL
@@ -145,6 +148,80 @@ export function isDraftUniqueViolation(caught: unknown): boolean {
     (candidate.constraint === 'template_draft_key_live_idx' ||
       candidate.constraint === 'template_draft_name_live_idx')
   );
+}
+
+export function isTemplateKeyUniqueViolation(caught: unknown): boolean {
+  const candidate = caught as { code?: unknown; constraint?: unknown };
+
+  return candidate?.code === '23505' && candidate.constraint === 'template_key_key';
+}
+
+export function isTemplateItemKeyUniqueViolation(caught: unknown): boolean {
+  const candidate = caught as { code?: unknown; constraint?: unknown };
+
+  return candidate?.code === '23505' && candidate.constraint === 'template_item_pkey';
+}
+
+export async function insertTemplate(
+  client: PoolClient,
+  template: { key: string; name: string },
+): Promise<{ id: string }> {
+  const { rows } = await client.query<{ id: string }>(
+    `INSERT INTO template (key, name)
+          VALUES ($1, $2)
+       RETURNING id`,
+    [template.key, template.name],
+  );
+
+  return rows[0] as { id: string };
+}
+
+export async function registerItems(
+  client: PoolClient,
+  templateId: string,
+  itemKeys: readonly string[],
+): Promise<void> {
+  await client.query(
+    `INSERT INTO template_item (item_key, template_id)
+     SELECT item_key, $1
+       FROM unnest($2::text[]) AS item_key`,
+    [templateId, [...itemKeys]],
+  );
+}
+
+export async function insertVersion(
+  client: PoolClient,
+  version: {
+    templateId: string;
+    document: TemplateDocument;
+    publishedBy: string;
+  },
+): Promise<{ id: string; version: number }> {
+  const { rows } = await client.query<{ id: string; version: number }>(
+    `INSERT INTO template_version (template_id, version, document, published_by)
+          VALUES ($1, 1, $2::jsonb, $3)
+       RETURNING id, version`,
+    [version.templateId, JSON.stringify(version.document), version.publishedBy],
+  );
+
+  return rows[0] as { id: string; version: number };
+}
+
+export async function markDraftPublished(
+  client: PoolClient,
+  id: string,
+  templateVersionId: string,
+): Promise<boolean> {
+  const { rowCount } = await client.query(
+    `UPDATE template_draft
+        SET published_at = now(), template_version_id = $2, updated_at = now()
+      WHERE id = $1
+        AND discarded_at IS NULL
+        AND published_at IS NULL`,
+    [id, templateVersionId],
+  );
+
+  return (rowCount ?? 0) > 0;
 }
 
 /**
@@ -201,6 +278,7 @@ export async function updateDraft(
              site_ids = $4::uuid[]
        WHERE id = $1
          AND discarded_at IS NULL
+         AND published_at IS NULL
   RETURNING ${DRAFT_COLUMNS}`,
     [
       update.id,
@@ -223,7 +301,7 @@ export async function discardDraft(client: PoolClient, id: string): Promise<bool
   const { rowCount } = await client.query(
     `UPDATE template_draft
         SET discarded_at = now(), updated_at = now()
-      WHERE id = $1 AND discarded_at IS NULL`,
+       WHERE id = $1 AND discarded_at IS NULL AND published_at IS NULL`,
     [id],
   );
 

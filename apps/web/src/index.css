@@ -3649,6 +3649,46 @@ select:disabled {
   margin: 0.15rem 0 0;
 }
 
+/* La tarjeta publicada comparte la silueta de borradores, pero no sus acciones: cada fila
+   es un registro terminado, no un link de edición. */
+.published-card .list {
+  margin: 0;
+}
+
+.published-card .list__row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.published-card .list__row > div {
+  min-width: 0;
+}
+
+.published-card .list__row .note {
+  margin: 0.15rem 0 0;
+}
+
+.published-empty {
+  padding: 1.5rem;
+  border: 1px dashed var(--line-control);
+  border-radius: var(--radius);
+  background: var(--tint-bg);
+  text-align: center;
+}
+
+.published-empty__icon {
+  color: var(--brand);
+}
+
+.published-empty__title {
+  margin: 0.25rem 0 0;
+  font-weight: 600;
+}
+
+.published-empty .note {
+  margin: 0.25rem 0 0;
+}
+
 /*
  * Todavía no hay ningún borrador. Borde punteado y no macizo: es un hueco que se va a
  * llenar, no un bloque de la pantalla. Mismo recurso que `.builder__empty-sections`, un

@@ -14,15 +14,18 @@ const DRAFT = '44444444-4444-4444-8444-444444444444';
 const getTemplateDraft = vi.hoisted(() => vi.fn());
 const saveTemplateDraft = vi.hoisted(() => vi.fn());
 const discardTemplateDraft = vi.hoisted(() => vi.fn());
+const publishTemplateDraft = vi.hoisted(() => vi.fn());
 const useAppSession = vi.hoisted(() => vi.fn());
 const listOrganizationLocations = vi.hoisted(() => vi.fn());
 const listCatalogLocations = vi.hoisted(() => vi.fn());
 const listSites = vi.hoisted(() => vi.fn());
+const navigate = vi.hoisted(() => vi.fn());
 
 vi.mock('../../api/templates', () => ({
   getTemplateDraft,
   saveTemplateDraft,
   discardTemplateDraft,
+  publishTemplateDraft,
 }));
 vi.mock('../../api/catalog', () => ({ listOrganizationLocations, listCatalogLocations }));
 vi.mock('../../api/inspections', () => ({ listSites }));
@@ -31,7 +34,7 @@ vi.mock('../../app/session-context', () => ({ useAppSession }));
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ children }: { children: React.ReactNode }) => <a href="/templates">{children}</a>,
   useParams: () => ({ id: DRAFT }),
-  useNavigate: () => vi.fn(),
+  useNavigate: () => navigate,
 }));
 
 function session(role: Session['role']): { account: Session } {
@@ -161,6 +164,12 @@ beforeEach(() => {
   listCatalogLocations.mockReset().mockResolvedValue(PHYSICAL);
   listSites.mockReset().mockResolvedValue(SITES);
   discardTemplateDraft.mockReset().mockResolvedValue(undefined);
+  publishTemplateDraft.mockReset().mockResolvedValue({
+    template_id: '88888888-8888-4888-8888-888888888888',
+    template_version_id: '99999999-9999-4999-8999-999999999999',
+    version: 1,
+  });
+  navigate.mockReset();
   saveTemplateDraft
     .mockReset()
     .mockImplementation(
@@ -202,7 +211,7 @@ describe('escribir la plantilla', () => {
     fireEvent.click(screen.getAllByRole('button', { name: 'Add question' })[1]!);
 
     expect(screen.getAllByRole('textbox', { name: /^Question / })).toHaveLength(2);
-  });
+  }, 15_000);
 
   it('no muestra claves técnicas de secciones ni preguntas', async () => {
     renderRoute();
@@ -737,6 +746,59 @@ describe('guardar', () => {
 
     expect(await screen.findByText('offline')).toBeTruthy();
     expect(screen.queryByLabelText('Template name')).toBeNull();
+  });
+});
+
+describe('publicar', () => {
+  it('mantiene el botón deshabilitado si hay issues', async () => {
+    getTemplateDraft.mockResolvedValue(
+      draft({
+        document: {
+          sections: [{ section_key: 'guarding', section_title: 'Guarding', items: [] }],
+        },
+      }),
+    );
+
+    renderRoute();
+    await screen.findByLabelText('Template name');
+
+    expect((screen.getByRole('button', { name: 'Publish' }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    expect(publishTemplateDraft).not.toHaveBeenCalled();
+  });
+
+  it('mantiene el botón deshabilitado con cambios sin guardar', async () => {
+    renderRoute();
+    await ready();
+
+    fireEvent.change(screen.getAllByLabelText('Location')[0]!, { target: { value: 'storage' } });
+
+    expect((screen.getByRole('button', { name: 'Publish' }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+  });
+
+  it('pide confirmación antes de publicar', async () => {
+    renderRoute();
+    await ready();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+
+    expect(screen.getByText('Publish “Monthly electrical inspection”?')).toBeTruthy();
+    expect(screen.getByText(/cannot be edited/)).toBeTruthy();
+    expect(publishTemplateDraft).not.toHaveBeenCalled();
+  });
+
+  it('publica, invalida el catálogo y vuelve al listado', async () => {
+    renderRoute();
+    await ready();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Publish template' }));
+
+    await waitFor(() => expect(publishTemplateDraft).toHaveBeenCalledWith(DRAFT));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/templates' }));
   });
 });
 

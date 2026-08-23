@@ -1107,4 +1107,254 @@ describe('gestionar una planta desde la consola de ubicaciones', () => {
 
     await expect(sites.deactivate(coordinator, SITE_B)).rejects.toThrow(/already deactivated/);
   });
+
+  it('reactiva la planta, la devuelve al listado y escribe su evento después de la baja', async () => {
+    const reactivated = await sites.reactivate(coordinator, SITE_B);
+
+    expect(reactivated).toMatchObject({
+      id: SITE_B,
+      code: 'catalog-b',
+      name: 'Renamed by the catalogue console',
+      deactivated_at: null,
+    });
+
+    const listed = await sites.list(coordinator);
+    expect(listed.find((site) => site.id === SITE_B)?.deactivated_at).toBeNull();
+
+    const events = await inScope<{
+      event_type: string;
+      payload: Record<string, unknown>;
+      actor_user_id: string | null;
+    }>(
+      db.migrator,
+      [SITE_B],
+      'SELECT event_type, payload, actor_user_id FROM audit_log WHERE site_id = $1 ORDER BY seq',
+      [SITE_B],
+    );
+    const reactivation = events.at(-1);
+    const deactivationIndex = events.findIndex((event) => event.event_type === 'site.deactivated');
+    const reactivationIndex = events.findIndex((event) => event.event_type === 'site.reactivated');
+
+    expect(deactivationIndex).toBeGreaterThanOrEqual(0);
+    expect(reactivationIndex).toBeGreaterThan(deactivationIndex);
+    expect(reactivation).toMatchObject({
+      event_type: 'site.reactivated',
+      actor_user_id: ACTOR,
+    });
+    expect(reactivation?.payload).toMatchObject({
+      site_id: SITE_B,
+      code: 'catalog-b',
+      name: 'Renamed by the catalogue console',
+    });
+  });
+
+  it('rechaza reactivar una planta activa, fuera de alcance o como supervisor', async () => {
+    const before = await inScope<{ deactivated_at: Date | null }>(
+      db.migrator,
+      [],
+      'SELECT deactivated_at FROM site WHERE id = $1',
+      [SITE_A],
+    );
+
+    await expect(sites.reactivate(coordinator, SITE_A)).rejects.toThrow(/already active/);
+    await expect(sites.reactivate({ ...coordinator, siteIds: [SITE_A] }, SITE_B)).rejects.toThrow(
+      /not found/,
+    );
+    await expect(sites.reactivate({ ...coordinator, role: 'supervisor' }, SITE_A)).rejects.toThrow(
+      /coordinator/,
+    );
+
+    const after = await inScope<{ deactivated_at: Date | null }>(
+      db.migrator,
+      [],
+      'SELECT deactivated_at FROM site WHERE id = $1',
+      [SITE_A],
+    );
+    expect(after).toEqual(before);
+  });
+
+  it('no restaura mappings y un rename activo no escribe reactivación', async () => {
+    const physical = await inScope<{ organization_location_id: string | null }>(
+      db.migrator,
+      [SITE_B],
+      'SELECT organization_location_id FROM location WHERE id = $1',
+      [dockB],
+    );
+    expect(one(physical)).toEqual({ organization_location_id: null });
+
+    const before = await inScope<{ count: string }>(
+      db.migrator,
+      [SITE_A],
+      "SELECT COUNT(*)::text AS count FROM audit_log WHERE site_id = $1 AND event_type = 'site.reactivated'",
+      [SITE_A],
+    );
+
+    await sites.update(coordinator, SITE_A, { name: 'Catalog A after restore' });
+
+    const after = await inScope<{ count: string }>(
+      db.migrator,
+      [SITE_A],
+      "SELECT COUNT(*)::text AS count FROM audit_log WHERE site_id = $1 AND event_type = 'site.reactivated'",
+      [SITE_A],
+    );
+    expect(after).toEqual(before);
+  });
+});
+
+/**
+ * El alcance declarado en la auditoría de la planta (migración 0027).
+ *
+ * LA ASIMETRÍA ES LO QUE SE PRUEBA. El alta se declara sola porque una planta que se está
+ * creando no puede estar en el alcance de nadie —y porque un seed tiene que poder
+ * registrarla igual—; renombrar y dar de baja exigen que la transacción haya reclamado la
+ * planta, que es justamente lo que el aislamiento existe para atrapar.
+ *
+ * Estas pruebas usan plantas propias y no `SITE_A` / `SITE_B`: los describe de arriba las
+ * renombran y las dan de baja en orden, y una baja de más rompería el siguiente.
+ */
+describe('el alcance declarado en la auditoría de la planta', () => {
+  const SITE_GUARD = '99999999-0000-4000-8000-0000000000e1';
+  const SITE_PAIR_ONE = '99999999-0000-4000-8000-0000000000e2';
+  const SITE_PAIR_TWO = '99999999-0000-4000-8000-0000000000e3';
+  const SITE_WIDENED = '99999999-0000-4000-8000-0000000000e4';
+
+  /** El SQLSTATE del guard de 0027. */
+  const SCOPE_NOT_DECLARED = 'HS013';
+
+  it('rechaza dar de baja una planta que la transacción no declaró', async () => {
+    await registerSite(db.migrator, SITE_GUARD, 'guard-site', 'Guard site');
+
+    let caught: unknown;
+
+    try {
+      await inScope(db.migrator, [], 'UPDATE site SET deactivated_at = now() WHERE id = $1', [
+        SITE_GUARD,
+      ]);
+    } catch (error) {
+      caught = error;
+    }
+
+    // Nombra la planta y dice qué falta. El rechazo que había antes era el de la política
+    // de `audit_log`: no nombraba `site`, ni la planta, ni la declaración que faltaba.
+    expect(sqlstate(caught)).toBe(SCOPE_NOT_DECLARED);
+    expect(sqlstate(caught)).not.toBe(INSUFFICIENT_PRIVILEGE);
+    expect((caught as Error).message).toContain(SITE_GUARD);
+
+    const stored = await inScope<{ deactivated_at: Date | null }>(
+      db.migrator,
+      [],
+      'SELECT deactivated_at FROM site WHERE id = $1',
+      [SITE_GUARD],
+    );
+
+    expect(one(stored).deactivated_at).toBeNull();
+
+    const events = await inScope<{ event_type: string }>(
+      db.migrator,
+      [SITE_GUARD],
+      "SELECT event_type FROM audit_log WHERE site_id = $1 AND event_type = 'site.deactivated'",
+      [SITE_GUARD],
+    );
+
+    expect(events).toHaveLength(0);
+  });
+
+  it('rechaza renombrar bajo el alcance de OTRA planta', async () => {
+    await expect(
+      inScope(db.migrator, [SITE_A], 'UPDATE site SET name = $2 WHERE id = $1', [
+        SITE_GUARD,
+        'Renamed from elsewhere',
+      ]),
+    ).rejects.toSatisfy((error) => sqlstate(error) === SCOPE_NOT_DECLARED);
+
+    const stored = await inScope<{ name: string }>(
+      db.migrator,
+      [],
+      'SELECT name FROM site WHERE id = $1',
+      [SITE_GUARD],
+    );
+
+    expect(one(stored).name).toBe('Guard site');
+  });
+
+  it('acepta el alta sin alcance declarado y la audita', async () => {
+    await inScope(db.migrator, [], 'INSERT INTO site (id, code, name) VALUES ($1, $2, $3)', [
+      SITE_WIDENED,
+      'guard-widened',
+      'Guard widened',
+    ]);
+
+    const events = await inScope<{ event_type: string; actor_user_id: string | null }>(
+      db.migrator,
+      [SITE_WIDENED],
+      "SELECT event_type, actor_user_id FROM audit_log WHERE site_id = $1 AND event_type = 'site.created'",
+      [SITE_WIDENED],
+    );
+
+    expect(one(events)).toMatchObject({ event_type: 'site.created', actor_user_id: null });
+  });
+
+  /**
+   * La regresión que el pisado producía: `set_config` escribía el valor entero, así que la
+   * segunda fila de una sentencia de dos tapaba la declaración de la primera y la
+   * transacción terminaba viendo una sola planta. Las dos entradas se escribían igual
+   * —cada una va después de su propio `set_config`—, y por eso el defecto solo se ve
+   * mirando el alcance al final.
+   */
+  it('el alta de dos plantas en una sentencia deja las dos declaradas', async () => {
+    const declared = await withSiteScope(db.migrator, { siteIds: [] }, async (client) => {
+      await client.query(
+        'INSERT INTO site (id, code, name) VALUES ($1, $2, $3), ($4, $5, $6)',
+        [
+          SITE_PAIR_ONE,
+          'guard-pair-one',
+          'Guard pair one',
+          SITE_PAIR_TWO,
+          'guard-pair-two',
+          'Guard pair two',
+        ],
+      );
+
+      const { rows } = await client.query<{ scope: string | null }>(
+        "SELECT current_setting('app.site_ids', true) AS scope",
+      );
+
+      return rows[0]?.scope ?? '';
+    });
+
+    expect(declared.split(',')).toEqual(
+      expect.arrayContaining([SITE_PAIR_ONE, SITE_PAIR_TWO]),
+    );
+
+    for (const siteId of [SITE_PAIR_ONE, SITE_PAIR_TWO]) {
+      const events = await inScope<{ event_type: string }>(
+        db.migrator,
+        [siteId],
+        "SELECT event_type FROM audit_log WHERE site_id = $1 AND event_type = 'site.created'",
+        [siteId],
+      );
+
+      expect(events).toHaveLength(1);
+    }
+  });
+
+  it('el alta conserva el alcance que la transacción ya tenía', async () => {
+    const declared = await withSiteScope(db.migrator, { siteIds: [SITE_GUARD] }, async (client) => {
+      await client.query('INSERT INTO site (id, code, name) VALUES ($1, $2, $3)', [
+        '99999999-0000-4000-8000-0000000000e5',
+        'guard-kept',
+        'Guard kept',
+      ]);
+
+      const { rows } = await client.query<{ scope: string | null }>(
+        "SELECT current_setting('app.site_ids', true) AS scope",
+      );
+
+      return rows[0]?.scope ?? '';
+    });
+
+    expect(declared.split(',')).toEqual(
+      expect.arrayContaining([SITE_GUARD, '99999999-0000-4000-8000-0000000000e5']),
+    );
+  });
 });

@@ -76,7 +76,7 @@ beforeAll(async () => {
   await registerSite(db.migrator, SITE_A, 'console-a', 'Console A');
   await registerSite(db.migrator, SITE_B, 'console-b', 'Console B');
   await registerSite(db.migrator, SITE_CLOSED, 'console-closed', 'Console Closed');
-  await inScope(db.migrator, [], 'UPDATE site SET deactivated_at = now() WHERE id = $1', [
+  await inScope(db.migrator, [SITE_CLOSED], 'UPDATE site SET deactivated_at = now() WHERE id = $1', [
     SITE_CLOSED,
   ]);
 
@@ -340,6 +340,22 @@ describe('el listado de plantillas', () => {
     });
 
     expect(created.template_version_id).toBe(offered?.latest_version_id);
+  });
+
+  it('informa la clave y la fecha de la versión publicada más alta', async () => {
+    const rows = await templates.list(asCoordinator());
+    const offered = rows.find((row) => row.id === templateId);
+    const published = await inScope<{ published_at: string }>(
+      db.migrator,
+      [],
+      'SELECT published_at::text FROM template_version WHERE id = $1',
+      [templateV2],
+    );
+
+    expect(offered?.key).toBe('console-template');
+    expect(offered?.latest_version).toBe(2);
+    expect(offered?.latest_version_id).toBe(templateV2);
+    expect(offered?.latest_published_at).toBe(published[0]?.published_at);
   });
 
   it('no depende del alcance: las dos plantas ven lo mismo', async () => {

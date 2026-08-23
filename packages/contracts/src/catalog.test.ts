@@ -6,6 +6,7 @@ import {
   createLocationSchema,
   createOrganizationLocationSchema,
   deactivateOrganizationLocationSchema,
+  reactivateSiteSchema,
   locationOptionSchema,
   locationSchema,
   siteSchema,
@@ -98,6 +99,16 @@ describe('deactivateSiteSchema', () => {
     expect(deactivateSiteSchema.safeParse({ deactivated_at: '2026-08-21T00:00:00.000Z' }).success).toBe(
       false,
     );
+  });
+});
+
+describe('reactivateSiteSchema', () => {
+  it('acepta un cuerpo vacío', () => {
+    expect(reactivateSiteSchema.safeParse({}).success).toBe(true);
+  });
+
+  it('rechaza una fecha o campos adicionales', () => {
+    expect(reactivateSiteSchema.safeParse({ deactivated_at: null }).success).toBe(false);
   });
 });
 

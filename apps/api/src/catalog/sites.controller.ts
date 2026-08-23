@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post } from '@nestj
 import {
   createSiteSchema,
   deactivateSiteSchema,
+  reactivateSiteSchema,
   type CreateSite,
   type Site,
   updateSiteSchema,
@@ -46,5 +47,15 @@ export class SitesController {
   ): Promise<Site> {
     deactivateSiteSchema.parse(body);
     return this.sites.deactivate(session, siteId);
+  }
+
+  @Post(':siteId/reactivate')
+  reactivate(
+    @CurrentSession() session: SessionContext,
+    @Param('siteId', new ParseUUIDPipe()) siteId: string,
+    @Body() body: unknown,
+  ): Promise<Site> {
+    reactivateSiteSchema.parse(body);
+    return this.sites.reactivate(session, siteId);
   }
 }

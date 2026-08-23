@@ -9,10 +9,8 @@ import { TemplatesService } from './templates.service';
  * Sigue sin haber repositorio inyectable: `templates.repository.ts` son funciones sueltas
  * que reciben el `PoolClient`, como en `roster`. La capa es delgada a propósito (ADR-008).
  *
- * **La publicación sigue sin vivir acá y sin vivir en ningún endpoint.** Escribir un
- * borrador no escribe una `template_version`, y `hs_app` sigue sin tener INSERT sobre las
- * cuatro tablas del modelo publicado: la migración 0016 no las tocó. Es la segunda mitad de
- * la etapa 8.
+ * La publicación vive en el servicio y el endpoint como una operación atómica. El repositorio
+ * sigue siendo un conjunto de funciones SQL que recibe el cliente de la transacción.
  */
 @Module({
   controllers: [TemplatesController],

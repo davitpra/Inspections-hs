@@ -1,6 +1,7 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Put } from '@nestjs/common';
 import {
   createTemplateDraftSchema,
+  type PublishedTemplate,
   saveTemplateDraftSchema,
   type TemplateDraft,
   type TemplateDraftSummary,
@@ -21,8 +22,8 @@ import { TemplatesService } from './templates.service';
  * `/templates/drafts` es otra cosa, y por eso son rutas separadas y no un parámetro de la
  * misma: un borrador no es una plantilla que todavía no se puede elegir, es un documento
  * que se está escribiendo. Ninguna de sus rutas escribe una fila en `template`,
- * `template_item` ni `template_version`. **Publicar sigue sin vivir en ningún endpoint**:
- * es la segunda mitad de la etapa 8.
+ * `template_item` ni `template_version`, salvo `POST drafts/:id/publish`, que convierte un
+ * borrador válido en una nueva versión publicada de forma atómica.
  *
  * Las cinco rutas de borrador son del coordinador, el `GET` incluido. El servicio lo
  * comprueba, y ahí está la única defensa que hay: `template_draft` no lleva `site_id` y por
@@ -56,6 +57,15 @@ export class TemplatesController {
     @Param('id') id: string,
   ): Promise<TemplateDraft> {
     return this.templates.getDraft(session, id);
+  }
+
+  /** Publicar no recibe cuerpo: el borrador guardado ya contiene toda la fuente de verdad. */
+  @Post('drafts/:id/publish')
+  async publishDraft(
+    @CurrentSession() session: SessionContext,
+    @Param('id') id: string,
+  ): Promise<PublishedTemplate> {
+    return this.templates.publishDraft(session, id);
   }
 
   /**

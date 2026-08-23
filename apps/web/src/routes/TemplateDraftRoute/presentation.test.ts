@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   defaultFinding,
+  canPublish,
   FAILURE_OPERATOR_LABELS,
   findingButtonLabel,
   hasUnsavedChanges,
@@ -15,6 +16,7 @@ import {
   offerableLocations,
   saveButtonLabel,
   saveStateLabel,
+  publishButtonLabel,
   saveErrorNotice,
   scopeOptions,
   scopeLabel,
@@ -128,6 +130,19 @@ describe('saveStateLabel', () => {
   it('dice Saved o Unsaved changes sin numerar el estado', () => {
     expect(saveStateLabel(false)).toBe('Saved');
     expect(saveStateLabel(true)).toBe('Unsaved changes');
+  });
+});
+
+describe('publishButtonLabel y canPublish', () => {
+  it('solo permite publicar el borrador guardado sin issues', () => {
+    expect(canPublish(false, [])).toBe(true);
+    expect(canPublish(true, [])).toBe(false);
+    expect(canPublish(false, [{ path: [], message: 'Incomplete' }])).toBe(false);
+  });
+
+  it('nombra el estado de publicación', () => {
+    expect(publishButtonLabel(false)).toBe('Publish');
+    expect(publishButtonLabel(true)).toBe('Publishing…');
   });
 });
 

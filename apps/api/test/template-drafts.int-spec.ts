@@ -5,7 +5,7 @@ import { DbService } from '../src/db/db.service';
 import { TemplatesService } from '../src/templates/templates.service';
 import { registerSite } from './helpers/catalog';
 import { createAccount } from './helpers/identity';
-import { createTemplate } from './helpers/templates';
+import { createTemplate, registerItems } from './helpers/templates';
 import { inScope, one, sqlstate, startTestDatabase, type TestDatabase } from './helpers/postgres';
 
 /**
@@ -49,7 +49,7 @@ let supervisorId: string;
 const asCoordinator = () => ({ userId: coordinatorId, role: 'hs_coordinator', siteIds: [SITE] });
 
 /** Una sección con un ítem: el borrador publicable más chico que existe. */
-function usableDocument(): TemplateDraftDocument {
+function usableDocument(itemKey = 'guard.fitted'): TemplateDraftDocument {
   return {
     sections: [
       {
@@ -57,7 +57,7 @@ function usableDocument(): TemplateDraftDocument {
         section_title: 'Guarding',
         items: [
           {
-            item_key: 'guard.fitted',
+            item_key: itemKey,
             prompt: 'Is the guard fitted?',
             required: true,
             response_type: 'yes_no',
@@ -196,21 +196,17 @@ describe('lo que el motor permite y lo que no', () => {
     ).rejects.toSatisfy((error) => sqlstate(error) === UNIQUE_VIOLATION);
   });
 
-  /**
-   * El permiso que 0016 tenía prohibido tocar. Si esto empieza a pasar, la primera
-   * mitad de la etapa 8 se llevó puesta la segunda sin que nadie lo pidiera.
-   */
-  it('sigue sin poder insertar en template_version: 0016 no tocó el modelo publicado', async () => {
-    const templateId = await createTemplate(db.migrator, 'untouched', 'Untouched');
+  it('concede INSERT al builder sin concederle UPDATE ni DELETE', async () => {
+    const rows = await inScope<{ id: string }>(
+      db.app,
+      [],
+      `INSERT INTO template (key, name) VALUES ('builder-insert', 'Builder insert') RETURNING id`,
+    );
+
+    expect(rows).toHaveLength(1);
 
     await expect(
-      inScope(
-        db.app,
-        [SITE],
-        `INSERT INTO template_version (template_id, version, document)
-         VALUES ($1, 1, '{"sections":[]}'::jsonb)`,
-        [templateId],
-      ),
+      inScope(db.app, [], `UPDATE template SET name = 'Changed' WHERE id = $1`, [rows[0]!.id]),
     ).rejects.toSatisfy((error) => sqlstate(error) === INSUFFICIENT_PRIVILEGE);
   });
 });
@@ -609,6 +605,234 @@ describe('las dos poblaciones no se tocan', () => {
     });
 
     expect(await countPublished()).toEqual(before);
+  });
+});
+
+describe('publicar un borrador', () => {
+  it('escribe la plantilla, los conceptos, la versión y la proyección', async () => {
+    const draft = await newDraft('Builder published template');
+
+    await templates.saveDraft(asCoordinator(), draft.id, {
+      name: draft.name,
+      document: usableDocument('published.one'),
+      site_ids: [SITE],
+    });
+
+    const published = await templates.publishDraft(asCoordinator(), draft.id);
+    const template = one(
+      await inScope<{ id: string; key: string; name: string }>(
+        db.app,
+        [],
+        'SELECT id, key, name FROM template WHERE id = $1',
+        [published.template_id],
+      ),
+    );
+    const version = one(
+      await inScope<{
+        id: string;
+        version: number;
+        published_by: string;
+        document: TemplateDraftDocument;
+      }>(
+        db.app,
+        [],
+        'SELECT id, version, published_by, document FROM template_version WHERE id = $1',
+        [published.template_version_id],
+      ),
+    );
+    const projected = one(
+      await inScope<{
+        item_key: string;
+        section_key: string;
+        prompt: string;
+        response_type: string;
+        required: boolean;
+      }>(
+        db.app,
+        [],
+        `SELECT item_key, section_key, prompt, response_type, required
+           FROM template_version_item
+          WHERE template_version_id = $1`,
+        [published.template_version_id],
+      ),
+    );
+
+    expect(template).toMatchObject({
+      id: published.template_id,
+      key: draft.key,
+      name: draft.name,
+    });
+    expect(version).toMatchObject({
+      id: published.template_version_id,
+      version: 1,
+      published_by: coordinatorId,
+    });
+    expect(version.document.sections[0]?.items[0]).toMatchObject({
+      item_key: 'published.one',
+      position: 1,
+    });
+    expect(projected).toMatchObject({
+      item_key: 'published.one',
+      section_key: 'guarding',
+      prompt: 'Is the guard fitted?',
+      response_type: 'yes_no',
+      required: true,
+    });
+    expect((await templates.list(asCoordinator())).some((each) => each.id === published.template_id)).toBe(
+      true,
+    );
+
+    const draftRow = one(
+      await inScope<{ published_at: Date | null; template_version_id: string | null }>(
+        db.app,
+        [],
+        'SELECT published_at, template_version_id FROM template_draft WHERE id = $1',
+        [draft.id],
+      ),
+    );
+
+    expect(draftRow.published_at).not.toBeNull();
+    expect(draftRow.template_version_id).toBe(published.template_version_id);
+    expect((await templates.listDrafts(asCoordinator())).map((each) => each.id)).not.toContain(
+      draft.id,
+    );
+  });
+
+  it('rechaza un borrador incompleto sin escribir nada y devuelve sus issues', async () => {
+    const draft = await newDraft('Incomplete publication');
+    await templates.saveDraft(asCoordinator(), draft.id, {
+      name: draft.name,
+      document: {
+        sections: [{ section_key: 'guarding', section_title: 'Guarding', items: [] }],
+      },
+      site_ids: [SITE],
+    });
+    const before = await countPublished();
+
+    await expect(templates.publishDraft(asCoordinator(), draft.id)).rejects.toMatchObject({
+      response: {
+        code: 'template_draft_not_publishable',
+        issues: expect.arrayContaining([
+          expect.objectContaining({ message: 'Section "Guarding" has no items.' }),
+        ]),
+      },
+    });
+
+    expect(await countPublished()).toEqual(before);
+    expect((await templates.getDraft(asCoordinator(), draft.id)).publishable).toBe(false);
+  });
+
+  it('traduce una clave de plantilla tomada y deja la transacción vacía', async () => {
+    const draft = await newDraft('Publish key taken');
+    await createTemplate(db.migrator, 'publish-key-taken', 'Existing published template');
+    await templates.saveDraft(asCoordinator(), draft.id, {
+      name: draft.name,
+      document: usableDocument('key.collision'),
+      site_ids: [SITE],
+    });
+    const before = await countPublished();
+
+    await expect(templates.publishDraft(asCoordinator(), draft.id)).rejects.toMatchObject({
+      response: { code: 'template_key_taken' },
+    });
+
+    expect(await countPublished()).toEqual(before);
+    expect((await templates.getDraft(asCoordinator(), draft.id)).publishable).toBe(true);
+  });
+
+  it('traduce un item_key global tomado y revierte la plantilla parcial', async () => {
+    const owner = await createTemplate(db.migrator, 'item-key-owner');
+    await registerItems(db.migrator, owner, ['taken.item']);
+    const draft = await newDraft('Publish item key taken');
+    await templates.saveDraft(asCoordinator(), draft.id, {
+      name: draft.name,
+      document: usableDocument('taken.item'),
+      site_ids: [SITE],
+    });
+    const before = await countPublished();
+
+    await expect(templates.publishDraft(asCoordinator(), draft.id)).rejects.toMatchObject({
+      response: { code: 'template_item_key_taken' },
+    });
+
+    expect(await countPublished()).toEqual(before);
+    expect(
+      await inScope(db.app, [], 'SELECT id FROM template WHERE key = $1', [draft.key]),
+    ).toHaveLength(0);
+  });
+
+  it('consume el borrador: no se puede leer, guardar, descartar ni publicar otra vez', async () => {
+    const draft = await newDraft('Consumed publication');
+    await templates.saveDraft(asCoordinator(), draft.id, {
+      name: draft.name,
+      document: usableDocument('consumed.one'),
+      site_ids: [SITE],
+    });
+    await templates.publishDraft(asCoordinator(), draft.id);
+    const rejected = { response: { code: 'template_draft_not_found' } };
+
+    await expect(templates.getDraft(asCoordinator(), draft.id)).rejects.toMatchObject(rejected);
+    await expect(
+      templates.saveDraft(asCoordinator(), draft.id, {
+        name: draft.name,
+        document: usableDocument('consumed.one'),
+        site_ids: [SITE],
+      }),
+    ).rejects.toMatchObject(rejected);
+    await expect(templates.discardDraft(asCoordinator(), draft.id)).rejects.toMatchObject(rejected);
+    await expect(templates.publishDraft(asCoordinator(), draft.id)).rejects.toMatchObject(rejected);
+  });
+
+  it('rechaza la publicación para cualquier rol que no sea coordinador', async () => {
+    const draft = await newDraft('Forbidden publication');
+
+    await expect(
+      templates.publishDraft({ userId: supervisorId, role: 'supervisor', siteIds: [SITE] }, draft.id),
+    ).rejects.toMatchObject({ response: { code: 'template_draft_forbidden' } });
+  });
+
+  /**
+   * El alcance del borrador NO viaja a la plantilla. `template` no lleva planta (0003 §1) y
+   * `site_ids` decía dónde se pensaba usar, no de quién es: su efecto entero —qué ubicación
+   * compartida pudo nombrar cada sección— ya quedó escrito en el documento que se congeló.
+   * Se afirma desde la OTRA planta, que es donde la ausencia se nota.
+   */
+  it('publica sin alcance de planta: la ofrece también la cuenta de la otra planta', async () => {
+    const draft = await newDraft('Single plant scope');
+
+    await templates.saveDraft(asCoordinator(), draft.id, {
+      name: draft.name,
+      document: usableDocument('scope.dropped'),
+      site_ids: [SITE],
+    });
+
+    const published = await templates.publishDraft(asCoordinator(), draft.id);
+    const offered = await templates.list({
+      userId: coordinatorId,
+      role: 'hs_coordinator',
+      siteIds: [OTHER_SITE],
+    });
+
+    expect(offered.some((each) => each.id === published.template_id)).toBe(true);
+  });
+
+  it('deja que la plantilla publicada sea la autoridad del nombre del nuevo borrador', async () => {
+    const draft = await newDraft('Published name authority');
+    await templates.saveDraft(asCoordinator(), draft.id, {
+      name: draft.name,
+      document: usableDocument('name.authority'),
+      site_ids: [SITE],
+    });
+    await templates.publishDraft(asCoordinator(), draft.id);
+
+    await expect(
+      templates.createDraft(asCoordinator(), { name: draft.name }),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'template_draft_name_taken',
+        message: expect.stringContaining('already exists'),
+      },
+    });
   });
 });
 

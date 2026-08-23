@@ -1,14 +1,16 @@
 import { z } from 'zod';
 import {
+  publishedTemplateSchema,
   templateDraftSchema,
   templateDraftSummarySchema,
   type CreateTemplateDraft,
+  type PublishedTemplate,
   type SaveTemplateDraft,
   type TemplateDraft,
   type TemplateDraftSummary,
 } from '@hs/contracts';
 
-import { get, send } from './request';
+import { get, post, send } from './request';
 
 /**
  * La autoría de plantillas.
@@ -57,6 +59,13 @@ export async function saveTemplateDraft(
 
 export async function discardTemplateDraft(id: string): Promise<void> {
   await send('POST', `/templates/drafts/${id}/discard`, {}, () => undefined);
+}
+
+/** Publica el borrador guardado; el POST no necesita cuerpo porque el servidor ya tiene el documento. */
+export async function publishTemplateDraft(id: string): Promise<PublishedTemplate> {
+  return post(`/templates/drafts/${id}/publish`, undefined, (value) =>
+    publishedTemplateSchema.parse(value),
+  );
 }
 
 export type { TemplateDraft, TemplateDraftSummary };

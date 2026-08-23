@@ -12,10 +12,9 @@ import { SECTION_KEY_PATTERN, templateDraftDocumentSchema } from './template-doc
  *  - El resto es el **borrador** (etapa 8, primera mitad): un documento que se está
  *    escribiendo, que puede estar incompleto y que todavía no es ninguna versión.
  *
- * Lo que sigue fuera es la **publicación**. Un borrador no escribe una sola fila en
- * `template`, `template_item` ni `template_version`, y por eso un borrador nunca aparece
- * en `templateOptionSchema`: son dos poblaciones que no se tocan hasta que alguien
- * publique.
+ * La publicación convierte un borrador en una nueva plantilla publicada. Su respuesta es un
+ * DTO pequeño (`publishedTemplateSchema`), porque la pantalla solo necesita identificar lo que
+ * acaba de quedar congelado.
  *
  * **Por qué no vive en `template-document.ts`**: ese archivo tiene la forma del
  * documento —congelado o en borrador—, la que interpreta `packages/forms` dentro del
@@ -39,15 +38,30 @@ import { SECTION_KEY_PATTERN, templateDraftDocumentSchema } from './template-doc
  * planificador para congelar una inspección al abrir el período. Si fueran dos, la
  * pantalla podría decir `2` mientras la inspección abre contra la `3`, sin que nada
  * fallara y sin que nadie se enterara.
+ *
+ * `latest_published_at` sale de esa MISMA fila que aporta la versión. No se calcula con
+ * `max(published_at)`: un máximo separado podría combinar la versión 3 con la fecha de la
+ * versión 1 y hacer que la pantalla nombre dos publicaciones distintas como una sola.
  */
 export const templateOptionSchema = z.strictObject({
   id: z.uuid(),
+  key: z.string().min(1),
   name: z.string().min(1),
   latest_version: z.int().positive(),
   latest_version_id: z.uuid(),
+  latest_published_at: z.string(),
 });
 
 export type TemplateOption = z.infer<typeof templateOptionSchema>;
+
+/** Identidad de la versión creada al publicar un borrador. */
+export const publishedTemplateSchema = z.strictObject({
+  template_id: z.uuid(),
+  template_version_id: z.uuid(),
+  version: z.int().positive(),
+});
+
+export type PublishedTemplate = z.infer<typeof publishedTemplateSchema>;
 
 /**
  * La `key` de un borrador. Mismo patrón que `template.key`, porque es la que va a

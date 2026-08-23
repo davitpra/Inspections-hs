@@ -75,6 +75,11 @@ export function canAuthorTemplates(account: Session | null): account is Session 
   return account?.role === 'hs_coordinator';
 }
 
+/** Quién puede convertir un borrador guardado en una versión publicada. */
+export function canPublishTemplates(account: Session | null): account is Session {
+  return account?.role === 'hs_coordinator';
+}
+
 export function canAdministerCatalog(account: Session | null): account is Session {
   return account?.role === 'hs_coordinator';
 }

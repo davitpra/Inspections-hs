@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Session, TemplateDraftSummary } from '@hs/contracts';
+import type { Session, TemplateDraftSummary, TemplateOption } from '@hs/contracts';
 
 import { TemplatesRoute } from './index';
 
@@ -12,6 +12,7 @@ const DRAFT = '44444444-4444-4444-8444-444444444444';
 const OTHER_DRAFT = '55555555-5555-4555-8555-555555555555';
 
 const listTemplateDrafts = vi.hoisted(() => vi.fn());
+const listTemplates = vi.hoisted(() => vi.fn());
 const createTemplateDraft = vi.hoisted(() => vi.fn());
 const discardTemplateDraft = vi.hoisted(() => vi.fn());
 const useAppSession = vi.hoisted(() => vi.fn());
@@ -22,6 +23,8 @@ vi.mock('../../api/templates', () => ({
   createTemplateDraft,
   discardTemplateDraft,
 }));
+
+vi.mock('../../api/inspections', () => ({ listTemplates }));
 
 vi.mock('../../app/session-context', () => ({ useAppSession }));
 
@@ -74,7 +77,19 @@ function draft(overrides: Partial<TemplateDraftSummary> = {}): TemplateDraftSumm
   };
 }
 
-function renderRoute(): void {
+function published(overrides: Partial<TemplateOption> = {}): TemplateOption {
+  return {
+    id: '66666666-6666-4666-8666-666666666666',
+    key: 'published-electrical',
+    name: 'Published electrical inspection',
+    latest_version: 1,
+    latest_version_id: '77777777-7777-4777-8777-777777777777',
+    latest_published_at: '2026-08-22 10:00:00+00',
+    ...overrides,
+  };
+}
+
+function renderRoute(): QueryClient {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
   render(
@@ -82,11 +97,14 @@ function renderRoute(): void {
       <TemplatesRoute />
     </QueryClientProvider>,
   );
+
+  return queryClient;
 }
 
 beforeEach(() => {
   useAppSession.mockReset().mockReturnValue(session('hs_coordinator'));
   listTemplateDrafts.mockReset().mockResolvedValue([draft()]);
+  listTemplates.mockReset().mockResolvedValue([]);
   createTemplateDraft.mockReset().mockResolvedValue({
     ...draft({ id: OTHER_DRAFT }),
     document: { sections: [] },
@@ -126,12 +144,12 @@ describe('quién puede escribir plantillas', () => {
 });
 
 describe('el listado', () => {
-  it('dice que publicar todavía no está disponible', async () => {
+  it('explica que publicar congela la versión', async () => {
     renderRoute();
 
     await screen.findByText('Monthly electrical inspection');
 
-    expect(screen.getByText(/Publishing a template so it can be scheduled is not available/))
+    expect(screen.getByText(/Published versions are frozen/))
       .toBeTruthy();
   });
 
@@ -179,6 +197,58 @@ describe('el listado', () => {
     renderRoute();
 
     expect(await screen.findByText(/This view needs a connection/)).toBeTruthy();
+  });
+});
+
+describe('las plantillas publicadas', () => {
+  it('muestra una publicada y no mezcla el borrador en ese bloque', async () => {
+    listTemplates.mockResolvedValue([published()]);
+
+    renderRoute();
+
+    await screen.findByText('Published electrical inspection');
+    const publishedBlock = screen
+      .getByRole('heading', { name: 'Published templates' })
+      .closest('section');
+
+    expect(publishedBlock).toBeTruthy();
+    expect(within(publishedBlock!).getByText('Published electrical inspection')).toBeTruthy();
+    expect(within(publishedBlock!).getByText(/published-electrical/)).toBeTruthy();
+    expect(within(publishedBlock!).getByText(/Version 1/)).toBeTruthy();
+    expect(within(publishedBlock!).getByText(/published 2026-08-22/)).toBeTruthy();
+    expect(within(publishedBlock!).queryByText('Monthly electrical inspection')).toBeNull();
+  });
+
+  it('explica cómo llenar la lista cuando no hay publicadas', async () => {
+    listTemplates.mockResolvedValue([]);
+
+    renderRoute();
+
+    expect(await screen.findByText('No published templates yet')).toBeTruthy();
+    expect(screen.getByText('Publish a completed draft to fill this list.')).toBeTruthy();
+  });
+
+  it('mueve la fila del bloque de borradores al de publicadas al refrescar', async () => {
+    const queryClient = renderRoute();
+
+    await screen.findByText('Monthly electrical inspection');
+    listTemplateDrafts.mockResolvedValue([]);
+    listTemplates.mockResolvedValue([published({ name: 'Monthly electrical inspection' })]);
+
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['template-drafts'] }),
+      queryClient.invalidateQueries({ queryKey: ['templates'] }),
+    ]);
+
+    await waitFor(() =>
+      expect(screen.queryByText('Monthly electrical inspection')).toBeTruthy(),
+    );
+    const publishedBlock = screen
+      .getByRole('heading', { name: 'Published templates' })
+      .closest('section');
+
+    expect(within(publishedBlock!).getByText('Monthly electrical inspection')).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Your drafts' })).toBeNull();
   });
 });
 

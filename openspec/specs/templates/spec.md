@@ -501,6 +501,243 @@ prevent.
 - **THEN** reading the draft returns both sections
 - **AND** only one `template_draft` row exists for that draft
 
+Publishing a draft SHALL be the only act that writes those rows, and SHALL end the draft's life
+as a working document rather than turning the draft into the version. The `template_draft` row
+that was published SHALL name the `template_version` it produced, so that the version's origin is
+recorded, and SHALL remain a separate record from it.
+
+#### Scenario: A published draft and its version are two records
+
+- **WHEN** a live draft is published
+- **THEN** the `template_draft` row and the `template_version` row both exist
+- **AND** the draft row names the version through `template_version_id`
+
+### Requirement: A publishable draft becomes version 1 of a new template
+
+The system SHALL publish a live draft on the HS coordinator's request, writing in one
+transaction the `template` row carrying the draft's `key` and `name`, one `template_item` row
+per `item_key` the document declares, and one `template_version` row carrying `version` 1 and
+the draft document with its positions derived from list order.
+
+The `template_version_item` rows SHALL NOT be written by the publishing request: they are
+derived from the document by the engine, so that a template published from a draft and a
+template loaded by a seed are projected by the same rule and cannot disagree.
+
+The system SHALL record on the version the account that published it, and SHALL report to the
+publisher the identity of the template, the identity of the version, and its version number,
+so that the interface can name what was created rather than only that something was.
+
+#### Scenario: Publishing writes the template, its items and its version
+
+- **GIVEN** a live draft whose document is publishable, with two sections of two questions each
+- **WHEN** the HS coordinator publishes it
+- **THEN** a `template` row exists carrying the draft's `key` and `name`
+- **AND** a `template_version` row exists for that template with `version` 1
+- **AND** its `document` holds the four questions
+- **AND** a `template_item` row is registered for each of the four `item_key` values
+- **AND** the response names the `template_id`, the `template_version_id` and `version` 1
+
+#### Scenario: The item rows are derived, not sent
+
+- **GIVEN** a live draft whose document is publishable
+- **WHEN** the HS coordinator publishes it
+- **THEN** one `template_version_item` row exists for every question of the document
+- **AND** each row carries the `item_key`, `section_key`, `prompt`, `response_type` and
+  `required` the document declared
+
+#### Scenario: The version records who published it
+
+- **WHEN** a coordinator publishes a draft
+- **THEN** the `template_version` row's `published_by` names that account
+- **AND** its `published_at` is set
+
+### Requirement: Order at publication is the order of the draft's elements
+
+The system SHALL assign, when a draft is published, section positions in list order starting
+at one and, within each section, item positions in list order starting at one. The draft
+carries no position of its own, so the order the author sees is the order that is frozen.
+
+#### Scenario: List order becomes position
+
+- **GIVEN** a live draft whose second section holds three questions
+- **WHEN** it is published
+- **THEN** that section's `template_version_item` rows carry positions 1, 2 and 3 in the order
+  the author arranged them
+- **AND** the published document declares the same positions
+
+### Requirement: An unpublishable draft is refused and writes nothing
+
+The system SHALL refuse to publish a draft whose document is not publishable, SHALL report the
+refusal as `template_draft_not_publishable` carrying the same issues that reading the draft
+reports, and SHALL leave the draft live and unchanged.
+
+The publishability of a draft SHALL be decided by the same shared rules that decide it when the
+draft is read, so that a draft the interface reports as ready is never refused at publication
+and a draft it reports as incomplete is never accepted.
+
+#### Scenario: A draft with an empty section is refused
+
+- **GIVEN** a live draft with a section that has no questions
+- **WHEN** the HS coordinator publishes it
+- **THEN** the request is refused as `template_draft_not_publishable`
+- **AND** the refusal carries the issue naming that section
+- **AND** no `template`, `template_item` or `template_version` row is written
+- **AND** the draft is still live
+
+#### Scenario: An empty draft is refused
+
+- **GIVEN** a live draft whose document has no sections
+- **WHEN** the HS coordinator publishes it
+- **THEN** the request is refused as `template_draft_not_publishable`
+- **AND** the draft is still live
+
+### Requirement: Publishing consumes the draft
+
+The system SHALL, on a successful publication, record `published_at` and the
+`template_version_id` of the version it produced on the `template_draft` row, and SHALL from
+then on treat that draft as no longer live: it is absent from the list of drafts, and saving,
+discarding or publishing it again SHALL be refused.
+
+The row SHALL be kept. A draft that produced a version is the record of where that version came
+from, and deleting it would erase that trace; but continuing to edit it would be editing scratch
+work that no longer describes anything, because the document it describes is frozen.
+
+A draft SHALL NOT be both discarded and published. The two are distinct ends: one says the
+author threw the work away, the other says it became a record.
+
+#### Scenario: A published draft leaves the list
+
+- **WHEN** a live draft is published
+- **THEN** it is absent from the list of drafts
+- **AND** its `template_draft` row still exists with `published_at` and `template_version_id` set
+
+#### Scenario: A published draft cannot be saved
+
+- **GIVEN** a draft that has been published
+- **WHEN** a save is submitted for it
+- **THEN** the request is refused as `template_draft_not_found`
+- **AND** the stored draft is unchanged
+
+#### Scenario: A published draft cannot be published twice
+
+- **GIVEN** a draft that has been published
+- **WHEN** the HS coordinator publishes it again
+- **THEN** the request is refused as `template_draft_not_found`
+- **AND** the number of `template` and `template_version` rows is unchanged
+
+#### Scenario: A published draft cannot be discarded
+
+- **GIVEN** a draft that has been published
+- **WHEN** it is discarded
+- **THEN** the request is refused as `template_draft_not_found`
+- **AND** its `discarded_at` is still absent
+
+### Requirement: Publishing releases the name and key the draft held
+
+The system SHALL stop counting a published draft among the live drafts for the purpose of name
+and key uniqueness, because from the moment it is published the authoritative holder of that key
+is the `template` row it created, whose `key` is unique across every published template.
+
+A new draft SHALL therefore be refused the name of a published template on the same grounds it
+is refused the name of a live draft, and not because the consumed draft still holds it.
+
+#### Scenario: A published draft no longer holds its name against a new draft
+
+- **GIVEN** a draft named `Monthly general inspection` that has been published
+- **WHEN** a coordinator creates a draft named `Monthly general inspection`
+- **THEN** the request is refused
+- **AND** the refusal names the published template rather than a live draft
+
+### Requirement: A key already held by a published template is refused at publication
+
+The system SHALL refuse a publication whose derived key already belongs to a published template,
+report it as `template_key_taken`, and leave the draft live and unchanged with no partial record
+written.
+
+The check when a draft is named is a courtesy so that the author learns early; it cannot be a
+guarantee, because a template may be published under that key between the naming and the
+publication. The refusal at publication is the authoritative one.
+
+#### Scenario: Publishing under a key a seeded template already holds is refused
+
+- **GIVEN** a seeded template whose `key` is `monthly-general-inspection`
+- **AND** a live publishable draft whose derived key is `monthly-general-inspection`
+- **WHEN** the HS coordinator publishes the draft
+- **THEN** the request is refused as `template_key_taken`
+- **AND** the draft is still live
+- **AND** no new `template` row exists
+
+### Requirement: Publication is all or nothing
+
+The system SHALL write the template, its registered items and its version in a single
+transaction, so that a refusal at any point leaves no trace: no template without a version, no
+registered `item_key` belonging to a template that does not exist, and no draft marked as
+published.
+
+A template row without a version would be invisible to every reader of published templates and
+would hold its key forever, which is the worst of both outcomes: the coordinator could neither
+schedule it nor publish it again under the same name.
+
+#### Scenario: A refused publication leaves no template row
+
+- **GIVEN** a live publishable draft whose derived key already belongs to a published template
+- **WHEN** the HS coordinator publishes it
+- **THEN** the number of `template`, `template_item` and `template_version` rows is unchanged
+- **AND** the draft's `published_at` is absent
+
+#### Scenario: An item_key already registered stops the whole publication
+
+- **GIVEN** a live publishable draft one of whose `item_key` values is already registered in
+  `template_item`
+- **WHEN** the HS coordinator publishes it
+- **THEN** the request is refused
+- **AND** no `template` row exists carrying the draft's `key`
+- **AND** the draft is still live
+
+### Requirement: Publishing a template is the HS coordinator's
+
+The system SHALL restrict publishing a template draft to the HS coordinator, and SHALL refuse
+every other role as `template_draft_forbidden`, the same code the other acts on a draft use: for
+every role but one, a draft is a document that does not exist.
+
+#### Scenario: A non-coordinator cannot publish
+
+- **WHEN** an account whose role is `supervisor` publishes a draft
+- **THEN** the request is refused as `template_draft_forbidden`
+- **AND** no `template` or `template_version` row is written
+
+### Requirement: A published template is offered for scheduling immediately
+
+The system SHALL offer a template published from a draft in the list of templates available for
+scheduling, on the same terms as a seeded one, with the version number and version identity of the
+version just published.
+
+#### Scenario: The template appears in the scheduling list
+
+- **GIVEN** a live publishable draft
+- **WHEN** it is published and the templates available for scheduling are listed
+- **THEN** the list includes it with `latest_version` 1
+- **AND** its `latest_version_id` is the version the publication produced
+
+### Requirement: The plants a draft named do not travel to the published template
+
+The system SHALL NOT record a draft's `site_ids` on the template it publishes. A template
+carries no `site_id` and no row-level policy, and the scope stated while authoring is a
+statement about where the template was being written for, not a property of the record it
+becomes.
+
+The scope SHALL have already had its whole effect on the document: it decided which shared
+locations each section could name, and those codes are written into the document that is frozen.
+A published template SHALL therefore be offered for scheduling at every plant, exactly as a
+seeded template is.
+
+#### Scenario: A single-plant draft publishes to an unscoped template
+
+- **GIVEN** a live publishable draft whose `site_ids` names only St. Thomas
+- **WHEN** it is published
+- **THEN** the `template` row carries no plant
+- **AND** the templates available for scheduling include it for an account scoped to Glencoe
+
 ### Requirement: A question can prescribe what to do when it fails
 
 The system SHALL let a draft question carry an optional `finding` block that records what the
@@ -722,7 +959,8 @@ configuration field belonging to a response type it no longer has.
 
 ### Requirement: Authoring a template is the HS coordinator's
 
-The system SHALL restrict reading, creating, saving and discarding a template draft to the HS
+The system SHALL restrict reading, creating, saving, discarding and publishing a template draft
+to the HS
 coordinator, and SHALL refuse every other role with a code the interface can act on rather than a
 message it must parse.
 
@@ -741,6 +979,12 @@ reintroduce the per-plant duplication the model exists to avoid.
 - **WHEN** an account whose role is `supervisor` saves an existing draft
 - **THEN** the request is refused as `template_draft_forbidden`
 - **AND** the stored draft is unchanged
+
+#### Scenario: A non-coordinator cannot publish a draft
+
+- **WHEN** an account whose role is `jhsc_member` publishes a draft
+- **THEN** the request is refused as `template_draft_forbidden`
+- **AND** no `template_version` row is written
 
 #### Scenario: Drafts do not depend on the requester's site scope
 
@@ -858,6 +1102,11 @@ The system SHALL retire a draft by setting `discarded_at` rather than by deletin
 draft SHALL be absent from the list of drafts, and deleting a `template_draft` row SHALL be refused
 by the engine for every role.
 
+Discarding and publishing SHALL be mutually exclusive ends for a draft, and the engine SHALL
+refuse a row that records both. They are different facts about the same work — one says the author
+threw it away, the other says it became a frozen record — and a row that claimed both would leave
+no way to tell which happened.
+
 #### Scenario: Discarding hides the draft and keeps the row
 
 - **WHEN** a draft is discarded
@@ -874,6 +1123,11 @@ by the engine for every role.
 
 - **WHEN** `template_draft.key` is updated as the application role
 - **THEN** the statement fails on insufficient privilege
+
+#### Scenario: A row cannot record both ends
+
+- **WHEN** a `template_draft` row is written with both `discarded_at` and `published_at` set
+- **THEN** the statement fails on a check constraint
 
 ### Requirement: Templates are loaded from versioned seed files
 
@@ -1116,10 +1370,69 @@ silently break the strictly-backwards reference rule when the duplicate is later
 - **WHEN** it is duplicated
 - **THEN** the duplicate carries no `visible_when`
 
+### Requirement: The authoring console lists the published templates
+
+The system SHALL show, in the console where templates are authored, the templates that have a
+published version, separately from the drafts and clearly distinguished from them: a draft is
+work in progress and a published template is a frozen record, and a list that mixed them would
+invite the coordinator to treat one as the other.
+
+Each entry SHALL name the template, its `key`, the number of its current version and when that
+version was published, so that the coordinator can answer both "did that publish" and "what
+version is this on" without leaving the console.
+
+The entries SHALL be ordered by name. Order by recency would rearrange the list under the
+coordinator every time anything is published, and the list is read to find a known template far
+more often than to see what changed last.
+
+The console SHALL show the published templates to the HS coordinator only, on the same grounds
+the drafts are: it is the authoring console, and the restriction is by role, not by site scope.
+
+#### Scenario: A published template appears in the console
+
+- **GIVEN** a template published from a draft
+- **WHEN** the HS coordinator opens the template console
+- **THEN** the published templates include it with its `key` and version `1`
+- **AND** it is not listed among the drafts
+
+#### Scenario: A seeded template appears the same way
+
+- **GIVEN** a template loaded by a seed file
+- **WHEN** the HS coordinator opens the template console
+- **THEN** it appears among the published templates
+- **AND** nothing distinguishes it from one published through the interface
+
+#### Scenario: A draft is not listed as published
+
+- **GIVEN** a live draft whose document is publishable
+- **WHEN** the HS coordinator opens the template console
+- **THEN** it appears among the drafts
+- **AND** it does not appear among the published templates
+
+#### Scenario: An organisation with nothing published is told what fills the list
+
+- **GIVEN** no template has a published version
+- **WHEN** the HS coordinator opens the template console
+- **THEN** the published templates section states that publishing a draft is what fills it
+
+### Requirement: Publishing moves a template from the drafts to the published list
+
+The system SHALL, when a draft is published, remove it from the drafts and show the template it
+produced among the published templates without requiring the console to be reopened, so that the
+act and its result are visible in one place.
+
+#### Scenario: The console reflects a publication
+
+- **GIVEN** the HS coordinator is looking at the template console with one live draft
+- **WHEN** that draft is published
+- **THEN** the drafts no longer include it
+- **AND** the published templates include the template it produced
+
 ### Requirement: The templates offered for scheduling are those with a published version
 
 The system SHALL expose the templates available to be scheduled, each carrying its `id`, its
-`name`, and the `version` number and `template_version_id` of its highest published version.
+`key`, its `name`, and the `version` number, `template_version_id` and publication timestamp of
+its highest published version.
 
 A template with no `template_version` row SHALL NOT be offered, because a schedule rule on such a
 template is refused as `template_not_publishable`: a list that offered it would be offering a
@@ -1128,7 +1441,8 @@ rejection.
 The version reported SHALL be resolved by **the same expression** the scheduler uses to freeze a
 newly opened inspection, so that the version the list names and the version an inspection is bound
 to cannot disagree. Reporting a version the scheduler would not choose would be silent: the
-coordinator would read `2` on the screen and the inspection would open against `3`.
+coordinator would read `2` on the screen and the inspection would open against `3`. The publication
+timestamp reported SHALL be that of the same version, for the same reason.
 
 The list SHALL NOT be restricted by site scope, because a template carries no `site_id` by design —
 one monthly inspection for the organisation, not one per plant, which is what makes "the same guard
@@ -1156,6 +1470,13 @@ for every requester.
 - **WHEN** version `3` is published and the templates are listed again
 - **THEN** the listed version is `3`
 - **AND** the existing scheduled inspection still reports `template_version_id` for version `2`
+
+#### Scenario: The key and the publication date name the same version
+
+- **GIVEN** a template whose highest published version is `2`
+- **WHEN** the templates are listed
+- **THEN** the entry carries the template's `key`
+- **AND** the reported publication timestamp is that of version `2`
 
 #### Scenario: The list does not depend on the requester's site scope
 

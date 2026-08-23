@@ -146,10 +146,69 @@ describe('la versión publicada es inmutable', () => {
     expect(rows).toHaveLength(1);
   });
 
-  // v1 publica por seed bajo hs_migrator; la etapa 8 concederá INSERT al builder.
-  it('hs_app tampoco puede publicar', async () => {
+  /**
+   * La etapa 8 concedió el INSERT que `0003` §9 dejó anunciado (`0025` §1), así que el
+   * builder publica con el mismo rol con el que la API lee. Lo que NO cambió es lo único
+   * que este bloque custodia: lo que `hs_app` acaba de insertar es tan inalterable como lo
+   * que escribió un seed. El GRANT es sobre INSERT y sobre nada más.
+   */
+  it('hs_app publica, y lo publicado le queda tan congelado como lo del seed', async () => {
+    const published = one(
+      await inScope<{ id: string }>(
+        db.app,
+        [],
+        `INSERT INTO template (key, name) VALUES ('builder-frozen', 'Builder frozen')
+         RETURNING id`,
+      ),
+    );
+
+    await inScope(db.app, [], 'INSERT INTO template_item (item_key, template_id) VALUES ($1, $2)', [
+      'builder.frozen',
+      published.id,
+    ]);
+
+    const version = one(
+      await inScope<{ id: string }>(
+        db.app,
+        [],
+        `INSERT INTO template_version (template_id, version, document)
+              VALUES ($1, 1, $2::jsonb)
+           RETURNING id`,
+        [published.id, JSON.stringify(documentWith(['builder.frozen']))],
+      ),
+    );
+
+    // El trigger de proyección corre como `hs_app`, que es por lo que el GRANT de `0025`
+    // §1 también alcanza a `template_version_item`.
+    const projected = await inScope(
+      db.app,
+      [],
+      'SELECT id FROM template_version_item WHERE template_version_id = $1',
+      [version.id],
+    );
+
+    expect(projected).toHaveLength(1);
+
     await expect(
-      inScope(db.app, [], `INSERT INTO template (key, name) VALUES ('sneaky', 'Sneaky')`),
+      inScope(db.app, [], `UPDATE template_version SET document = '{}'::jsonb WHERE id = $1`, [
+        version.id,
+      ]),
+    ).rejects.toSatisfy((error) => sqlstate(error) === INSUFFICIENT_PRIVILEGE);
+
+    await expect(
+      inScope(db.app, [], 'DELETE FROM template_version WHERE id = $1', [version.id]),
+    ).rejects.toSatisfy((error) => sqlstate(error) === INSUFFICIENT_PRIVILEGE);
+
+    // La plantilla y el concepto tampoco: se retiran con `deactivated_at`, y ese UPDATE
+    // sigue siendo de `hs_migrator` (`0003` §9).
+    await expect(
+      inScope(db.app, [], 'UPDATE template SET deactivated_at = now() WHERE id = $1', [
+        published.id,
+      ]),
+    ).rejects.toSatisfy((error) => sqlstate(error) === INSUFFICIENT_PRIVILEGE);
+
+    await expect(
+      inScope(db.app, [], 'DELETE FROM template WHERE id = $1', [published.id]),
     ).rejects.toSatisfy((error) => sqlstate(error) === INSUFFICIENT_PRIVILEGE);
   });
 });

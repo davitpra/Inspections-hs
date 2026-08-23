@@ -161,6 +161,10 @@ export const templateDraft = pgTable(
 
     // Nunca DELETE: el trigger de 0016 lo prohíbe para todos los roles.
     discardedAt: timestamp('discarded_at', { withTimezone: true }),
+
+    // Un borrador publicado se conserva como rastro del origen de la versión.
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    templateVersionId: uuid('template_version_id').references(() => templateVersion.id),
   },
   // El índice es PARCIAL (`WHERE discarded_at IS NULL`) y eso Drizzle no lo sabe
   // expresar acá; vive en la migración. Un borrador descartado libera su `key`.

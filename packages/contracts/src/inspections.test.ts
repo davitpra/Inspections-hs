@@ -199,9 +199,11 @@ describe('templateOptionSchema', () => {
   it('acepta una plantilla con su versión publicada más alta', () => {
     const result = templateOptionSchema.safeParse({
       id: TEMPLATE_ID,
+      key: 'monthly-general-workplace',
       name: 'Monthly general workplace inspection',
       latest_version: 3,
       latest_version_id: VERSION_ID,
+      latest_published_at: '2026-08-22 10:00:00+00',
     });
 
     expect(result.success).toBe(true);
@@ -212,9 +214,11 @@ describe('templateOptionSchema', () => {
   it('rechaza una plantilla sin versión', () => {
     const result = templateOptionSchema.safeParse({
       id: TEMPLATE_ID,
+      key: 'monthly-general-workplace',
       name: 'Monthly general workplace inspection',
       latest_version: null,
       latest_version_id: null,
+      latest_published_at: null,
     });
 
     expect(result.success).toBe(false);
@@ -223,9 +227,11 @@ describe('templateOptionSchema', () => {
   it('rechaza una versión cero o negativa', () => {
     const result = templateOptionSchema.safeParse({
       id: TEMPLATE_ID,
+      key: 'monthly-general-workplace',
       name: 'Monthly general workplace inspection',
       latest_version: 0,
       latest_version_id: VERSION_ID,
+      latest_published_at: '2026-08-22 10:00:00+00',
     });
 
     expect(result.success).toBe(false);

@@ -1,4 +1,5 @@
 import {
+  type DraftIssue,
   type Location,
   type OrganizationLocationOption,
   type ResponseType,
@@ -116,6 +117,15 @@ export function saveStateLabel(dirty: boolean): string {
 export function saveButtonLabel(pending: boolean, dirty: boolean): string {
   if (pending) return 'Saving…';
   return dirty ? 'Save draft' : 'Saved';
+}
+
+/** El botón solo ofrece el punto de no retorno para el último documento guardado y completo. */
+export function canPublish(dirty: boolean, issues: readonly DraftIssue[]): boolean {
+  return !dirty && issues.length === 0;
+}
+
+export function publishButtonLabel(pending: boolean): string {
+  return pending ? 'Publishing…' : 'Publish';
 }
 
 /**

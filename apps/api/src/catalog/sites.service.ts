@@ -168,6 +168,44 @@ export class SitesService {
     });
   }
 
+  async reactivate(session: SessionScope, siteId: string): Promise<Site> {
+    this.requireCoordinator(session);
+
+    return this.db.withSessionClient(session, async (client) => {
+      // Sin SELECT ... FOR UPDATE: el motor solo concede UPDATE por columna sobre
+      // `site` (0023), y el bloqueo de fila exige el privilegio de tabla completo.
+      // La propia reactivación es la que arbitra la carrera: solo una transacción
+      // encuentra la fila todavía desactivada.
+      const updated = await client.query<SiteRow>(
+        `UPDATE site
+            SET deactivated_at = NULL
+          WHERE id = $1
+            AND id = ANY($2::uuid[])
+            AND deactivated_at IS NOT NULL
+          RETURNING id, code, name, deactivated_at`,
+        [siteId, [...session.siteIds]],
+      );
+
+      if (updated.rows.length === 0) {
+        const current = await client.query<SiteRow>(
+          `SELECT id, code, name, deactivated_at
+             FROM site
+            WHERE id = $1
+              AND id = ANY($2::uuid[])`,
+          [siteId, [...session.siteIds]],
+        );
+
+        if (current.rows.length === 0) {
+          throw new NotFoundException('Site not found in the current scope');
+        }
+
+        throw new BadRequestException('Site is already active');
+      }
+
+      return toSite(updated.rows[0] as SiteRow);
+    });
+  }
+
   private requireCoordinator(session: SessionScope): void {
     if (session.role !== 'hs_coordinator') {
       throw new ForbiddenException('Only the H&S coordinator can administer sites');

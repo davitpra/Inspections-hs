@@ -18,8 +18,7 @@ export function PublishReadiness({ issues }: { issues: readonly DraftIssue[] }):
   if (issues.length === 0) {
     return (
       <p className="status-card">
-        <CheckIcon size={20} /> Nothing left to fill in. This template will be publishable once
-        publishing is available.
+        <CheckIcon size={20} /> Nothing left to fill in. This template is ready to publish.
       </p>
     );
   }

@@ -1,4 +1,5 @@
 import { HttpException, HttpStatus } from '@nestjs/common';
+import type { DraftIssue } from '@hs/contracts';
 
 /**
  * Los errores de la autoría de plantillas.
@@ -21,15 +22,19 @@ export type TemplateDraftErrorCode =
   | 'template_draft_name_taken'
   | 'template_draft_name_unusable'
   | 'template_draft_site_out_of_scope'
-  | 'template_draft_site_deactivated';
+  | 'template_draft_site_deactivated'
+  | 'template_draft_not_publishable'
+  | 'template_key_taken'
+  | 'template_item_key_taken';
 
 export class TemplateDraftException extends HttpException {
   constructor(
     readonly code: TemplateDraftErrorCode,
     message: string,
     status: HttpStatus,
+    details: Record<string, unknown> = {},
   ) {
-    super({ code, message }, status);
+    super({ code, message, ...details }, status);
   }
 }
 
@@ -126,4 +131,34 @@ export const templateDraftSiteDeactivated = (): TemplateDraftException =>
     'template_draft_site_deactivated',
     'A template cannot be scoped to a plant that has been removed',
     HttpStatus.UNPROCESSABLE_ENTITY,
+  );
+
+/**
+ * El documento todavía tiene pendientes que la pantalla ya puede mostrar.
+ * Llevar `issues` en el cuerpo mantiene el motivo de rechazo alineado con el builder.
+ */
+export const templateDraftNotPublishable = (
+  issues: readonly DraftIssue[],
+): TemplateDraftException =>
+  new TemplateDraftException(
+    'template_draft_not_publishable',
+    'This template is not ready to publish',
+    HttpStatus.CONFLICT,
+    { issues },
+  );
+
+/** La clave reservada por el borrador ya pertenece a una plantilla publicada. */
+export const templateKeyTaken = (): TemplateDraftException =>
+  new TemplateDraftException(
+    'template_key_taken',
+    'This template key is already used by a published template',
+    HttpStatus.CONFLICT,
+  );
+
+/** Un `item_key` global ya fue registrado por otra plantilla. */
+export const templateItemKeyTaken = (): TemplateDraftException =>
+  new TemplateDraftException(
+    'template_item_key_taken',
+    'An item key in this draft is already registered by another template',
+    HttpStatus.CONFLICT,
   );

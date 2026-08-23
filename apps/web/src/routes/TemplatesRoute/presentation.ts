@@ -1,4 +1,4 @@
-import type { TemplateDraftSummary } from '@hs/contracts';
+import type { TemplateDraftSummary, TemplateOption } from '@hs/contracts';
 
 /**
  * La lógica pura del listado de borradores.
@@ -41,4 +41,21 @@ export function canCreate(name: string): boolean {
  */
 export function draftCountLabel(count: number): string {
   return count === 1 ? '1 draft' : `${count} drafts`;
+}
+
+/** Las publicadas son referencia: se buscan por nombre, no por la fecha de publicación. */
+export function sortPublishedTemplates(
+  templates: readonly TemplateOption[],
+): TemplateOption[] {
+  return [...templates].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** La versión es el dato que distingue el documento congelado que se está nombrando. */
+export function publishedVersionLabel(version: number): string {
+  return `Version ${version}`;
+}
+
+/** El encabezado conserva la unidad incluso cuando hay una sola plantilla. */
+export function publishedCountLabel(count: number): string {
+  return count === 1 ? '1 template' : `${count} templates`;
 }
