@@ -281,10 +281,11 @@ export function scopeNotice(siteIds: readonly string[], sites: readonly Site[]):
 /**
  * Las opciones del selector de alcance: una por planta, más «todas» cuando hay más de una.
  *
- * La baja no saca la planta de `user_site_scope`, así que el selector filtra por su cuenta.
- * El filtro no sube a `index.tsx`: rompería el «Both plants» de `scopeLabel` y dejaría un
- * `site_ids` viejo sin nombre. `SitePicker` resuelve lo mismo al revés —muestra las cerradas
- * para poder mirar historia—, y ambas decisiones son correctas para su pantalla.
+ * La baja no saca la planta de `user_site_scope`, así que el selector filtra por su cuenta —
+ * mismo criterio que `SitePicker`, que tampoco ofrece plantas cerradas (ver
+ * `presentation/sites.ts`). Acá el filtro no sube a `index.tsx`: rompería el «Both plants»
+ * de `scopeLabel` y dejaría un `site_ids` viejo sin nombre. Lo que se recorta es qué se
+ * puede ELEGIR; los nombres de un alcance viejo se siguen resolviendo con la lista completa.
  *
  * El orden es «cada planta sola» y después «las dos», que es el del mockup y también el
  * orden en que se decide: primero se pregunta si esto es de una planta, y «las dos» es la

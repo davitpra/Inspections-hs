@@ -9,6 +9,7 @@ import { canAdministerScheduling } from '../../permissions/session';
 import { CalendarIcon, InfoIcon, PinIcon } from '../../components/icons';
 import { PeriodsSection } from './PeriodsSection';
 import { currentCivilYear } from '../../presentation/dates';
+import { resolveSiteId } from '../../presentation/sites';
 import { isUnassigned, unassignedNotice } from './presentation';
 import { RulesSection } from './RulesSection';
 
@@ -38,7 +39,13 @@ export function SchedulingRoute(): React.JSX.Element {
   const [chosenSite, setChosenSite] = useState<string | null>(null);
   const [year, setYear] = useState(() => currentCivilYear());
 
-  const siteId = chosenSite ?? account?.siteScope[0] ?? '';
+  /*
+    La planta por defecto NO es `siteScope[0]`: la baja no saca la planta del alcance, así
+    que esa línea abría la consola en una planta cerrada —un calendario vacío que además no
+    se podía cambiar por otra cosa que no fuera cerrada. `resolveSiteId` es el mismo criterio
+    que aplica `SitePicker` a las opciones.
+  */
+  const siteId = resolveSiteId(sites.data ?? [], account?.siteScope ?? [], chosenSite);
 
   const schedules = useQuery({
     queryKey: queryKeys.inspectionSchedules(),
@@ -53,6 +60,13 @@ export function SchedulingRoute(): React.JSX.Element {
   });
 
   const canAdminister = canAdministerScheduling(account);
+
+  /*
+    Todas las plantas del alcance están dadas de baja. No es un error ni una carga: no hay
+    nada que programar, y se dice. Dibujar el año entero de una planta que no existe es lo
+    que hacía la consola antes y es lo que confundía.
+  */
+  const noActiveSite = sites.isSuccess && siteId === '';
 
   const siteName = (id: string): string =>
     sites.data?.find((site) => site.id === id)?.name ?? id;
@@ -81,17 +95,19 @@ export function SchedulingRoute(): React.JSX.Element {
           </p>
         </div>
 
-        <div className="site-card">
-          <span className="site-card__icon">
-            <PinIcon />
-          </span>
-          <SitePicker
-            sites={sites.data ?? []}
-            value={siteId}
-            onChange={setChosenSite}
-            siteName={siteName}
-          />
-        </div>
+        {noActiveSite ? null : (
+          <div className="site-card">
+            <span className="site-card__icon">
+              <PinIcon />
+            </span>
+            <SitePicker
+              sites={sites.data ?? []}
+              value={siteId}
+              onChange={setChosenSite}
+              siteName={siteName}
+            />
+          </div>
+        )}
       </header>
 
       {/*
@@ -107,6 +123,12 @@ export function SchedulingRoute(): React.JSX.Element {
       {schedules.isLoading || scheduled.isLoading ? (
         <p className="status-card">
           <CalendarIcon size={20} /> Loading…
+        </p>
+      ) : null}
+
+      {noActiveSite ? (
+        <p className="status-card">
+          <InfoIcon size={20} /> No active sites.
         </p>
       ) : null}
 
@@ -127,21 +149,25 @@ export function SchedulingRoute(): React.JSX.Element {
         </div>
       ) : null}
 
-      <RulesSection
-        rules={rules}
-        siteId={siteId}
-        canAdminister={canAdminister}
-        ready={schedules.isSuccess}
-      />
+      {noActiveSite ? null : (
+        <>
+          <RulesSection
+            rules={rules}
+            siteId={siteId}
+            canAdminister={canAdminister}
+            ready={schedules.isSuccess}
+          />
 
-      <PeriodsSection
-        rules={rules}
-        periods={periods}
-        siteId={siteId}
-        canAdminister={canAdminister}
-        year={year}
-        onYearChange={setYear}
-      />
+          <PeriodsSection
+            rules={rules}
+            periods={periods}
+            siteId={siteId}
+            canAdminister={canAdminister}
+            year={year}
+            onYearChange={setYear}
+          />
+        </>
+      )}
     </>
   );
 }

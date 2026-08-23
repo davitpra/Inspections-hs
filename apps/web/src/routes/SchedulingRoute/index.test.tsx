@@ -21,6 +21,8 @@ const RULE = '77777777-7777-4777-8777-777777777777';
 const CANDIDATE = '88888888-8888-4888-8888-888888888888';
 const OTHER_TEMPLATE = '99999999-9999-4999-8999-999999999999';
 const OTHER_VERSION = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const OTHER_SITE = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const CLOSED_SITE = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 
 const listSites = vi.hoisted(() => vi.fn());
 const listTemplates = vi.hoisted(() => vi.fn());
@@ -49,13 +51,16 @@ vi.mock('../../api/inspections', () => ({
 
 vi.mock('../../app/session-context', () => ({ useAppSession }));
 
-function session(role: Session['role']): { account: Session } {
+function session(
+  role: Session['role'],
+  siteScope: readonly string[] = [SITE],
+): { account: Session } {
   return {
     account: {
       userId: USER,
       personId: PERSON,
       role,
-      siteScope: [SITE],
+      siteScope: [...siteScope],
       recordsFrom: null,
       recordsTo: null,
     },
@@ -597,5 +602,58 @@ describe('nombres y no identificadores', () => {
 
     expect(await screen.findByText('Site: St. Thomas')).toBeTruthy();
     expect(screen.queryByLabelText('Site')).toBeNull();
+  });
+});
+
+/**
+ * La baja de una planta no la saca de `user_site_scope`, así que sigue llegando en el
+ * alcance y en `GET /sites`. Si la consola no filtra, abre en un calendario vacío que
+ * además se puede volver a elegir.
+ */
+describe('las plantas dadas de baja', () => {
+  const glencoe: Site = { id: OTHER_SITE, code: 'glencoe', name: 'Glencoe', deactivated_at: null };
+  const rodney: Site = {
+    id: CLOSED_SITE,
+    code: 'rodney',
+    name: 'Rodney',
+    deactivated_at: '2026-08-21T12:00:00.000Z',
+  };
+
+  it('no se ofrecen en el selector', async () => {
+    listSites.mockResolvedValue([site(), glencoe, rodney]);
+    useAppSession.mockReturnValue(session('hs_coordinator', [SITE, OTHER_SITE, CLOSED_SITE]));
+
+    renderRoute();
+
+    const select = await screen.findByLabelText('Site');
+    expect(within(select).queryByRole('option', { name: /Rodney/ })).toBeNull();
+    expect(within(select).getAllByRole('option').map((option) => option.textContent)).toEqual([
+      'Glencoe',
+      'St. Thomas',
+    ]);
+  });
+
+  it('la consola no abre en una cerrada aunque encabece el alcance', async () => {
+    listSites.mockResolvedValue([rodney, glencoe]);
+    useAppSession.mockReturnValue(session('hs_coordinator', [CLOSED_SITE, OTHER_SITE]));
+    listSchedules.mockResolvedValue([rule({ site_id: OTHER_SITE })]);
+
+    renderRoute();
+
+    // Una sola planta elegible: el selector degrada a texto, y dice cuál.
+    expect(await screen.findByText('Site: Glencoe')).toBeTruthy();
+    expect(screen.getAllByText('Monthly general workplace inspection').length).toBeGreaterThan(0);
+  });
+
+  it('sin ninguna planta activa lo dice, en vez de dibujar el año de una que no existe', async () => {
+    listSites.mockResolvedValue([rodney]);
+    useAppSession.mockReturnValue(session('hs_coordinator', [CLOSED_SITE]));
+
+    renderRoute();
+
+    expect(await screen.findByText('No active sites.')).toBeTruthy();
+    expect(screen.queryByLabelText('Site')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Create rule' })).toBeNull();
+    expect(screen.queryByText('August')).toBeNull();
   });
 });

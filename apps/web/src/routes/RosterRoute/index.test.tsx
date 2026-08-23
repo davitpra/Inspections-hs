@@ -134,6 +134,32 @@ describe('la lista', () => {
     await waitFor(() => expect(listPeople).toHaveBeenCalledWith(SITE_B));
   });
 
+  /**
+   * La baja no saca la planta de `user_site_scope`: sigue en el alcance y en `GET /sites`.
+   * Sin filtro, el selector la ofrece y la consola llega a abrir en ella.
+   */
+  it('no ofrece una planta dada de baja, y pide el roster de la activa', async () => {
+    const closed = { ...site(SITE, 'St. Thomas'), deactivated_at: '2026-08-21T12:00:00.000Z' };
+    useAppSession.mockReturnValue(session('hs_coordinator', [SITE, SITE_B]));
+    listSites.mockResolvedValue([closed, site(SITE_B, 'Glencoe')]);
+
+    renderRoute();
+
+    await waitFor(() => expect(listPeople).toHaveBeenCalledWith(SITE_B));
+    expect(listPeople).not.toHaveBeenCalledWith(SITE);
+    expect(await screen.findByText('Site: Glencoe')).toBeTruthy();
+  });
+
+  it('sin ninguna planta activa lo dice y no pide roster', async () => {
+    const closed = { ...site(SITE, 'St. Thomas'), deactivated_at: '2026-08-21T12:00:00.000Z' };
+    listSites.mockResolvedValue([closed]);
+
+    renderRoute();
+
+    expect(await screen.findByText('No active sites.')).toBeTruthy();
+    expect(listPeople).not.toHaveBeenCalled();
+  });
+
   it('con una sola planta en el alcance no dibuja un selector que no elige nada', async () => {
     renderRoute();
     await screen.findByRole('rowheader', { name: 'Reid, Ada' });

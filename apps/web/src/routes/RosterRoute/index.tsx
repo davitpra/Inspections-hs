@@ -7,6 +7,7 @@ import { listPeople } from '../../api/roster';
 import { useAppSession } from '../../app/session-context';
 import { SitePicker } from '../../components/SitePicker';
 import { canAdministerRoster, canInviteFromRoster } from '../../permissions/session';
+import { resolveSiteId } from '../../presentation/sites';
 import { InviteDialog } from './InviteDialog';
 import { ReissueDialog } from './ReissueDialog';
 import { RemoveAccessDialog } from './RemoveAccessDialog';
@@ -111,7 +112,10 @@ function RosterConsole({
 
   const sites = useQuery({ queryKey: queryKeys.sites(), queryFn: listSites, retry: false });
 
-  const siteId = chosenSite ?? siteScope[0] ?? '';
+  // La baja no saca la planta de `user_site_scope`, así que `siteScope[0]` puede ser una
+  // planta cerrada; `resolveSiteId` abre en una activa, igual que la consola de programación.
+  const siteId = resolveSiteId(sites.data ?? [], siteScope, chosenSite);
+  const noActiveSite = sites.isSuccess && siteId === '';
 
   const roster = useQuery({
     queryKey: queryKeys.roster(siteId),
@@ -139,12 +143,20 @@ function RosterConsole({
         the file.
       </p>
 
-      <SitePicker
-        sites={sites.data ?? []}
-        value={siteId}
-        onChange={setChosenSite}
-        siteName={siteName}
-      />
+      {/*
+        Sin ninguna planta activa no hay roster que pedir —la consulta ya está apagada por
+        `enabled`—, y el selector degradado diría «Site:» y nada más.
+      */}
+      {noActiveSite ? (
+        <p className="notice">No active sites.</p>
+      ) : (
+        <SitePicker
+          sites={sites.data ?? []}
+          value={siteId}
+          onChange={setChosenSite}
+          siteName={siteName}
+        />
+      )}
 
       <div className="filters">
         <label htmlFor={searchId}>Search</label>
