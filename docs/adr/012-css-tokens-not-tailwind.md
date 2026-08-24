@@ -7,7 +7,7 @@
 | **Supersede**               | —                                                      |
 | **Superada por**            | —                                                      |
 | **Referencias**             | ADR-001, ADR-003, ADR-010; `apps/web/scripts/check-tokens.mjs`, `apps/web/scripts/check-service-worker.mjs` |
-| **Changes que la consumen** | —                                                      |
+| **Changes que la consumen** | `tokenizar-espaciado-y-peso`                           |
 
 ## Contexto
 
@@ -18,8 +18,13 @@ de las dos librerías estuvo nunca instalada. Este ADR existe para que la pregun
 estoy escribiendo CSS puro?" tenga respuesta en el mismo lugar que el resto de las
 decisiones, en vez de reabrirse cada vez que alguien lee esa tabla.
 
-Lo que hay hoy son 1195 líneas en un único `index.css`: dos capas de tokens —primitivas y
-semánticas, el archivo explica en su encabezado por qué no hay una tercera— y 141 clases.
+Lo que había al escribir este ADR eran 1195 líneas en un único `index.css`: dos capas de
+tokens —primitivas y semánticas, el archivo explica en su encabezado por qué no hay una
+tercera— y 141 clases. Hoy son 4172 líneas y 322 clases: la etapa 8 (builder visual) casi
+cuadruplicó la hoja, y `tokenizar-espaciado-y-peso` cerró la deuda que eso dejó a la vista
+—el guardián comprobaba sólo color mientras el espaciado juntaba 24 valores distintos—
+extendiéndolo a las cinco categorías. Los números de este párrafo son de la fecha del ADR;
+la decisión que describe no cambió.
 Los contrastes están **medidos** contra `--paper`, no estimados, con piso de 4.5:1 para
 texto (WCAG 1.4.3) y 3:1 para bordes que delimitan un control o transportan estado (1.4.11).
 Se lee en una planta, con luz de más y una pantalla de teléfono (ADR-010).
@@ -29,9 +34,10 @@ Se lee en una planta, con luz de más y una pantalla de teléfono (ADR-010).
 **CSS propio con dos capas de tokens. Sin Tailwind, sin shadcn/ui.**
 
 La regla que sostiene el sistema no vive en un comentario: `scripts/check-tokens.mjs` corre
-dentro de `pnpm --filter web build` y rechaza un color literal fuera del bloque de tokens,
-un `var(--x)` que no resuelva, una primitiva usada salteando la capa semántica, y un color
-de `index.html` o del manifest desincronizado de `--brand`.
+dentro de `pnpm --filter web build` y rechaza un literal fuera del bloque de tokens —en
+color, espaciado, radio, tipografía o peso—, un `var(--x)` que no resuelva, una primitiva
+de color usada salteando la capa semántica, y un color de `index.html` o del manifest
+desincronizado de `--brand`.
 
 Que sea condición del build y no convención es deliberado: ya se rompió una vez —la etapa 7
 inventó su propia paleta en hex y quedaron dos sistemas conviviendo— y una regla escrita

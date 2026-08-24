@@ -100,10 +100,53 @@
    * `--text-xs` es el piso y se usa sólo donde el tamaño es la razón de ser del dato
    * (el digest de 64 caracteres, que truncado no sirve). No es un tamaño para poner
    * información que haya que leer con guantes puestos.
+   *
+   * `--text-base` es el cuarto: el tamaño de un título de barra o de hoja. El comentario
+   * decía "cuatro pasos" desde el principio y el paso estaba escrito a mano en tres
+   * reglas —que es la forma en que un token se pierde: nombrado en la prosa, no en el
+   * bloque.
    */
   --text-xs: 0.8rem;
   --text-sm: 0.9rem;
+  --text-base: 1rem;
   --text-lg: 1.25rem;
+
+  /*
+   * Dos pesos, como hay dos pesos de línea: el nombre dice el rol y no el valor, que es
+   * la misma razón por la que el token es `--brand` y no `--green-900`. Si mañana el peso
+   * fuerte pasa a 700, `--weight-strong` sigue siendo cierto.
+   */
+  --weight-normal: 400;
+  --weight-strong: 600;
+
+  /*
+   * El espaciado. El número es el múltiplo de 4px y por eso la escala se lee sin
+   * memorizarla: `--space-3` son tres pasos, 12px. Es la última categoría de la hoja que
+   * seguía escrita a mano —388 declaraciones repartidas en 24 valores distintos, con
+   * 0.35rem, 0.4rem y 0.45rem conviviendo a menos de 1px— y es exactamente lo que el
+   * comentario de `--text-*` describe: el quinto paso que se inventa cuando nadie nombró
+   * los cuatro primeros.
+   *
+   * Los dos medios pasos llevan `-0-5` y `-1-5` en el nombre a propósito. Son la puerta
+   * por la que el problema vuelve, y el nombre los delata como excepción cada vez que
+   * alguien los escribe. Existen porque sin ellos los nudges de alineación óptica (2px)
+   * saltan a 4px, que en un nudge es el efecto entero, y porque 0.35rem y 0.4rem —a 0.8px
+   * de distancia— se partirían en direcciones opuestas.
+   *
+   * Ojo con `--space-4`: son 16px, el cuarto paso. No tiene relación con `--text-base`,
+   * que también vale 1rem por coincidencia y no por parentesco.
+   */
+  --space-0-5: 0.125rem; /* 2px — nudge óptico */
+  --space-1: 0.25rem; /* 4px */
+  --space-1-5: 0.375rem; /* 6px */
+  --space-2: 0.5rem; /* 8px */
+  --space-3: 0.75rem; /* 12px */
+  --space-4: 1rem; /* 16px */
+  --space-5: 1.25rem; /* 20px */
+  --space-6: 1.5rem; /* 24px */
+  --space-8: 2rem; /* 32px */
+  --space-10: 2.5rem; /* 40px */
+  --space-12: 3rem; /* 48px */
 }
 
 body {
@@ -120,7 +163,7 @@ button,
 .choices__button {
   min-height: 48px;
   min-width: 48px;
-  padding: 0.6rem 1rem;
+  padding: var(--space-2) var(--space-4);
   font: inherit;
   border: 1px solid var(--line-control);
   border-radius: var(--radius);
@@ -149,7 +192,7 @@ input:where(:not([type="checkbox"]):not([type="radio"]):not([type="file"])),
 textarea {
   min-height: 48px;
   width: 100%;
-  padding: 0.6rem;
+  padding: var(--space-2);
   font: inherit;
   border: 1px solid var(--line-control);
   border-radius: var(--radius);
@@ -234,7 +277,7 @@ input[type="checkbox"]:disabled::after {
  */
 select {
   min-height: 48px;
-  padding: 0.6rem;
+  padding: var(--space-2);
   font: inherit;
   border: 1px solid var(--line-control);
   border-radius: var(--radius);
@@ -301,8 +344,8 @@ select:disabled {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  padding: 1rem 0.75rem;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-3);
   box-sizing: border-box;
   border-inline-end: 1px solid var(--line);
 }
@@ -315,10 +358,10 @@ select:disabled {
 .sidebar__brand {
   display: flex;
   align-items: center;
-  gap: 0.625rem;
-  padding: 0 0.25rem 0.75rem;
+  gap: var(--space-2);
+  padding: 0 var(--space-1) var(--space-3);
   border-bottom: 1px solid var(--line);
-  font-weight: 600;
+  font-weight: var(--weight-strong);
   letter-spacing: 0.01em;
   color: var(--ink);
 }
@@ -337,7 +380,7 @@ select:disabled {
 .sidebar__links {
   display: flex;
   flex-direction: column;
-  gap: 0.125rem;
+  gap: var(--space-0-5);
   overflow-y: auto;
 }
 
@@ -353,9 +396,9 @@ select:disabled {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: var(--space-3);
   min-height: 44px;
-  padding: 0.5rem 0.75rem;
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius);
   font-size: var(--text-sm);
   text-decoration: none;
@@ -389,7 +432,7 @@ select:disabled {
 .sidebar__link[data-status="active"] {
   background: var(--tint-bg);
   color: var(--brand);
-  font-weight: 600;
+  font-weight: var(--weight-strong);
 }
 
 .sidebar__link[data-status="active"]::before {
@@ -409,8 +452,8 @@ select:disabled {
   margin-block-start: auto;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.75rem;
+  gap: var(--space-2);
+  padding: var(--space-3);
   border: 1px solid var(--line);
   border-radius: var(--radius);
 }
@@ -418,7 +461,7 @@ select:disabled {
 .sidebar__account-row {
   display: flex;
   align-items: center;
-  gap: 0.625rem;
+  gap: var(--space-2);
   /* Un nombre largo se recorta; sin esto empuja al avatar fuera de la ficha. */
   min-width: 0;
 }
@@ -433,7 +476,7 @@ select:disabled {
   background: var(--tint-bg);
   color: var(--brand);
   font-size: var(--text-xs);
-  font-weight: 600;
+  font-weight: var(--weight-strong);
 }
 
 .sidebar__account .account-chip {
@@ -453,7 +496,7 @@ select:disabled {
 .sidebar__signout {
   min-height: auto;
   width: 100%;
-  padding: 0.35rem 0.5rem;
+  padding: var(--space-1-5) var(--space-2);
   border-color: transparent;
   background: none;
   text-align: start;
@@ -534,9 +577,9 @@ select:disabled {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    gap: 0.5rem;
-    padding-inline: max(0.25rem, env(safe-area-inset-left))
-      max(0.25rem, env(safe-area-inset-right));
+    gap: var(--space-2);
+    padding-inline: max(var(--space-1), env(safe-area-inset-left))
+      max(var(--space-1), env(safe-area-inset-right));
     border-bottom: 1px solid var(--line);
   }
 
@@ -568,8 +611,8 @@ select:disabled {
    */
   .appbar__title {
     margin: 0;
-    font-size: 1rem;
-    font-weight: 600;
+    font-size: var(--text-base);
+    font-weight: var(--weight-strong);
     text-align: center;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -577,10 +620,10 @@ select:disabled {
   }
 
   .shell__main {
-    padding-inline: max(1rem, env(safe-area-inset-left))
-      max(1rem, env(safe-area-inset-right));
+    padding-inline: max(var(--space-4), env(safe-area-inset-left))
+      max(var(--space-4), env(safe-area-inset-right));
     /* La barra de gestos, si no, se come el último botón de la pantalla. */
-    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+    padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom));
   }
 }
 
@@ -599,7 +642,7 @@ select:disabled {
   max-width: 100%;
   height: 100dvh;
   max-height: 100dvh;
-  padding: 1rem;
+  padding: var(--space-4);
   border: none;
   background: var(--paper);
   color: var(--ink);
@@ -607,7 +650,7 @@ select:disabled {
   /* Encabezado fijo arriba, contenido desplazándose debajo. */
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--space-3);
   opacity: 0;
   transform: translateX(-100%);
   transition:
@@ -618,13 +661,13 @@ select:disabled {
 .sheet--start {
   margin: 0 auto 0 0;
   border-right: 1px solid var(--line);
-  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-left: max(var(--space-4), env(safe-area-inset-left));
 }
 
 .sheet--end {
   margin: 0 0 0 auto;
   border-left: 1px solid var(--line);
-  padding-right: max(1rem, env(safe-area-inset-right));
+  padding-right: max(var(--space-4), env(safe-area-inset-right));
   transform: translateX(100%);
 }
 
@@ -668,9 +711,9 @@ select:disabled {
 .sheet__head {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
   flex: none;
-  padding-bottom: 0.75rem;
+  padding-bottom: var(--space-3);
   border-bottom: 1px solid var(--line);
 }
 
@@ -678,8 +721,8 @@ select:disabled {
   margin: 0;
   flex: 1 1 auto;
   min-width: 0;
-  font-size: 1rem;
-  font-weight: 600;
+  font-size: var(--text-base);
+  font-weight: var(--weight-strong);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -711,7 +754,7 @@ select:disabled {
 .sheet__body {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: var(--space-4);
   /* `min-height: 0` o el contenido largo estira el hijo flex en vez de desplazarse. */
   flex: 1 1 auto;
   min-height: 0;
@@ -722,7 +765,7 @@ select:disabled {
 .sheet__nav {
   display: flex;
   flex-direction: column;
-  gap: 0.125rem;
+  gap: var(--space-0-5);
 }
 
 /*
@@ -738,9 +781,9 @@ select:disabled {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: var(--space-3);
   min-height: 48px;
-  padding: 0.75rem;
+  padding: var(--space-3);
   border-radius: var(--radius);
   text-decoration: none;
   color: var(--ink);
@@ -767,7 +810,7 @@ select:disabled {
 .sheet__link[data-status="active"] {
   background: var(--tint-bg);
   color: var(--brand);
-  font-weight: 600;
+  font-weight: var(--weight-strong);
 }
 
 .sheet__link[data-status="active"]::before {
@@ -794,7 +837,7 @@ select:disabled {
 
 .sheet__account .account-chip__name {
   max-width: 100%;
-  font-size: 1rem;
+  font-size: var(--text-base);
 }
 
 /*
@@ -820,7 +863,7 @@ select:disabled {
 .shell__main {
   box-sizing: border-box;
   width: min(120rem, 100%);
-  padding: 1rem;
+  padding: var(--space-4);
   margin: 0 auto;
 }
 
@@ -832,7 +875,7 @@ select:disabled {
   position: sticky;
   top: 0;
   z-index: 10;
-  padding: 0.75rem 1rem;
+  padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--line);
   background: var(--paper);
 }
@@ -841,7 +884,7 @@ select:disabled {
   background: var(--warn-bg);
   color: var(--warn-ink);
   border-bottom-color: var(--warn-ink);
-  font-weight: 600;
+  font-weight: var(--weight-strong);
 }
 
 .unsynced__count {
@@ -849,23 +892,23 @@ select:disabled {
 }
 
 .unsynced__warning {
-  margin: 0.25rem 0 0;
+  margin: var(--space-1) 0 0;
 }
 
 .filters {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem 1rem;
-  margin: 0 0 1rem;
+  gap: var(--space-2) var(--space-4);
+  margin: 0 0 var(--space-4);
 }
 
 .filters label {
-  font-weight: 600;
+  font-weight: var(--weight-strong);
 }
 
 .notice {
-  padding: 0.75rem;
+  padding: var(--space-3);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   color: var(--muted);
@@ -880,7 +923,7 @@ select:disabled {
 .modal {
   width: min(28rem, 92vw);
   max-width: 100%;
-  padding: 1.5rem;
+  padding: var(--space-6);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--paper);
@@ -893,16 +936,16 @@ select:disabled {
 
 .list {
   list-style: none;
-  margin: 0 0 1.5rem;
+  margin: 0 0 var(--space-6);
   padding: 0;
 }
 
 .list__row {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: var(--space-2);
   align-items: center;
-  padding: 0.75rem 0;
+  padding: var(--space-3) 0;
   border-bottom: 1px solid var(--line);
 }
 
@@ -919,14 +962,14 @@ select:disabled {
 }
 
 .list__row--stacked p {
-  margin: 0 0 0.25rem;
+  margin: 0 0 var(--space-1);
 }
 
 /* El dato secundario de una fila apilada: la sección que ubica al ítem, un paso por
  * debajo en contraste. `--muted` cumple 4.5:1 sobre `--paper`. */
 .list__aside {
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
 }
 
 /*
@@ -942,7 +985,7 @@ select:disabled {
   align-items: center;
   box-sizing: border-box; /* Repite el chrome del `button`, y eso incluye la caja. */
   color: var(--brand);
-  font-weight: 600;
+  font-weight: var(--weight-strong);
   text-decoration: none;
 }
 
@@ -955,7 +998,7 @@ select:disabled {
 .list__action--block {
   width: 100%;
   justify-content: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 /*
@@ -971,10 +1014,10 @@ select:disabled {
 .back-link {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: var(--space-1-5);
   min-height: 48px;
   color: var(--muted);
-  font-weight: 600;
+  font-weight: var(--weight-strong);
   text-decoration: none;
 }
 
@@ -995,7 +1038,7 @@ select:disabled {
  */
 .table {
   width: 100%;
-  margin: 0 0 1.5rem;
+  margin: 0 0 var(--space-6);
   border-collapse: collapse;
   text-align: left;
 }
@@ -1013,38 +1056,38 @@ select:disabled {
 .table__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .table__caption {
   text-align: left;
-  padding-bottom: 0.5rem;
+  padding-bottom: var(--space-2);
   color: var(--muted);
   font-size: var(--text-sm);
 }
 
 .table th,
 .table td {
-  padding: 0.75rem 0.5rem;
+  padding: var(--space-3) var(--space-2);
   border-bottom: 1px solid var(--line);
   vertical-align: middle;
 }
 
 /* El encabezado se distingue del cuerpo por peso, no por un fondo que compita con los badges. */
 .table thead th {
-  font-weight: 600;
+  font-weight: var(--weight-strong);
   font-size: var(--text-sm);
   color: var(--muted);
 }
 
 /* La celda de nombre es `<th scope="row">`: encabezado de su fila, pero no se lee como título. */
 .table tbody th {
-  font-weight: 400;
+  font-weight: var(--weight-normal);
 }
 
 .badge {
   font-size: var(--text-sm);
-  padding: 0.15rem 0.5rem;
+  padding: var(--space-0-5) var(--space-2);
   border-radius: var(--radius-pill);
   border: 1px solid var(--line);
 }
@@ -1067,18 +1110,18 @@ select:disabled {
 }
 
 .list__row--unread {
-  font-weight: 600;
+  font-weight: var(--weight-strong);
 }
 
 .item {
-  padding: 1rem 0;
+  padding: var(--space-4) 0;
   border-bottom: 1px solid var(--line);
 }
 
 .item label {
   display: block;
-  font-weight: 600;
-  margin-bottom: 0.5rem;
+  font-weight: var(--weight-strong);
+  margin-bottom: var(--space-2);
 }
 
 .item fieldset {
@@ -1087,10 +1130,36 @@ select:disabled {
   padding: 0;
 }
 
+/*
+ * La acción correctiva que la plantilla prescribió para esta pregunta, dentro del bloque
+ * de hallazgo. Se distingue del resto por el fondo tenue y no por un color de alarma: no
+ * es un aviso del sistema —eso es `--warn-*`— sino una decisión que la organización ya
+ * había tomado. La barra de la izquierda es lo que dice, sin leerlo, que este texto vino
+ * escrito de antes y no lo escribió el inspector.
+ */
+.finding__prescription {
+  background: var(--tint-bg);
+  border-left: var(--space-0-5) solid var(--brand);
+  border-radius: var(--radius);
+  padding: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.finding__prescription-title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
+  color: var(--muted);
+  margin: 0 0 var(--space-1) 0;
+}
+
+.finding__prescription p:last-child {
+  margin: 0;
+}
+
 .choices {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: var(--space-2);
   border: 0;
   margin: 0;
   padding: 0;
@@ -1099,7 +1168,7 @@ select:disabled {
 .choices__option {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: var(--space-1-5);
   min-height: 48px;
 }
 
@@ -1111,9 +1180,9 @@ select:disabled {
 .photos__list {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: var(--space-3);
   list-style: none;
-  margin: 0 0 0.75rem;
+  margin: 0 0 var(--space-3);
   padding: 0;
 }
 
@@ -1137,10 +1206,10 @@ select:disabled {
 }
 
 .onboarding {
-  padding: 0.75rem 1rem;
+  padding: var(--space-3) var(--space-4);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  margin-bottom: 1rem;
+  margin-bottom: var(--space-4);
 }
 
 .onboarding__degraded {
@@ -1157,17 +1226,17 @@ select:disabled {
 
 .fraction {
   font-size: var(--text-lg);
-  font-weight: 600;
-  margin: 0.5rem 0;
+  font-weight: var(--weight-strong);
+  margin: var(--space-2) 0;
 }
 
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
-  gap: 0.5rem;
+  gap: var(--space-2);
   list-style: none;
   padding: 0;
-  margin: 0.5rem 0 1rem;
+  margin: var(--space-2) 0 var(--space-4);
 }
 
 .period {
@@ -1175,10 +1244,10 @@ select:disabled {
   border-left-width: 4px;
   border-top-width: 3px;
   border-radius: var(--radius);
-  padding: 0.5rem;
+  padding: var(--space-2);
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: var(--space-0-5);
 }
 
 .period--completed {
@@ -1216,7 +1285,7 @@ select:disabled {
 /* El mes es lo primero que se lee, como el encabezado de una hoja de calendario. */
 .period__month {
   font-size: var(--text-lg);
-  font-weight: 600;
+  font-weight: var(--weight-strong);
 }
 .period__status {
   font-size: var(--text-sm);
@@ -1242,8 +1311,8 @@ select:disabled {
 .report {
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 0.75rem;
-  margin-bottom: 0.5rem;
+  padding: var(--space-3);
+  margin-bottom: var(--space-2);
 }
 
 /* El digest ENTERO, y por eso `word-break`: 64 caracteres no entran en una línea de
@@ -1274,7 +1343,7 @@ select:disabled {
 .scheduling__title {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: var(--space-2);
 }
 
 .scheduling__icon {
@@ -1283,7 +1352,7 @@ select:disabled {
 }
 
 .scheduling__subtitle {
-  margin: 0.25rem 0 0;
+  margin: var(--space-1) 0 0;
   color: var(--muted);
 }
 
@@ -1297,18 +1366,18 @@ select:disabled {
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  margin: 1rem 0 1.5rem;
+  gap: var(--space-4);
+  margin: var(--space-4) 0 var(--space-6);
 }
 
 .site-card {
   display: flex;
   align-items: start;
-  gap: 0.75rem;
+  gap: var(--space-3);
   flex: 0 1 18rem;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 0.6rem 0.9rem;
+  padding: var(--space-2) var(--space-4);
 }
 
 .site-card__icon {
@@ -1325,14 +1394,14 @@ select:disabled {
 .site-card .filters {
   flex-direction: column;
   align-items: stretch;
-  gap: 0.15rem;
+  gap: var(--space-0-5);
   margin: 0;
   flex: 1;
   min-width: 0;
 }
 
 .site-card .filters label {
-  font-weight: 400;
+  font-weight: var(--weight-normal);
   font-size: var(--text-sm);
   color: var(--muted);
 }
@@ -1344,8 +1413,8 @@ select:disabled {
 .card {
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 1rem;
-  margin: 0 0 1rem;
+  padding: var(--space-4);
+  margin: 0 0 var(--space-4);
 }
 
 /* El encabezado de una tarjeta cuando lleva un estado al lado del título: el título a la
@@ -1356,8 +1425,8 @@ select:disabled {
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem 1rem;
-  margin: 0 0 0.75rem;
+  gap: var(--space-2) var(--space-4);
+  margin: 0 0 var(--space-3);
 }
 
 .card__head h3 {
@@ -1369,7 +1438,7 @@ select:disabled {
 .card__footer {
   display: flex;
   justify-content: center;
-  padding-top: 0.75rem;
+  padding-top: var(--space-3);
   border-top: 1px solid var(--line);
 }
 
@@ -1382,11 +1451,11 @@ select:disabled {
 .status-card {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: var(--space-3);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 0.9rem 1rem;
-  margin: 0 0 1rem;
+  padding: var(--space-4) var(--space-4);
+  margin: 0 0 var(--space-4);
   color: var(--muted);
 }
 
@@ -1407,17 +1476,17 @@ select:disabled {
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem 1rem;
+  gap: var(--space-3) var(--space-4);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 1rem;
-  margin: 0 0 1rem;
+  padding: var(--space-4);
+  margin: 0 0 var(--space-4);
   background: var(--tint-bg);
 }
 
 .notice-card__body {
   display: flex;
-  gap: 0.75rem;
+  gap: var(--space-3);
   align-items: center;
   min-width: 0;
   flex: 1 1 18rem;
@@ -1430,11 +1499,11 @@ select:disabled {
 
 .notice-card__title {
   margin: 0;
-  font-weight: 600;
+  font-weight: var(--weight-strong);
 }
 
 .notice-card__text {
-  margin: 0.15rem 0 0;
+  margin: var(--space-0-5) 0 0;
   color: var(--muted);
 }
 
@@ -1444,7 +1513,7 @@ select:disabled {
   align-items: center;
   justify-content: center;
   min-height: 48px;
-  padding: 0.5rem 1rem;
+  padding: var(--space-2) var(--space-4);
   white-space: nowrap;
   text-decoration: none;
   background: var(--paper);
@@ -1452,7 +1521,7 @@ select:disabled {
 
 .rules-card summary {
   cursor: pointer;
-  font-weight: 600;
+  font-weight: var(--weight-strong);
   list-style: none;
 }
 
@@ -1464,11 +1533,11 @@ select:disabled {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.75rem 1rem;
+  gap: var(--space-3) var(--space-4);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 1rem;
-  margin: 0.75rem 0;
+  padding: var(--space-4);
+  margin: var(--space-3) 0;
 }
 
 .rule-card__icon {
@@ -1479,25 +1548,25 @@ select:disabled {
 .rule-card__name {
   flex: 1 1 12rem;
   min-width: 0;
-  font-weight: 600;
+  font-weight: var(--weight-strong);
 }
 
 .rule-card__field {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: var(--space-1);
   flex: 1 1 14rem;
 }
 
 .field-label {
   font-size: var(--text-sm);
   color: var(--muted);
-  font-weight: 600;
+  font-weight: var(--weight-strong);
 }
 
 .rule-card__hint {
-  margin: 0.75rem 0 0;
-  padding-top: 0.75rem;
+  margin: var(--space-3) 0 0;
+  padding-top: var(--space-3);
   border-top: 1px solid var(--line);
   color: var(--muted);
   font-size: var(--text-sm);
@@ -1508,28 +1577,28 @@ select:disabled {
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
-  margin: 0 0 1rem;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-4);
 }
 
 .year-nav {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
   margin: 0;
 }
 
 .year-nav__arrow {
   min-width: 48px;
-  padding: 0.5rem 0.75rem;
+  padding: var(--space-2) var(--space-3);
 }
 
 .year-nav__current {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: var(--space-1-5);
   min-height: 48px;
-  padding: 0.5rem 0.9rem;
+  padding: var(--space-2) var(--space-4);
   border: 1px solid var(--line-control);
   border-radius: var(--radius);
   color: var(--brand);
@@ -1547,15 +1616,15 @@ select:disabled {
 .view-toggle {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
+  gap: var(--space-1-5);
 }
 
 .view-toggle__button {
   min-height: 48px;
-  padding: 0.5rem 0.9rem;
+  padding: var(--space-2) var(--space-4);
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: var(--space-1-5);
   white-space: nowrap;
 }
 
@@ -1572,7 +1641,7 @@ select:disabled {
  */
 .grid--scheduling {
   grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
-  gap: 0.75rem;
+  gap: var(--space-3);
 }
 
 /* El mismo reset que `.grid`, y por la misma razón: un `<ul>` trae relleno propio del
@@ -1581,14 +1650,14 @@ select:disabled {
 .grid--list {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-2);
   list-style: none;
-  margin: 0 0 1rem;
+  margin: 0 0 var(--space-4);
   padding: 0;
 }
 
 .period {
-  gap: 0.5rem;
+  gap: var(--space-2);
   /* El menú se ancla a la tarjeta, no al renglón del encabezado (ver `.row-menu`). */
   position: relative;
 }
@@ -1603,7 +1672,7 @@ select:disabled {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.6rem;
+  gap: var(--space-2);
 }
 
 /* La base de 8rem es lo que decide quién cede: por debajo de eso el título deja de
@@ -1611,7 +1680,7 @@ select:disabled {
 .period__title {
   display: flex;
   flex-direction: column;
-  gap: 0.1rem;
+  gap: var(--space-0-5);
   min-width: 0;
   flex: 1 1 8rem;
 }
@@ -1634,14 +1703,14 @@ select:disabled {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 0.35rem;
+  gap: var(--space-1-5);
   flex: none;
 }
 
 /* El hueco que el encabezado le reserva al menú, solo donde hay uno: sin esto la píldora
    de estado se mete debajo del botón en la tarjeta angosta. */
 .period__head--menu {
-  padding-right: 3rem;
+  padding-right: var(--space-12);
 }
 
 /*
@@ -1661,7 +1730,7 @@ select:disabled {
 }
 
 .row-menu__button {
-  padding: 0 0.5rem;
+  padding: 0 var(--space-2);
   background: transparent;
   border-color: transparent;
   color: var(--muted);
@@ -1675,7 +1744,7 @@ select:disabled {
   display: flex;
   flex-direction: column;
   min-width: 12rem;
-  padding: 0.25rem;
+  padding: var(--space-1);
   background: var(--paper);
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -1697,7 +1766,7 @@ select:disabled {
 
 .status-pill {
   font-size: var(--text-sm);
-  padding: 0.15rem 0.6rem;
+  padding: var(--space-0-5) var(--space-2);
   border-radius: var(--radius-pill);
   border: 1px solid var(--line);
   white-space: nowrap;
@@ -1741,10 +1810,10 @@ select:disabled {
 .field-select {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
   border: 1px solid var(--line-control);
   border-radius: var(--radius);
-  padding: 0 0.6rem;
+  padding: 0 var(--space-2);
 }
 
 .field-select__icon {
@@ -1756,7 +1825,7 @@ select:disabled {
   flex: 1;
   min-width: 0;
   border: 0;
-  padding: 0.6rem 0;
+  padding: var(--space-2) 0;
 }
 
 /* La acción al pie de la tarjeta, sea `button` o link (`.list__action`): a lo ancho y
@@ -1771,7 +1840,7 @@ select:disabled {
    0.15rem de `.period` separa datos, no objetivos de toque. La primera trae su propio
    margen desde `.list__action`; la segunda lo necesita acá. */
 .period__action + .period__action {
-  margin-top: 0.5rem;
+  margin-top: var(--space-2);
 }
 
 .stats-bar {
@@ -1779,7 +1848,7 @@ select:disabled {
   flex-wrap: wrap;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  margin: 1rem 0;
+  margin: var(--space-4) 0;
   overflow: hidden;
 }
 
@@ -1787,8 +1856,8 @@ select:disabled {
   flex: 1 1 8rem;
   display: flex;
   align-items: center;
-  gap: 0.6rem;
-  padding: 0.9rem 1rem;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-4);
   border-right: 1px solid var(--line);
 }
 
@@ -1804,7 +1873,7 @@ select:disabled {
 .stats-bar__number {
   display: block;
   font-size: var(--text-lg);
-  font-weight: 600;
+  font-weight: var(--weight-strong);
   line-height: 1.1;
 }
 
@@ -1817,7 +1886,7 @@ select:disabled {
 .stats-bar__tip {
   flex: 1 1 100%;
   margin: 0;
-  padding: 0.75rem 1rem;
+  padding: var(--space-3) var(--space-4);
   border-top: 1px solid var(--line);
   color: var(--muted);
   font-size: var(--text-sm);
@@ -1850,7 +1919,7 @@ select:disabled {
   border-color: transparent;
   background: transparent;
   color: var(--state-danger);
-  font-weight: 600;
+  font-weight: var(--weight-strong);
 }
 
 /*
@@ -1862,7 +1931,7 @@ select:disabled {
   width: 100%;
   border-color: var(--brand);
   color: var(--brand);
-  font-weight: 600;
+  font-weight: var(--weight-strong);
 }
 
 /* ---------------------------------------------------------------------------
@@ -1875,8 +1944,8 @@ select:disabled {
 .assignment {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  margin: 0 0 1.5rem;
+  gap: var(--space-4);
+  margin: 0 0 var(--space-6);
 }
 
 .assignment__head {
@@ -1884,7 +1953,7 @@ select:disabled {
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: var(--space-4);
 }
 
 .assignment__head h2 {
@@ -1903,7 +1972,7 @@ select:disabled {
  */
 .assignment__cta {
   min-height: 48px;
-  padding: 0.6rem 1.2rem;
+  padding: var(--space-2) var(--space-5);
   display: inline-flex;
   align-items: center;
   box-sizing: border-box;
@@ -1911,7 +1980,7 @@ select:disabled {
   border: 1px solid var(--brand);
   border-radius: var(--radius);
   color: var(--paper);
-  font-weight: 600;
+  font-weight: var(--weight-strong);
   text-decoration: none;
 }
 
@@ -1926,14 +1995,14 @@ select:disabled {
 .assignment__layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 1rem;
+  gap: var(--space-4);
   align-items: start;
 }
 
 .assignment__aside {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: var(--space-4);
 }
 
 /* La tira de datos que identifica la asignación: mismas divisorias que `.stats-bar`, con
@@ -1950,22 +2019,25 @@ select:disabled {
   flex: 1 1 10rem;
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
-  padding: 0.75rem 1rem;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
   border: 1px solid var(--line);
+  /* No es espaciado y por eso no lleva token: es el ancho de una línea con signo, que
+     solapa el borde de la celda con el de su vecina para que la grilla dibuje una sola
+     divisoria y no dos pegadas. */
   margin: -1px 0 0 -1px;
 }
 
 .facts__label {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: var(--space-1-5);
   font-size: var(--text-sm);
   color: var(--muted);
 }
 
 .facts__value {
-  font-weight: 600;
+  font-weight: var(--weight-strong);
 }
 
 /* El detalle que acompaña un valor y no es el dato principal — "in 15 days" al lado de
@@ -1973,15 +2045,15 @@ select:disabled {
 .facts__hint {
   display: block;
   font-size: var(--text-sm);
-  font-weight: 400;
+  font-weight: var(--weight-normal);
   color: var(--muted);
 }
 
 .progress {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  margin: 0.5rem 0 1rem;
+  gap: var(--space-4);
+  margin: var(--space-2) 0 var(--space-4);
 }
 
 /*
@@ -2007,16 +2079,16 @@ select:disabled {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 600;
+  font-weight: var(--weight-strong);
 }
 
 .progress__title {
   margin: 0;
-  font-weight: 600;
+  font-weight: var(--weight-strong);
 }
 
 .progress__text {
-  margin: 0.15rem 0 0;
+  margin: var(--space-0-5) 0 0;
   color: var(--muted);
   font-size: var(--text-sm);
 }
@@ -2025,8 +2097,8 @@ select:disabled {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.6rem 0;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
   border-bottom: 1px solid var(--line);
 }
 
@@ -2037,7 +2109,7 @@ select:disabled {
 .section-row__title {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: var(--space-1-5);
 }
 
 .section-row__count {
@@ -2050,23 +2122,23 @@ select:disabled {
    se escanea como las tarjetas del calendario. */
 .checklist {
   list-style: none;
-  margin: 0.5rem 0 0;
+  margin: var(--space-2) 0 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: var(--space-2);
 }
 
 .checklist li {
   display: flex;
   align-items: start;
-  gap: 0.5rem;
+  gap: var(--space-2);
   color: var(--muted);
 }
 
 .checklist li svg {
   flex: none;
-  margin-top: 0.15rem;
+  margin-top: var(--space-0-5);
   color: var(--state-ok);
 }
 
@@ -2080,7 +2152,7 @@ select:disabled {
 .offline__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: var(--space-3);
 }
 
 .offline__actions a {
@@ -2105,7 +2177,7 @@ select:disabled {
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem 1rem;
+  gap: var(--space-2) var(--space-4);
 }
 
 /* La lista termina donde termina el contenido de la tarjeta: el margen inferior de
@@ -2149,30 +2221,30 @@ select:disabled {
   list-style: none;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  padding: 1.25rem;
-  margin: 0 0 0.75rem;
+  padding: var(--space-5);
+  margin: 0 0 var(--space-3);
   background: var(--paper);
 }
 
 /* La lista de preguntas de una sección no lleva el margen inferior de `.list`: la sección
    ya lo pone, y sumados dejaban un hueco del alto de una fila antes de "Add question". */
 .list--items {
-  margin-bottom: 0.5rem;
+  margin-bottom: var(--space-2);
 }
 
 /* Cada pendiente en su renglón, sin la divisoria de `.list__row`: son frases, no filas
    comparables, y una línea entre cada una las convierte en una tabla de una columna. */
 .list--issues .list__row {
   border-bottom: 0;
-  padding: 0.25rem 0;
+  padding: var(--space-1) 0;
 }
 
 /* Las opciones de un ítem de selección: el tercer nivel. Mismo recurso que
    `.item-editor` —filete y sangría— y no un tercer tono de fondo. */
 .options {
   border-left: 2px solid var(--line);
-  padding-left: 0.75rem;
-  margin: 0 0 0.75rem;
+  padding-left: var(--space-3);
+  margin: 0 0 var(--space-3);
 }
 
 /* La tabla de opciones se compacta en desktop y se vuelve vertical en pantallas pequeñas. */
@@ -2181,18 +2253,18 @@ select:disabled {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .options__head {
-  padding: 0 0.5rem 0.25rem;
+  padding: 0 var(--space-2) var(--space-1);
   color: var(--muted);
   font-size: var(--text-sm);
-  font-weight: 600;
+  font-weight: var(--weight-strong);
 }
 
 .options__row {
-  padding: 0.25rem 0;
+  padding: var(--space-1) 0;
 }
 
 .options__field {
@@ -2204,6 +2276,9 @@ select:disabled {
   width: 1px;
   height: 1px;
   padding: 0;
+  /* Tampoco es espaciado: es el recorte de una etiqueta que existe para el lector
+     de pantalla y no ocupa lugar. El -1px va con el `clip` de abajo, no con la
+     escala. */
   margin: -1px;
   overflow: hidden;
   clip: rect(0, 0, 0, 0);
@@ -2250,14 +2325,14 @@ select:disabled {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.75rem;
+  gap: var(--space-3);
 }
 
 .mapping__add {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
   min-height: 48px;
   width: auto;
   white-space: nowrap;
@@ -2266,13 +2341,13 @@ select:disabled {
 .manage-sites__list {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--space-3);
 }
 
 .manage-sites__item {
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 0.75rem;
+  padding: var(--space-3);
 }
 
 .manage-sites__summary,
@@ -2281,7 +2356,7 @@ select:disabled {
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .manage-sites__summary h3,
@@ -2301,9 +2376,9 @@ select:disabled {
 .manage-sites__confirm {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  margin-top: 0.75rem;
-  padding-top: 0.75rem;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
   border-top: 1px solid var(--line);
 }
 
@@ -2319,8 +2394,8 @@ select:disabled {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem 0.75rem;
-  padding: 0.75rem 1rem;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--line);
 }
 
@@ -2330,9 +2405,9 @@ select:disabled {
   flex: 1 1 14rem;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
   min-height: 48px;
-  padding: 0 0.7rem;
+  padding: 0 var(--space-3);
   border: 1px solid var(--line-control);
   border-radius: var(--radius);
   color: var(--muted);
@@ -2377,7 +2452,7 @@ select:disabled {
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: var(--space-1-5);
   min-height: 44px;
 }
 
@@ -2416,7 +2491,7 @@ select:disabled {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--muted);
-  font-weight: 600;
+  font-weight: var(--weight-strong);
 }
 
 /*
@@ -2431,7 +2506,7 @@ select:disabled {
  */
 .mapping__cell {
   box-sizing: border-box;
-  padding: 0.6rem 1rem;
+  padding: var(--space-2) var(--space-4);
   min-width: 0;
 }
 
@@ -2455,22 +2530,22 @@ select:disabled {
   min-width: 5.5rem;
   border-left: 1px solid var(--line);
   text-align: center;
-  padding-inline: 0.4rem;
+  padding-inline: var(--space-1-5);
 }
 
 .mapping__cell--actions {
   flex: 0 0 3.5rem;
   border-left: 1px solid var(--line);
   text-align: center;
-  padding-inline: 0.25rem;
+  padding-inline: var(--space-1);
 }
 
 .mapping__name {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.4rem;
-  font-weight: 600;
+  gap: var(--space-1-5);
+  font-weight: var(--weight-strong);
 }
 
 /* El badge de cobertura nombra hasta todas las plantas —«Department, St. Thomas only»— y como
@@ -2500,7 +2575,7 @@ select:disabled {
   display: block;
   text-transform: none;
   letter-spacing: normal;
-  font-weight: 400;
+  font-weight: var(--weight-normal);
   font-variant-numeric: tabular-nums;
 }
 
@@ -2538,8 +2613,8 @@ select:disabled {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  padding: 0.4rem 0.5rem;
+  gap: var(--space-2);
+  padding: var(--space-1-5) var(--space-2);
   border-radius: var(--radius);
   font-size: var(--text-sm);
   color: var(--muted);
@@ -2557,7 +2632,7 @@ select:disabled {
   flex: none;
   width: 18px;
   height: 18px;
-  border-radius: 5px;
+  border-radius: var(--radius);
   border: 1.5px solid var(--line-control);
   display: grid;
   place-items: center;
@@ -2566,7 +2641,7 @@ select:disabled {
 
 .tick[aria-checked="true"] {
   color: var(--brand);
-  font-weight: 600;
+  font-weight: var(--weight-strong);
 }
 
 .tick[aria-checked="true"] .tick__box {
@@ -2583,7 +2658,7 @@ select:disabled {
 }
 
 .tick__error {
-  margin: 0 0 0.4rem;
+  margin: 0 0 var(--space-1-5);
   font-size: var(--text-xs);
 }
 
@@ -2657,7 +2732,7 @@ select:disabled {
     order: 2;
     flex: 1 1 0;
     min-width: 6rem;
-    padding-block: 0.25rem;
+    padding-block: var(--space-1);
     border-left: 0;
   }
 
@@ -2667,7 +2742,7 @@ select:disabled {
     line-height: 1.2;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    font-weight: 600;
+    font-weight: var(--weight-strong);
   }
 
   /* `margin-left: auto` y no el sobrante del nombre: el «…» se ancla a la derecha aunque el
@@ -2701,7 +2776,7 @@ select:disabled {
 .builder__layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 22rem;
-  gap: 1rem;
+  gap: var(--space-4);
   align-items: start;
 }
 
@@ -2715,7 +2790,7 @@ select:disabled {
 .builder__aside {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: var(--space-4);
   position: sticky;
   /* Pegado arriba, porque el editor es mucho más alto que el resumen: sin esto, escribir
      la octava sección deja el resumen fuera de pantalla justo cuando más sirve. */
@@ -2723,7 +2798,7 @@ select:disabled {
 }
 
 .builder__aside h3 {
-  margin: 0 0 0.75rem;
+  margin: 0 0 var(--space-3);
 }
 
 /* El encabezado ---------------------------------------------------------- */
@@ -2732,14 +2807,14 @@ select:disabled {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  gap: 0.75rem;
+  gap: var(--space-3);
 }
 
 .builder__state {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 0.15rem;
+  gap: var(--space-0-5);
 }
 
 /* En un teléfono el encabezado se lee en dos tiempos: identidad arriba y acciones abajo. */
@@ -2748,7 +2823,7 @@ select:disabled {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     align-items: start;
-    gap: 0.75rem;
+    gap: var(--space-3);
   }
 
   .scheduling__header {
@@ -2785,20 +2860,20 @@ select:disabled {
 .builder__identity-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 1rem 1.5rem;
+  gap: var(--space-4) var(--space-6);
   align-items: start;
 }
 
 .builder__sections {
-  margin-top: 1.5rem;
+  margin-top: var(--space-6);
 }
 
 .builder__sections-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 1rem;
-  margin: 0 0 0.75rem;
+  gap: var(--space-4);
+  margin: 0 0 var(--space-3);
 }
 
 .builder__sections-head h2 {
@@ -2808,7 +2883,7 @@ select:disabled {
 
 .builder__sections-head .note {
   max-width: 42rem;
-  margin: 0.15rem 0 0;
+  margin: var(--space-0-5) 0 0;
 }
 
 .builder__sections-head > div {
@@ -2817,11 +2892,11 @@ select:disabled {
 
 .builder__sections-head .status-pill {
   flex: none;
-  margin-top: 0.15rem;
+  margin-top: var(--space-0-5);
 }
 
 .builder__empty-sections {
-  padding: 1.25rem;
+  padding: var(--space-5);
   border: 1px dashed var(--line-control);
   border-radius: var(--radius);
   background: var(--tint-bg);
@@ -2830,11 +2905,11 @@ select:disabled {
 
 .builder__empty-sections-title {
   margin: 0;
-  font-weight: 600;
+  font-weight: var(--weight-strong);
 }
 
 .builder__empty-sections .note {
-  margin: 0.25rem 0 0;
+  margin: var(--space-1) 0 0;
 }
 
 @media (max-width: 48rem) {
@@ -2846,7 +2921,7 @@ select:disabled {
 @media (max-width: 30rem) {
   .builder__sections-head {
     flex-direction: column;
-    gap: 0.35rem;
+    gap: var(--space-1-5);
   }
 
   .builder__sections-head .status-pill {
@@ -2857,7 +2932,7 @@ select:disabled {
 .builder__field {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: var(--space-1);
   min-width: 0;
 }
 
@@ -2873,13 +2948,13 @@ select:disabled {
 }
 
 .builder__scope .note {
-  margin: 0 0 0.5rem;
+  margin: 0 0 var(--space-2);
 }
 
 .builder__scope-options {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 /* Las tres opciones a la vista y la elegida pintada: es la decisión que condiciona qué
@@ -2888,7 +2963,7 @@ select:disabled {
 .builder__scope-option {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
   flex: 1 1 8rem;
   min-width: 0;
   justify-content: center;
@@ -2903,9 +2978,9 @@ select:disabled {
 .builder__scope-summary {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  margin: 0.15rem 0 1rem;
-  font-weight: 600;
+  gap: var(--space-2);
+  margin: var(--space-0-5) 0 var(--space-4);
+  font-weight: var(--weight-strong);
 }
 
 .builder__scope-summary strong {
@@ -2916,23 +2991,23 @@ select:disabled {
 /* El resumen ------------------------------------------------------------- */
 
 .builder__summary-card {
-  padding: 1.25rem;
+  padding: var(--space-5);
 }
 
 .builder__summary-head {
   align-items: flex-start;
-  margin-bottom: 1.25rem;
+  margin-bottom: var(--space-5);
 }
 
 .builder__summary-heading {
   display: flex;
   align-items: flex-start;
-  gap: 0.65rem;
+  gap: var(--space-3);
 }
 
 .builder__summary-heading svg {
   flex: none;
-  margin-top: 0.1rem;
+  margin-top: var(--space-0-5);
 }
 
 .builder__summary-heading h3 {
@@ -2941,24 +3016,24 @@ select:disabled {
 }
 
 .builder__summary-heading .note {
-  margin: 0.1rem 0 0;
+  margin: var(--space-0-5) 0 0;
 }
 
 .builder__summary-scope {
-  padding: 0.75rem;
+  padding: var(--space-3);
   border-radius: var(--radius);
   background: var(--tint-bg);
 }
 
 .builder__summary-scope .field-label {
-  margin-bottom: 0.25rem;
+  margin-bottom: var(--space-1);
 }
 
 .builder__counts {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.5rem;
-  margin: 1rem 0 1.25rem;
+  gap: var(--space-2);
+  margin: var(--space-4) 0 var(--space-5);
 }
 
 .builder__counts > div {
@@ -2966,9 +3041,9 @@ select:disabled {
   flex-direction: column-reverse;
   align-items: center;
   justify-content: center;
-  gap: 0.15rem;
+  gap: var(--space-0-5);
   min-width: 0;
-  padding: 0.65rem 0.4rem;
+  padding: var(--space-3) var(--space-1-5);
   border: 1px solid var(--line);
   border-radius: var(--radius);
 }
@@ -2982,14 +3057,14 @@ select:disabled {
 .builder__counts dd {
   margin: 0;
   font-size: var(--text-lg);
-  font-weight: 600;
+  font-weight: var(--weight-strong);
 }
 
 .builder__breakdown-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 1rem;
+  gap: var(--space-4);
 }
 
 .builder__breakdown-head .field-label {
@@ -3003,18 +3078,18 @@ select:disabled {
 
 .builder__breakdown {
   list-style: none;
-  margin: 0.6rem 0 0;
+  margin: var(--space-2) 0 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .builder__breakdown-item {
   display: flex;
-  gap: 0.7rem;
+  gap: var(--space-3);
   align-items: start;
-  padding: 0.7rem;
+  padding: var(--space-3);
   border: 1px solid var(--line);
   border-radius: var(--radius);
 }
@@ -3026,15 +3101,15 @@ select:disabled {
 
 .builder__breakdown-title {
   margin: 0;
-  font-weight: 600;
+  font-weight: var(--weight-strong);
   overflow-wrap: anywhere;
 }
 
 .builder__breakdown-scope {
   display: flex;
   align-items: center;
-  gap: 0.3rem;
-  margin: 0.15rem 0 0.45rem;
+  gap: var(--space-1);
+  margin: var(--space-0-5) 0 var(--space-1-5);
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -3046,12 +3121,12 @@ select:disabled {
 .builder__chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem;
+  gap: var(--space-1-5);
 }
 
 .builder__empty-summary {
   margin: 0;
-  padding: 1rem;
+  padding: var(--space-4);
   border: 1px dashed var(--line-control);
   border-radius: var(--radius);
   color: var(--muted);
@@ -3092,10 +3167,10 @@ select:disabled {
      título sin nada a la izquierda que los sostuviera. */
   grid-template-columns: auto auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 0.6rem;
+  gap: var(--space-2);
   /* El hueco que el encabezado le reserva al menú, como `.period__head--menu`. */
-  padding-right: 3rem;
-  margin: 0 0 0.75rem;
+  padding-right: var(--space-12);
+  margin: 0 0 var(--space-3);
 }
 
 /* El «⋮» de la sección se centra con la fila del encabezado, no con el borde de arriba:
@@ -3118,7 +3193,7 @@ select:disabled {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .builder__section-title .note {
@@ -3129,12 +3204,12 @@ select:disabled {
    introduce, y por eso el que se destaca es el valor. */
 .builder__section-scope {
   color: var(--ink);
-  font-weight: 600;
+  font-weight: var(--weight-strong);
 }
 
 .builder__section-actions {
   display: flex;
-  gap: 0.5rem;
+  gap: var(--space-2);
   align-items: center;
   justify-content: flex-end;
   grid-column: 4;
@@ -3145,7 +3220,7 @@ select:disabled {
 .builder__section-actions button {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: var(--space-1-5);
   width: auto;
 }
 
@@ -3175,6 +3250,9 @@ select:disabled {
     width: 1px;
     height: 1px;
     padding: 0;
+    /* Tampoco es espaciado: es el recorte de una etiqueta que existe para el lector
+       de pantalla y no ocupa lugar. El -1px va con el `clip` de abajo, no con la
+       escala. */
     margin: -1px;
     overflow: hidden;
     clip: rect(0, 0, 0, 0);
@@ -3217,7 +3295,7 @@ select:disabled {
   background: var(--brand);
   color: var(--paper);
   font-size: var(--text-sm);
-  font-weight: 600;
+  font-weight: var(--weight-strong);
 }
 
 /* En una pregunta el número es referencia, no jerarquía: pintarlo como el de la sección
@@ -3227,7 +3305,7 @@ select:disabled {
   min-width: 1.5rem;
   background: transparent;
   color: var(--muted);
-  font-weight: 400;
+  font-weight: var(--weight-normal);
 }
 
 /* La manija de arrastre. Sin `min-height` de 48px porque no es un objetivo de toque
@@ -3237,7 +3315,7 @@ select:disabled {
   flex: none;
   min-height: 0;
   min-width: 0;
-  padding: 0.35rem;
+  padding: var(--space-1-5);
   border-color: transparent;
   background: transparent;
   color: var(--muted);
@@ -3250,7 +3328,7 @@ select:disabled {
 }
 
 .builder__section-location {
-  margin: 0 0 0.75rem;
+  margin: 0 0 var(--space-3);
 }
 
 .builder__section-location select {
@@ -3260,7 +3338,7 @@ select:disabled {
 .builder__section-location .field-label {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: var(--space-1-5);
 }
 
 /* Una caja por planta, lado a lado. Es una LECTURA, no un control: la sección nombra una
@@ -3268,14 +3346,14 @@ select:disabled {
 .builder__resolution {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
-  gap: 0.75rem;
-  margin: 0 0 0.75rem;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-3);
 }
 
 .builder__plant {
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 0.6rem 0.8rem;
+  padding: var(--space-2) var(--space-3);
   background: var(--tint-bg);
 }
 
@@ -3289,22 +3367,22 @@ select:disabled {
 .builder__plant .note {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: var(--space-1-5);
   margin: 0;
 }
 
 .builder__plant-name {
-  margin: 0.15rem 0 0;
-  font-weight: 600;
+  margin: var(--space-0-5) 0 0;
+  font-weight: var(--weight-strong);
 }
 
 .builder__questions-label {
-  margin: 0 0 0.5rem;
-  font-weight: 600;
+  margin: 0 0 var(--space-2);
+  font-weight: var(--weight-strong);
 }
 
 .builder__questions {
-  margin-bottom: 0.75rem;
+  margin-bottom: var(--space-3);
 }
 
 /* Ahora que cada pregunta es una tarjeta con margen propio, la última sumaba el suyo al de
@@ -3316,14 +3394,14 @@ select:disabled {
 .builder__add {
   display: flex;
   justify-content: center;
-  padding-top: 0.75rem;
+  padding-top: var(--space-3);
   border-top: 1px solid var(--line);
 }
 
 .builder__add button {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
   width: auto;
 }
 
@@ -3332,8 +3410,8 @@ select:disabled {
 .builder__add--section {
   border: 1px dashed var(--line-control);
   border-radius: var(--radius);
-  padding: 0.5rem;
-  margin: 0 0 1rem;
+  padding: var(--space-2);
+  margin: 0 0 var(--space-4);
 }
 
 /* La pregunta ------------------------------------------------------------ */
@@ -3344,8 +3422,8 @@ select:disabled {
   display: grid;
   grid-template-columns: auto auto minmax(0, 1fr);
   align-items: start;
-  gap: 0.75rem;
-  padding-right: 3rem;
+  gap: var(--space-3);
+  padding-right: var(--space-12);
 }
 
 /* `--line` y no `--line-control`: el input del prompt ocupa el renglón entero y es lo
@@ -3356,7 +3434,7 @@ select:disabled {
   grid-row: 1;
   width: auto;
   min-width: 0;
-  padding: 0.75rem;
+  padding: var(--space-3);
   border-color: var(--line);
 }
 
@@ -3366,14 +3444,14 @@ select:disabled {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem 1rem;
-  padding-top: 0.5rem;
+  gap: var(--space-2) var(--space-4);
+  padding-top: var(--space-2);
 }
 
 .item-editor__type {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: var(--space-1-5);
   min-width: 0;
 }
 
@@ -3384,13 +3462,13 @@ select:disabled {
 /* "Answer type" es una etiqueta AL COSTADO de su select, no el encabezado de un campo
    apilado: en 600 competía con el texto de la pregunta que tiene justo arriba. */
 .item-editor__type .field-label {
-  font-weight: 400;
+  font-weight: var(--weight-normal);
 }
 
 .item-editor__required {
   display: inline-flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: var(--space-2);
   min-height: 48px;
   white-space: nowrap;
 }
@@ -3421,11 +3499,11 @@ select:disabled {
    `button` base (ADR-010). */
 .item-editor__corrective {
   min-height: 48px;
-  padding: 0 0.75rem;
+  padding: 0 var(--space-3);
   border-color: var(--line-control);
   background: var(--paper);
   color: var(--brand);
-  font-weight: 600;
+  font-weight: var(--weight-strong);
   white-space: nowrap;
 }
 
@@ -3434,11 +3512,11 @@ select:disabled {
 .finding-sheet__threshold {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .finding-sheet__question {
-  padding: 0.75rem;
+  padding: var(--space-3);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--tint-bg);
@@ -3451,20 +3529,20 @@ select:disabled {
 .finding-sheet__threshold {
   min-width: 0;
   margin: 0;
-  padding: 0.75rem;
+  padding: var(--space-3);
   border: 1px solid var(--line);
   border-radius: var(--radius);
 }
 
 .finding-sheet__threshold legend {
-  padding: 0 0.25rem;
-  font-weight: 600;
+  padding: 0 var(--space-1);
+  font-weight: var(--weight-strong);
 }
 
 .finding-sheet__check {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .finding-sheet__check input {
@@ -3474,16 +3552,16 @@ select:disabled {
 .finding-sheet__threshold-fields {
   display: grid;
   grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
-  gap: 0.75rem;
+  gap: var(--space-3);
 }
 
 .finding-sheet__actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 0.5rem;
+  gap: var(--space-2);
   margin-top: auto;
-  padding-top: 0.75rem;
+  padding-top: var(--space-3);
   border-top: 1px solid var(--line);
 }
 
@@ -3494,33 +3572,35 @@ select:disabled {
 }
 
 /* La configuración queda separada de la pregunta y solo ocupa espacio cuando se solicita.
-   Su caja arranca en la columna del número —2.5rem, el ancho de la manija más el hueco—
-   para que se lea colgada de ESTA pregunta y no del borde de la tarjeta. */
+   Su caja arranca en la columna del número —`--space-10`, el ancho de la manija más el
+   hueco— para que se lea colgada de ESTA pregunta y no del borde de la tarjeta. Es el
+   único paso de la escala que no se eligió por ritmo sino midiendo otra cosa; son 40px y
+   caen en diez pasos exactos, así que entra sin corrimiento. */
 .item-editor__settings {
-  margin: 1rem 0 0 2.5rem;
-  padding: 1.25rem;
+  margin: var(--space-4) 0 0 var(--space-10);
+  padding: var(--space-5);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
 }
 
 .item-editor__settings-head {
-  margin-bottom: 1rem;
+  margin-bottom: var(--space-4);
 }
 
 .item-editor__settings-title {
   margin: 0;
-  font-weight: 600;
+  font-weight: var(--weight-strong);
 }
 
 .item-editor__settings .note {
-  margin: 0 0 0.5rem;
+  margin: 0 0 var(--space-2);
 }
 
 .item-editor__settings .filters {
   flex-direction: column;
   align-items: stretch;
-  gap: 0.25rem;
-  margin: 0 0 0.75rem;
+  gap: var(--space-1);
+  margin: 0 0 var(--space-3);
 }
 
 .item-editor__settings .filters input {
@@ -3536,8 +3616,8 @@ select:disabled {
 .item-editor__fields {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
-  column-gap: 1rem;
-  row-gap: 0.75rem;
+  column-gap: var(--space-4);
+  row-gap: var(--space-3);
 }
 
 .builder__breakdown-title,
@@ -3568,12 +3648,12 @@ select:disabled {
     display: block;
     width: auto;
     height: auto;
-    margin: 0 0 0.25rem;
+    margin: 0 0 var(--space-1);
     overflow: visible;
     clip: auto;
     color: var(--muted);
     font-size: var(--text-sm);
-    font-weight: 600;
+    font-weight: var(--weight-strong);
     white-space: normal;
   }
 
@@ -3582,19 +3662,19 @@ select:disabled {
   }
 
   .item-editor {
-    padding: 0.75rem;
+    padding: var(--space-3);
   }
 
   .item-editor__settings {
     margin-left: 0;
-    padding: 0.75rem;
+    padding: var(--space-3);
   }
 
   .item-editor__type {
     flex: 1 1 100%;
     flex-direction: column;
     align-items: stretch;
-    gap: 0.25rem;
+    gap: var(--space-1);
   }
 
   .item-editor__type select {
@@ -3624,7 +3704,7 @@ select:disabled {
  */
 .templates__counts {
   display: flex;
-  gap: 0.5rem;
+  gap: var(--space-2);
   margin: 0;
 }
 
@@ -3633,9 +3713,9 @@ select:disabled {
   flex-direction: column-reverse;
   align-items: center;
   justify-content: center;
-  gap: 0.15rem;
+  gap: var(--space-0-5);
   min-width: 5.5rem;
-  padding: 0.65rem 0.9rem;
+  padding: var(--space-3) var(--space-4);
   border: 1px solid var(--line);
   border-radius: var(--radius);
 }
@@ -3649,7 +3729,7 @@ select:disabled {
 .templates__counts dd {
   margin: 0;
   font-size: var(--text-lg);
-  font-weight: 600;
+  font-weight: var(--weight-strong);
 }
 
 /* La lista deja de flotar en la página y pasa a ser el cuerpo de la tarjeta: sin el
@@ -3679,12 +3759,12 @@ select:disabled {
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 0.5rem;
+  gap: var(--space-2);
   margin-left: auto;
 }
 
 .drafts-card .list__row .note {
-  margin: 0.15rem 0 0;
+  margin: var(--space-0-5) 0 0;
 }
 
 /* La tarjeta publicada comparte la silueta de borradores, pero no sus acciones: cada fila
@@ -3703,11 +3783,11 @@ select:disabled {
 }
 
 .published-card .list__row .note {
-  margin: 0.15rem 0 0;
+  margin: var(--space-0-5) 0 0;
 }
 
 .published-empty {
-  padding: 1.5rem;
+  padding: var(--space-6);
   border: 1px dashed var(--line-control);
   border-radius: var(--radius);
   background: var(--tint-bg);
@@ -3719,12 +3799,12 @@ select:disabled {
 }
 
 .published-empty__title {
-  margin: 0.25rem 0 0;
-  font-weight: 600;
+  margin: var(--space-1) 0 0;
+  font-weight: var(--weight-strong);
 }
 
 .published-empty .note {
-  margin: 0.25rem 0 0;
+  margin: var(--space-1) 0 0;
 }
 
 /*
@@ -3733,7 +3813,7 @@ select:disabled {
  * nivel más arriba —ahí falta una sección, acá falta la plantilla entera—.
  */
 .drafts-empty {
-  padding: 1.5rem;
+  padding: var(--space-6);
   border: 1px dashed var(--line-control);
   border-radius: var(--radius);
   background: var(--tint-bg);
@@ -3745,12 +3825,12 @@ select:disabled {
 }
 
 .drafts-empty__title {
-  margin: 0.25rem 0 0;
-  font-weight: 600;
+  margin: var(--space-1) 0 0;
+  font-weight: var(--weight-strong);
 }
 
 .drafts-empty .note {
-  margin: 0.25rem 0 0;
+  margin: var(--space-1) 0 0;
 }
 
 /*
@@ -3762,8 +3842,8 @@ select:disabled {
 .modal__head {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
-  margin: 0 0 0.75rem;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
 }
 
 .modal__head h2 {
@@ -3777,7 +3857,7 @@ select:disabled {
 }
 
 .modal__text {
-  margin: 0 0 1rem;
+  margin: 0 0 var(--space-4);
   color: var(--muted);
 }
 
@@ -3789,7 +3869,7 @@ select:disabled {
 .modal__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .modal__actions button {
@@ -3797,7 +3877,7 @@ select:disabled {
 }
 
 .modal .notice {
-  margin: 1rem 0 0;
+  margin: var(--space-4) 0 0;
 }
 
 /*
@@ -3817,7 +3897,7 @@ select:disabled {
   display: inline-block;
   max-width: 100%;
   color: var(--brand);
-  font-weight: 600;
+  font-weight: var(--weight-strong);
   text-decoration: none;
   /* Un nombre largo recorta antes que empujar el estado y "Discard" fuera de la fila. */
   overflow: hidden;
@@ -3847,7 +3927,7 @@ select:disabled {
   display: inline-block;
   max-width: 100%;
   color: var(--brand);
-  font-weight: 600;
+  font-weight: var(--weight-strong);
   text-decoration: none;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3866,7 +3946,7 @@ select:disabled {
 }
 
 .published-template__header {
-  margin: 1rem 0;
+  margin: var(--space-4) 0;
 }
 
 .published-template__eyebrow,
@@ -3875,42 +3955,42 @@ select:disabled {
   margin: 0;
   color: var(--muted);
   font-size: var(--text-sm);
-  font-weight: 600;
+  font-weight: var(--weight-strong);
   letter-spacing: 0.03em;
   text-transform: uppercase;
 }
 
 .published-template__header h1 {
-  margin: 0.15rem 0 0;
+  margin: var(--space-0-5) 0 0;
 }
 
 .published-template__identity {
-  margin: 0.35rem 0 0;
+  margin: var(--space-1-5) 0 0;
   color: var(--muted);
 }
 
 .published-template__frozen {
-  margin-bottom: 1.5rem;
+  margin-bottom: var(--space-6);
 }
 
 .published-template__document {
   display: grid;
-  gap: 1rem;
+  gap: var(--space-4);
 }
 
 .published-template__section {
-  padding: 1rem;
+  padding: var(--space-4);
 }
 
 .published-template__section-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 1rem;
+  gap: var(--space-4);
 }
 
 .published-template__section-head h2 {
-  margin: 0.1rem 0 0;
+  margin: var(--space-0-5) 0 0;
 }
 
 .published-template__location {
@@ -3920,9 +4000,9 @@ select:disabled {
 }
 
 .published-template__condition {
-  margin: 0.85rem 0 0;
+  margin: var(--space-3) 0 0;
   border-left: 3px solid var(--line-control);
-  padding: 0.55rem 0.75rem;
+  padding: var(--space-2) var(--space-3);
   color: var(--muted);
   background: var(--tint-bg);
 }
@@ -3930,7 +4010,7 @@ select:disabled {
 .published-template__items {
   display: grid;
   gap: 0;
-  margin: 1rem 0 0;
+  margin: var(--space-4) 0 0;
   padding: 0;
   list-style: none;
 }
@@ -3938,25 +4018,25 @@ select:disabled {
 .published-template__item {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 0.75rem;
+  gap: var(--space-3);
   border-top: 1px solid var(--line);
-  padding: 1rem 0 0;
+  padding: var(--space-4) 0 0;
 }
 
 .published-template__item + .published-template__item {
-  margin-top: 1rem;
+  margin-top: var(--space-4);
 }
 
 .published-template__item-number {
   color: var(--muted);
-  font-weight: 600;
+  font-weight: var(--weight-strong);
 }
 
 .published-template__item-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 0.75rem;
+  gap: var(--space-3);
 }
 
 .published-template__item-head h3 {
@@ -3966,14 +4046,14 @@ select:disabled {
 .published-template__facts {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem 1.25rem;
-  margin: 0.65rem 0 0;
+  gap: var(--space-2) var(--space-5);
+  margin: var(--space-3) 0 0;
 }
 
 .published-template__facts div {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.25rem 0.5rem;
+  gap: var(--space-1) var(--space-2);
 }
 
 .published-template__facts dt {
@@ -3982,21 +4062,21 @@ select:disabled {
 
 .published-template__facts dd {
   margin: 0;
-  font-weight: 600;
+  font-weight: var(--weight-strong);
 }
 
 .published-template__details,
 .published-template__finding {
-  margin-top: 0.85rem;
+  margin-top: var(--space-3);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 0.75rem;
+  padding: var(--space-3);
 }
 
 .published-template__details ul,
 .published-template__finding ul {
-  margin: 0.35rem 0 0;
-  padding-left: 1.2rem;
+  margin: var(--space-1-5) 0 0;
+  padding-left: var(--space-5);
 }
 
 .published-template__finding {
@@ -4011,12 +4091,259 @@ select:disabled {
   }
 
   .published-template__location {
-    margin-top: 0.6rem;
+    margin-top: var(--space-2);
     text-align: left;
   }
 
   .published-template__item-head .status-pill {
     display: inline-block;
-    margin-top: 0.5rem;
+    margin-top: var(--space-2);
   }
+}
+
+/* ---------------------------------------------------------------------------
+   Iniciar sesión (`SignInRoute`).
+
+   La única pantalla con una tarjeta centrada, y por una razón que no es estética:
+   `.shell__main` mide hasta 120rem porque adentro hay grillas y tablas, y un formulario
+   de dos campos estirado a ese ancho deja los labels a un metro de sus inputs. Acá el
+   ancho lo fija el contenido —24rem, el ancho cómodo de un campo— y el resto es aire.
+
+   No inventa colores ni radios: la tarjeta es `--radius-lg` como toda tarjeta, el
+   cuadrado de marca repite `.sidebar__brand-mark` (mismo `--brand`, mismo tamaño de
+   icono) y el botón es `.button--primary`, el mismo de las demás pantallas.
+   --------------------------------------------------------------------------- */
+
+.auth {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Menos el relleno de `.shell__main`, para centrar en la ventana y no desbordarla. */
+  min-height: calc(100dvh - 2rem);
+  padding: var(--space-4) 0;
+  box-sizing: border-box;
+}
+
+.auth__panel {
+  width: min(24rem, 100%);
+}
+
+.auth__brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+  font-weight: var(--weight-strong);
+  letter-spacing: 0.01em;
+}
+
+.auth__brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 32px;
+  height: 32px;
+  border-radius: var(--radius);
+  background: var(--brand);
+  color: var(--paper);
+}
+
+.auth__card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  background: var(--paper);
+}
+
+.auth__title {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+
+.auth__lede {
+  margin: var(--space-1-5) 0 var(--space-5);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+/* Los campos no son `.item`: esa clase separa filas de una lista con una divisoria, y
+   acá una línea entre el email y la contraseña sugeriría dos bloques distintos. */
+.auth__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.auth__field label {
+  display: block;
+  margin-bottom: var(--space-1-5);
+  font-weight: var(--weight-strong);
+  font-size: var(--text-sm);
+}
+
+.auth__note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: var(--space-5) 0 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.auth__note-icon {
+  flex: none;
+  /* El icono se alinea con la primera línea del texto, no con el centro del párrafo. */
+  margin-top: var(--space-0-5);
+}
+
+/* ---------------------------------------------------------------------------
+   El roster (§6) — doscientas filas que se comparan entre sí.
+
+   UN `<table>` DE VERDAD, y es lo que lo separa del catálogo de ubicaciones de acá arriba:
+   las columnas son cinco y son siempre las mismas, así que no hay nada que armar con flex
+   ni un ancho que pasarle desde React. Lo que la tabla necesita es lo que el `.table` base
+   no da: respirar dentro de la tarjeta —el mismo aire horizontal que el buscador de arriba,
+   para que la primera columna arranque donde arranca el buscador— y no desbordar la tarjeta
+   en un teléfono.
+
+   POR ESO `overflow-x` Y NO UNA FILA QUE SE APILA. La fila apilada es lo correcto cuando la
+   fila es una FICHA —una ubicación y sus plantas—, y acá es lo contrario: se entra a esta
+   pantalla a leer una columna hacia abajo (quién tiene acceso hoy), y apilar es justamente
+   lo que destruye esa lectura. Deslizar conserva las columnas.
+   --------------------------------------------------------------------------- */
+
+/* El buscador y la tabla llegan hasta el borde de la tarjeta: el aire lo pone cada uno
+   adentro, y así la divisoria del encabezado cruza la tarjeta entera. */
+.roster {
+  padding: 0;
+  overflow: hidden;
+}
+
+.roster__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--line);
+}
+
+/* Un `<label>` con el ícono adentro: el borde lo pone el envoltorio y no el input, así el
+   foco encierra al ícono también. Mismo recurso que el buscador de ubicaciones. */
+.roster__search {
+  flex: 1 1 16rem;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 48px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--line-control);
+  border-radius: var(--radius);
+  color: var(--muted);
+}
+
+.roster__search:focus-within {
+  border-color: var(--brand);
+}
+
+.roster__search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  padding: 0;
+  background: transparent;
+  font: inherit;
+  color: var(--ink);
+}
+
+/* Para el lector de pantalla y nada más: la etiqueta del buscador —un placeholder no es una
+   etiqueta— y el `<caption>` que dice de qué planta es la tabla. A la vista las dos cosas
+   ya las dice el encabezado de la pantalla, y repetirlas arriba de la tabla era decir dos
+   veces lo mismo. */
+.roster__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.roster__count {
+  margin-left: auto;
+  font-size: var(--text-sm);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Las dos notas de lista vacía ocupan el lugar de la tabla, así que llevan su aire. */
+.roster__body > .note {
+  margin: 0;
+  padding: var(--space-4);
+}
+
+.roster__scroll {
+  overflow-x: auto;
+}
+
+.roster__table {
+  margin: 0;
+  /* La tabla nunca es más angosta que esto: por debajo, deslizar es mejor que cinco
+     columnas comprimidas a una palabra por renglón. */
+  min-width: 44rem;
+}
+
+.roster__table th,
+.roster__table td {
+  padding: var(--space-3) var(--space-4);
+}
+
+/* El encabezado, con el mismo tratamiento que el del catálogo: tinte, versalitas y peso.
+   Es lo que marca dónde empieza el cuerpo cuando la tabla se desliza. */
+.roster__table thead th {
+  background: var(--tint-bg);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+/* El nombre es lo que se busca en la fila, así que carga el peso; el resto de la fila es
+   contexto. El `.table` base lo deja normal porque ahí no compite con una píldora. */
+.roster__table tbody th {
+  font-weight: var(--weight-strong);
+  white-space: nowrap;
+}
+
+/* Deslizar el ojo por doscientas filas de cinco columnas es donde se pierde el renglón: el
+   tinte al pasar por encima es lo que lo devuelve. */
+.roster__table tbody tr:hover {
+  background: var(--tint-bg);
+}
+
+/* La última fila no dibuja su divisoria: la del borde de la tarjeta ya está ahí, y dos
+   líneas a 1px de distancia se ven como un error de dibujo. */
+.roster__table tbody tr:last-child th,
+.roster__table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+/* El número de empleado es lo que se compara columna abajo cuando dos personas se llaman
+   igual: cifras de ancho fijo o no se comparan. */
+.roster__number {
+  font-variant-numeric: tabular-nums;
+}
+
+.roster__email {
+  color: var(--muted);
+}
+
+/* La acción de una fila es del tamaño de su texto y no del ancho de la celda: `--outline` y
+   `--danger-quiet` toman el ancho entero, que en una tabla estira la columna hasta comerse
+   el nombre. El piso de 48px del `button` base se queda (ADR-010). */
+.roster__action {
+  width: auto;
+  white-space: nowrap;
 }

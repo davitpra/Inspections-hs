@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { ScheduledInspection } from '@hs/contracts';
 
-import { monthName } from '../../presentation/dates';
+import { periodLabel } from '../../presentation/dates';
 import { OpenPeriodForm } from './OpenPeriodForm';
 
 /**
@@ -34,7 +34,8 @@ export function ReopenPeriodDialog({
   return (
     <dialog ref={dialogRef} className="modal" onClose={onClose}>
       <h2>
-        Schedule {monthName(inspection.period_start)} — {inspection.template_name} again?
+        Schedule {periodLabel(inspection.period_start, inspection.period_months)} —{' '}
+        {inspection.template_name} again?
       </h2>
 
       <p>
@@ -52,9 +53,10 @@ export function ReopenPeriodDialog({
           template_id: inspection.template_id,
           template_name: inspection.template_name,
           period_start: inspection.period_start,
+          period_months: inspection.period_months,
         }}
         siteId={siteId}
-        action="Schedule this month again"
+        action="Schedule this period again"
         onOpened={() => dialogRef.current?.close()}
       />
 

@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
+import type { PoolClient } from 'pg';
 import {
+  draftFromDocument,
   draftIssues,
   emptyDraftDocument,
   normalizeDraft,
@@ -19,14 +21,17 @@ import { LATEST_PUBLISHED_VERSION_CTE } from './published-version.sql';
 import { templateKeyFromName } from './template-key';
 import {
   templateDraftForbidden,
+  templateDraftNameLocked,
   templateDraftNotPublishable,
   templateDraftNameTaken,
   templateDraftNameUnusable,
   templateDraftNotFound,
   templateDraftSiteDeactivated,
   templateDraftSiteOutOfScope,
+  templateItemDeactivated,
   templateItemKeyTaken,
   templateKeyTaken,
+  templateNotFound,
   templateVersionNotFound,
 } from './templates.errors';
 import {
@@ -34,6 +39,9 @@ import {
   discardDraft,
   findDraft,
   findDrafts,
+  findLiveRevisionDraft,
+  findRegisteredItems,
+  findTemplateForRevision,
   insertDraft,
   insertTemplate,
   insertVersion,
@@ -213,6 +221,58 @@ export class TemplatesService {
     });
   }
 
+  /**
+   * Revisar una plantilla publicada: un borrador sembrado con la última versión.
+   *
+   * **La versión N+1 se escribe editando la N.** Empezar de cero sería empezar con `item_key`
+   * nuevos, y ahí la serie de recurrencia se parte: «la misma guarda falta otra vez» dejaría de
+   * ser una pregunta que se puede hacer, que es lo único que el modelo de identidad dual existe
+   * para garantizar. Por eso se siembra, y por eso el editor no deja tocar la clave de un ítem.
+   *
+   * **La clave y el nombre se HEREDAN, no se derivan.** `templateKeyFromName` podría dar otra
+   * —el nombre pudo cambiar de estilo, o la clave pudo venir de un seed escrito a mano— y la
+   * clave de la plantilla ya existe: derivarla de nuevo sería inventar una segunda respuesta.
+   *
+   * **Es idempotente.** Si ya hay una revisión viva, se devuelve esa. Hay a lo sumo una y lo
+   * garantiza `template_draft_revision_live_idx` (0028 §2); un `409` obligaría a la pantalla a
+   * buscar en el listado cuál era, cuando lo que el coordinador quiere es llegar a su trabajo
+   * en curso.
+   *
+   * El alcance inicial es el de la sesión, igual que al crear: la plantilla publicada no lleva
+   * ninguno (`### Requirement: The plants a draft named do not travel to the published
+   * template`), así que no hay nada que heredar.
+   */
+  async reviseTemplate(session: SessionScope, templateId: string): Promise<TemplateDraft> {
+    requireCoordinator(session);
+
+    return this.db.withSessionClient(session, async (client) => {
+      const template = await findTemplateForRevision(client, templateId);
+
+      if (!template) throw templateNotFound();
+
+      // Existe y no publicó nada: no hay versión de la cual salir. Es un caso que solo puede
+      // dejar un seed a medio cargar, y `list` ya la deja afuera por el mismo motivo.
+      if (!template.document || template.version_id === null) throw templateVersionNotFound();
+
+      const live = await findLiveRevisionDraft(client, templateId);
+
+      if (live) return toDraft(live);
+
+      const siteIds = await activeSiteIds(client, session.siteIds);
+
+      const created = await insertDraft(client, {
+        key: template.key,
+        name: template.name,
+        document: draftFromDocument(template.document),
+        createdBy: session.userId,
+        siteIds,
+        templateId: template.id,
+      });
+
+      return toDraft(created);
+    });
+  }
+
   async getDraft(session: SessionScope, id: string): Promise<TemplateDraft> {
     requireCoordinator(session);
 
@@ -226,7 +286,17 @@ export class TemplatesService {
   }
 
   /**
-   * Publica la versión 1 que describe el borrador y consume el borrador en la misma transacción.
+   * Publica la próxima versión que describe el borrador y lo consume en la misma transacción.
+   *
+   * DOS RAMAS Y UNA SOLA DIFERENCIA: un borrador que no nombra plantilla la crea primero; uno
+   * de revisión no escribe nada en `template`. Todo lo demás —las reglas de publicabilidad, el
+   * documento normalizado, el registro de los `item_key` nuevos, la versión, el consumo del
+   * borrador— es exactamente lo mismo, y por eso es un `if` de tres líneas y no dos métodos.
+   *
+   * EL NÚMERO DE VERSIÓN NO SE DECIDE ACÁ. `insertVersion` propone `max + 1` y
+   * `hs_template_version_next()` lo recalcula bajo su advisory lock. Una plantilla recién
+   * insertada tiene máximo cero, así que la primera versión sale 1 sin ninguna rama.
+   *
    * `draftIssues` y `templateDocumentSchema` son las mismas reglas que usa el builder y el motor.
    */
   async publishDraft(session: SessionScope, id: string): Promise<PublishedTemplate> {
@@ -246,26 +316,12 @@ export class TemplatesService {
         section.items.map((item) => item.item_key),
       );
 
-      let template: { id: string };
+      const templateId = draft.template_id ?? (await createTemplate(client, draft)).id;
 
-      try {
-        template = await insertTemplate(client, { key: draft.key, name: draft.name });
-      } catch (caught) {
-        if (isTemplateKeyUniqueViolation(caught)) throw templateKeyTaken();
-
-        throw caught;
-      }
-
-      try {
-        await registerItems(client, template.id, itemKeys);
-      } catch (caught) {
-        if (isTemplateItemKeyUniqueViolation(caught)) throw templateItemKeyTaken();
-
-        throw caught;
-      }
+      await registerNewItems(client, templateId, itemKeys);
 
       const version = await insertVersion(client, {
-        templateId: template.id,
+        templateId,
         document,
         publishedBy: session.userId,
       });
@@ -275,7 +331,7 @@ export class TemplatesService {
       }
 
       return {
-        template_id: template.id,
+        template_id: templateId,
         template_version_id: version.id,
         version: version.version,
       };
@@ -314,13 +370,22 @@ export class TemplatesService {
       // Primero se comprueba que el borrador siga vivo. Así un borrador publicado o descartado
       // siempre devuelve `template_draft_not_found`, sin que una colisión de nombre oculte su
       // estado terminal.
-      if (!(await findDraft(client, id))) throw templateDraftNotFound();
+      const live = await findDraft(client, id);
 
-      // Renombrar tiene que respetar la misma unicidad que crear: el nombre es la
-      // identidad de un borrador (0017), y dos renglones iguales en el listado no se
-      // distinguen por nada que el autor vea. La `key` no se revisa porque no se
-      // mueve — no está en el GRANT UPDATE de 0016 §4.
-      if (await isNameTakenByAnother(client, name, id)) {
+      if (!live) throw templateDraftNotFound();
+
+      if (live.template_id !== null) {
+        // UNA REVISIÓN NO RENOMBRA. `template.name` no lo puede actualizar nadie —`hs_app` no
+        // tiene UPDATE sobre `template` desde 0003 §9—, así que un nombre distinto se guardaría
+        // en el borrador, se mostraría en el builder y la publicación lo ignoraría: dos
+        // respuestas a la misma pregunta. El editor lo muestra de solo lectura; llegar acá con
+        // otro nombre es un cliente desincronizado.
+        if (name !== live.name) throw templateDraftNameLocked();
+      } else if (await isNameTakenByAnother(client, name, id)) {
+        // Renombrar tiene que respetar la misma unicidad que crear: el nombre es la
+        // identidad de un borrador (0017), y dos renglones iguales en el listado no se
+        // distinguen por nada que el autor vea. La `key` no se revisa porque no se
+        // mueve — no está en el GRANT UPDATE de 0016 §4.
         throw templateDraftNameTaken(name);
       }
 
@@ -390,7 +455,73 @@ function toSummary(row: TemplateDraftRecord): TemplateDraftSummary {
     updated_at: row.updated_at.toISOString(),
     publishable: draftIssues(row.document).length === 0,
     site_ids: row.site_ids,
+    template_id: row.template_id,
+    next_version: row.next_version,
   };
+}
+
+/**
+ * La plantilla que va a llevar la primera versión.
+ *
+ * Solo corre para un borrador que no nombra ninguna. La refutación autoritativa de la clave es
+ * este `UNIQUE`: la comprobación al nombrar el borrador es una cortesía, porque entre las dos
+ * otra publicación pudo tomarla.
+ */
+async function createTemplate(
+  client: PoolClient,
+  draft: TemplateDraftRecord,
+): Promise<{ id: string }> {
+  try {
+    return await insertTemplate(client, { key: draft.key, name: draft.name });
+  } catch (caught) {
+    if (isTemplateKeyUniqueViolation(caught)) throw templateKeyTaken();
+
+    throw caught;
+  }
+}
+
+/**
+ * Registra en `template_item` SOLO los conceptos que el documento estrena.
+ *
+ * Los que la revisión trae de la versión anterior ya tienen su fila y no se tocan: esa fila es
+ * la identidad del concepto y su `created_at` dice cuándo la organización empezó a preguntar
+ * eso. Reescribirla sería reescribir el origen de la serie.
+ *
+ * Antes de escribir, lo ya registrado se parte en dos rechazos:
+ *
+ *   - DE OTRA PLANTILLA — `item_key` es global y write-once. Aceptarlo fundiría las series de
+ *     recurrencia de dos plantillas, y eso no se deshace.
+ *   - DESACTIVADO — `deactivated_at` dice «esta pregunta no se vuelve a hacer»; una versión
+ *     nueva que la declare la estaría haciendo.
+ *
+ * El `23505` se sigue traduciendo igual: entre la lectura y el INSERT otra publicación puede
+ * registrar la misma clave, y la garantía es la PK, no esta lectura.
+ */
+async function registerNewItems(
+  client: PoolClient,
+  templateId: string,
+  itemKeys: readonly string[],
+): Promise<void> {
+  const registered = await findRegisteredItems(client, itemKeys);
+
+  const deactivated = registered.filter((item) => item.deactivated).map((item) => item.item_key);
+
+  if (deactivated.length > 0) throw templateItemDeactivated(deactivated);
+
+  if (registered.some((item) => item.template_id !== templateId)) throw templateItemKeyTaken();
+
+  const known = new Set(registered.map((item) => item.item_key));
+  const fresh = itemKeys.filter((itemKey) => !known.has(itemKey));
+
+  if (fresh.length === 0) return;
+
+  try {
+    await registerItems(client, templateId, fresh);
+  } catch (caught) {
+    if (isTemplateItemKeyUniqueViolation(caught)) throw templateItemKeyTaken();
+
+    throw caught;
+  }
 }
 
 function toDraft(row: TemplateDraftRecord): TemplateDraft {

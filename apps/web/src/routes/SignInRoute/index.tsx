@@ -1,6 +1,7 @@
 import { useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 
+import { CrossIcon, LockIcon } from '../../components/icons';
 import { sessionClient } from '../../api/client';
 import { messageFor } from './presentation';
 import { useAppSession } from '../../app/session-context';
@@ -18,6 +19,11 @@ import { useAppSession } from '../../app/session-context';
  * junto con el resto. Con él se fue el bloque que detectaba una sesión de alcance
  * limitado: sin `purpose` en el contrato, toda sesión que el servidor devuelve es
  * plena, y no hay ningún estado intermedio que esta pantalla tenga que explicar.
+ *
+ * La tarjeta centrada es la única de la aplicación: `.shell__main` mide 120rem y un
+ * formulario de dos campos estirado a ese ancho no se lee como una puerta, se lee como
+ * una pantalla a medio cargar. La marca la repite entera —el cuadrado y el nombre— y no
+ * la hereda del sidebar, porque acá el sidebar todavía no existe.
  */
 export function SignInRoute(): React.JSX.Element {
   const navigate = useNavigate();
@@ -49,49 +55,72 @@ export function SignInRoute(): React.JSX.Element {
   };
 
   return (
-    <>
-      <h1>Sign in</h1>
+    <div className="auth">
+      <div className="auth__panel">
+        <div className="auth__brand">
+          <span className="auth__brand-mark">
+            <CrossIcon size={18} />
+          </span>
+          <span>Health &amp; Safety</span>
+        </div>
 
-      <form onSubmit={(event) => void submit(event)}>
-        <p className="item">
-          <label htmlFor="email">Work email</label>
-          <input
-            id="email"
-            type="email"
-            autoComplete="username"
-            required
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-          />
-        </p>
-
-        <p className="item">
-          <label htmlFor="password">Password</label>
-          <input
-            id="password"
-            type="password"
-            autoComplete="current-password"
-            required
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
-        </p>
-
-        {error ? (
-          <p className="notice notice--warn" role="alert">
-            {error}
+        <div className="auth__card">
+          <h1 className="auth__title">Sign in</h1>
+          <p className="auth__lede">
+            Use the account your coordinator issued you.
           </p>
-        ) : null}
 
-        <button type="submit" disabled={busy}>
-          {busy ? 'Signing in…' : 'Sign in'}
-        </button>
-      </form>
+          <form className="auth__form" onSubmit={(event) => void submit(event)}>
+            <div className="auth__field">
+              <label htmlFor="email">Work email</label>
+              <input
+                id="email"
+                type="email"
+                autoComplete="username"
+                inputMode="email"
+                placeholder="you@company.com"
+                required
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+              />
+            </div>
 
-      <p className="notice">
-        Signing in needs a connection. Once you are in, preparing an inspection is the last
-        thing that does — the walkthrough itself runs with no network.
-      </p>
-    </>
+            <div className="auth__field">
+              <label htmlFor="password">Password</label>
+              <input
+                id="password"
+                type="password"
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+            </div>
+
+            {error ? (
+              <p className="notice notice--warn" role="alert">
+                {error}
+              </p>
+            ) : null}
+
+            <button className="button--primary" type="submit" disabled={busy}>
+              {busy ? 'Signing in…' : 'Sign in'}
+            </button>
+          </form>
+        </div>
+
+        {/* Fuera de la tarjeta: no es un campo ni un error, es lo que hay que saber antes
+            de bajar al piso de planta. */}
+        <p className="auth__note">
+          <span className="auth__note-icon">
+            <LockIcon size={16} />
+          </span>
+          <span>
+            Signing in needs a connection. Once you are in, preparing an inspection is the
+            last thing that does — the walkthrough itself runs with no network.
+          </span>
+        </p>
+      </div>
+    </div>
   );
 }

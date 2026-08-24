@@ -26,7 +26,7 @@ vi.mock('../../offline/prefetch', () => ({
 
 /**
  * `captureEligibility` viaja SIN doble: es la regla real que este test verifica, igual
- * que `PendingRoute` deja `isDiscardable` sin reemplazar. Lo que se dobla es la
+ * que `InspectorHomeRoute` deja `isDiscardable` sin reemplazar. Lo que se dobla es la
  * lectura/escritura de Dexie, no la decisión.
  */
 vi.mock('../../offline/drafts', async (importOriginal) => ({
@@ -129,7 +129,7 @@ describe('elegibilidad de captura', () => {
     findDraft.mockResolvedValue(undefined);
     openDraft.mockResolvedValue({ client_submission_id: 'draft-1' });
     loadDraft.mockResolvedValue({
-      draft: { client_submission_id: 'draft-1', status: 'capturing' },
+      draft: { client_submission_id: 'draft-1', status: 'capturing', template_version_id: VERSION },
       answers: {},
       photos: [],
       findings: [],
@@ -159,7 +159,7 @@ describe('elegibilidad de captura', () => {
     findDraft.mockResolvedValue({ client_submission_id: 'draft-1' });
     openDraft.mockResolvedValue({ client_submission_id: 'draft-1' });
     loadDraft.mockResolvedValue({
-      draft: { client_submission_id: 'draft-1', status: 'capturing' },
+      draft: { client_submission_id: 'draft-1', status: 'capturing', template_version_id: VERSION },
       answers: {},
       photos: [],
       findings: [],
@@ -181,7 +181,7 @@ describe('elegibilidad de captura', () => {
     findDraft.mockResolvedValue(undefined);
     openDraft.mockResolvedValue({ client_submission_id: 'draft-1' });
     loadDraft.mockResolvedValue({
-      draft: { client_submission_id: 'draft-1', status: 'capturing' },
+      draft: { client_submission_id: 'draft-1', status: 'capturing', template_version_id: VERSION },
       answers: {},
       photos: [],
       findings: [],
@@ -192,6 +192,64 @@ describe('elegibilidad de captura', () => {
 
     await waitFor(() => expect(openDraft).toHaveBeenCalled());
     expect(screen.queryByText('Not your inspection')).toBeNull();
+  });
+});
+
+/**
+ * Spec: "A draft bound to a version the device no longer holds is named".
+ *
+ * `documentForDraft` ya se negaba a interpretar un borrador con una versión que no es la
+ * suya —y hace bien: un envío construido con el documento equivocado vuelve rechazado
+ * DESPUÉS del recorrido— pero devolvía el mismo `null` que "todavía no cargó", y la
+ * pantalla se quedaba en "Loading the inspection…" para siempre. Sin texto y sin salida.
+ */
+describe('un borrador atado a una versión que el dispositivo ya no tiene', () => {
+  const OTHER_VERSION = '66666666-6666-4666-8666-666666666666';
+
+  function mismatched(status: 'capturing' | 'signed') {
+    useAppSession.mockReturnValue({ account: { userId: ACCOUNT }, ready: true });
+    missingForField.mockResolvedValue([]);
+    storedTemplateVersion.mockResolvedValue({
+      site_id: SITE,
+      template_version_id: OTHER_VERSION,
+      inspector_id: ACCOUNT,
+    });
+    storedLocations.mockResolvedValue([]);
+    findDraft.mockResolvedValue({ client_submission_id: 'draft-1' });
+    openDraft.mockResolvedValue({ client_submission_id: 'draft-1' });
+    loadDraft.mockResolvedValue({
+      draft: { client_submission_id: 'draft-1', status, template_version_id: VERSION },
+      answers: {},
+      photos: [],
+      findings: [],
+    });
+    // Lo que de verdad devuelve la función real ante el desajuste.
+    documentForDraft.mockResolvedValue(null);
+  }
+
+  it('lo nombra en vez de quedarse cargando', async () => {
+    mismatched('capturing');
+
+    renderRoute();
+
+    expect(await screen.findByText('Started against a different version')).toBeTruthy();
+    expect(screen.getByText(/Discard this draft/)).toBeTruthy();
+    expect(screen.queryByText('Loading the inspection…')).toBeNull();
+  });
+
+  /**
+   * Firmado no se puede descartar (`isDiscardable`) y el servidor lo va a rechazar. El
+   * texto lo dice así: prometer un descarte que la base va a negar sería peor que la mala
+   * noticia.
+   */
+  it('no promete descartar un borrador ya firmado', async () => {
+    mismatched('signed');
+
+    renderRoute();
+
+    expect(await screen.findByText('Started against a different version')).toBeTruthy();
+    expect(screen.queryByText(/Discard this draft/)).toBeNull();
+    expect(screen.getByText(/the server will refuse it/)).toBeTruthy();
   });
 });
 
@@ -267,5 +325,94 @@ describe('la vista previa de una asignación', () => {
 
     expect(await screen.findByText('Preview unavailable')).toBeTruthy();
     expect(openDraft).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Spec offline-capture: "A negative answer shows the corrective action its question
+ * prescribes".
+ *
+ * El borrador se carga CON la respuesta negativa ya puesta en vez de hacer clic en el
+ * control, y es a propósito: hacer clic ejercitaría `saveAnswer` contra Dexie —que acá va
+ * sin doble— y este change no toca esa escritura. Lo que se fija es lo que se ve cuando
+ * el ítem ya es negativo, que es exactamente lo que el change agrega. Quién es negativo
+ * lo sigue decidiendo `negativeAnswers` de `@hs/forms`, sin doble.
+ */
+describe('la acción correctiva prescrita', () => {
+  const PRESCRIBED = 'Stop the machine and refit the guard before it runs again.';
+
+  const DOCUMENT = {
+    sections: [
+      {
+        section_key: 'machine_guarding',
+        section_title: 'Machine guarding',
+        items: [
+          {
+            item_key: 'guard_in_place',
+            prompt: 'Is the guard in place?',
+            position: 1,
+            response_type: 'yes_no',
+            required: true,
+            finding: { corrective_action: PRESCRIBED },
+          },
+          {
+            item_key: 'floors_clear',
+            prompt: 'Are floors clear of obstructions?',
+            position: 2,
+            response_type: 'yes_no',
+            required: true,
+          },
+        ],
+      },
+    ],
+  };
+
+  function openWithNegativeAnswers(): void {
+    useAppSession.mockReturnValue({ account: { userId: ACCOUNT }, ready: true });
+    missingForField.mockResolvedValue([]);
+    storedTemplateVersion.mockResolvedValue({
+      site_id: SITE,
+      template_version_id: VERSION,
+      inspector_id: ACCOUNT,
+    });
+    storedLocations.mockResolvedValue([]);
+    findDraft.mockResolvedValue({ client_submission_id: 'draft-1' });
+    openDraft.mockResolvedValue({ client_submission_id: 'draft-1' });
+    loadDraft.mockResolvedValue({
+      draft: { client_submission_id: 'draft-1', status: 'capturing', template_version_id: VERSION },
+      answers: { guard_in_place: false, floors_clear: false },
+      photos: [],
+      findings: [
+        { client_submission_id: 'draft-1', item_key: 'guard_in_place', description: '' },
+        { client_submission_id: 'draft-1', item_key: 'floors_clear', description: '' },
+      ],
+    });
+    documentForDraft.mockResolvedValue(DOCUMENT);
+
+    renderRoute();
+  }
+
+  it('muestra lo prescrito y deja la descripción del inspector vacía', async () => {
+    openWithNegativeAnswers();
+
+    expect(await screen.findByText(PRESCRIBED)).toBeTruthy();
+    expect(screen.getAllByText('Corrective action')).toHaveLength(1);
+
+    // Lo prescrito no es lo observado: el campo sigue esperando lo que el inspector vio.
+    // Hay dos, uno por ítem negativo; el de la pregunta que prescribe es el primero.
+    const descriptions = screen.getAllByLabelText('What is wrong?') as HTMLTextAreaElement[];
+    expect(descriptions[0]!.value).toBe('');
+    expect(descriptions[0]!.placeholder).toBe('');
+  });
+
+  it('no muestra nada para una pregunta que no prescribe', async () => {
+    openWithNegativeAnswers();
+
+    // Las dos respuestas son negativas y las dos piden su hallazgo…
+    expect(await screen.findByText(PRESCRIBED)).toBeTruthy();
+    expect(screen.getAllByText('This needs a finding')).toHaveLength(2);
+
+    // …pero sólo una de las dos trae prescripción, y la otra no dibuja ni el encabezado.
+    expect(screen.getAllByText('Corrective action')).toHaveLength(1);
   });
 });

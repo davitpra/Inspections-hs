@@ -151,6 +151,31 @@ export function normalizeDraft(draft: TemplateDraftDocument): TemplateDocument {
 }
 
 /**
+ * La inversa de `normalizeDraft`: el documento congelado, de vuelta en forma de
+ * borrador.
+ *
+ * Saca `position` de cada sección y de cada ítem, y no toca NADA más. El orden no
+ * se pierde: pasa de estar en un campo a estar en el arreglo, que es donde el
+ * borrador lo lleva (diferencia 1 de la cabecera de este archivo).
+ *
+ * Existe para revisar una plantilla publicada: la versión N+1 se escribe editando
+ * la N, y cada `item_key` tiene que llegar intacto porque es lo que mantiene una
+ * sola serie de recurrencia a través de las versiones.
+ *
+ * `draftFromDocument(normalizeDraft(d))` devuelve `d`. La otra vuelta no es una
+ * identidad y no puede serlo: `normalizeDraft` inventa las `position` a partir del
+ * orden, así que un documento con posiciones que no son 1..n vuelve con otras.
+ */
+export function draftFromDocument(document: TemplateDocument): TemplateDraftDocument {
+  return {
+    sections: document.sections.map(({ position: _sectionPosition, items, ...section }) => ({
+      ...section,
+      items: items.map(({ position: _itemPosition, ...item }) => item),
+    })),
+  } as TemplateDraftDocument;
+}
+
+/**
  * Lo que le falta a un borrador para poder publicarse.
  *
  * `path` ubica el problema dentro del borrador —`['sections', 2, 'items', 0]`—

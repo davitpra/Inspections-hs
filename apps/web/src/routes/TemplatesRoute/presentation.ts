@@ -43,6 +43,19 @@ export function draftCountLabel(count: number): string {
   return count === 1 ? '1 draft' : `${count} drafts`;
 }
 
+/**
+ * Qué es este borrador: una plantilla nueva o la corrección de una publicada.
+ *
+ * Va en el renglón del listado, al lado de la clave, porque un borrador de revisión lleva
+ * exactamente la misma clave y el mismo nombre que la plantilla que corrige: sin esto, la
+ * única forma de distinguirlo de uno nuevo sería abrirlo.
+ */
+export function draftKindLabel(draft: TemplateDraftSummary): string {
+  return draft.template_id === null
+    ? 'New template'
+    : `Revision · version ${draft.next_version}`;
+}
+
 /** Las publicadas son referencia: se buscan por nombre, no por la fecha de publicación. */
 export function sortPublishedTemplates(
   templates: readonly TemplateOption[],

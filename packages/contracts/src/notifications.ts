@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { severitySchema } from './findings.js';
+import { periodMonthsSchema } from './compliance.js';
 import { incidentClassificationSchema } from './incidents.js';
 
 /**
@@ -25,16 +26,30 @@ export const notificationKindSchema = z.enum(NOTIFICATION_KINDS);
 
 export type NotificationKind = z.infer<typeof notificationKindSchema>;
 
-/** El payload de `inspection_period_opened`: qué período se abrió y con qué. */
+/**
+ * El payload de `inspection_period_opened`: qué se abrió en esa planta y con qué.
+ *
+ * **EL PERÍODO ESTÁ EN CADA ENTRADA Y NO ARRIBA**, y desde 0029 no puede ser de otra
+ * manera: dos reglas de la misma planta pueden tener frecuencias distintas, así que una
+ * corrida que abre la mensual de agosto y el trimestre que empieza en agosto produce dos
+ * períodos que no terminan el mismo día. Un `period_start` al tope tendría que mentir
+ * sobre uno de los dos.
+ *
+ * Lo que queda arriba es `opened_for_month`: el mes que la corrida estaba resolviendo, que
+ * es lo que la deduplicación usa como clave y lo que la tarjeta lee para titular. No es el
+ * período de nadie en particular — es la corrida.
+ */
 export const inspectionPeriodOpenedPayloadSchema = z.strictObject({
-  period_start: z.iso.date(),
-  period_end: z.iso.date(),
+  opened_for_month: z.iso.date(),
   opened: z.array(
     z.strictObject({
       scheduled_inspection_id: z.uuid(),
       template_id: z.uuid(),
       template_name: z.string().min(1),
       inspector_id: z.uuid().nullable(),
+      period_start: z.iso.date(),
+      period_end: z.iso.date(),
+      period_months: periodMonthsSchema,
     }),
   ),
 });

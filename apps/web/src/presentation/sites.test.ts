@@ -21,10 +21,10 @@ describe('las plantas que se pueden elegir', () => {
     expect(activeSites([glencoe, closed]).map((each) => each.id)).toEqual([GLENCOE]);
   });
 
-  it('van en orden alfabético, no en el que vino la respuesta', () => {
+  it('conserva el orden de la respuesta —antigüedad— y no lo reordena por nombre', () => {
     expect(activeSites([stThomas, glencoe]).map((each) => each.name)).toEqual([
-      'Glencoe',
       'St. Thomas',
+      'Glencoe',
     ]);
   });
 });
@@ -34,15 +34,15 @@ describe('la planta que mira la consola', () => {
     expect(resolveSiteId([glencoe, stThomas], scope, ST_THOMAS)).toBe(ST_THOMAS);
   });
 
-  it('sin elección abre en la primera del alcance, no en la primera alfabética', () => {
-    // El selector ordena alfabéticamente —Glencoe antes que St. Thomas—, pero la planta por
-    // defecto es la de la cuenta: ordenar acá movería la consola sin que nadie la toque.
-    expect(resolveSiteId([glencoe, stThomas], scope, null)).toBe(ST_THOMAS);
+  it('sin elección abre en la primera opción, no en la primera del alcance', () => {
+    // `scope` empieza por St. Thomas —los ids del alcance van ordenados por UUID, que es
+    // azar—, pero la consola abre en la planta más antigua, que es la primera de la lista.
+    expect(resolveSiteId([glencoe, stThomas], scope, null)).toBe(GLENCOE);
   });
 
-  it('salta la primera del alcance cuando está dada de baja', () => {
-    // El alcance empieza por St. Thomas y St. Thomas está cerrada: sin este filtro la
-    // consola abría justo en el calendario vacío.
+  it('salta la primera opción cuando está dada de baja', () => {
+    // La más antigua es St. Thomas y St. Thomas está cerrada: sin este filtro la consola
+    // abría justo en el calendario vacío.
     const closed = site(ST_THOMAS, 'St. Thomas', '2026-08-21T12:00:00.000Z');
 
     expect(resolveSiteId([closed, glencoe], scope, null)).toBe(GLENCOE);

@@ -4,7 +4,9 @@ import { Link, useParams } from '@tanstack/react-router';
 
 import { getPublishedTemplateVersion } from '../../api/templates';
 import { queryKeys } from '../../api/query-keys';
+import { useAppSession } from '../../app/session-context';
 import { GridIcon, InfoIcon } from '../../components/icons';
+import { canPublishTemplates } from '../../permissions/session';
 import { SectionCard } from './SectionCard';
 import { VersionHeader } from './VersionHeader';
 
@@ -13,9 +15,12 @@ import { VersionHeader } from './VersionHeader';
  *
  * Es online y de solo lectura: el documento llega por el id de la versión, se dibuja con el
  * orden del motor y ningún componente ofrece edición. Una corrección se publica como otra
- * versión, por eso esta pantalla explica que el documento está congelado.
+ * versión, por eso esta pantalla explica que el documento está congelado — y, para el
+ * coordinador, ofrece empezarla. Ese botón no vuelve editable nada de lo que se muestra: abre
+ * un borrador aparte.
  */
 export function PublishedTemplateRoute(): React.JSX.Element {
+  const { account } = useAppSession();
   const { versionId } = useParams({ from: '/templates/versions/$versionId' });
   const version = useQuery({
     queryKey: queryKeys.publishedTemplateVersion(versionId),
@@ -49,7 +54,7 @@ export function PublishedTemplateRoute(): React.JSX.Element {
 
   return (
     <>
-      <VersionHeader version={version.data} />
+      <VersionHeader version={version.data} canRevise={canPublishTemplates(account)} />
       <div className="published-template__document">
         {documentOrder.map(([section, items], index) => (
           <SectionCard

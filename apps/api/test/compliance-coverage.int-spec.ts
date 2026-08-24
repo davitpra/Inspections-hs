@@ -23,6 +23,7 @@ import { createTemplate, publishVersion, registerItems } from './helpers/templat
 
 const SITE_FULL_YEAR = 'c0117000-0000-4000-8000-000000000001';
 const SITE_STATES = 'c0117000-0000-4000-8000-000000000002';
+const SITE_QUARTERLY = 'c0117000-0000-4000-8000-000000000005';
 const SITE_RULES = 'c0117000-0000-4000-8000-000000000003';
 
 /** Un instante bien después de 2026: con este reloj, todo 2026 está cerrado. */
@@ -30,6 +31,7 @@ const AFTER_2026 = '2027-01-15T12:00:00.000Z';
 
 interface PeriodRow extends Record<string, unknown> {
   period_start: Date;
+  period_months: number;
   period_end: Date;
   status: 'completed' | 'missed' | 'cancelled' | 'open';
   scheduled_inspection_id: string | null;
@@ -51,6 +53,7 @@ beforeAll(async () => {
 
   await registerSite(db.migrator, SITE_FULL_YEAR, 'cvr-full');
   await registerSite(db.migrator, SITE_STATES, 'cvr-state');
+  await registerSite(db.migrator, SITE_QUARTERLY, 'cvr-quarter');
   await registerSite(db.migrator, SITE_RULES, 'cvr-rule');
 
   templateId = await createTemplate(db.migrator, 'coverage.monthly');
@@ -97,32 +100,42 @@ async function createRule(
   siteId: string,
   createdAt: string,
   deactivatedAt: string | null = null,
+  frequency: { frequencyMonths?: number; anchorMonth?: number } = {},
 ): Promise<void> {
   await inScope(
     db.app,
     [siteId],
-    `INSERT INTO inspection_schedule (site_id, template_id, created_at, deactivated_at)
-     VALUES ($1, $2, $3::timestamptz, $4::timestamptz)`,
-    [siteId, templateId, createdAt, deactivatedAt],
+    `INSERT INTO inspection_schedule
+       (site_id, template_id, frequency_months, anchor_month, created_at, deactivated_at)
+     VALUES ($1, $2, $3, $4, $5::timestamptz, $6::timestamptz)`,
+    [
+      siteId,
+      templateId,
+      frequency.frequencyMonths ?? 1,
+      frequency.anchorMonth ?? 1,
+      createdAt,
+      deactivatedAt,
+    ],
   );
 }
 
 async function schedule(
   siteId: string,
   periodStart: string,
-  options: { cancelledAt?: string; reason?: string } = {},
+  options: { cancelledAt?: string; reason?: string; periodMonths?: number } = {},
 ): Promise<string> {
   const [row] = await inScope<{ id: string }>(
     db.app,
     [siteId],
     `INSERT INTO scheduled_inspection
-       (site_id, period_start, template_id, template_version_id, inspector_id,
+       (site_id, period_start, period_months, template_id, template_version_id, inspector_id,
         cancelled_at, cancellation_reason)
-     VALUES ($1, $2::date, $3, $4, $5, $6::timestamptz, $7)
+     VALUES ($1, $2::date, $3, $4, $5, $6, $7::timestamptz, $8)
      RETURNING id`,
     [
       siteId,
       periodStart,
+      options.periodMonths ?? 1,
       templateId,
       versionId,
       inspector.accountId,
@@ -350,5 +363,66 @@ describe('el aislamiento', () => {
     ]);
 
     expect(rows).toHaveLength(0);
+  });
+});
+
+/**
+ * EL CASO QUE JUSTIFICA LA MIGRACIÓN 0029.
+ *
+ * Antes de la frecuencia, una plantilla trimestral era imposible de expresar: el sistema
+ * la habría reclamado doce veces al año y este mismo reporte —el que se le entrega al
+ * MLITSD— habría declarado ocho incumplimientos que nadie cometió.
+ */
+describe('un año de cobertura con una regla trimestral', () => {
+  beforeAll(async () => {
+    // Trimestral anclada en enero, viva desde diciembre de 2025.
+    await createRule(SITE_QUARTERLY, '2025-12-01T00:00:00Z', null, {
+      frequencyMonths: 3,
+      anchorMonth: 1,
+    });
+
+    // Tres de los cuatro trimestres inspeccionados; el de octubre no se abrió nunca.
+    for (const month of ['01', '04', '07']) {
+      const scheduledId = await schedule(SITE_QUARTERLY, `2026-${month}-01`, { periodMonths: 3 });
+      await submit(SITE_QUARTERLY, scheduledId, `2026-${month}-20T14:00:00Z`);
+    }
+  });
+
+  it('debe CUATRO períodos al año, no doce', async () => {
+    const rows = await coverage(SITE_QUARTERLY, '2026-01-01', '2026-12-31');
+
+    expect(counts(rows)).toEqual({ required: 4, completed: 3, missed: 1, cancelled: 0, open: 0 });
+  });
+
+  it('cada período cubre su trimestre entero', async () => {
+    const rows = await coverage(SITE_QUARTERLY, '2026-01-01', '2026-12-31');
+
+    expect(rows.map((row) => iso(row.period_start))).toEqual([
+      '2026-01-01',
+      '2026-04-01',
+      '2026-07-01',
+      '2026-10-01',
+    ]);
+    expect(iso(rows[0]!.period_end)).toBe('2026-03-31');
+    expect(iso(rows[3]!.period_end)).toBe('2026-12-31');
+  });
+
+  it('el trimestre que nunca se abrió se cuenta igual, y sin identificadores', async () => {
+    // La misma propiedad que el mes de abril del año mensual: lo que hace visible el
+    // período omitido es la REGLA, no la fila que no existe.
+    const rows = await coverage(SITE_QUARTERLY, '2026-01-01', '2026-12-31');
+    const q4 = rows.find((row) => iso(row.period_start) === '2026-10-01');
+
+    expect(q4?.status).toBe('missed');
+    expect(q4?.scheduled_inspection_id).toBeNull();
+    expect(q4?.period_months).toBe(3);
+  });
+
+  it('los meses de en medio del trimestre no son períodos', async () => {
+    const rows = await coverage(SITE_QUARTERLY, '2026-01-01', '2026-12-31');
+    const starts = rows.map((row) => iso(row.period_start));
+
+    expect(starts).not.toContain('2026-02-01');
+    expect(starts).not.toContain('2026-03-01');
   });
 });

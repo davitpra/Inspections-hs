@@ -95,6 +95,7 @@ export function PeriodsSection({
             <PeriodRow
               key={entry.inspection.id}
               inspection={entry.inspection}
+              year={year}
               siteId={siteId}
               canAdminister={canAdminister}
             />
@@ -102,6 +103,7 @@ export function PeriodsSection({
             <UnopenedPeriodRow
               key={`${entry.period.template_id}|${entry.period.period_start}`}
               period={entry.period}
+              year={year}
               siteId={siteId}
               canAdminister={canAdminister}
             />

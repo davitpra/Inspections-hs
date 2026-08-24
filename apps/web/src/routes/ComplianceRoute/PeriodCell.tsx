@@ -1,6 +1,7 @@
 import type { CompliancePeriod } from '@hs/contracts';
 
-import { STATUS_LABELS, monthLabel } from './presentation';
+import { periodLabel } from '../../presentation/dates';
+import { STATUS_LABELS } from './presentation';
 
 /**
  * Un período de la grilla.
@@ -13,7 +14,7 @@ import { STATUS_LABELS, monthLabel } from './presentation';
 export function PeriodCell({ period }: { period: CompliancePeriod }): React.JSX.Element {
   return (
     <li className={`period period--${period.status}`}>
-      <span className="period__month">{monthLabel(period.period_start)}</span>
+      <span className="period__month">{periodLabel(period.period_start, period.period_months)}</span>
       <span className="period__status">{STATUS_LABELS[period.status]}</span>
 
       {period.status === 'missed' && period.scheduled_inspection_id === null ? (

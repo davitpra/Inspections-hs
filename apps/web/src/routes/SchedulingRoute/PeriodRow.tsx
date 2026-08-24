@@ -3,9 +3,9 @@ import type { ScheduledInspection } from "@hs/contracts";
 
 import { CancelPeriodDialog } from "./CancelPeriodDialog";
 import { CalendarIcon } from "../../components/icons";
-import { monthName } from "../../presentation/dates";
 import { ReopenPeriodDialog } from "./ReopenPeriodDialog";
 import {
+  calendarLabel,
   inspectorLabel,
   isUnassigned,
   missedNote,
@@ -36,13 +36,17 @@ import { RowMenu } from "../../components/RowMenu";
  */
 export function PeriodRow({
   inspection,
+  year,
   siteId,
   canAdminister,
 }: {
   inspection: ScheduledInspection;
+  /** El año que muestra el calendario: el encabezado ya lo dice, la fila no lo repite. */
+  year: string;
   siteId: string;
   canAdminister: boolean;
 }): React.JSX.Element {
+  const label = calendarLabel(inspection.period_start, inspection.period_months, year);
   const [cancelling, setCancelling] = useState(false);
   const [reopening, setReopening] = useState(false);
   const cancelled = inspection.cancelled_at !== null;
@@ -56,7 +60,7 @@ export function PeriodRow({
   const actions = !canAdminister
     ? []
     : cancelled
-      ? [{ label: 'Schedule this month again', onSelect: () => setReopening(true) }]
+      ? [{ label: 'Schedule this period again', onSelect: () => setReopening(true) }]
       : [
           {
             label: 'Cancel this period',
@@ -74,7 +78,7 @@ export function PeriodRow({
           más del renglón, así el mes y su estado se acomodan sin contar con él. */}
       {actions.length > 0 ? (
         <RowMenu
-          label={`More actions for ${monthName(inspection.period_start)}`}
+          label={`More actions for ${label}`}
           actions={actions}
         />
       ) : null}
@@ -90,7 +94,7 @@ export function PeriodRow({
 
         <span className="period__title">
           <span className="period__month">
-            {monthName(inspection.period_start)}
+            {label}
           </span>
         </span>
 

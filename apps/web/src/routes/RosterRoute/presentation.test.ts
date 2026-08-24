@@ -14,7 +14,9 @@ import {
   reissueButtonLabel,
   removeButtonLabel,
   removeButtonText,
+  roleCellClass,
   roleCellLabel,
+  rosterCounts,
   showsAccountRole,
   sortRoster,
 } from './presentation';
@@ -422,5 +424,56 @@ describe('sortRoster', () => {
     sortRoster(rows);
 
     expect(rows.map((row) => row.id)).toEqual(['z', 'a']);
+  });
+});
+
+describe('roleCellClass', () => {
+  it('quien ya entra se pinta como algo resuelto', () => {
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true });
+
+    expect(roleCellClass(row)).toBe('status-pill status-pill--ready');
+  });
+
+  // Es lo mismo que la app pinta en ámbar en todas partes: algo que espera a alguien.
+  it('la invitación sin aceptar se pinta como algo que espera', () => {
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: false });
+
+    expect(roleCellClass(row)).toBe('status-pill status-pill--not-ready');
+  });
+
+  // No tener acceso es la situación normal del roster, no una falta: gris apagado.
+  it('quien no tiene cuenta se pinta apagado', () => {
+    expect(roleCellClass(withAccount())).toBe('status-pill status-pill--not-opened');
+  });
+
+  it('la cuenta dada de baja se pinta como la de quien nunca tuvo una', () => {
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: false, can_sign_in: false });
+
+    expect(roleCellClass(row)).toBe('status-pill status-pill--not-opened');
+  });
+});
+
+describe('rosterCounts', () => {
+  it('cuenta a todos, a los que entran, y a los que tienen una invitación esperando', () => {
+    const counts = rosterCounts([
+      withAccount({ id: 'a' }, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true }),
+      withAccount({ id: 'b' }, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: false }),
+      withAccount({ id: 'c' }),
+    ]);
+
+    expect(counts).toEqual({ total: 3, withAccess: 1, invited: 1 });
+  });
+
+  // Para el roster, esa persona no tiene cuenta: no entra y no está esperando nada.
+  it('la cuenta dada de baja no cuenta ni como acceso ni como invitación', () => {
+    const counts = rosterCounts([
+      withAccount({ id: 'a' }, { id: ACCOUNT_ID, role: 'jhsc_member', active: false, can_sign_in: false }),
+    ]);
+
+    expect(counts).toEqual({ total: 1, withAccess: 0, invited: 0 });
+  });
+
+  it('un roster vacío cuenta cero y no rompe', () => {
+    expect(rosterCounts([])).toEqual({ total: 0, withAccess: 0, invited: 0 });
   });
 });

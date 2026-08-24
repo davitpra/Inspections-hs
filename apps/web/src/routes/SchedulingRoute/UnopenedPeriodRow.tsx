@@ -1,7 +1,6 @@
 import { CalendarIcon } from '../../components/icons';
 import { OpenPeriodForm } from './OpenPeriodForm';
-import { monthName } from '../../presentation/dates';
-import { type UnopenedPeriod } from './presentation';
+import { calendarLabel, type UnopenedPeriod } from './presentation';
 
 /**
  * La casilla de un mes que la regla debe y que todavía no es una fila.
@@ -13,10 +12,13 @@ import { type UnopenedPeriod } from './presentation';
  */
 export function UnopenedPeriodRow({
   period,
+  year,
   siteId,
   canAdminister,
 }: {
   period: UnopenedPeriod;
+  /** El año que muestra el calendario: el encabezado ya lo dice, la fila no lo repite. */
+  year: string;
   siteId: string;
   canAdminister: boolean;
 }): React.JSX.Element {
@@ -28,7 +30,9 @@ export function UnopenedPeriodRow({
         </span>
 
         <span className="period__title">
-          <span className="period__month">{monthName(period.period_start)}</span>
+          <span className="period__month">
+            {calendarLabel(period.period_start, period.period_months, year)}
+          </span>
           <span className="period__status">{period.template_name}</span>
         </span>
 
@@ -38,7 +42,7 @@ export function UnopenedPeriodRow({
       </div>
 
       {canAdminister ? (
-        <OpenPeriodForm period={period} siteId={siteId} action="Open this month" />
+        <OpenPeriodForm period={period} siteId={siteId} action="Open this period" />
       ) : null}
     </li>
   );

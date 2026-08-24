@@ -379,8 +379,9 @@ describe('el aislamiento por sitio', () => {
     const rows = await inScope(
       db.app,
       [SITE_B],
-      `INSERT INTO scheduled_inspection (site_id, period_start, template_id, template_version_id)
-       VALUES ($1, '2026-11-01'::date, $2, $3)
+      `INSERT INTO scheduled_inspection
+         (site_id, period_start, period_months, template_id, template_version_id)
+       VALUES ($1, '2026-11-01'::date, 1, $2, $3)
        RETURNING id`,
       [SITE_A, templateA, versionA1],
     ).catch((error: unknown) => error);

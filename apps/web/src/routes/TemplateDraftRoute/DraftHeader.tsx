@@ -12,8 +12,17 @@ import { publishButtonLabel, saveButtonLabel, saveStateLabel } from './presentat
  *
  * **DICE «Saved» / «Unsaved changes», NO «Auto-saved».** El mockup escribe lo segundo y
  * no se implementa: el guardado es explícito.
+ *
+ * **Y DICE QUÉ SE ESTÁ ESCRIBIENDO.** Corregir una plantilla publicada y escribir una nueva se
+ * hacen en el mismo editor, con las mismas piezas, y se ven igual. Lo que las distingue —qué
+ * plantilla se corrige y qué número va a tener la versión— tiene que estar arriba: el autor que
+ * cree estar escribiendo una plantilla nueva va a tomar decisiones distintas sobre el mismo
+ * documento.
  */
 export function DraftHeader({
+  revising,
+  templateName,
+  nextVersion,
   dirty,
   saving,
   canSave,
@@ -23,6 +32,9 @@ export function DraftHeader({
   onPublish,
   onDiscard,
 }: {
+  revising: boolean;
+  templateName: string;
+  nextVersion: number;
   dirty: boolean;
   saving: boolean;
   canSave: boolean;
@@ -39,16 +51,20 @@ export function DraftHeader({
           <span className="scheduling__icon">
             <DocumentIcon size={22} />
           </span>
-          <h1>Template builder</h1>
+          <h1>{revising ? 'Revise template' : 'Template builder'}</h1>
         </div>
         <p className="scheduling__subtitle">
-          Create reusable inspection templates for one plant or both plants.
+          {revising
+            ? `Correcting “${templateName}”. Publishing writes version ${nextVersion}; the version it replaces stays readable.`
+            : 'Create reusable inspection templates for one plant or both plants.'}
         </p>
       </div>
 
       <div className="builder__actions">
         <div className="builder__state">
-          <span className="status-pill status-pill--draft">Draft</span>
+          <span className="status-pill status-pill--draft">
+            {revising ? `Revision · version ${nextVersion}` : 'Draft'}
+          </span>
           <span className="note">{saveStateLabel(dirty)}</span>
         </div>
 
@@ -78,7 +94,13 @@ export function DraftHeader({
         <div className="builder__menu-anchor">
           <RowMenu
             label="More template actions"
-            actions={[{ label: 'Discard this draft', tone: 'danger', onSelect: onDiscard }]}
+            actions={[
+              {
+                label: revising ? 'Discard this revision' : 'Discard this draft',
+                tone: 'danger',
+                onSelect: onDiscard,
+              },
+            ]}
           />
         </div>
       </div>

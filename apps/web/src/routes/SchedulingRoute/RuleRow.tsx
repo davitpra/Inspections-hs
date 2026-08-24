@@ -1,11 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
-import type { InspectionSchedule } from "@hs/contracts";
+import { PERIOD_MONTHS_LABELS, type InspectionSchedule } from "@hs/contracts";
 
 import { listInspectorCandidates, updateSchedule } from "../../api/inspections";
 import { queryKeys } from "../../api/query-keys";
 import { CalendarIcon, PersonIcon } from "../../components/icons";
-import { candidateLabel } from "./presentation";
+import { candidateLabel, frequencyNote } from "./presentation";
 
 export function RuleRow({
   rule,
@@ -71,6 +71,19 @@ export function RuleRow({
         {active ? null : <span className="badge badge--closed"> Deactivated</span>}
       </span>
 
+      {/*
+        La frecuencia se MUESTRA y no se edita, y el texto tiene que decir por qué: el
+        motor rechaza el UPDATE con HS001, así que sin esta línea el coordinador buscaría
+        un control que no existe y concluiría que falta implementarlo.
+      */}
+      <span className="rule-card__field">
+        <span className="field-label">Frequency</span>
+        <span>
+          {PERIOD_MONTHS_LABELS[rule.frequency_months]}
+          <span className="note"> — {frequencyNote(rule)}</span>
+        </span>
+      </span>
+
       {canAdminister ? (
         <span className="rule-card__field">
           <label htmlFor={`${controlId}-default-inspector`} className="field-label">
@@ -120,8 +133,8 @@ export function RuleRow({
             // desactivar corta la apertura de períodos futuros y hace que el reporte de
             // cobertura deje de contarlos como debidos.
             const confirmed = window.confirm(
-              `Deactivate this rule? No further monthly period will be opened for ` +
-                `${rule.template_name}, and future months will stop counting as owed. ` +
+              `Deactivate this rule? No further period will be opened for ` +
+                `${rule.template_name}, and future periods will stop counting as owed. ` +
                 `Periods already opened are unaffected.`,
             );
 

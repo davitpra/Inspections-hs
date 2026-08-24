@@ -3,7 +3,7 @@ import { Link } from '@tanstack/react-router';
 
 import { CalendarIcon, ClockIcon, PersonIcon, PinIcon } from '../../components/icons';
 import { displayName } from '../../presentation/account';
-import { monthName } from '../../presentation/dates';
+import { periodLabel } from '../../presentation/dates';
 import { availabilityLabel } from './presentation';
 
 /**
@@ -40,7 +40,7 @@ export function NextAssignment({
             <CalendarIcon size={16} /> Month
           </span>
           <span className="facts__value">
-            {monthName(inspection.period_start)} {inspection.period_start.slice(0, 4)}
+            {periodLabel(inspection.period_start, inspection.period_months)}
           </span>
         </div>
 

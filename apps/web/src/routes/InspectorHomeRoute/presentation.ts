@@ -2,6 +2,7 @@ import type { PendingInspection } from "@hs/contracts";
 
 import type { DraftRow } from "../../offline/db";
 import { DiscardRefusedError, type DiscardRefusal } from "../../offline/drafts";
+import type { PackageDrift } from "../../offline/prefetch";
 import { civilMonth, monthName } from "../../presentation/dates";
 
 /**
@@ -66,6 +67,12 @@ export function draftPillClass(status: DraftRow["status"]): string {
  *
  * `null` es un caso real y no un placeholder: es el mes en curso sin asignación, que la
  * pantalla dibuja como el estado vacío del mock y no como una tarjeta rota.
+ *
+ * **EL PERÍODO CORRIENTE ES EL QUE CONTIENE AL MES, no el que empieza en él** (0029). Con
+ * frecuencias no mensuales las dos cosas dejaron de coincidir: una inspección trimestral
+ * abierta en enero desaparecía de la pantalla en febrero —`period_start` ya no era el mes
+ * en curso— aunque siguiera siendo exactamente lo que el inspector tiene que hacer. Se
+ * compara contra los DOS extremos.
  */
 export function focusedAssignment(
   pending: readonly PendingInspection[],
@@ -79,9 +86,12 @@ export function focusedAssignment(
 
   const thisMonth = civilMonth(now);
 
-  return (
-    pending.find((item) => item.period_start.slice(0, 7) === thisMonth) ?? null
-  );
+  return pending.find((item) => containsMonth(item, thisMonth)) ?? null;
+}
+
+/** Si el mes `YYYY-MM` cae dentro del período, inclusive en los dos extremos. */
+function containsMonth(item: PendingInspection, month: string): boolean {
+  return item.period_start.slice(0, 7) <= month && month <= item.period_end.slice(0, 7);
 }
 
 /**
@@ -90,6 +100,10 @@ export function focusedAssignment(
  * Solo existe cuando el coordinador programó por adelantado: la mayoría de los meses se
  * abren automáticamente uno a la vez, así que esto devuelve `null` mucho más seguido que
  * no. Es lo que el estado vacío ofrece en lugar de dejar la pantalla sin nada que decir.
+ *
+ * "Más allá" se mide por el FIN del período, en espejo de `focusedAssignment`: un período
+ * que todavía contiene al mes en curso es el actual, no el próximo, y contarlo acá lo
+ * mostraría dos veces en la misma pantalla.
  */
 export function nextAssignment(
   pending: readonly PendingInspection[],
@@ -98,9 +112,8 @@ export function nextAssignment(
   const thisMonth = civilMonth(now);
 
   const future = pending
-    .filter(
-      (item) => !item.overdue && item.period_start.slice(0, 7) > thisMonth,
-    )
+    .filter((item) => !item.overdue && item.period_end.slice(0, 7) > thisMonth)
+    .filter((item) => !containsMonth(item, thisMonth))
     .sort((a, b) => a.period_start.localeCompare(b.period_start));
 
   return future[0] ?? null;
@@ -165,6 +178,16 @@ export type AssignmentAction =
 export interface AssignmentState {
   action: AssignmentAction;
   actionLabel: string;
+  /**
+   * Si además se ofrece volver a bajar el paquete.
+   *
+   * Es un campo aparte y NO un `action: 'refresh'` porque no compite con la acción
+   * primaria: la de una asignación lista es salir a recorrer, y degradarla a "refrescar"
+   * pondría la preparación por delante del trabajo. Va con el paquete completo incluso
+   * con un borrador en curso o firmado — un roster viejo se arregla igual con la
+   * inspección empezada, y esa es la mitad del paquete que envejece sola.
+   */
+  showsRefresh: boolean;
   pillLabel: string;
   pillClass: string;
 }
@@ -177,9 +200,9 @@ const OVERDUE_PILL = {
 /**
  * La píldora y la acción de una asignación, decididas UNA vez.
  *
- * `PendingRow` y `AssignmentHero` consumen esta misma función: si la tarjeta destacada y
- * la del calendario para el mismo mes ofrecieran acciones distintas, el desacuerdo sería
- * visible en una sola pantalla.
+ * Hoy la consume solo `AssignmentHero`, y sigue acá y no adentro de la tarjeta porque es
+ * la REGLA y no el dibujo: qué se le ofrece a alguien según lo descargado, lo vencido y
+ * el borrador se prueba sin renderizar.
  *
  * Lo vencido gana en la PÍLDORA y no en la acción: un mes vencido y ya descargado sigue
  * ofreciendo "Start inspection", no "Download for the field" — lo que falta no es el
@@ -198,6 +221,7 @@ export function assignmentState({
     return {
       action: "none",
       actionLabel: "",
+      showsRefresh: false,
       ...(overdue ? OVERDUE_PILL : { pillLabel: "", pillClass: "" }),
     };
   }
@@ -206,6 +230,7 @@ export function assignmentState({
     return {
       action: "open",
       actionLabel: "Open inspection",
+      showsRefresh: true,
       ...(overdue
         ? OVERDUE_PILL
         : {
@@ -219,6 +244,7 @@ export function assignmentState({
     return {
       action: "resume",
       actionLabel: "Resume inspection",
+      showsRefresh: true,
       ...(overdue
         ? OVERDUE_PILL
         : {
@@ -232,6 +258,7 @@ export function assignmentState({
     return {
       action: "download",
       actionLabel: "Download for the field",
+      showsRefresh: false,
       ...(overdue
         ? OVERDUE_PILL
         : {
@@ -244,6 +271,7 @@ export function assignmentState({
   return {
     action: "start",
     actionLabel: "Start inspection",
+    showsRefresh: true,
     ...(overdue
       ? OVERDUE_PILL
       : {
@@ -276,4 +304,34 @@ export function statusLabel(status: DraftRow["status"]): string {
   if (status === "signed") return "Signed, waiting to send";
 
   return "Draft";
+}
+
+/**
+ * Qué se le dice al inspector cuando lo guardado no está alineado.
+ *
+ * Los dos casos terminan distinto y por eso son dos textos y no uno con un matiz:
+ * `stale-package` se arregla acá mismo volviendo a bajar, y `draft-orphaned` no se
+ * arregla de ninguna manera —el borrador quedó atado a un documento que el dispositivo ya
+ * no tiene— así que el texto nombra la única salida real, que es descartarlo.
+ *
+ * El caso firmado dice lo que va a pasar en vez de ofrecer una salida: `isDiscardable` no
+ * deja descartar un borrador que ya está en la cola, y el servidor va a rechazar el envío
+ * por versión equivocada. Prometer un botón que la base va a negar sería peor que la mala
+ * noticia.
+ */
+export function driftMessage(
+  drift: PackageDrift,
+  draftStatus: DraftRow["status"] | null = null,
+): string | null {
+  if (drift === "none") return null;
+
+  if (drift === "stale-package") {
+    return "The package on this device is not the version this inspection is locked to. Refresh it while you have a connection.";
+  }
+
+  if (draftStatus === "signed") {
+    return "This draft was started against a different version of the form. It is signed and on its way, and the server will refuse it.";
+  }
+
+  return "This draft was started against a different version of the form and cannot be continued. Discard it and start the inspection over.";
 }

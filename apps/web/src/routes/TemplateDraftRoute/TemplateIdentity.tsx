@@ -15,10 +15,16 @@ import { ScopePicker } from "./ScopePicker";
  * al crear— y no la puede cambiar. Se muestra igual: renombrar NO la mueve, así que una
  * plantilla renombrada queda con una clave que ya no se le parece, y el día que alguien lea
  * un seed tiene que poder entender por qué.
+ *
+ * EN UNA REVISIÓN, EL NOMBRE TAMPOCO SE EDITA. `template.name` no lo puede actualizar nadie
+ * —`hs_app` no tiene UPDATE sobre `template`—, así que un campo editable acá sería un campo
+ * que se guarda, se muestra, y la publicación ignora. Se muestra como la clave, por la misma
+ * razón: esconderlo dejaría al autor sin saber qué está corrigiendo.
  */
 export function TemplateIdentity({
   name,
   templateKey,
+  revising,
   sites,
   siteIds,
   onName,
@@ -26,6 +32,8 @@ export function TemplateIdentity({
 }: {
   name: string;
   templateKey: string;
+  /** El borrador corrige una plantilla publicada: su nombre y su clave ya están decididos. */
+  revising: boolean;
   sites: readonly Site[];
   siteIds: readonly string[];
   onName: (name: string) => void;
@@ -45,11 +53,14 @@ export function TemplateIdentity({
             type="text"
             value={name}
             placeholder="Daily equipment inspection"
+            readOnly={revising}
             onChange={(event) => onName(event.target.value)}
           />
           <p className="note">
-            Give your template a clear name so it&apos;s easy to find. Key{" "}
-            <code>{templateKey}</code>
+            {revising
+              ? 'The name of a published template cannot be changed by revising it.'
+              : "Give your template a clear name so it's easy to find."}{" "}
+            Key <code>{templateKey}</code>
           </p>
         </div>
 

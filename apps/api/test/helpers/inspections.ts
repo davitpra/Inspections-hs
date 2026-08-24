@@ -43,19 +43,32 @@ export async function inScopeAs<T extends Record<string, unknown>>(
   }
 }
 
-/** Crea una regla de recurrencia y devuelve su id. */
+/**
+ * Crea una regla de recurrencia y devuelve su id.
+ *
+ * Mensual anclada en enero salvo que el caso diga otra cosa: es lo que era toda regla
+ * antes de 0029, así que los tests que no hablan de frecuencia siguen diciendo lo mismo.
+ */
 export async function createSchedule(
   pool: Pool,
   siteId: string,
   templateId: string,
   defaultInspectorId: string | null = null,
+  frequency: { frequencyMonths?: number; anchorMonth?: number } = {},
 ): Promise<string> {
   const rows = await inScope<{ id: string }>(
     pool,
     [siteId],
-    `INSERT INTO inspection_schedule (site_id, template_id, default_inspector_id)
-     VALUES ($1, $2, $3) RETURNING id`,
-    [siteId, templateId, defaultInspectorId],
+    `INSERT INTO inspection_schedule
+       (site_id, template_id, frequency_months, anchor_month, default_inspector_id)
+     VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+    [
+      siteId,
+      templateId,
+      frequency.frequencyMonths ?? 1,
+      frequency.anchorMonth ?? 1,
+      defaultInspectorId,
+    ],
   );
 
   return one(rows).id;
@@ -64,6 +77,8 @@ export async function createSchedule(
 export interface ScheduledSpec {
   siteId: string;
   periodStart: string;
+  /** El largo del período. Mensual si no se dice, que es lo que era todo antes de 0029. */
+  periodMonths?: number;
   templateId: string;
   templateVersionId: string;
   inspectorId?: string | null;
@@ -76,12 +91,14 @@ export async function scheduleInspection(pool: Pool, spec: ScheduledSpec): Promi
     pool,
     [spec.siteId],
     `INSERT INTO scheduled_inspection
-       (site_id, period_start, template_id, template_version_id, inspector_id, scheduled_by)
-     VALUES ($1, $2::date, $3, $4, $5, $6)
+       (site_id, period_start, period_months, template_id, template_version_id,
+        inspector_id, scheduled_by)
+     VALUES ($1, $2::date, $3, $4, $5, $6, $7)
      RETURNING id`,
     [
       spec.siteId,
       spec.periodStart,
+      spec.periodMonths ?? 1,
       spec.templateId,
       spec.templateVersionId,
       spec.inspectorId ?? null,
@@ -96,6 +113,7 @@ export interface ScheduledRow extends Record<string, unknown> {
   id: string;
   site_id: string;
   period_start: string;
+  period_months: number;
   period_end: string;
   template_id: string;
   template_version_id: string;
@@ -114,7 +132,8 @@ export async function scheduledById(
   const rows = await inScope<ScheduledRow>(
     pool,
     siteIds,
-    `SELECT id, site_id, period_start::text AS period_start, period_end::text AS period_end,
+    `SELECT id, site_id, period_start::text AS period_start, period_months,
+            period_end::text AS period_end,
             template_id, template_version_id, inspector_id, scheduled_by,
             cancelled_at, cancellation_reason
        FROM scheduled_inspection WHERE id = $1`,
@@ -133,7 +152,8 @@ export async function scheduledForPeriod(
   return inScope<ScheduledRow>(
     pool,
     siteIds,
-    `SELECT id, site_id, period_start::text AS period_start, period_end::text AS period_end,
+    `SELECT id, site_id, period_start::text AS period_start, period_months,
+            period_end::text AS period_end,
             template_id, template_version_id, inspector_id, scheduled_by,
             cancelled_at, cancellation_reason
        FROM scheduled_inspection

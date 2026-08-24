@@ -301,3 +301,20 @@ export function GripIcon({ size = 16 }: { size?: number }): React.JSX.Element {
     </svg>
   );
 }
+
+/**
+ * La cruz de la marca: la misma forma del favicon y del icono instalado
+ * (`public/icon-192.png`), para que la aplicación se llame igual en la pestaña, en el
+ * escritorio del teléfono y arriba de «Health & Safety».
+ *
+ * Es la única de este archivo que se dibuja rellena y no trazada: el resto son íconos de
+ * línea que acompañan un texto, y esta es una marca — a 16px un trazo de 1.8 la deja
+ * flaca y deja de leerse como la del ícono instalado.
+ */
+export function CrossIcon({ size = 16 }: { size?: number }): React.JSX.Element {
+  return (
+    <svg {...svgProps(size)} stroke="none" fill="currentColor">
+      <path d="M9.2 4h5.6v5.2H20v5.6h-5.2V20H9.2v-5.2H4V9.2h5.2V4Z" />
+    </svg>
+  );
+}

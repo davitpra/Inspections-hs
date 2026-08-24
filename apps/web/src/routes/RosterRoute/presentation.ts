@@ -227,3 +227,48 @@ export function roleCellLabel(person: PersonWithAccount): string {
 export function emailCellLabel(person: PersonWithAccount): string {
   return showsAccountRole(person) ? person.account!.email : '';
 }
+
+/**
+ * La clase de la píldora de la celda Role.
+ *
+ * Tres estados y no dos, porque son tres preguntas distintas para quien mira la columna:
+ * quien ya entra (verde, no hay nada que hacer), quien fue invitado y todavía no (ámbar,
+ * espera algo de alguien — el mismo tinte que usa el resto de la app para eso) y quien no
+ * tiene acceso (gris apagado, que es la situación NORMAL del roster y no una falta; ver
+ * `roleCellLabel`).
+ *
+ * El texto lo sigue diciendo `roleCellLabel`: la píldora no reemplaza la palabra, la ubica.
+ * Un color solo no dice nada a quien no lo distingue.
+ */
+export function roleCellClass(person: PersonWithAccount): string {
+  if (!showsAccountRole(person)) return 'status-pill status-pill--not-opened';
+
+  return person.account!.can_sign_in
+    ? 'status-pill status-pill--ready'
+    : 'status-pill status-pill--not-ready';
+}
+
+/**
+ * Los tres números del encabezado: cuánta gente hay, cuánta entra, y cuánta invitación
+ * está esperando.
+ *
+ * NO SON UN RESUMEN DECORATIVO: la pregunta que trae al coordinador a esta pantalla es
+ * "¿quién del comité tiene acceso hoy?", y con doscientas filas esa respuesta no se cuenta
+ * a ojo. `invited` es además lo único accionable de la pantalla —cada uno de esos es un
+ * link que puede haberse perdido y que se reemite desde su fila.
+ *
+ * Se cuentan sobre el roster ENTERO y no sobre lo filtrado: son el estado de la planta, no
+ * el de la búsqueda. Lo que la búsqueda recortó lo dice el contador de la tabla.
+ */
+export function rosterCounts(people: readonly PersonWithAccount[]): {
+  total: number;
+  withAccess: number;
+  invited: number;
+} {
+  return {
+    total: people.length,
+    withAccess: people.filter((person) => showsAccountRole(person) && person.account!.can_sign_in)
+      .length,
+    invited: people.filter(canReissueInvitation).length,
+  };
+}

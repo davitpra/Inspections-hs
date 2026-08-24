@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DiscardRefusedError } from '../../offline/drafts';
-import { PendingRoute } from './index';
+import { InspectorHomeRoute } from './index';
 
 const request = vi.hoisted(() => vi.fn());
 const listDrafts = vi.hoisted(() => vi.fn());
@@ -11,6 +11,7 @@ const discardDraft = vi.hoisted(() => vi.fn());
 const missingForField = vi.hoisted(() => vi.fn());
 const prefetchInspection = vi.hoisted(() => vi.fn());
 const storedTemplateVersion = vi.hoisted(() => vi.fn());
+const prefetchedAt = vi.hoisted(() => vi.fn());
 const listSites = vi.hoisted(() => vi.fn());
 const listScheduled = vi.hoisted(() => vi.fn());
 const useAppSession = vi.hoisted(() => vi.fn());
@@ -28,10 +29,17 @@ vi.mock('../../offline/drafts', async (importOriginal) => ({
   listDrafts,
   discardDraft,
 }));
-vi.mock('../../offline/prefetch', () => ({
+/**
+ * De la descarga previa se reemplazan las lecturas de Dexie y la escritura, nunca
+ * `packageDrift`: esa es la decisión que estos tests miran, y un doble la volvería una
+ * tautología.
+ */
+vi.mock('../../offline/prefetch', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../offline/prefetch')>()),
   missingForField,
   prefetchInspection,
   storedTemplateVersion,
+  prefetchedAt,
 }));
 vi.mock('../../app/session-context', () => ({ useAppSession }));
 vi.mock('../../app/InstallPrompt', () => ({ InstallPrompt: () => null }));
@@ -64,6 +72,7 @@ function pending() {
       id: INSPECTION,
       site_id: SITE,
       period_start: '2026-03-01',
+      period_months: 1,
       period_end: '2026-03-31',
       template_name: 'Monthly general workplace inspection',
       template_version_id: VERSION,
@@ -77,7 +86,7 @@ function renderRoute(): void {
 
   render(
     <QueryClientProvider client={client}>
-      <PendingRoute />
+      <InspectorHomeRoute />
     </QueryClientProvider>,
   );
 }
@@ -93,12 +102,13 @@ function renderRoute(): void {
  * botón, el link, el texto de lo que falta— ahora las produce `AssignmentHero` /
  * `AssignmentChecklist` y no la grilla del año.
  */
-describe('PendingRoute', () => {
+describe('InspectorHomeRoute', () => {
   beforeEach(() => {
     request.mockResolvedValue({ ok: true, value: pending() });
     listDrafts.mockResolvedValue([]);
     discardDraft.mockResolvedValue(true);
     storedTemplateVersion.mockResolvedValue(null);
+    prefetchedAt.mockResolvedValue(null);
     listSites.mockResolvedValue([{ id: SITE, code: 'GLE', name: 'Glencoe', deactivated_at: null }]);
     listScheduled.mockResolvedValue([]);
     useAppSession.mockReturnValue({
@@ -165,7 +175,11 @@ describe('PendingRoute', () => {
 
     const start = await screen.findByRole('link', { name: 'Start inspection' });
     expect(start.getAttribute('href')).toBe(`/inspections/${INSPECTION}/capture`);
+
+    // Lo que desaparece es la PRIMERA descarga; volver a bajar sigue ofrecido, porque el
+    // roster y las ubicaciones envejecen solas y no hay otra pantalla donde arreglarlo.
     expect(screen.queryByRole('button', { name: 'Download for the field' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Refresh field package' })).toBeTruthy();
   });
 
   /**
@@ -193,12 +207,82 @@ describe('PendingRoute', () => {
     ).toBeTruthy();
     expect(screen.queryByRole('link', { name: 'Start inspection' })).toBeNull();
   });
+
+  /**
+   * La razón de ser del refresco: `locations` y `roster` son la foto ACTIVA de la planta
+   * al momento de la descarga y envejecen solas. Hasta ahora el control desaparecía en
+   * cuanto el paquete estaba completo y no había ninguna otra pantalla donde arreglarlo.
+   */
+  it('vuelve a bajar el paquete ya completo, y dice de cuándo es', async () => {
+    missingForField.mockResolvedValue([]);
+    storedTemplateVersion.mockResolvedValue({
+      kind: 'template_version',
+      site_id: SITE,
+      template_version_id: VERSION,
+      version: 2,
+      document: { sections: [] },
+      inspector_id: USER,
+    });
+    prefetchedAt.mockResolvedValue('2026-03-02T14:05:00.000Z');
+    prefetchInspection.mockResolvedValue({
+      scheduled_inspection_id: INSPECTION,
+      stored: ['template_version', 'locations', 'roster'],
+      missing: [],
+      errors: {},
+    });
+
+    renderRoute();
+
+    expect(await screen.findByText(/^Downloaded /)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh field package' }));
+
+    await waitFor(() => expect(prefetchInspection).toHaveBeenCalledWith(INSPECTION));
+  });
+
+  /**
+   * La deriva se decide con lo que YA viaja: la versión congelada viene en la lista de
+   * pendientes y la guardada está en el dispositivo. Sin este aviso, el desajuste se
+   * descubría al enviar, después del recorrido.
+   */
+  it('nombra el paquete que no es la versión a la que la inspección está atada', async () => {
+    missingForField.mockResolvedValue([]);
+    storedTemplateVersion.mockResolvedValue({
+      kind: 'template_version',
+      site_id: SITE,
+      template_version_id: '55555555-5555-4555-8555-555555555555',
+      version: 1,
+      document: { sections: [] },
+      inspector_id: USER,
+    });
+
+    renderRoute();
+
+    expect(await screen.findByText(/not the version this inspection is locked to/)).toBeTruthy();
+  });
+
+  it('un paquete alineado no avisa nada', async () => {
+    missingForField.mockResolvedValue([]);
+    storedTemplateVersion.mockResolvedValue({
+      kind: 'template_version',
+      site_id: SITE,
+      template_version_id: VERSION,
+      version: 2,
+      document: { sections: [] },
+      inspector_id: USER,
+    });
+
+    renderRoute();
+
+    await screen.findByRole('button', { name: 'Refresh field package' });
+    expect(screen.queryByText(/not the version this inspection is locked to/)).toBeNull();
+  });
 });
 
 /**
  * Cuál asignación es el héroe de la pantalla, y qué pasa cuando no hay ninguna.
  */
-describe('PendingRoute — la asignación destacada', () => {
+describe('InspectorHomeRoute — la asignación destacada', () => {
   const CURRENT = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 
   beforeEach(() => {
@@ -206,6 +290,7 @@ describe('PendingRoute — la asignación destacada', () => {
     discardDraft.mockResolvedValue(true);
     missingForField.mockResolvedValue([]);
     storedTemplateVersion.mockResolvedValue(null);
+    prefetchedAt.mockResolvedValue(null);
     listSites.mockResolvedValue([{ id: SITE, code: 'GLE', name: 'Glencoe', deactivated_at: null }]);
     listScheduled.mockResolvedValue([]);
     useAppSession.mockReturnValue({
@@ -228,6 +313,7 @@ describe('PendingRoute — la asignación destacada', () => {
           id: CURRENT,
           site_id: SITE,
           period_start: '2099-01-01',
+          period_months: 1,
           period_end: '2099-01-31',
           template_name: 'Un mes al día',
           template_version_id: VERSION,
@@ -259,7 +345,7 @@ describe('PendingRoute — la asignación destacada', () => {
  * un solo clic no alcance, que la confirmación diga qué se pierde, y que la línea de
  * ADR-001 —firmado ya no se descarta— se vea en la fila y no solo en la base.
  */
-describe('PendingRoute — descartar un borrador', () => {
+describe('InspectorHomeRoute — descartar un borrador', () => {
   const CAPTURING = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
   const SIGNED = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
@@ -284,6 +370,7 @@ describe('PendingRoute — descartar un borrador', () => {
     missingForField.mockResolvedValue([]);
     discardDraft.mockResolvedValue(true);
     storedTemplateVersion.mockResolvedValue(null);
+    prefetchedAt.mockResolvedValue(null);
     listSites.mockResolvedValue([{ id: SITE, code: 'GLE', name: 'Glencoe', deactivated_at: null }]);
     listScheduled.mockResolvedValue([]);
     useAppSession.mockReturnValue({
@@ -361,7 +448,7 @@ describe('PendingRoute — descartar un borrador', () => {
  * La lista del dispositivo. El encabezado "Drafts on this device" tiene que ser cierto:
  * lo aceptado ya está en el servidor y no es un borrador de nadie.
  */
-describe('PendingRoute — lo enviado no se lista como borrador', () => {
+describe('InspectorHomeRoute — lo enviado no se lista como borrador', () => {
   function draft(overrides: Record<string, unknown> = {}) {
     return {
       client_submission_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
@@ -382,6 +469,7 @@ describe('PendingRoute — lo enviado no se lista como borrador', () => {
     request.mockResolvedValue({ ok: true, value: pending() });
     missingForField.mockResolvedValue([]);
     storedTemplateVersion.mockResolvedValue(null);
+    prefetchedAt.mockResolvedValue(null);
     listSites.mockResolvedValue([{ id: SITE, code: 'GLE', name: 'Glencoe', deactivated_at: null }]);
     listScheduled.mockResolvedValue([]);
     useAppSession.mockReturnValue({

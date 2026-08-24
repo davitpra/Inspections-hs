@@ -47,6 +47,83 @@ export const periodStatusSchema = z.enum(PERIOD_STATUSES);
 
 export type PeriodStatus = z.infer<typeof periodStatusSchema>;
 
+/**
+ * Cada cuántos meses. LOS DIVISORES DE 12 Y NADA MÁS, y la lista no es una preferencia.
+ *
+ * El anclaje de una regla es un mes de 1 a 12, no una fecha absoluta, y eso solo alcanza
+ * para decidir si un mes empieza período —sin mirar el año— cuando la frecuencia divide a
+ * 12. Con 5, la respuesta dependería del año en que la regla nació y el ancla tendría que
+ * ser otra cosa. El CHECK de la migración 0029 dice exactamente esto mismo.
+ *
+ * **No hay semanal ni quincenal**, y su ausencia es estructural, no una omisión: un
+ * período semanal no empieza el día 1 de un mes, así que rompería el CHECK de
+ * `period_start`, el calendario anual de la consola y el CTE del reporte. Ese día es otro
+ * change y toca mucho más que una columna.
+ */
+export const PERIOD_MONTHS = [1, 3, 6, 12] as const;
+
+export const periodMonthsSchema = z.union([
+  z.literal(1),
+  z.literal(3),
+  z.literal(6),
+  z.literal(12),
+]);
+
+export type PeriodMonths = z.infer<typeof periodMonthsSchema>;
+
+/** Cómo se llama cada frecuencia en pantalla. Inglés: es contenido de la aplicación. */
+export const PERIOD_MONTHS_LABELS: Readonly<Record<PeriodMonths, string>> = {
+  1: 'Monthly',
+  3: 'Quarterly',
+  6: 'Semiannual',
+  12: 'Annual',
+};
+
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+/**
+ * CÓMO SE LLAMA UN PERÍODO. `August 2026`, `Q1 2026`, `H2 2026`, `2026`.
+ *
+ * **Vive en `contracts` y no en cada aplicación**, que es lo que la vuelve confiable: la
+ * consola de programación, la pantalla del inspector, la bandeja y **el PDF que se le
+ * entrega al MLITSD** tienen que nombrar el mismo período con las mismas palabras. Tres
+ * copias de esta función serían tres formas de escribir «el primer trimestre», y la que
+ * envejecería es la del documento regulatorio, que es la única que alguien va a leer
+ * dentro de cinco años.
+ *
+ * Los nombres de mes están acá adentro y no salen de `Intl`: la interfaz es solo inglés y
+ * no depende del locale del dispositivo ni del contenedor que renderiza el PDF. Es el
+ * mismo criterio que ya sigue `formatCivilDay` en el cliente.
+ *
+ * `periodStart` es `YYYY-MM-01`. `periodMonths` ausente se lee como mensual: es lo que un
+ * reporte congelado antes de 0029 significaba, y lo dice `compliancePeriodSchema`.
+ */
+export function periodLabel(periodStart: string, periodMonths: PeriodMonths = 1): string {
+  const year = Number(periodStart.slice(0, 4));
+  const month = Number(periodStart.slice(5, 7));
+
+  if (periodMonths === 1) return `${MONTH_NAMES[month - 1]!} ${year}`;
+
+  // LOS NOMBRES CORTOS SOLO CUANDO EL PERÍODO CAE DONDE EL CALENDARIO LOS PONE. Una regla
+  // trimestral anclada en febrero cubre feb-abr, que no es ningún trimestre civil;
+  // llamarlo «Q1» sería mentir sobre qué meses cubre, y en un documento regulatorio esa
+  // mentira es sobre el alcance de la evidencia. Cuando no coincide se escriben los dos
+  // extremos, que no se pueden malinterpretar. Lo mismo con `H` y con el año a secas.
+  if (periodMonths === 12 && month === 1) return String(year);
+  if (periodMonths === 6 && month % 6 === 1) return `H${Math.floor((month - 1) / 6) + 1} ${year}`;
+  if (periodMonths === 3 && month % 3 === 1) return `Q${Math.floor((month - 1) / 3) + 1} ${year}`;
+
+  const endOffset = month - 1 + periodMonths - 1;
+  const endYear = year + Math.floor(endOffset / 12);
+  const start = MONTH_NAMES[month - 1]!.slice(0, 3);
+  const end = MONTH_NAMES[endOffset % 12]!.slice(0, 3);
+
+  return endYear === year ? `${start}–${end} ${year}` : `${start} ${year}–${end} ${endYear}`;
+}
+
 /** `YYYY-MM-DD`, que es como viajan las fechas de período: son días, no instantes. */
 const dateSchema = z.iso.date();
 
@@ -64,6 +141,19 @@ const dateSchema = z.iso.date();
 export const compliancePeriodSchema = z.strictObject({
   period_start: dateSchema,
   period_end: dateSchema,
+
+  /**
+   * Cuánto dura el período. **OPCIONAL, y su ausencia significa algo**: el reporte se
+   * congeló antes de 0029, cuando todo período era mensual por construcción.
+   *
+   * Requerirlo habría sido reescribir un registro regulatorio ya firmado. El payload de
+   * un reporte se guarda tal cual y su digest se calculó sobre ESA forma; un campo
+   * obligatorio haría que un documento de 2026 dejara de validar contra el contrato que
+   * lo tiene que poder leer en 2031. Quien lo lea sin el campo puede asumir 1 con la misma
+   * certeza que tenía el sistema que lo escribió.
+   */
+  period_months: periodMonthsSchema.optional(),
+
   status: periodStatusSchema,
 
   /** Null cuando el sitio debía el período y nunca se abrió. */
@@ -237,7 +327,18 @@ export type CompliancePayloadAction = z.infer<typeof compliancePayloadActionSche
  * idénticos generados a los dos lados de un cambio de forma tienen digests distintos por
  * un motivo que solo este número explica.
  */
-export const COMPLIANCE_PAYLOAD_SCHEMA_VERSION = 1;
+export const COMPLIANCE_PAYLOAD_SCHEMA_VERSION = 2;
+
+/*
+ * HISTORIAL, porque el número solo no dice qué cambió:
+ *
+ *   1 → la forma original de la etapa 7.
+ *   2 → 0029 agregó `period_months` a cada período. Un payload de la versión 1 no lo
+ *       lleva y no hace falta que lo lleve: cuando se congeló, todo período era mensual.
+ *       Por eso el campo es opcional en `compliancePeriodSchema` — un reporte de 2026
+ *       tiene que seguir validando contra este contrato en 2031, y su digest se calculó
+ *       sobre la forma sin el campo.
+ */
 
 /**
  * EL DOCUMENTO CONGELADO. Esto es lo que se canonicaliza y se hashea.
@@ -253,7 +354,11 @@ export const COMPLIANCE_PAYLOAD_SCHEMA_VERSION = 1;
  * buscarlo».
  */
 export const compliancePayloadSchema = z.strictObject({
-  schema_version: z.literal(COMPLIANCE_PAYLOAD_SCHEMA_VERSION),
+  /**
+   * Acepta las versiones que este contrato sabe leer, no solo la que escribe. Un reporte
+   * congelado con la 1 se sigue leyendo; los nuevos salen con `COMPLIANCE_PAYLOAD_SCHEMA_VERSION`.
+   */
+  schema_version: z.union([z.literal(1), z.literal(2)]),
 
   site: z.strictObject({ id: z.uuid(), name: z.string() }),
   range: z.strictObject({ start: dateSchema, end: dateSchema }),

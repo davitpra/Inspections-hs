@@ -5,6 +5,14 @@ import { listSites } from '../../api/inspections';
 import { queryKeys } from '../../api/query-keys';
 import { listPeople } from '../../api/roster';
 import { useAppSession } from '../../app/session-context';
+import {
+  CheckIcon,
+  ClockIcon,
+  InfoIcon,
+  PersonIcon,
+  PinIcon,
+  SearchIcon,
+} from '../../components/icons';
 import { SitePicker } from '../../components/SitePicker';
 import { canAdministerRoster, canInviteFromRoster } from '../../permissions/session';
 import { resolveSiteId } from '../../presentation/sites';
@@ -23,7 +31,9 @@ import {
   reissueButtonLabel,
   removeButtonLabel,
   removeButtonText,
+  roleCellClass,
   roleCellLabel,
+  rosterCounts,
   sortRoster,
 } from './presentation';
 
@@ -47,6 +57,12 @@ import {
  * lectura, al revés que la consola de programación, que deja mirar a cualquiera: esta ruta
  * SÍ devuelve el perfil. Si alguien conecta el `PersonPicker` de los incidentes a
  * `GET /people`, rompe lo único que las mantiene separadas.
+ *
+ * LA FORMA ES LA DE LAS OTRAS CONSOLAS DEL COORDINADOR (§6): encabezado con la planta al
+ * costado, la tira de números, y una tarjeta con su buscador arriba de la tabla. Es la misma
+ * pila de piezas que programación y ubicaciones —`.scheduling__top`, `.site-card`,
+ * `.stats-bar`, `.card`, `.status-card`—, y la comparten porque son la misma pantalla vista
+ * tres veces: elegir planta, entender de un vistazo qué falta, y actuar sobre una fila.
  *
  * ONLINE y fuera del precacheo: un roster servido desde caché es un roster viejo que no
  * dice que lo es (ADR-001).
@@ -129,170 +145,286 @@ function RosterConsole({
 
   const all = sortRoster(roster.data ?? []);
   const visible = all.filter((person) => matchesSearch(person, search));
+  const counts = rosterCounts(all);
 
   return (
     <>
-      <h1>Roster</h1>
+      {/*
+        El título a la izquierda y la planta a la derecha, en la misma línea: la planta no
+        es un filtro más de la pantalla, es de qué planta habla TODO lo que sigue. Es el
+        mismo encabezado que la consola de programación, y lo comparten a propósito — son
+        dos vistas de la misma planta y saltar entre ellas no debería mover el título.
+      */}
+      <header className="scheduling__top">
+        <div className="scheduling__header">
+          <div className="scheduling__title">
+            <span className="scheduling__icon">
+              <PersonIcon size={22} />
+            </span>
+            <h1>Roster</h1>
+          </div>
+          <p className="scheduling__subtitle">
+            Everyone who works at this plant, and who of them can sign in to the JHSC console.
+          </p>
+        </div>
+
+        {/*
+          Sin ninguna planta activa no hay roster que pedir —la consulta ya está apagada por
+          `enabled`—, y el selector degradado diría «Site:» y nada más.
+        */}
+        {noActiveSite ? null : (
+          <div className="site-card">
+            <span className="site-card__icon">
+              <PinIcon />
+            </span>
+            <SitePicker
+              sites={sites.data ?? []}
+              value={siteId}
+              onChange={setChosenSite}
+              siteName={siteName}
+            />
+          </div>
+        )}
+      </header>
 
       {/*
         Dónde se corrige lo que esta pantalla muestra. Sin esta línea, el coordinador ve un
-        apellido mal escrito y no tiene forma de saber por dónde se arregla.
+        apellido mal escrito y no tiene forma de saber por dónde se arregla. Va en la tarjeta
+        de aviso y no en un párrafo suelto porque es lo primero que hay que leer cuando algo
+        de la tabla está mal, y un `.note` gris debajo del título no se leía nunca.
       */}
-      <p className="note">
-        The roster is maintained by CSV import. Names, sites and active status all come from
-        the file.
-      </p>
-
-      {/*
-        Sin ninguna planta activa no hay roster que pedir —la consulta ya está apagada por
-        `enabled`—, y el selector degradado diría «Site:» y nada más.
-      */}
-      {noActiveSite ? (
-        <p className="notice">No active sites.</p>
-      ) : (
-        <SitePicker
-          sites={sites.data ?? []}
-          value={siteId}
-          onChange={setChosenSite}
-          siteName={siteName}
-        />
-      )}
-
-      <div className="filters">
-        <label htmlFor={searchId}>Search</label>
-        <input
-          id={searchId}
-          type="search"
-          value={search}
-          placeholder="Name or employee number"
-          onChange={(event) => setSearch(event.target.value)}
-        />
+      <div className="notice-card">
+        <div className="notice-card__body">
+          <span className="notice-card__icon">
+            <InfoIcon size={20} />
+          </span>
+          <p className="notice-card__text">
+            The roster is maintained by CSV import. Names, sites and active status all come from
+            the file.
+          </p>
+        </div>
       </div>
 
-      {roster.isError ? <p className="notice">This view needs a connection.</p> : null}
-      {roster.isLoading ? <p>Loading…</p> : null}
+      {/*
+        El estado de la conexión con silueta de tarjeta, como el resto de las consolas del
+        coordinador: se lee dentro de la misma pila que todo lo demás.
+      */}
+      {roster.isError ? (
+        <p className="status-card status-card--error">
+          <InfoIcon size={20} /> This view needs a connection.
+        </p>
+      ) : null}
+      {roster.isLoading ? (
+        <p className="status-card">
+          <PersonIcon size={20} /> Loading…
+        </p>
+      ) : null}
+      {noActiveSite ? (
+        <p className="status-card">
+          <InfoIcon size={20} /> No active sites.
+        </p>
+      ) : null}
 
       {/*
-        "Esta planta no tiene a nadie" y "la búsqueda no encontró nada" son problemas
-        distintos: el primero es un roster sin importar, el segundo es un tipeo.
+        Los tres números de la planta, antes de la tabla: con doscientas filas, "cuántos del
+        comité entran hoy" y "cuántas invitaciones están esperando" no se cuentan a ojo. Ver
+        `rosterCounts` — se cuentan sobre el roster entero, no sobre lo que filtró la
+        búsqueda.
       */}
-      {roster.isSuccess && all.length === 0 ? (
-        <p>No one is on the roster of {siteName(siteId)}.</p>
-      ) : null}
-      {roster.isSuccess && all.length > 0 && visible.length === 0 ? (
-        <p>No one matches “{search}”.</p>
+      {roster.isSuccess && all.length > 0 ? (
+        <div className="stats-bar">
+          <div className="stats-bar__item">
+            <span className="stats-bar__icon">
+              <PersonIcon size={20} />
+            </span>
+            <span>
+              <span className="stats-bar__number">{counts.total}</span>
+              <span className="stats-bar__label">On the roster</span>
+            </span>
+          </div>
+          <div className="stats-bar__item">
+            <span className="stats-bar__icon">
+              <CheckIcon size={20} />
+            </span>
+            <span>
+              <span className="stats-bar__number">{counts.withAccess}</span>
+              <span className="stats-bar__label">Can sign in</span>
+            </span>
+          </div>
+          <div className="stats-bar__item">
+            <span className="stats-bar__icon">
+              <ClockIcon size={20} />
+            </span>
+            <span>
+              <span className="stats-bar__number">{counts.invited}</span>
+              <span className="stats-bar__label">Invitation pending</span>
+            </span>
+          </div>
+        </div>
       ) : null}
 
       {/*
-        Una tabla y no una lista: el roster es la única pantalla donde se comparan filas
-        entre sí —qué número tiene cada quien, qué rol— y comparar necesita columnas
-        alineadas con su encabezado. El `<caption>` no es adorno: es lo que le dice a un
-        lector de pantalla de qué planta es la tabla que va a recorrer.
-
-        La fila va inline y no en su propio archivo: sin estado, sin hooks y sin mutación,
-        no llega al umbral que `CLAUDE.md` pide para separarla.
+        Una tarjeta y no una tabla suelta: el buscador, el contador y las filas son una sola
+        unidad —qué estoy mirando y cuánto de todo es— y el borde es lo que lo dice.
       */}
-      {visible.length > 0 ? (
-        <table className="table">
-          <caption className="table__caption">Roster of {siteName(siteId)}</caption>
-          <thead>
-            <tr>
-              <th scope="col">Name</th>
-              <th scope="col">Employee #</th>
-              <th scope="col">Role</th>
-              <th scope="col">Email</th>
-              <th scope="col">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {visible.map((person) => (
-              <tr key={person.id}>
-                <th scope="row">{personName(person)}</th>
-                <td>{person.employee_number}</td>
-                {/*
-                  "Worker" cuando no hay cuenta: la ausencia de acceso se nombra, no se deja
-                  en blanco. No es un rol de `ROLES` — ver `roleCellLabel`.
-                */}
-                <td>{roleCellLabel(person)}</td>
-                {/*
-                  El correo al que se invitó a esta persona, y solo el de quien tiene
-                  cuenta: el roster del CSV no trae correos. Va pegado a Role porque las dos
-                  columnas responden a la misma pregunta —qué acceso tiene esta fila— y
-                  antes de Actions porque es dato, no acto.
+      <section className="card roster">
+        <div className="roster__toolbar">
+          <label className="roster__search" htmlFor={searchId}>
+            <SearchIcon />
+            <span className="roster__sr">Search</span>
+            <input
+              id={searchId}
+              type="search"
+              value={search}
+              placeholder="Name or employee number"
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </label>
 
-                  El guión y no el vacío: en una tabla donde la mayoría de las filas no tiene
-                  cuenta, la columna en blanco se lee como una columna rota. Acá no hace falta
-                  nombrar la ausencia como sí lo hace `roleCellLabel` con "Worker" —la celda
-                  Role de esa misma fila ya lo dijo—, solo mostrar que el lugar existe y está
-                  vacío a propósito.
-                */}
-                <td>{emailCellLabel(person) || '—'}</td>
-                <td>
-                  {/*
-                    La acción tiene columna propia, separada del rol: el rol es un dato que
-                    se compara hacia abajo —quién tiene acceso hoy— y el botón es un acto.
-                    Mezclados en una celda, la columna cambiaba de ancho fila por fila y el
-                    ojo perdía la lectura vertical del rol, que es para lo que la tabla
-                    existe.
+          {/*
+            Cuánto de todo se está viendo. Solo con el roster cargado: "0 of 0 people"
+            mientras carga es un dato falso, no un dato vacío.
+          */}
+          {roster.isSuccess ? (
+            <span className="roster__count">
+              {visible.length} of {all.length} people
+            </span>
+          ) : null}
+        </div>
 
-                    Cada fila ofrece SOLO el acto que su estado admite:
+        <div className="roster__body">
+          {/*
+            "Esta planta no tiene a nadie" y "la búsqueda no encontró nada" son problemas
+            distintos: el primero es un roster sin importar, el segundo es un tipeo.
+          */}
+          {roster.isSuccess && all.length === 0 ? (
+            <p className="note">No one is on the roster of {siteName(siteId)}.</p>
+          ) : null}
+          {roster.isSuccess && all.length > 0 && visible.length === 0 ? (
+            <p className="note">No one matches “{search}”.</p>
+          ) : null}
 
-                    - sin acceso y activa → invitar. Cuenta acá tanto quien nunca tuvo
-                      cuenta como aquel a quien se le quitó: las dos filas se dibujan
-                      igual, porque son la misma pregunta;
-                    - con cuenta que todavía no puede entrar → reemitir el link, y
-                      cancelar la invitación;
-                    - con cuenta que ya entra → quitar del JHSC.
+          {/*
+            Una tabla y no una lista: el roster es la única pantalla donde se comparan filas
+            entre sí —qué número tiene cada quien, qué rol— y comparar necesita columnas
+            alineadas con su encabezado. El `<caption>` no es adorno: es lo que le dice a un
+            lector de pantalla de qué planta es la tabla que va a recorrer.
 
-                    Nada para quien no tiene acceso y está dado de baja — invitar a esa
-                    fila es exactamente lo que 4.5 no ofrece. Esa celda queda vacía, y
-                    vacía está bien: la columna existe porque OTRAS filas tienen un acto.
-                  */}
-                  <div className="table__actions">
-                    {mayInvite && canInvite(person) ? (
-                      <button
-                        type="button"
-                        aria-label={inviteButtonLabel(person)}
-                        onClick={() =>
-                          setInviting({ id: person.id, label: personLabel(person) })
-                        }
-                      >
-                        Invite to JHSC
-                      </button>
-                    ) : null}
-                    {mayInvite && canReissueInvitation(person) ? (
-                      <button
-                        type="button"
-                        aria-label={reissueButtonLabel(person)}
-                        onClick={() =>
-                          setReissuing({ userId: person.account!.id, label: personLabel(person) })
-                        }
-                      >
-                        New link
-                      </button>
-                    ) : null}
-                    {mayInvite && canRemoveJhscAccess(person) ? (
-                      <button
-                        type="button"
-                        aria-label={removeButtonLabel(person)}
-                        onClick={() =>
-                          setRemoving({
-                            userId: person.account!.id,
-                            label: personLabel(person),
-                            canSignIn: person.account!.can_sign_in,
-                          })
-                        }
-                      >
-                        {removeButtonText(person)}
-                      </button>
-                    ) : null}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      ) : null}
+            La fila va inline y no en su propio archivo: sin estado, sin hooks y sin mutación,
+            no llega al umbral que `CLAUDE.md` pide para separarla.
+          */}
+          {visible.length > 0 ? (
+            <div className="roster__scroll">
+              <table className="table roster__table">
+                <caption className="roster__sr">Roster of {siteName(siteId)}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Name</th>
+                    <th scope="col">Employee #</th>
+                    <th scope="col">Role</th>
+                    <th scope="col">Email</th>
+                    <th scope="col">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visible.map((person) => (
+                    <tr key={person.id}>
+                      <th scope="row">{personName(person)}</th>
+                      <td className="roster__number">{person.employee_number}</td>
+                      {/*
+                        "Worker" cuando no hay cuenta: la ausencia de acceso se nombra, no se
+                        deja en blanco. No es un rol de `ROLES` — ver `roleCellLabel`. La
+                        píldora la ubica en la escala de las otras consolas —verde entra,
+                        ámbar espera, gris no tiene— sin reemplazar la palabra.
+                      */}
+                      <td>
+                        <span className={roleCellClass(person)}>{roleCellLabel(person)}</span>
+                      </td>
+                      {/*
+                        El correo al que se invitó a esta persona, y solo el de quien tiene
+                        cuenta: el roster del CSV no trae correos. Va pegado a Role porque las dos
+                        columnas responden a la misma pregunta —qué acceso tiene esta fila— y
+                        antes de Actions porque es dato, no acto.
+
+                        El guión y no el vacío: en una tabla donde la mayoría de las filas no tiene
+                        cuenta, la columna en blanco se lee como una columna rota. Acá no hace falta
+                        nombrar la ausencia como sí lo hace `roleCellLabel` con "Worker" —la celda
+                        Role de esa misma fila ya lo dijo—, solo mostrar que el lugar existe y está
+                        vacío a propósito.
+                      */}
+                      <td className="roster__email">{emailCellLabel(person) || '—'}</td>
+                      <td>
+                        {/*
+                          La acción tiene columna propia, separada del rol: el rol es un dato que
+                          se compara hacia abajo —quién tiene acceso hoy— y el botón es un acto.
+                          Mezclados en una celda, la columna cambiaba de ancho fila por fila y el
+                          ojo perdía la lectura vertical del rol, que es para lo que la tabla
+                          existe.
+
+                          Cada fila ofrece SOLO el acto que su estado admite:
+
+                          - sin acceso y activa → invitar. Cuenta acá tanto quien nunca tuvo
+                            cuenta como aquel a quien se le quitó: las dos filas se dibujan
+                            igual, porque son la misma pregunta;
+                          - con cuenta que todavía no puede entrar → reemitir el link, y
+                            cancelar la invitación;
+                          - con cuenta que ya entra → quitar del JHSC.
+
+                          Nada para quien no tiene acceso y está dado de baja — invitar a esa
+                          fila es exactamente lo que 4.5 no ofrece. Esa celda queda vacía, y
+                          vacía está bien: la columna existe porque OTRAS filas tienen un acto.
+                        */}
+                        <div className="table__actions">
+                          {mayInvite && canInvite(person) ? (
+                            <button
+                              type="button"
+                              className="button--outline roster__action"
+                              aria-label={inviteButtonLabel(person)}
+                              onClick={() =>
+                                setInviting({ id: person.id, label: personLabel(person) })
+                              }
+                            >
+                              Invite to JHSC
+                            </button>
+                          ) : null}
+                          {mayInvite && canReissueInvitation(person) ? (
+                            <button
+                              type="button"
+                              className="roster__action"
+                              aria-label={reissueButtonLabel(person)}
+                              onClick={() =>
+                                setReissuing({ userId: person.account!.id, label: personLabel(person) })
+                              }
+                            >
+                              New link
+                            </button>
+                          ) : null}
+                          {mayInvite && canRemoveJhscAccess(person) ? (
+                            <button
+                              type="button"
+                              className="button--danger-quiet roster__action"
+                              aria-label={removeButtonLabel(person)}
+                              onClick={() =>
+                                setRemoving({
+                                  userId: person.account!.id,
+                                  label: personLabel(person),
+                                  canSignIn: person.account!.can_sign_in,
+                                })
+                              }
+                            >
+                              {removeButtonText(person)}
+                            </button>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </div>
+      </section>
 
       {/*
         Montaje condicional: cada apertura crea el modal de nuevo, así que `showModal()`

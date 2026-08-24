@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   defaultItemConfig,
+  draftFromDocument,
   draftIssues,
   emptyDraftDocument,
   normalizeDraft,
@@ -613,3 +614,71 @@ describe('ITEM_KEY_PATTERN sigue siendo el mismo de siempre', () => {
 function withItem(only: TemplateDraftItem): TemplateDraftDocument {
   return { sections: [{ section_key: 'guarding', section_title: 'Guarding', items: [only] }] };
 }
+
+describe('draftFromDocument devuelve el documento congelado a forma de borrador', () => {
+  const draft: TemplateDraftDocument = {
+    sections: [
+      {
+        section_key: 'guarding',
+        section_title: 'Guarding',
+        organization_location_code: 'line-3',
+        items: [
+          {
+            item_key: 'guard.fitted',
+            prompt: 'Is the guard fitted?',
+            required: true,
+            response_type: 'yes_no',
+          },
+          {
+            item_key: 'guard.gap',
+            prompt: 'Gap in millimetres',
+            required: false,
+            response_type: 'number',
+            min: 0,
+            max: 50,
+            decimals: 1,
+          },
+        ],
+      },
+      {
+        section_key: 'housekeeping',
+        section_title: 'Housekeeping',
+        items: [
+          {
+            item_key: 'floor.clear',
+            prompt: 'Are the walkways clear?',
+            required: true,
+            response_type: 'yes_no_na',
+          },
+        ],
+      },
+    ],
+  };
+
+  it('es la inversa exacta de normalizeDraft', () => {
+    expect(draftFromDocument(normalizeDraft(draft))).toEqual(draft);
+  });
+
+  it('el resultado es un borrador válido', () => {
+    const parsed = templateDraftDocumentSchema.safeParse(draftFromDocument(normalizeDraft(draft)));
+
+    expect(parsed.success).toBe(true);
+  });
+
+  it('saca la position y no toca nada más', () => {
+    const sembrado = draftFromDocument(normalizeDraft(draft));
+
+    expect(sembrado.sections[0]).not.toHaveProperty('position');
+    expect(sembrado.sections[0]?.items[0]).not.toHaveProperty('position');
+    // El item_key es lo que hace que la versión N+1 conserve la serie de recurrencia.
+    expect(sembrado.sections[0]?.items.map((item) => item.item_key)).toEqual([
+      'guard.fitted',
+      'guard.gap',
+    ]);
+    expect(sembrado.sections[0]?.organization_location_code).toBe('line-3');
+  });
+
+  it('lo que sale se puede volver a publicar sin issues', () => {
+    expect(draftIssues(draftFromDocument(normalizeDraft(draft)))).toEqual([]);
+  });
+});

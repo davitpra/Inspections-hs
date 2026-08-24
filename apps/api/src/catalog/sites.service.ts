@@ -39,10 +39,13 @@ export class SitesService {
   async list(session: SessionScope): Promise<Site[]> {
     return this.db.withSessionClient(session, async (client) => {
       const { rows } = await client.query<SiteRow>(
+        // POR ANTIGÜEDAD, no por nombre: la consola abre en la primera de esta lista y
+        // renombrar una planta no tiene por qué mover a nadie de consola. `id` desempata
+        // para que dos altas del mismo instante no alternen entre requests.
         `SELECT id, code, name, deactivated_at
            FROM site
           WHERE id = ANY($1::uuid[])
-          ORDER BY name`,
+          ORDER BY created_at, id`,
         [[...session.siteIds]],
       );
 

@@ -48,8 +48,7 @@ import { periodStatusCase } from '../inspections/period-status.sql';
  */
 export const COMPLIANCE_PERIODS_SQL = `
   WITH months AS (
-    SELECT gs::date                                              AS period_start,
-           (gs + INTERVAL '1 month' - INTERVAL '1 day')::date    AS period_end
+    SELECT gs::date AS month
       FROM generate_series($2::date, $3::date, INTERVAL '1 month') gs
   ),
   -- LO QUE EL SITIO DEBÍA. Las dos mitades del UNION dicen cosas distintas y hacen falta
@@ -64,21 +63,56 @@ export const COMPLIANCE_PERIODS_SQL = `
   -- Una regla creada a mitad de mayo hace deber mayo: el trabajo de apertura habría
   -- abierto ese mismo período al día siguiente. Una desactivada en septiembre deja de
   -- hacer deber octubre, y septiembre sigue debiéndose.
-  owed AS (
-    SELECT m.period_start, m.period_end, sch.site_id, sch.template_id
+  --
+  -- DESDE 0029 UN PERÍODO NO ES UN MES. months genera los meses del rango, pero la
+  -- rama (a) solo produce fila cuando el mes EMPIEZA un período de esa regla —la misma
+  -- condición de MOD que el trabajo de apertura— y el fin se calcula con
+  -- frequency_months. Sin ese filtro, una regla trimestral haría deber doce períodos al
+  -- año y el documento declararía ocho incumplimientos que nadie cometió, que es
+  -- exactamente el error que este archivo existe para no cometer, en el otro sentido.
+  --
+  -- EL RANGO SE MIDE POR EL INICIO DEL PERÍODO, y conviene que quede escrito porque es una
+  -- decisión y no una consecuencia: un trimestre que empezó antes de $2 no entra al
+  -- reporte aunque lo solape. El consumidor real es el año calendario, y un año calendario
+  -- contiene trimestres, semestres y años enteros para cualquier ancla — así que el caso
+  -- no aparece salvo que alguien pida un rango que parte una serie al medio.
+  --
+  -- Las dos ramas devuelven largos distintos, así que period_months viaja en el UNION y
+  -- period_end se deriva de él UNA vez, afuera. Derivarlo adentro de cada rama haría que
+  -- dos filas del mismo período con el mismo largo no dedupliquen si una de las dos lo
+  -- calcula por otro camino.
+  owed_periods AS (
+    SELECT m.month AS period_start, sch.frequency_months AS period_months,
+           sch.site_id, sch.template_id
       FROM months m
       JOIN inspection_schedule sch
         ON sch.site_id = $1::uuid
-       AND sch.created_at < (m.period_start + INTERVAL '1 month')
-       AND (sch.deactivated_at IS NULL OR sch.deactivated_at >= m.period_start)
+       AND MOD(EXTRACT(MONTH FROM m.month)::int - sch.anchor_month + 12,
+               sch.frequency_months) = 0
+       AND sch.created_at < (m.month + (sch.frequency_months * INTERVAL '1 month'))
+       AND (sch.deactivated_at IS NULL OR sch.deactivated_at >= m.month)
     UNION
-    SELECT m.period_start, m.period_end, si.site_id, si.template_id
+    SELECT m.month AS period_start, si.period_months, si.site_id, si.template_id
       FROM months m
       JOIN scheduled_inspection si
         ON si.site_id = $1::uuid
-       AND si.period_start = m.period_start
+       AND si.period_start = m.month
+  ),
+  -- El fin se deriva UNA vez, después del UNION y no adentro de cada rama: acá ya
+  -- deduplicó, así que no hay forma de que dos caminos calculen el mismo día distinto. Es
+  -- también la única forma de que periodStatusCase() pueda nombrarlo — una expresión del
+  -- SELECT no se puede referenciar desde otra expresión del mismo SELECT.
+  owed AS (
+    SELECT period_start,
+           period_months,
+           site_id,
+           template_id,
+           (period_start + (period_months * INTERVAL '1 month') - INTERVAL '1 day')::date
+             AS period_end
+      FROM owed_periods
   )
   SELECT o.period_start,
+         o.period_months,
          o.period_end,
          si.id                                                   AS scheduled_inspection_id,
          o.template_id,

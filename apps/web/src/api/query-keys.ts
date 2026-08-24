@@ -65,6 +65,13 @@ export const queryKeys = {
   storedTemplateVersion: (scheduledInspectionId?: string) =>
     key('stored-template-version', scheduledInspectionId),
   /**
+   * Cuándo se bajó el paquete. Clave propia y no un campo de `storedTemplateVersion`
+   * porque es la respuesta a otra pregunta —qué tan viejo es esto— y la pantalla que la
+   * hace no necesita el documento entero para contestarla.
+   */
+  prefetchedAt: (scheduledInspectionId?: string) =>
+    key('prefetched-at', scheduledInspectionId),
+  /**
    * El documento pedido POR RED, para la vista previa de una asignación que no está
    * descargada. Clave distinta de `storedTemplateVersion` a propósito: esa lee del
    * dispositivo y nunca sale a la red, y confundirlas convertiría una lectura offline

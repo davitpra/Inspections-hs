@@ -1,6 +1,7 @@
 import { ITEM_KEY_PATTERN, signatureAnswerSchema, templateDocumentSchema } from '@hs/forms';
 import { z } from 'zod';
 
+import { periodMonthsSchema } from './compliance.js';
 import { findingSchema, submissionFindingsSchema } from './findings.js';
 
 /**
@@ -230,6 +231,8 @@ export const submittedInspectionSchema = z.strictObject({
   inspection_id: z.uuid(),
   site_id: z.uuid(),
   period_start: z.iso.date(),
+  /** El largo del período, para que el registro se titule «Q1 2026» y no «January». */
+  period_months: periodMonthsSchema,
   template_name: z.string().min(1),
   template_version_id: z.uuid(),
   template_version: z.int().positive(),

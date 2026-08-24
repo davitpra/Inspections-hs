@@ -8,6 +8,7 @@ describe('lo completado por este inspector', () => {
       id: 's-1',
       site_id: 'site-1',
       period_start: '2026-06-01',
+      period_months: 1 as const,
       period_end: '2026-06-30',
       template_id: 't-1',
       template_name: 'Monthly general workplace inspection',

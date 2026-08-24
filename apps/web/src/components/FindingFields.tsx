@@ -17,9 +17,20 @@ import { PhotoField } from './PhotoField';
  * La ubicación ya no se pregunta acá: la sección declara la ubicación conceptual y el
  * servidor la resuelve contra el catálogo de la planta. Si no hay mapeo, el hallazgo queda
  * explícitamente sin resolver en vez de inventar un lugar.
+ *
+ * Lo prescrito se MUESTRA, lo observado se ESCRIBE, y no se mezclan. `correctiveAction`
+ * es lo que la organización decidió hace meses sobre esta pregunta; la descripción es lo
+ * que el inspector vio hoy. Por eso el texto prescrito no prellena el campo ni viaja como
+ * `placeholder`: un valor que nadie eligió termina leyéndose como evidencia firmada, que
+ * es exactamente el error que corrigió el retiro del nivel de control prescrito.
+ *
+ * Llega como cadena y no como el ítem entero a propósito. Este componente no necesita el
+ * tipo de respuesta ni la config, y no tenerlos hace imposible que mañana alguien lea el
+ * prompt o el umbral desde adentro del bloque de hallazgo.
  */
 export function FindingFields({
   itemKey,
+  correctiveAction,
   finding,
   photos,
   disabled,
@@ -28,6 +39,7 @@ export function FindingFields({
   onDiscardPhoto,
 }: {
   itemKey: string;
+  correctiveAction: string | undefined;
   finding: FindingDraftRow | undefined;
   photos: PhotoRow[];
   disabled: boolean;
@@ -40,6 +52,25 @@ export function FindingFields({
   return (
     <div className="finding">
       <p className="finding__title">This needs a finding</p>
+
+      {/*
+        Lo que la plantilla ya decidió para esta pregunta, tal como se congeló al
+        publicar. Va ARRIBA del campo porque es contexto para redactar la observación y no
+        un comentario sobre ella: abajo llegaría cuando el inspector ya escribió.
+
+        Una pregunta sin prescripción no dibuja nada —ni encabezado ni leyenda—. Un "no
+        corrective action defined" convertiría lo que el autor no decidió en una
+        afirmación de la plantilla.
+
+        El umbral `fails_when` no se muestra: el motor no lo lee, y enseñarlo durante la
+        recorrida presentaría como vigente un valor que el sistema nunca aplica.
+      */}
+      {correctiveAction ? (
+        <div className="finding__prescription">
+          <p className="finding__prescription-title">Corrective action</p>
+          <p>{correctiveAction}</p>
+        </div>
+      ) : null}
 
       <label htmlFor={`finding-description-${itemKey}`}>What is wrong?</label>
       {/*

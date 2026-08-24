@@ -40,6 +40,7 @@ function scheduled(overrides: Record<string, unknown> = {}) {
     id: 's-1',
     site_id: SITE,
     period_start: '2027-07-01',
+    period_months: 1,
     period_end: '2027-07-31',
     template_id: 't-1',
     template_name: 'Monthly general workplace inspection',

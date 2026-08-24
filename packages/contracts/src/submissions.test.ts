@@ -323,6 +323,7 @@ describe('submittedInspectionSchema', () => {
       inspection_id: SUBMISSION_ID,
       site_id: SITE_ID,
       period_start: '2026-08-01',
+      period_months: 1,
       template_name: 'Monthly general workplace inspection',
       template_version_id: VERSION_ID,
       template_version: 2,

@@ -1,6 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useId, useState } from 'react';
-import type { InspectionSchedule } from '@hs/contracts';
+import {
+  PERIOD_MONTHS,
+  PERIOD_MONTHS_LABELS,
+  type InspectionSchedule,
+  type PeriodMonths,
+} from '@hs/contracts';
 
 import { createSchedule, listTemplates } from '../../api/inspections';
 import { queryKeys } from '../../api/query-keys';
@@ -11,7 +16,18 @@ import { queryKeys } from '../../api/query-keys';
  * El selector EXCLUYE las plantillas que ya tienen regla activa en este sitio. Es la
  * mitad cliente de la unicidad: el servidor responde `schedule_already_active` igual, y
  * no ofrecerlo evita que el coordinador provoque ese error haciendo lo único que la
- * pantalla le ofrece.
+ * pantalla le ofrece. La exclusión NO mira la frecuencia: sigue siendo una regla activa
+ * por planta y plantilla, cualquiera sea cada cuánto abre.
+ *
+ * EL MES ANCLA SOLO APARECE CUANDO SIGNIFICA ALGO. Para una regla mensual todos los meses
+ * empiezan período, así que ofrecerlo sería pedir una decisión sin consecuencia — y el
+ * coordinador que la tomara creería haber configurado algo. Cuando no se manda, el
+ * servidor lo resuelve con el mes civil de Ontario, que es el calendario en el que abre el
+ * trabajo automático; el navegador no lo calcula porque su reloj es el del dispositivo.
+ *
+ * LA FRECUENCIA NO SE PUEDE CAMBIAR DESPUÉS. Se dice acá, en el alta, porque es el único
+ * momento en que se puede elegir: el motor rechaza el UPDATE con HS001 y el reporte de
+ * cumplimiento depende de que no se mueva.
  */
 export function NewRuleForm({
   siteId,
@@ -23,6 +39,8 @@ export function NewRuleForm({
   const queryClient = useQueryClient();
   const controlId = useId();
   const [templateId, setTemplateId] = useState('');
+  const [frequencyMonths, setFrequencyMonths] = useState<PeriodMonths>(1);
+  const [anchorMonth, setAnchorMonth] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const templates = useQuery({
@@ -37,9 +55,20 @@ export function NewRuleForm({
   const available = (templates.data ?? []).filter((template) => !taken.has(template.id));
 
   const create = useMutation({
-    mutationFn: () => createSchedule({ site_id: siteId, template_id: templateId }),
+    mutationFn: () =>
+      createSchedule({
+        site_id: siteId,
+        template_id: templateId,
+        frequency_months: frequencyMonths,
+        // Sin ancla lo resuelve el servidor; con mensual no significa nada y no se manda.
+        ...(frequencyMonths !== 1 && anchorMonth !== ''
+          ? { anchor_month: Number(anchorMonth) }
+          : {}),
+      }),
     onSuccess: () => {
       setTemplateId('');
+      setFrequencyMonths(1);
+      setAnchorMonth('');
       setError(null);
       void queryClient.invalidateQueries({ queryKey: queryKeys.inspectionSchedules() });
     },
@@ -66,6 +95,42 @@ export function NewRuleForm({
         ))}
       </select>
 
+      <label htmlFor={`${controlId}-frequency`}>Frequency</label>
+      <select
+        id={`${controlId}-frequency`}
+        value={frequencyMonths}
+        onChange={(event) => {
+          const next = Number(event.target.value) as PeriodMonths;
+
+          setFrequencyMonths(next);
+          if (next === 1) setAnchorMonth('');
+        }}
+      >
+        {PERIOD_MONTHS.map((months) => (
+          <option key={months} value={months}>
+            {PERIOD_MONTHS_LABELS[months]}
+          </option>
+        ))}
+      </select>
+
+      {frequencyMonths === 1 ? null : (
+        <>
+          <label htmlFor={`${controlId}-anchor`}>Starting in</label>
+          <select
+            id={`${controlId}-anchor`}
+            value={anchorMonth}
+            onChange={(event) => setAnchorMonth(event.target.value)}
+          >
+            <option value="">This month</option>
+            {ANCHOR_MONTHS.map((month, index) => (
+              <option key={month} value={index + 1}>
+                {month}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
+
       <button
         type="button"
         onClick={() => create.mutate()}
@@ -74,7 +139,17 @@ export function NewRuleForm({
         {create.isPending ? 'Creating…' : 'Create rule'}
       </button>
 
+      <p className="note">
+        The frequency and its starting month cannot be changed later. To change them,
+        deactivate the rule and create another.
+      </p>
+
       {error ? <p className="notice">{error}</p> : null}
     </div>
   );
 }
+
+const ANCHOR_MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];

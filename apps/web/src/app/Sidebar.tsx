@@ -2,7 +2,7 @@ import type { Session } from '@hs/contracts';
 import { Link } from '@tanstack/react-router';
 
 import { AccountChip } from '../components/AccountChip';
-import { CheckIcon } from '../components/icons';
+import { CrossIcon } from '../components/icons';
 import { initials } from '../presentation/account';
 import { visibleNavItems } from './nav-items';
 
@@ -28,7 +28,7 @@ export function Sidebar({
     <nav className="sidebar" aria-label="Main">
       <div className="sidebar__brand">
         <span className="sidebar__brand-mark">
-          <CheckIcon size={16} />
+          <CrossIcon size={16} />
         </span>
         <span>Health &amp; Safety</span>
       </div>

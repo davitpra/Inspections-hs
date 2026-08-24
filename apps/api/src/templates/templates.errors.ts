@@ -24,8 +24,10 @@ export type TemplateDraftErrorCode =
   | 'template_draft_site_out_of_scope'
   | 'template_draft_site_deactivated'
   | 'template_draft_not_publishable'
+  | 'template_draft_name_locked'
   | 'template_key_taken'
-  | 'template_item_key_taken';
+  | 'template_item_key_taken'
+  | 'template_item_deactivated';
 
 export class TemplateDraftException extends HttpException {
   constructor(
@@ -38,7 +40,7 @@ export class TemplateDraftException extends HttpException {
   }
 }
 
-export type TemplateVersionErrorCode = 'template_version_not_found';
+export type TemplateVersionErrorCode = 'template_version_not_found' | 'template_not_found';
 
 export class TemplateVersionException extends HttpException {
   constructor(readonly code: TemplateVersionErrorCode, message: string, status: HttpStatus) {
@@ -51,6 +53,21 @@ export const templateVersionNotFound = (): TemplateVersionException =>
   new TemplateVersionException(
     'template_version_not_found',
     'That published template version does not exist',
+    HttpStatus.NOT_FOUND,
+  );
+
+/**
+ * La plantilla que se quiere revisar no existe, o fue dada de baja: para quien pregunta son
+ * lo mismo, igual que un borrador descartado y uno inexistente.
+ *
+ * Es distinto de `template_version_not_found`, que es la plantilla que sí existe y todavía no
+ * publicó nada. Las dos son `404` y la pantalla dice cosas distintas: una no se puede abrir,
+ * la otra no se puede corregir porque no hay nada que corregir todavía.
+ */
+export const templateNotFound = (): TemplateVersionException =>
+  new TemplateVersionException(
+    'template_not_found',
+    'That template does not exist',
     HttpStatus.NOT_FOUND,
   );
 
@@ -177,4 +194,37 @@ export const templateItemKeyTaken = (): TemplateDraftException =>
     'template_item_key_taken',
     'An item key in this draft is already registered by another template',
     HttpStatus.CONFLICT,
+  );
+
+/**
+ * El nombre de una plantilla publicada no se puede cambiar desde su revisión.
+ *
+ * No es una restricción inventada por comodidad: `template.name` no es actualizable por
+ * ningún camino de aplicación —`hs_app` no tiene `UPDATE` sobre `template` desde 0003 §9—,
+ * así que un nombre editable en el editor sería un campo que se guarda en el borrador, se
+ * muestra en el builder y después la publicación ignora. Dos respuestas a la misma pregunta
+ * en el mismo registro.
+ *
+ * El editor lo muestra de solo lectura, así que llegar acá es un cliente desincronizado.
+ */
+export const templateDraftNameLocked = (): TemplateDraftException =>
+  new TemplateDraftException(
+    'template_draft_name_locked',
+    'The name of a published template cannot be changed by revising it',
+    HttpStatus.CONFLICT,
+  );
+
+/**
+ * El documento declara una pregunta que fue retirada.
+ *
+ * `template_item.deactivated_at` dice «esta pregunta no se vuelve a hacer»; una versión nueva
+ * que la declare la estaría haciendo. El motor también lo rechaza al proyectar, pero el error
+ * de acá nombra la clave, que es lo único que el autor puede buscar en su documento.
+ */
+export const templateItemDeactivated = (itemKeys: readonly string[]): TemplateDraftException =>
+  new TemplateDraftException(
+    'template_item_deactivated',
+    `This template asks a question that was retired: ${itemKeys.join(', ')}`,
+    HttpStatus.CONFLICT,
+    { item_keys: itemKeys },
   );

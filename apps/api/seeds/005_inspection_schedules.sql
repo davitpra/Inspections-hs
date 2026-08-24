@@ -38,9 +38,16 @@ SELECT set_config('app.user_id', 'acc00000-0000-4000-8000-000000000001', true);
 -- `WHERE NOT EXISTS` y no `ON CONFLICT DO NOTHING`: el único es un índice PARCIAL
 -- (`WHERE deactivated_at IS NULL`) y `ON CONFLICT` sobre un parcial exige repetir su
 -- predicado como inferencia, que es más frágil de leer que la condición explícita.
-INSERT INTO inspection_schedule (site_id, template_id, default_inspector_id, created_by)
+--
+-- MENSUAL Y ANCLADA EN ENERO, explícito desde 0029. Para una regla mensual el ancla no
+-- significa nada —`mod 1` es cero para todos los meses— así que enero acá no es una
+-- elección, es el único valor que no puede distinguirse de otro.
+INSERT INTO inspection_schedule
+  (site_id, template_id, frequency_months, anchor_month, default_inspector_id, created_by)
 SELECT s.id,
        t.id,
+       1,
+       1,
        NULL,
        'acc00000-0000-4000-8000-000000000001'
   FROM site s

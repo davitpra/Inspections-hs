@@ -20,14 +20,16 @@ function envelope(kind: string, payload: unknown) {
 }
 
 const PERIOD_OPENED = {
-  period_start: '2026-08-01',
-  period_end: '2026-08-31',
+  opened_for_month: '2026-08-01',
   opened: [
     {
       scheduled_inspection_id: ACTION_ID,
       template_id: FINDING_ID,
       template_name: 'Monthly greenhouse walk',
       inspector_id: null,
+      period_start: '2026-08-01',
+      period_end: '2026-08-31',
+      period_months: 1,
     },
   ],
 };

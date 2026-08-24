@@ -163,6 +163,66 @@ export async function storedTemplateVersion(
   return row?.payload.kind === 'template_version' ? row.payload : null;
 }
 
+/**
+ * Cuándo se bajó el documento, tal como lo selló la descarga.
+ *
+ * `fetched_at` se escribe en cada fila desde que existe la tabla y hasta ahora no lo leía
+ * nadie. Es lo que hace honesto el botón de volver a bajar: sin la fecha, refrescar es una
+ * apuesta — el inspector no tiene forma de saber si lo que tiene es de esta mañana o del
+ * mes pasado.
+ *
+ * Sale de la fila del documento y no de las tres: es la pieza que identifica el paquete, y
+ * las tres se bajan juntas.
+ */
+export async function prefetchedAt(
+  scheduledInspectionId: string,
+  database: OfflineDatabase = db,
+): Promise<string | null> {
+  const row = await database.prefetch.get([scheduledInspectionId, 'template_version']);
+
+  return row?.fetched_at ?? null;
+}
+
+/**
+ * En qué se desalineó lo guardado, si es que en algo.
+ *
+ * Son DOS problemas distintos con dos salidas distintas, y por eso esto no devuelve un
+ * booleano: `stale-package` se arregla volviendo a bajar, `draft-orphaned` no se arregla
+ * de ninguna manera —el borrador quedó atado a un documento que el dispositivo ya no
+ * tiene— y hay que descartarlo. Un booleano obligaría a la pantalla a volver a
+ * distinguirlos para saber qué ofrecer.
+ *
+ * **Falta de información es `none`, no deriva.** Mientras la consulta del paquete no
+ * resolvió no se sabe nada, y un aviso dibujado antes de saber manda al inspector a
+ * arreglar algo que no está roto. Es el mismo criterio que `readiness` aplica con
+ * `unknown`.
+ *
+ * `frozenVersionId` sale de la lista de pendientes, que ya trae la versión a la que la
+ * inspección está atada: comparar no cuesta una llamada. Pedir el paquete por red para
+ * compararlo convertiría una lectura que funciona sin señal en una que no.
+ */
+export type PackageDrift = 'none' | 'stale-package' | 'draft-orphaned';
+
+export function packageDrift({
+  storedVersionId,
+  frozenVersionId,
+  draftVersionId,
+}: {
+  storedVersionId: string | null | undefined;
+  frozenVersionId: string | null | undefined;
+  draftVersionId?: string | null;
+}): PackageDrift {
+  if (!storedVersionId) return 'none';
+
+  // El borrador primero: si el que está en curso no puede interpretarse, eso es lo que hay
+  // que decir, aunque además el paquete esté rancio. Refrescar no lo salva.
+  if (draftVersionId && draftVersionId !== storedVersionId) return 'draft-orphaned';
+
+  if (!frozenVersionId) return 'none';
+
+  return storedVersionId === frozenVersionId ? 'none' : 'stale-package';
+}
+
 export async function storedLocations(
   scheduledInspectionId: string,
   database: OfflineDatabase = db,

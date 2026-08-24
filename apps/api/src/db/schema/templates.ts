@@ -139,6 +139,14 @@ export const templateDraft = pgTable(
     key: text('key').notNull(),
     name: text('name').notNull(),
 
+    // QUÉ PLANTILLA REVISA ESTE BORRADOR (migración 0028 §1). Nula: va a crear
+    // una plantilla. No nula: va a agregarle una versión a esta. Es la única
+    // diferencia entre las dos cosas, y por eso no hay una tabla aparte.
+    //
+    // Write-once por omisión: no está en el GRANT UPDATE de 0028, igual que
+    // `key` y `created_by`.
+    templateId: uuid('template_id').references(() => template.id),
+
     // La forma laxa: `templateDraftDocumentSchema` de @hs/forms, sin `position`.
     document: jsonb('document').$type<TemplateDraftDocument>().notNull(),
 
@@ -166,8 +174,9 @@ export const templateDraft = pgTable(
     publishedAt: timestamp('published_at', { withTimezone: true }),
     templateVersionId: uuid('template_version_id').references(() => templateVersion.id),
   },
-  // El índice es PARCIAL (`WHERE discarded_at IS NULL`) y eso Drizzle no lo sabe
-  // expresar acá; vive en la migración. Un borrador descartado libera su `key`.
+  // El índice es PARCIAL y eso Drizzle no lo sabe expresar acá; vive en la
+  // migración. Un borrador descartado o publicado libera su `key`, y uno de
+  // revisión nunca la reservó: lleva a propósito la de su plantilla (0028 §3).
   (table) => [index('template_draft_key_live_idx').on(table.key)],
 );
 

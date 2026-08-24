@@ -13,7 +13,9 @@ import type { OfflineDatabase } from './db';
 import {
   isFieldReady,
   missingForField,
+  packageDrift,
   prefetchInspection,
+  prefetchedAt,
   storedLocations,
   storedRoster,
   storedTemplateVersion,
@@ -123,5 +125,91 @@ describe('prefetchInspection', () => {
     expect(stored?.version).toBe(2);
     expect(stored?.template_version_id).toBe(VERSION_2);
     expect(stored?.template_version_id).not.toBe(VERSION_3);
+  });
+
+  /**
+   * Spec: "A field-ready inspection can still be prepared again".
+   *
+   * El caso de arriba prueba que el servidor devuelve la congelada; este prueba lo otro,
+   * que es lo que hace posible refrescar: la segunda descarga PISA lo guardado. Sin esto,
+   * un payload que quedó mal escrito no se podría reemplazar nunca.
+   */
+  it('volver a bajar pisa el paquete guardado', async () => {
+    database = freshDatabase();
+    await prefetchInspection(INSPECTION_ID, { database, client: fullServer(2, VERSION_2) });
+
+    await prefetchInspection(INSPECTION_ID, { database, client: fullServer(3, VERSION_3) });
+
+    const stored = await storedTemplateVersion(INSPECTION_ID, database);
+    expect(stored?.version).toBe(3);
+    expect(stored?.template_version_id).toBe(VERSION_3);
+  });
+});
+
+describe('prefetchedAt', () => {
+  it('devuelve el sello con el que se guardó el documento', async () => {
+    database = freshDatabase();
+    await prefetchInspection(INSPECTION_ID, { database, client: fullServer() });
+
+    const stamp = await prefetchedAt(INSPECTION_ID, database);
+
+    expect(stamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it('no inventa un sello para lo que nunca se bajó', async () => {
+    database = freshDatabase();
+
+    expect(await prefetchedAt(INSPECTION_ID, database)).toBeNull();
+  });
+});
+
+/**
+ * La deriva es lo que separa "esto se arregla volviendo a bajar" de "esto no se arregla".
+ * Se prueba sin Dexie y sin renderizar porque es una decisión, no un dibujo.
+ */
+describe('packageDrift', () => {
+  it('no reporta nada cuando lo guardado es la versión congelada', () => {
+    expect(
+      packageDrift({ storedVersionId: VERSION_2, frozenVersionId: VERSION_2 }),
+    ).toBe('none');
+  });
+
+  it('no reporta nada mientras falte con qué comparar', () => {
+    // La consulta del paquete todavía no resolvió: no se sabe nada, y un aviso acá manda
+    // al inspector a arreglar algo que no está roto.
+    expect(
+      packageDrift({ storedVersionId: undefined, frozenVersionId: VERSION_2 }),
+    ).toBe('none');
+    expect(
+      packageDrift({ storedVersionId: VERSION_2, frozenVersionId: undefined }),
+    ).toBe('none');
+  });
+
+  it('nombra el paquete rancio cuando no es la versión a la que la inspección está atada', () => {
+    expect(
+      packageDrift({ storedVersionId: VERSION_3, frozenVersionId: VERSION_2 }),
+    ).toBe('stale-package');
+  });
+
+  it('nombra el borrador huérfano y lo pone por delante del paquete rancio', () => {
+    // Las dos cosas están mal a la vez, y la que hay que decir es la del borrador:
+    // refrescar arregla el paquete y NO arregla el borrador.
+    expect(
+      packageDrift({
+        storedVersionId: VERSION_3,
+        frozenVersionId: VERSION_2,
+        draftVersionId: VERSION_2,
+      }),
+    ).toBe('draft-orphaned');
+  });
+
+  it('un borrador alineado con lo guardado no es huérfano', () => {
+    expect(
+      packageDrift({
+        storedVersionId: VERSION_2,
+        frozenVersionId: VERSION_2,
+        draftVersionId: VERSION_2,
+      }),
+    ).toBe('none');
   });
 });

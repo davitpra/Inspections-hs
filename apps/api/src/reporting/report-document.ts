@@ -1,4 +1,4 @@
-import type { CompliancePayload } from '@hs/contracts';
+import { periodLabel, type CompliancePayload } from '@hs/contracts';
 
 /**
  * Requisitos §3 R5 — EL DOCUMENTO QUE SE LE ENTREGA AL MLITSD.
@@ -129,11 +129,22 @@ function coverageSection({ payload }: DocumentInput): string {
 </section>`;
 }
 
+/**
+ * EL NOMBRE DEL PERÍODO Y ADEMÁS SUS DOS EXTREMOS, no uno de los dos.
+ *
+ * Desde 0029 un período puede durar uno, tres, seis o doce meses, así que «2026-01-01» ya
+ * no dice cuánto cubre. El nombre lo hace legible —«Q1 2026»— y las fechas exactas
+ * debajo son las que defienden el registro: un inspector del MLITSD tiene que poder ver el
+ * alcance sin confiar en que quien escribió la etiqueta la calculó bien.
+ */
 function periodsSection({ payload }: DocumentInput): string {
   const rows = payload.periods
     .map(
       (period) => `<tr class="status-${period.status}">
-      <td>${text(period.period_start)} &ndash; ${text(period.period_end)}</td>
+      <td>
+        <strong>${text(periodLabel(period.period_start, period.period_months))}</strong>
+        <div class="small">${text(period.period_start)} &ndash; ${text(period.period_end)}</div>
+      </td>
       <td class="status">${text(period.status)}</td>
       <td>${period.occurred_at ? text(period.occurred_at) : '&mdash;'}</td>
       <td class="mono small">${period.inspection_id ? text(period.inspection_id) : scheduleNote(period.scheduled_inspection_id)}</td>

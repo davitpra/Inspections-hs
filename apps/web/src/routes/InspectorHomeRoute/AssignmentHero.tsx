@@ -6,30 +6,44 @@ import { queryKeys } from '../../api/query-keys';
 import { DownloadForField } from '../../components/FieldPackage';
 import { CalendarIcon, ClockIcon, LockIcon, PersonIcon, PinIcon } from '../../components/icons';
 import type { DraftRow } from '../../offline/db';
-import { missingForField, storedTemplateVersion } from '../../offline/prefetch';
+import {
+  missingForField,
+  packageDrift,
+  prefetchedAt,
+  storedTemplateVersion,
+} from '../../offline/prefetch';
 import { displayName } from '../../presentation/account';
-import { monthName } from '../../presentation/dates';
-import { assignmentState, dueIn, readiness } from './presentation';
+import { formatInstant, periodLabel } from '../../presentation/dates';
+import { assignmentState, driftMessage, dueIn, readiness } from './presentation';
 
 /**
  * La asignación que importa AHORA: título, la única acción que corresponde, y la tira de
- * datos que la identifica. Es el héroe de la pantalla — el resto del año sigue debajo,
- * en la misma grilla de siempre.
+ * datos que la identifica. Es el héroe de la pantalla: debajo va su progreso, y más abajo
+ * lo que sigue y lo que ya se cerró.
  *
- * Consulta `fieldReady` con la MISMA clave que `PendingRow`: no agrega una llamada, lee
- * la misma caché que la tarjeta del mes en la grilla de abajo tendría si estuviera ahí.
+ * Consulta `fieldReady` con la MISMA clave que `AssignmentChecklist` y la captura: no
+ * agrega una llamada, lee la caché que las tres comparten — y que `FieldPackage`
+ * invalida para todas cuando el paquete termina de bajar.
+ *
+ * Con el paquete completo la tarjeta ofrece DOS cosas: salir a recorrer, que es lo
+ * primario, y volver a bajar el paquete, que es secundario y no lo desplaza. El sello de
+ * la descarga va en la tira de datos porque es lo que hace que refrescar sea una decisión
+ * y no una apuesta.
  */
 export function AssignmentHero({
   inspection,
   site,
   account,
   draftStatus,
+  draftTemplateVersionId,
   today,
 }: {
   inspection: PendingInspection;
   site: Site | undefined;
   account: Session;
   draftStatus: DraftRow['status'] | null;
+  /** La versión que el borrador congeló, si hay borrador. Es la mitad de la deriva. */
+  draftTemplateVersionId: string | null;
   today: string;
 }): React.JSX.Element {
   const missing = useQuery({
@@ -42,7 +56,30 @@ export function AssignmentHero({
     queryFn: () => storedTemplateVersion(inspection.id),
   });
 
+  /**
+   * Cuándo se bajó. Consulta aparte de la anterior porque contesta otra pregunta —qué tan
+   * viejo es esto— y es la que justifica el botón de volver a bajar: sin la fecha,
+   * refrescar es una apuesta.
+   */
+  const fetchedAt = useQuery({
+    queryKey: queryKeys.prefetchedAt(inspection.id),
+    queryFn: () => prefetchedAt(inspection.id),
+  });
+
   const state = readiness(missing.data);
+
+  /**
+   * La comparación NO sale a la red: la versión a la que la inspección está congelada ya
+   * viaja en la lista de pendientes, y la guardada está en el dispositivo. Pedir el
+   * paquete por red para compararlo convertiría una lectura que funciona sin señal en una
+   * que no.
+   */
+  const drift = packageDrift({
+    storedVersionId: stored.data?.template_version_id,
+    frozenVersionId: inspection.template_version_id,
+    draftVersionId: draftTemplateVersionId,
+  });
+  const driftNotice = driftMessage(drift, draftStatus);
   const decision = assignmentState({
     readiness: state,
     overdue: inspection.overdue,
@@ -73,8 +110,18 @@ export function AssignmentHero({
           ) : null}
 
           {decision.action === 'download' ? <DownloadForField id={inspection.id} /> : null}
+
+          {decision.showsRefresh ? (
+            <DownloadForField
+              id={inspection.id}
+              label="Refresh field package"
+              className="button--outline"
+            />
+          ) : null}
         </div>
       </div>
+
+      {driftNotice ? <p className="notice notice--warn">{driftNotice}</p> : null}
 
       <dl className="facts">
         <div className="facts__item">
@@ -89,7 +136,7 @@ export function AssignmentHero({
             <CalendarIcon size={16} /> Inspection month
           </span>
           <span className="facts__value">
-            {monthName(inspection.period_start)} {inspection.period_start.slice(0, 4)}
+            {periodLabel(inspection.period_start, inspection.period_months)}
           </span>
         </div>
 
@@ -124,7 +171,9 @@ export function AssignmentHero({
             </span>
             <span className="facts__value">
               Version {stored.data.version}
-              <span className="facts__hint">Locked</span>
+              <span className="facts__hint">
+                {fetchedAt.data ? `Downloaded ${formatInstant(fetchedAt.data)}` : 'Locked'}
+              </span>
             </span>
           </div>
         ) : null}

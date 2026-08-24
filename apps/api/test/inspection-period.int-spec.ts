@@ -97,7 +97,7 @@ describe('la apertura del período', () => {
   it('resuelve el período en el calendario de la planta, no en UTC', async () => {
     const result = await stack.openPeriod.run(LATE_AUGUST_UTC);
 
-    expect(result.periodStart).toBe(AUGUST);
+    expect(result.month).toBe(AUGUST);
     expect(result.opened).toBe(1);
 
     const rows = await scheduledForPeriod(db.app, [SITE_A, SITE_B], AUGUST);
@@ -172,9 +172,18 @@ describe('la notificación al coordinador', () => {
 
     expect(opened).toHaveLength(1);
     expect(opened[0]?.kind).toBe('inspection_period_opened');
-    expect(opened[0]?.payload.period_start).toBe(NOVEMBER);
-    expect(opened[0]?.payload.period_end).toBe('2026-11-30');
-    expect((opened[0]?.payload.opened as unknown[]) ?? []).toHaveLength(1);
+
+    // EL PERÍODO VIVE EN CADA ENTRADA Y NO ARRIBA (0029): dos reglas de la misma planta
+    // pueden tener frecuencias distintas, así que una corrida puede abrir dos períodos que
+    // no terminan el mismo día. Arriba queda el mes que la corrida resolvió.
+    expect(opened[0]?.payload.opened_for_month).toBe(NOVEMBER);
+
+    const entries = (opened[0]?.payload.opened as Record<string, unknown>[]) ?? [];
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.period_start).toBe(NOVEMBER);
+    expect(entries[0]?.period_end).toBe('2026-11-30');
+    expect(entries[0]?.period_months).toBe(1);
   });
 
   it('no notifica a un coordinador sin alcance en esa planta', async () => {
@@ -506,3 +515,160 @@ function restore(name: string, value: string | undefined): void {
   if (value === undefined) delete process.env[name];
   else process.env[name] = value;
 }
+
+/**
+ * LA FRECUENCIA DE LA REGLA (migración 0029).
+ *
+ * Sitio propio y regla propia para no depender del estado que dejan los describe de
+ * arriba: la unicidad es por `(site_id, template_id)` con la regla activa, así que una
+ * regla trimestral no puede convivir con la mensual de SITE_A.
+ */
+describe('una regla que no es mensual', () => {
+  const SITE_Q = '9b000000-0000-4000-8000-000000000003';
+
+  beforeAll(async () => {
+    await registerSite(db.migrator, SITE_Q, 'quarterly-site');
+
+    // Trimestral anclada en enero: la serie es enero, abril, julio y octubre.
+    await createSchedule(db.app, SITE_Q, templateId, null, {
+      frequencyMonths: 3,
+      anchorMonth: 1,
+    });
+  });
+
+  it('abre UN período que cubre el trimestre entero', async () => {
+    await stack.openPeriod.run(new Date('2026-01-20T12:00:00Z'));
+
+    const rows = await scheduledForPeriod(db.app, [SITE_Q], '2026-01-01');
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.period_months).toBe(3);
+    expect(rows[0]?.period_end).toBe('2026-03-31');
+  });
+
+  /**
+   * LA PROPIEDAD DE RECUPERACIÓN DE ADR-005, que es la razón de que el trabajo pregunte
+   * por el período que CONTIENE al mes y no por «hoy empieza uno». Correr en febrero, con
+   * enero perdido, tiene que abrir el trimestre de enero — no saltearlo hasta abril.
+   */
+  it('correr a mitad del trimestre abre el trimestre que ya había empezado', async () => {
+    const rows = await scheduledForPeriod(db.app, [SITE_Q], '2026-01-01');
+    expect(rows).toHaveLength(1);
+
+    await stack.openPeriod.run(new Date('2026-02-14T12:00:00Z'));
+    await stack.openPeriod.run(new Date('2026-03-31T12:00:00Z'));
+
+    // Los tres meses resuelven el MISMO period_start, así que el único parcial absorbe
+    // las dos corridas sobrantes. La idempotencia no se movió de lugar.
+    expect(await scheduledForPeriod(db.app, [SITE_Q], '2026-01-01')).toHaveLength(1);
+    expect(await scheduledForPeriod(db.app, [SITE_Q], '2026-02-01')).toHaveLength(0);
+    expect(await scheduledForPeriod(db.app, [SITE_Q], '2026-03-01')).toHaveLength(0);
+  });
+
+  it('el trimestre siguiente sí es un período nuevo', async () => {
+    await stack.openPeriod.run(new Date('2026-04-05T12:00:00Z'));
+
+    const rows = await scheduledForPeriod(db.app, [SITE_Q], '2026-04-01');
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.period_end).toBe('2026-06-30');
+  });
+
+  it('una frecuencia que no divide a 12 la rechaza el motor', async () => {
+    const failure = await inScope(
+      db.app,
+      [SITE_Q],
+      `INSERT INTO inspection_schedule (site_id, template_id, frequency_months, anchor_month)
+       VALUES ($1, $2, 5, 1)`,
+      [SITE_Q, templateId],
+    ).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(Error);
+    expect(String(failure)).toContain('inspection_schedule_frequency_check');
+  });
+
+  it('un mes ancla fuera de 1..12 lo rechaza el motor', async () => {
+    const failure = await inScope(
+      db.app,
+      [SITE_Q],
+      `INSERT INTO inspection_schedule (site_id, template_id, frequency_months, anchor_month)
+       VALUES ($1, $2, 3, 13)`,
+      [SITE_Q, templateId],
+    ).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(Error);
+    expect(String(failure)).toContain('inspection_schedule_anchor_check');
+  });
+});
+
+/**
+ * LA INMUTABILIDAD DE LA FRECUENCIA, con las dos barreras que ADR-004 exige.
+ *
+ * No es purismo: el CTE `owed` del reporte GENERA los períodos que el sitio debía a partir
+ * de la regla, así que un UPDATE acá no cambiaría el futuro — reescribiría cuántas
+ * inspecciones debía el sitio el año pasado.
+ */
+describe('la frecuencia de una regla se asigna una sola vez', () => {
+  const SITE_F = '9b000000-0000-4000-8000-000000000004';
+  let ruleId: string;
+
+  beforeAll(async () => {
+    await registerSite(db.migrator, SITE_F, 'frozen-site');
+    ruleId = await createSchedule(db.app, SITE_F, templateId, null, {
+      frequencyMonths: 3,
+      anchorMonth: 2,
+    });
+  });
+
+  it('la aplicación no puede cambiarla: le falta el privilegio (42501)', async () => {
+    const failure = await inScope(
+      db.app,
+      [SITE_F],
+      'UPDATE inspection_schedule SET frequency_months = 1 WHERE id = $1',
+      [ruleId],
+    ).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as { code?: string }).code).toBe('42501');
+  });
+
+  it('el dueño de la tabla tampoco: lo frena el trigger de guarda (HS001)', async () => {
+    const failure = await inScope(
+      db.migrator,
+      [SITE_F],
+      'UPDATE inspection_schedule SET anchor_month = 4 WHERE id = $1',
+      [ruleId],
+    ).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as { code?: string }).code).toBe('HS001');
+  });
+
+  it('y la regla sigue diciendo lo mismo que cuando nació', async () => {
+    const rows = await inScope<{ frequency_months: number; anchor_month: number }>(
+      db.app,
+      [SITE_F],
+      'SELECT frequency_months, anchor_month FROM inspection_schedule WHERE id = $1',
+      [ruleId],
+    );
+
+    expect(one(rows).frequency_months).toBe(3);
+    expect(one(rows).anchor_month).toBe(2);
+  });
+
+  it('el largo de un período abierto tampoco se puede cambiar', async () => {
+    await stack.openPeriod.run(new Date('2026-05-10T12:00:00Z'));
+
+    const scheduled = one(await scheduledForPeriod(db.app, [SITE_F], '2026-05-01'));
+
+    const failure = await inScope(
+      db.migrator,
+      [SITE_F],
+      'UPDATE scheduled_inspection SET period_months = 1 WHERE id = $1',
+      [scheduled.id],
+    ).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as { code?: string }).code).toBe('HS001');
+  });
+});

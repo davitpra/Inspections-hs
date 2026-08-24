@@ -14,12 +14,12 @@ import { CaptureRoute } from '../routes/CaptureRoute';
 import { Form7Route } from '../routes/Form7Route';
 import { InboxRoute } from '../routes/InboxRoute';
 import { InspectionReportRoute } from '../routes/InspectionReportRoute';
+import { InspectorHomeRoute } from '../routes/InspectorHomeRoute';
 import { IncidentRoute } from '../routes/IncidentRoute';
 import { IncidentsRoute } from '../routes/IncidentsRoute';
 import { OfflineRoute } from '../routes/OfflineRoute';
 import { OutboxRoute } from '../routes/OutboxRoute';
 import { PastInspectionsRoute } from '../routes/PastInspectionsRoute';
-import { PendingRoute } from '../routes/PendingRoute';
 import { ComplianceRoute } from '../routes/ComplianceRoute';
 import { RecurrenceRoute } from '../routes/RecurrenceRoute';
 import { ReportIncidentRoute } from '../routes/ReportIncidentRoute';
@@ -146,11 +146,11 @@ function Shell(): React.JSX.Element {
  * `/accept-invitation`— y `validateSearch` deja que la pantalla lo reciba tipado. Una URL
  * pegada a mano con el parámetro puesto muestra un aviso de más y nada peor.
  */
-const pendingRoute = createRoute({
+const inspectorHomeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
   validateSearch: z.object({ submitted: z.literal('accepted').optional() }),
-  component: PendingRoute,
+  component: InspectorHomeRoute,
 });
 
 /**
@@ -358,7 +358,7 @@ const outboxRoute = createRoute({
 });
 
 const routeTree = rootRoute.addChildren([
-  pendingRoute,
+  inspectorHomeRoute,
   captureRoute,
   pastInspectionsRoute,
   inspectionReportRoute,

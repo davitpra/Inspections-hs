@@ -6,6 +6,7 @@ import {
   availabilityLabel,
   discardRefusalMessage,
   draftPeriodStart,
+  driftMessage,
   dueIn,
   focusedAssignment,
   nextAssignment,
@@ -14,17 +15,37 @@ import {
   statusLabel,
 } from './presentation';
 
+/**
+ * `period_end` se DERIVA de `period_start` y del largo, y no es un detalle de fixture:
+ * casi todos los casos de abajo pisan solo el inicio, y con un fin fijo quedaban períodos
+ * que terminan antes de empezar. Desde que «el período corriente» se mide contra los dos
+ * extremos, eso dejaba de ser un fixture feo para pasar a ser uno que miente.
+ */
 function inspection(overrides: Record<string, unknown> = {}) {
-  return {
+  const base = {
     id: 'i-1',
     site_id: 's-1',
     period_start: '2026-03-01',
-    period_end: '2026-03-31',
+    period_months: 1,
     template_name: 'Monthly general workplace inspection',
     template_version_id: 'v-1',
     overdue: false,
     ...overrides,
+  };
+
+  return {
+    ...base,
+    period_end: periodEndOf(base.period_start as string, base.period_months as number),
   } as Parameters<typeof focusedAssignment>[0][number];
+}
+
+/** El último día del último mes que cubre el período. */
+function periodEndOf(periodStart: string, periodMonths: number): string {
+  const year = Number(periodStart.slice(0, 4));
+  const month = Number(periodStart.slice(5, 7));
+  const end = new Date(Date.UTC(year, month - 1 + periodMonths, 0));
+
+  return end.toISOString().slice(0, 10);
 }
 
 describe('statusLabel', () => {
@@ -184,6 +205,28 @@ describe('assignmentState', () => {
   });
 
   /**
+   * El refresco NO desplaza a la acción primaria: con el paquete completo se ofrecen las
+   * dos cosas. Va también con un borrador en curso o firmado, porque el roster y las
+   * ubicaciones envejecen solas y se arreglan igual con la inspección empezada.
+   */
+  it('con el paquete completo se ofrece volver a bajarlo, sin desplazar la acción', () => {
+    for (const draftStatus of [null, 'capturing', 'signed'] as const) {
+      const state = assignmentState({ readiness: 'ready', overdue: false, draftStatus });
+
+      expect(state.showsRefresh).toBe(true);
+      expect(state.action).not.toBe('download');
+    }
+  });
+
+  it('no se ofrece refrescar lo que todavía no está, ni antes de saberlo', () => {
+    for (const state of ['not-ready', 'unknown'] as const) {
+      expect(
+        assignmentState({ readiness: state, overdue: false, draftStatus: null }).showsRefresh,
+      ).toBe(false);
+    }
+  });
+
+  /**
    * El caso que separa la píldora de la acción: un mes vencido y YA descargado sigue
    * ofreciendo "Start inspection" — lo que falta no es el paquete — pero la píldora dice
    * "Overdue" y no "Ready to start", porque eso es lo que de verdad hay que resolver.
@@ -224,5 +267,32 @@ describe('las dos listas de este dispositivo', () => {
 
   it('lo que todavía pide trabajo excluye lo aceptado', () => {
     expect(pendingWork(drafts).map((draft) => draft.status)).toEqual(['capturing', 'signed']);
+  });
+});
+
+/**
+ * Los dos avisos terminan en salidas distintas, y por eso son dos textos: uno manda a
+ * refrescar y el otro a descartar. El tercero no manda a ningún lado a propósito —un
+ * borrador firmado no se puede descartar— y decirlo es mejor que ofrecer un botón que la
+ * base va a negar.
+ */
+describe('driftMessage', () => {
+  it('sin deriva no dice nada', () => {
+    expect(driftMessage('none')).toBeNull();
+  });
+
+  it('el paquete rancio manda a refrescar', () => {
+    expect(driftMessage('stale-package')).toContain('Refresh it');
+  });
+
+  it('el borrador huérfano manda a descartar', () => {
+    expect(driftMessage('draft-orphaned', 'capturing')).toContain('Discard it');
+  });
+
+  it('el borrador huérfano YA FIRMADO no promete un descarte que no existe', () => {
+    const message = driftMessage('draft-orphaned', 'signed');
+
+    expect(message).not.toContain('Discard it');
+    expect(message).toContain('the server will refuse it');
   });
 });

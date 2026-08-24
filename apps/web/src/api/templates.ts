@@ -70,6 +70,19 @@ export async function publishTemplateDraft(id: string): Promise<PublishedTemplat
   );
 }
 
+/**
+ * Siembra un borrador con la última versión publicada de una plantilla, para corregirla.
+ *
+ * ES IDEMPOTENTE: si la plantilla ya tiene una revisión viva, el servidor devuelve esa. La
+ * pantalla navega al borrador que venga sin preguntar cuál de las dos cosas pasó, porque para
+ * el coordinador son la misma —llegar a la corrección en curso—.
+ */
+export async function reviseTemplate(templateId: string): Promise<TemplateDraft> {
+  return post(`/templates/${templateId}/revisions`, undefined, (value) =>
+    templateDraftSchema.parse(value),
+  );
+}
+
 /** La lectura de plantillas publicadas también es online, como el resto de este archivo. */
 export async function getPublishedTemplateVersion(id: string): Promise<PublishedTemplateVersion> {
   return get(`/templates/versions/${id}`, (value) => publishedTemplateVersionSchema.parse(value));

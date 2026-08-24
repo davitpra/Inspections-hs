@@ -261,6 +261,7 @@ function DraftForm({
 
   const dirty = hasUnsavedChanges(edits.edited, edits.saved);
   const issues = draftIssues(document);
+  const revising = loaded.template_id !== null;
 
   return (
     <>
@@ -269,6 +270,9 @@ function DraftForm({
       </Link>
 
       <DraftHeader
+        revising={revising}
+        templateName={loaded.name}
+        nextVersion={loaded.next_version}
         dirty={dirty}
         saving={save.isPending}
         canSave={
@@ -284,6 +288,8 @@ function DraftForm({
       {publishDialog ? (
         <PublishDialog
           draftName={name}
+          nextVersion={loaded.next_version}
+          revising={revising}
           publishing={publish.isPending}
           error={publish.isError ? (publish.error as Error).message : null}
           onClose={() => setPublishDialog(false)}
@@ -302,6 +308,7 @@ function DraftForm({
           <TemplateIdentity
             name={name}
             templateKey={loaded.key}
+            revising={revising}
             sites={sites}
             siteIds={siteIds}
             onName={(next) => edit({ name: next })}

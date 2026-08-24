@@ -10,7 +10,8 @@ import {
   isUnassigned,
   missedNote,
   projectYear,
-  ruleOwesMonth,
+  ruleOwesPeriod,
+  startsPeriod,
   statusClass,
   statusPillClass,
   STATUS_LABELS,
@@ -27,6 +28,7 @@ function inspection(overrides: Partial<ScheduledInspection> = {}): ScheduledInsp
     id: '44444444-4444-4444-8444-444444444444',
     site_id: SITE,
     period_start: '2026-08-01',
+    period_months: 1,
     period_end: '2026-08-31',
     template_id: '55555555-5555-4555-8555-555555555555',
     template_name: 'Monthly general workplace inspection',
@@ -64,6 +66,8 @@ function rule(overrides: Partial<InspectionSchedule> = {}): InspectionSchedule {
     site_id: SITE,
     template_id: TEMPLATE_A,
     template_name: 'Monthly general workplace inspection',
+    frequency_months: 1,
+    anchor_month: 1,
     default_inspector_id: null,
     default_inspector_name: null,
     created_at: '2020-01-01T00:00:00.000Z',
@@ -232,19 +236,19 @@ describe('el candidato en el selector', () => {
 
 describe('lo que una regla debe', () => {
   it('debe el mes en que se creó', () => {
-    expect(ruleOwesMonth(rule({ created_at: '2026-03-12T00:00:00.000Z' }), '2026-03-01')).toBe(
+    expect(ruleOwesPeriod(rule({ created_at: '2026-03-12T00:00:00.000Z' }), '2026-03-01')).toBe(
       true,
     );
   });
 
   it('no debe un mes anterior a su creación', () => {
-    expect(ruleOwesMonth(rule({ created_at: '2026-03-12T00:00:00.000Z' }), '2026-02-01')).toBe(
+    expect(ruleOwesPeriod(rule({ created_at: '2026-03-12T00:00:00.000Z' }), '2026-02-01')).toBe(
       false,
     );
   });
 
   it('sin desactivar, debe todo mes futuro', () => {
-    expect(ruleOwesMonth(rule({ created_at: '2020-01-01T00:00:00.000Z' }), '2030-01-01')).toBe(
+    expect(ruleOwesPeriod(rule({ created_at: '2020-01-01T00:00:00.000Z' }), '2030-01-01')).toBe(
       true,
     );
   });
@@ -255,15 +259,15 @@ describe('lo que una regla debe', () => {
       deactivated_at: '2026-09-15T00:00:00.000Z',
     });
 
-    expect(ruleOwesMonth(deactivated, '2026-09-01')).toBe(true);
-    expect(ruleOwesMonth(deactivated, '2026-10-01')).toBe(false);
+    expect(ruleOwesPeriod(deactivated, '2026-09-01')).toBe(true);
+    expect(ruleOwesPeriod(deactivated, '2026-10-01')).toBe(false);
   });
 
   it('resuelve la ventana en la zona de la planta', () => {
     // 2026-04-01T02:00:00Z es 2026-03-31 en America/Toronto: la regla ya debe marzo.
     const createdLate = rule({ created_at: '2026-04-01T02:00:00.000Z' });
 
-    expect(ruleOwesMonth(createdLate, '2026-03-01')).toBe(true);
+    expect(ruleOwesPeriod(createdLate, '2026-03-01')).toBe(true);
   });
 });
 
@@ -452,7 +456,13 @@ describe('el año más antiguo al que se puede retroceder', () => {
 describe('los conteos del pie del calendario', () => {
   it('reparte cada entrada en un solo cubo, y suman el total', () => {
     const entries: YearEntry[] = [
-      { kind: 'unopened', period: { site_id: SITE, template_id: 't', template_name: 'x', period_start: '2026-01-01' } },
+      { kind: 'unopened', period: {
+          site_id: SITE,
+          template_id: 't',
+          template_name: 'x',
+          period_start: '2026-01-01',
+          period_months: 1,
+        } },
       { kind: 'opened', inspection: inspection({ inspector_id: null, inspector_name: null }) },
       { kind: 'opened', inspection: inspection({ inspector_id: USER, inspector_name: 'Dana Okafor' }) },
     ];
@@ -475,5 +485,77 @@ describe('los conteos del pie del calendario', () => {
       unassigned: 0,
       notOpened: 0,
     });
+  });
+});
+
+/**
+ * LOS MISMOS CASOS QUE `apps/api/src/inspections/period.spec.ts`.
+ *
+ * La aritmética del ancla vive en cuatro lugares —el CTE del reporte, el INSERT del
+ * trabajo de apertura, `period.ts` del servidor y `startsPeriod` de acá— y no se puede
+ * compartir código entre Postgres, Node y el navegador. Que estos casos estén escritos
+ * dos veces es deliberado: es lo que hace que una divergencia falle en vez de producir un
+ * calendario que muestra cuatro casillas donde el servidor abrió doce.
+ */
+describe('el ancla de la regla', () => {
+  const quarterly = (anchor: number) =>
+    rule({ frequency_months: 3, anchor_month: anchor });
+
+  it('una regla mensual empieza período todos los meses', () => {
+    expect(startsPeriod(rule({ frequency_months: 1, anchor_month: 3 }), '2026-05-01')).toBe(true);
+  });
+
+  it('trimestral anclada en enero: el trimestre civil', () => {
+    expect(startsPeriod(quarterly(1), '2026-01-01')).toBe(true);
+    expect(startsPeriod(quarterly(1), '2026-02-01')).toBe(false);
+    expect(startsPeriod(quarterly(1), '2026-04-01')).toBe(true);
+  });
+
+  it('trimestral anclada en febrero: la serie se corre un mes', () => {
+    expect(startsPeriod(quarterly(2), '2026-02-01')).toBe(true);
+    expect(startsPeriod(quarterly(2), '2026-03-01')).toBe(false);
+    expect(startsPeriod(quarterly(2), '2026-11-01')).toBe(true);
+  });
+
+  it('CRUZA EL AÑO: con ancla en noviembre, febrero sigue la serie', () => {
+    expect(startsPeriod(quarterly(11), '2026-11-01')).toBe(true);
+    expect(startsPeriod(quarterly(11), '2027-02-01')).toBe(true);
+    expect(startsPeriod(quarterly(11), '2027-01-01')).toBe(false);
+  });
+
+  it('anual: un solo mes al año', () => {
+    const annual = rule({ frequency_months: 12, anchor_month: 9 });
+
+    expect(startsPeriod(annual, '2026-09-01')).toBe(true);
+    expect(startsPeriod(annual, '2026-10-01')).toBe(false);
+    expect(startsPeriod(annual, '2027-09-01')).toBe(true);
+  });
+});
+
+describe('el calendario de una regla no mensual', () => {
+  it('una regla trimestral proyecta cuatro casillas al año, no doce', () => {
+    const entries = projectYear([rule({ frequency_months: 3, anchor_month: 1 })], [], '2026');
+
+    expect(entries).toHaveLength(4);
+    expect(
+      entries.map((entry) => (entry.kind === 'unopened' ? entry.period.period_start : null)),
+    ).toEqual(['2026-01-01', '2026-04-01', '2026-07-01', '2026-10-01']);
+  });
+
+  it('una regla anual proyecta una sola, en su mes ancla', () => {
+    const entries = projectYear([rule({ frequency_months: 12, anchor_month: 9 })], [], '2026');
+
+    const only = entries[0];
+
+    expect(entries).toHaveLength(1);
+    expect(only?.kind === 'unopened' && only.period.period_start).toBe('2026-09-01');
+  });
+
+  it('la casilla sin abrir lleva el largo de la regla, para poder nombrarse', () => {
+    const entries = projectYear([rule({ frequency_months: 3, anchor_month: 1 })], [], '2026');
+    const first = entries[0];
+
+    expect(first?.kind).toBe('unopened');
+    expect(first?.kind === 'unopened' && first.period.period_months).toBe(3);
   });
 });

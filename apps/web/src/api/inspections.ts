@@ -6,6 +6,7 @@ import {
   templateOptionSchema,
   submittedInspectionSchema,
   templateVersionPackageSchema,
+  type CreateInspectionSchedule,
   type CreateScheduledInspection,
   type InspectionSchedule,
   type InspectorOption,
@@ -67,11 +68,9 @@ export async function listSchedules(): Promise<InspectionSchedule[]> {
   );
 }
 
-export async function createSchedule(body: {
-  site_id: string;
-  template_id: string;
-  default_inspector_id?: string | null;
-}): Promise<InspectionSchedule> {
+export async function createSchedule(
+  body: CreateInspectionSchedule,
+): Promise<InspectionSchedule> {
   return send('POST', '/inspection-schedules', body, (value) =>
     inspectionScheduleSchema.parse(value),
   );

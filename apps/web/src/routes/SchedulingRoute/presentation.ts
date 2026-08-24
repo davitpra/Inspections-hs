@@ -1,11 +1,12 @@
 import type {
   InspectionSchedule,
   InspectorOption,
+  PeriodMonths,
   PeriodStatus,
   ScheduledInspection,
 } from '@hs/contracts';
 
-import { civilMonth } from '../../presentation/dates';
+import { civilMonth, monthName, periodLabel } from '../../presentation/dates';
 
 /**
  * Cómo se lee la consola de programación: etiquetas y clases, sin marcado.
@@ -68,8 +69,8 @@ export function missedNote(inspection: ScheduledInspection): string | null {
   if (inspection.status !== 'missed') return null;
 
   return inspection.inspector_id === null
-    ? 'The month closed without an inspection. Assign an inspector and it can still be submitted.'
-    : 'The month closed without an inspection. It can still be submitted.';
+    ? 'The period closed without an inspection. Assign an inspector and it can still be submitted.'
+    : 'The period closed without an inspection. It can still be submitted.';
 }
 
 /** Si esta fila es de las que el coordinador tiene que resolver. */
@@ -147,6 +148,8 @@ export interface UnopenedPeriod {
   template_id: string;
   template_name: string;
   period_start: string;
+  /** Copiado de la regla que lo reclama: la casilla tiene que poder decir «Q1 2026». */
+  period_months: PeriodMonths;
 }
 
 export type YearEntry =
@@ -160,13 +163,91 @@ function entrySortKey(entry: YearEntry): { periodStart: string; templateName: st
 }
 
 /**
- * Si la regla debe ese mes: dentro de la ventana `created_at`..`deactivated_at`,
- * inclusiva en los dos extremos y resuelta en la misma zona que el trabajo automático.
+ * El nombre del período DENTRO del calendario de un año.
+ *
+ * `periodLabel` siempre lleva el año, y tiene que llevarlo: la usan el PDF y la pantalla
+ * del inspector, donde no hay ningún encabezado que lo diga. Acá sí lo hay —el navegador
+ * de año lo muestra en grande arriba— así que repetirlo en las doce filas es ruido.
+ *
+ * Se recorta SOLO cuando la etiqueta termina en el año que se está mirando. Un período que
+ * cruza el año («Nov 2026–Jan 2027») termina en el OTRO, y ahí el año no sobra: es la única
+ * forma de ver que esa casilla se va del año. Una regla anual en su propio año se llama
+ * «2026» y tampoco se recorta, porque el año ES el nombre del período.
  */
-export function ruleOwesMonth(
-  rule: Pick<InspectionSchedule, 'created_at' | 'deactivated_at'>,
+export function calendarLabel(
+  periodStart: string,
+  periodMonths: PeriodMonths,
+  year: string,
+): string {
+  const label = periodLabel(periodStart, periodMonths);
+
+  return label.endsWith(` ${year}`) ? label.slice(0, -(year.length + 1)) : label;
+}
+
+/**
+ * Qué significa la frecuencia de una regla, en una línea, y por qué no se puede cambiar.
+ *
+ * Las dos mitades hacen falta. La primera dice CUÁNDO cae la serie, que con un ancla que
+ * no es enero no es evidente: «Quarterly» a secas deja pensar en el trimestre civil.
+ * La segunda dice que hay que desactivar y recrear — sin eso, el coordinador busca un
+ * control que el motor rechaza con HS001 y concluye que falta implementarlo.
+ *
+ * Para una regla mensual el ancla no se nombra: `mod 1` es cero para todos los meses, así
+ * que decir «anchored in January» sería inventar una restricción que no existe.
+ */
+export function frequencyNote(
+  rule: Pick<InspectionSchedule, 'frequency_months' | 'anchor_month'>,
+): string {
+  const change = 'to change it, deactivate this rule and create another';
+
+  if (rule.frequency_months === 1) return `one period every month — ${change}`;
+
+  // `monthName` toma un `period_start` y no un índice, así que se le arma uno: el año no
+  // participa del nombre del mes. Es preferible a una cuarta copia de los doce nombres.
+  const anchor = monthName(`2000-${String(rule.anchor_month).padStart(2, '0')}-01`);
+  const every =
+    rule.frequency_months === 12 ? 'every 12 months' : `every ${rule.frequency_months} months`;
+
+  return `one period ${every}, starting in ${anchor} — ${change}`;
+}
+
+/**
+ * Si el mes EMPIEZA un período de esa regla.
+ *
+ * ESPEJO EXACTO de `containingPeriodStart()` y `startsPeriod()` en
+ * `apps/api/src/inspections/period.ts`, y de la expresión `MOD` que usan el trabajo de
+ * apertura y el CTE `owed` del reporte. Son cuatro copias de la misma aritmética y no se
+ * pueden unificar —una corre en Postgres, otra en el servidor, esta en el navegador— así
+ * que la defensa es que los tests de las dos de TypeScript fijen los MISMOS casos. El
+ * cruce de año hacia atrás (ancla 11, trimestral, mes de enero) es el que se rompe primero
+ * si alguien "simplifica" el `+ 12`.
+ *
+ * Funciona con un `mod` sobre el mes 1-12 porque las cuatro frecuencias dividen a 12; ver
+ * `periodMonthsSchema` en contracts.
+ */
+export function startsPeriod(
+  rule: Pick<InspectionSchedule, 'frequency_months' | 'anchor_month'>,
   periodStart: string,
 ): boolean {
+  const month = Number(periodStart.slice(5, 7));
+
+  return (month - rule.anchor_month + 12) % rule.frequency_months === 0;
+}
+
+/**
+ * Si la regla debe ese período: empieza donde la regla ancla, y cae dentro de la ventana
+ * `created_at`..`deactivated_at`, inclusiva en los dos extremos y resuelta en la misma
+ * zona que el trabajo automático.
+ */
+export function ruleOwesPeriod(
+  rule: Pick<
+    InspectionSchedule,
+    'created_at' | 'deactivated_at' | 'frequency_months' | 'anchor_month'
+  >,
+  periodStart: string,
+): boolean {
+  if (!startsPeriod(rule, periodStart)) return false;
+
   const month = periodStart.slice(0, 7);
   const owesFrom = civilMonth(new Date(rule.created_at));
 
@@ -243,8 +324,11 @@ export function projectYear(
   const entries: YearEntry[] = [];
 
   for (const rule of currentRules(rules)) {
+    // Se siguen recorriendo los doce meses y se filtra por `ruleOwesPeriod`, en vez de
+    // generar los inicios de período de la regla: es la misma lista y evita una segunda
+    // aritmética de calendario que podría discrepar con `startsPeriod` en el cruce de año.
     for (const periodStart of monthsOfYear(year)) {
-      if (!ruleOwesMonth(rule, periodStart)) continue;
+      if (!ruleOwesPeriod(rule, periodStart)) continue;
 
       const key = `${rule.template_id}|${periodStart}`;
       claimed.add(key);
@@ -261,6 +345,7 @@ export function projectYear(
                 template_id: rule.template_id,
                 template_name: rule.template_name,
                 period_start: periodStart,
+                period_months: rule.frequency_months,
               },
             },
       );

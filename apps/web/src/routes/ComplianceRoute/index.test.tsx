@@ -47,6 +47,7 @@ function view(): ComplianceView {
 
     return {
       period_start: `2026-${month}-01`,
+      period_months: 1 as const,
       period_end: `2026-${month}-28`,
       status: missed ? ('missed' as const) : ('completed' as const),
       scheduled_inspection_id: missed ? null : REPORT,
@@ -116,7 +117,9 @@ describe('la grilla de períodos', () => {
     renderRoute();
 
     expect(await screen.findByText('11 of 12 required periods completed')).toBeTruthy();
-    expect(screen.getAllByText(/^2026-\d\d$/)).toHaveLength(12);
+    // `periodLabel` reemplazó al recorte `2026-04`: el nombre del período se escribe
+    // igual acá, en la consola y en el PDF, o deja de ser el mismo período.
+    expect(screen.getAllByText(/^[A-Z][a-z]+ 2026$/)).toHaveLength(12);
   });
 
   it('distingue el mes que nunca se planificó', async () => {

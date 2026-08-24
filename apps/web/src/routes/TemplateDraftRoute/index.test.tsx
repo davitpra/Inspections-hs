@@ -111,6 +111,8 @@ function draft(overrides: Partial<TemplateDraft> = {}): TemplateDraft {
     name: 'Monthly electrical inspection',
     updated_at: '2026-08-14T10:00:00.000Z',
     site_ids: [ST_THOMAS, GLENCOE],
+    template_id: null,
+    next_version: 1,
     document,
     issues: draftIssues(document),
     publishable: draftIssues(document).length === 0,
@@ -817,6 +819,15 @@ describe('la cabecera', () => {
     expect(screen.queryByLabelText('Key')).toBeNull();
   });
 
+  it('dice que crea la versión 1 cuando el borrador no corrige nada', async () => {
+    renderRoute();
+    await ready();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+
+    expect(screen.getByText(/This creates version 1\./)).toBeTruthy();
+  });
+
   it('descarta el borrador desde el menú', async () => {
     renderRoute();
     await ready();
@@ -825,5 +836,77 @@ describe('la cabecera', () => {
     fireEvent.click(within(menu).getByRole('menuitem', { name: 'Discard this draft' }));
 
     await waitFor(() => expect(discardTemplateDraft).toHaveBeenCalledWith(DRAFT));
+  });
+});
+
+/**
+ * El mismo editor escribe una plantilla nueva y corrige una publicada. Lo que las distingue
+ * —qué se corrige, qué número va a tener la versión, y que el nombre ya está decidido— tiene
+ * que verse sin abrir la base: el autor que cree estar empezando de cero toma otras decisiones
+ * sobre el mismo documento.
+ */
+describe('cuando el borrador revisa una plantilla publicada', () => {
+  const TEMPLATE = '55555555-5555-4555-8555-555555555555';
+
+  function revision(): TemplateDraft {
+    return draft({ template_id: TEMPLATE, next_version: 3 });
+  }
+
+  beforeEach(() => {
+    getTemplateDraft.mockResolvedValue(revision());
+  });
+
+  it('lo dice en la cabecera, con la plantilla y el número de versión', async () => {
+    renderRoute();
+    await ready();
+
+    expect(screen.getByRole('heading', { name: 'Revise template' })).toBeTruthy();
+    expect(screen.getByText(/Correcting “Monthly electrical inspection”/)).toBeTruthy();
+    expect(screen.getByText(/Publishing writes version 3/)).toBeTruthy();
+    expect(screen.getByText('Revision · version 3')).toBeTruthy();
+  });
+
+  it('no ofrece el nombre para editar y explica por qué', async () => {
+    renderRoute();
+    await ready();
+
+    const name = screen.getByLabelText('Template name') as HTMLInputElement;
+
+    expect(name.readOnly).toBe(true);
+    expect(
+      screen.getByText(/The name of a published template cannot be changed by revising it/),
+    ).toBeTruthy();
+  });
+
+  it('la confirmación nombra la versión que va a escribir, no la 1', async () => {
+    renderRoute();
+    await ready();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+
+    expect(screen.getByText(/This creates version 3\./)).toBeTruthy();
+    expect(screen.getByText(/The version it replaces stays readable/)).toBeTruthy();
+  });
+
+  it('el documento sembrado se sigue editando y guardando como cualquier otro', async () => {
+    renderRoute();
+    await ready();
+
+    fireEvent.change(screen.getByDisplayValue('Is the guard fitted?'), {
+      target: { value: 'Is the machine guard fitted and secured?' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Save/ }));
+
+    await waitFor(() => expect(saveTemplateDraft).toHaveBeenCalled());
+    expect(lastSave().name).toBe('Monthly electrical inspection');
+  });
+
+  it('el menú habla de descartar la revisión, no el borrador', async () => {
+    renderRoute();
+    await ready();
+
+    const menu = await openMenu('More template actions');
+
+    expect(within(menu).getByRole('menuitem', { name: 'Discard this revision' })).toBeTruthy();
   });
 });

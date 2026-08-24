@@ -28,6 +28,7 @@ export {
   choiceOptionSchema,
   conditionSchema,
   defaultItemConfig,
+  draftFromDocument,
   draftIssues,
   emptyDraftDocument,
   normalizeDraft,

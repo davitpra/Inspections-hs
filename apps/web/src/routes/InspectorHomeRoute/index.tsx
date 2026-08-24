@@ -45,7 +45,7 @@ import {
  * tarde. Y se arregla ACÁ también: la tarjeta que dice que falta el roster es la misma que
  * lo baja.
  */
-export function PendingRoute(): React.JSX.Element {
+export function InspectorHomeRoute(): React.JSX.Element {
   const { account } = useAppSession();
 
   /**
@@ -165,6 +165,7 @@ export function PendingRoute(): React.JSX.Element {
               site={focusedSite}
               account={account}
               draftStatus={focusedDraft?.status ?? null}
+              draftTemplateVersionId={focusedDraft?.template_version_id ?? null}
               today={civilToday(now)}
             />
 

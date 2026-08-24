@@ -15,20 +15,26 @@ import type { Site } from '@hs/contracts';
  * se decide acá.
  */
 
-/** Las que se pueden elegir, en orden alfabético — el mismo que usa la consola de ubicaciones. */
+/**
+ * Las que se pueden elegir, EN EL ORDEN EN QUE VINO LA RESPUESTA — que es el de antigüedad:
+ * `GET /sites` ordena por `created_at`.
+ *
+ * No se reordena acá a propósito. Alfabético dejaba la planta original detrás de cualquier
+ * alta posterior que empezara con una letra más chica, y el orden de la interfaz cambiaba
+ * al renombrar una planta. La primera opción es la primera planta que se dio de alta, y esa
+ * también es la que abre la consola (ver `resolveSiteId`).
+ */
 export function activeSites(sites: readonly Site[]): Site[] {
-  return sites
-    .filter((site) => site.deactivated_at === null)
-    .sort((a, b) => a.name.localeCompare(b.name));
+  return sites.filter((site) => site.deactivated_at === null);
 }
 
 /**
- * La planta que la consola mira: la elegida si sigue activa, si no la primera activa del
- * alcance, y `''` cuando no queda ninguna.
+ * La planta que la consola mira: la elegida si sigue activa, si no la primera activa —la
+ * más antigua— dentro del alcance de la cuenta, y `''` cuando no queda ninguna.
  *
- * EL ORDEN ES EL DEL ALCANCE, no el alfabético de las opciones: la planta por defecto es la
- * de la cuenta —la primera de `siteScope`— y lo único que cambia es que se saltea las
- * cerradas. Ordenar acá también movería la consola de planta sin que nadie la haya tocado.
+ * EL ORDEN ES EL DE LAS OPCIONES, no el de `siteScope`: los ids del alcance vienen ordenados
+ * por UUID, que es azar, así que abrir en `siteScope[0]` era abrir en una planta cualquiera.
+ * La consola abre en la primera opción del selector, que es lo que el selector ya muestra.
  *
  * El caso del medio no es solo el arranque: una planta se puede dar de baja con la consola
  * abierta, y entonces la elección guardada en el estado apunta a algo que el selector ya no
@@ -40,10 +46,9 @@ export function resolveSiteId(
   siteScope: readonly string[],
   chosen: string | null,
 ): string {
-  const isAvailable = (id: string): boolean =>
-    siteScope.includes(id) && sites.some((site) => site.id === id && site.deactivated_at === null);
+  const options = activeSites(sites).filter((site) => siteScope.includes(site.id));
 
-  if (chosen !== null && isAvailable(chosen)) return chosen;
+  if (chosen !== null && options.some((site) => site.id === chosen)) return chosen;
 
-  return siteScope.find(isAvailable) ?? '';
+  return options[0]?.id ?? '';
 }

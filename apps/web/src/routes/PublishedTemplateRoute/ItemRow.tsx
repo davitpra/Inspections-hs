@@ -1,6 +1,11 @@
-import type { TemplateDocument, TemplateItem } from '@hs/contracts';
+import type { TemplateDocument, TemplateItem } from "@hs/contracts";
 
-import { findingConfiguration, responseConfiguration, responseTypeLabel, visibilityLabel } from './presentation';
+import {
+  findingConfiguration,
+  responseConfiguration,
+  responseTypeLabel,
+  visibilityLabel,
+} from "./presentation";
 
 /** Una pregunta publicada: datos de lectura, nunca controles del editor. */
 export function ItemRow({
@@ -22,16 +27,14 @@ export function ItemRow({
       <div className="published-template__item-body">
         <div className="published-template__item-head">
           <h3>{item.prompt}</h3>
-          {item.required ? <span className="status-pill status-pill--ready">Required</span> : null}
+          {item.required ? (
+            <span className="status-pill status-pill--ready">Required</span>
+          ) : null}
         </div>
         <dl className="published-template__facts">
           <div>
             <dt>Answer type</dt>
             <dd>{responseTypeLabel(item)}</dd>
-          </div>
-          <div>
-            <dt>Item key</dt>
-            <dd>{item.item_key}</dd>
           </div>
         </dl>
         <div className="published-template__details">
@@ -49,7 +52,9 @@ export function ItemRow({
         ) : null}
         {finding.length > 0 ? (
           <div className="published-template__finding">
-            <p className="published-template__detail-label">Finding prescription</p>
+            <p className="published-template__detail-label">
+              Finding prescription
+            </p>
             <ul>
               {finding.map((line) => (
                 <li key={line}>{line}</li>

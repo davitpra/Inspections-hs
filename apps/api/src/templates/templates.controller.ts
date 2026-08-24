@@ -51,6 +51,24 @@ export class TemplatesController {
     return this.templates.getPublishedVersion(session, z.uuid().parse(versionId));
   }
 
+  /**
+   * Revisar una plantilla publicada: siembra un borrador con su última versión.
+   *
+   * `POST` y no `GET` porque escribe una fila, aunque no reciba cuerpo: la plantilla que se
+   * revisa está en la ruta y no hay nada más que elegir. Es IDEMPOTENTE — si la plantilla ya
+   * tiene una revisión viva, devuelve esa en vez de crear una segunda.
+   *
+   * Cuelga de `/templates/:templateId` y no de `/templates/drafts` porque el sujeto es la
+   * plantilla publicada: el borrador es la consecuencia.
+   */
+  @Post(':templateId/revisions')
+  async reviseTemplate(
+    @CurrentSession() session: SessionContext,
+    @Param('templateId') templateId: string,
+  ): Promise<TemplateDraft> {
+    return this.templates.reviseTemplate(session, z.uuid().parse(templateId));
+  }
+
   @Get('drafts')
   async listDrafts(@CurrentSession() session: SessionContext): Promise<TemplateDraftSummary[]> {
     return this.templates.listDrafts(session);

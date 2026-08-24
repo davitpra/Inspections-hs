@@ -66,6 +66,7 @@ export function ItemRow({
         {negative ? (
           <FindingFields
             itemKey={item.item_key}
+            correctiveAction={item.finding?.corrective_action}
             finding={finding}
             photos={findingPhotos}
             disabled={readOnly}

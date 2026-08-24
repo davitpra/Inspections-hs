@@ -1,13 +1,20 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PublishedTemplateVersion } from '@hs/contracts';
 
 import { PublishedTemplateRoute } from './index';
 
 const getPublishedTemplateVersion = vi.hoisted(() => vi.fn());
+const reviseTemplate = vi.hoisted(() => vi.fn());
+const navigate = vi.hoisted(() => vi.fn());
+const account = vi.hoisted(() => ({ current: null as { role: string } | null }));
 
-vi.mock('../../api/templates', () => ({ getPublishedTemplateVersion }));
+vi.mock('../../api/templates', () => ({ getPublishedTemplateVersion, reviseTemplate }));
+
+vi.mock('../../app/session-context', () => ({
+  useAppSession: () => ({ account: account.current }),
+}));
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
@@ -32,6 +39,7 @@ vi.mock('@tanstack/react-router', () => ({
     );
   },
   useParams: () => ({ versionId: '77777777-7777-4777-8777-777777777777' }),
+  useNavigate: () => navigate,
 }));
 
 const version: PublishedTemplateVersion = {
@@ -103,6 +111,10 @@ function renderRoute(): void {
 
 beforeEach(() => {
   getPublishedTemplateVersion.mockReset().mockResolvedValue(version);
+  reviseTemplate.mockReset().mockResolvedValue({ id: '88888888-8888-4888-8888-888888888888' });
+  navigate.mockReset();
+  // Sin cuenta de coordinador por defecto: la pantalla es de lectura para todos los demás.
+  account.current = { role: 'inspector' };
 });
 
 afterEach(() => {
@@ -146,6 +158,60 @@ describe('PublishedTemplateRoute', () => {
       await screen.findByText(/This published template could not be loaded. Reading it needs a connection/),
     ).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Back to templates' })).toBeTruthy();
+  });
+
+  it('no le ofrece corregir a quien no escribe plantillas', async () => {
+    renderRoute();
+
+    await screen.findByRole('heading', { name: 'Machine guarding' });
+
+    expect(screen.queryByRole('button', { name: /Revise this template/ })).toBeNull();
+  });
+
+  it('el coordinador empieza la revisión y llega al borrador sembrado', async () => {
+    account.current = { role: 'hs_coordinator' };
+
+    renderRoute();
+
+    const revise = await screen.findByRole('button', { name: /Revise this template/ });
+    fireEvent.click(revise);
+
+    await waitFor(() =>
+      expect(reviseTemplate).toHaveBeenCalledWith('66666666-6666-4666-8666-666666666666'),
+    );
+    await waitFor(() =>
+      expect(navigate).toHaveBeenCalledWith({
+        to: '/templates/drafts/$id',
+        params: { id: '88888888-8888-4888-8888-888888888888' },
+      }),
+    );
+  });
+
+  it('empezar la revisión no vuelve editable la versión', async () => {
+    account.current = { role: 'hs_coordinator' };
+
+    renderRoute();
+
+    await screen.findByRole('button', { name: /Revise this template/ });
+
+    // El único control de la pantalla sigue siendo el que abre el borrador.
+    expect(screen.getAllByRole('button')).toHaveLength(1);
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.queryByRole('combobox')).toBeNull();
+  });
+
+  it('si la revisión no se puede abrir, lo dice y no navega', async () => {
+    account.current = { role: 'hs_coordinator' };
+    reviseTemplate.mockRejectedValue(new Error('offline'));
+
+    renderRoute();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Revise this template/ }));
+
+    expect(
+      await screen.findByText(/This template could not be opened for revision/),
+    ).toBeTruthy();
+    expect(navigate).not.toHaveBeenCalled();
   });
 
   it('vuelve a Templates desde el encabezado', async () => {

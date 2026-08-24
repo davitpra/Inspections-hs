@@ -77,6 +77,8 @@ function rule(overrides: Partial<InspectionSchedule> = {}): InspectionSchedule {
     site_id: SITE,
     template_id: TEMPLATE,
     template_name: 'Monthly general workplace inspection',
+    frequency_months: 1,
+    anchor_month: 1,
     default_inspector_id: null,
     default_inspector_name: null,
     created_at: '2020-01-01T00:00:00.000Z',
@@ -90,6 +92,7 @@ function inspection(overrides: Partial<ScheduledInspection> = {}): ScheduledInsp
     id: SCHEDULED,
     site_id: SITE,
     period_start: '2026-08-01',
+    period_months: 1,
     period_end: '2026-08-31',
     template_id: TEMPLATE,
     template_name: 'Monthly general workplace inspection',
@@ -201,7 +204,7 @@ describe('quién puede administrar', () => {
     expect(screen.queryByRole('button', { name: /More actions/ })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Create rule' })).toBeNull();
     expect(screen.queryByLabelText('Inspector')).toBeNull();
-    expect(screen.queryByText(/Open this month/)).toBeNull();
+    expect(screen.queryByText(/Open this period/)).toBeNull();
   });
 });
 
@@ -387,7 +390,7 @@ describe('cancelar', () => {
 
       fireEvent.click(
         within(await openPeriodMenu()).getByRole('menuitem', {
-          name: 'Schedule this month again',
+          name: 'Schedule this period again',
         }),
       );
 
@@ -397,7 +400,7 @@ describe('cancelar', () => {
       fireEvent.change(select, { target: { value: CANDIDATE } });
 
       fireEvent.click(
-        within(dialog).getByRole('button', { name: /Schedule this month again/ }),
+        within(dialog).getByRole('button', { name: /Schedule this period again/ }),
       );
 
       await waitFor(() => {
@@ -415,7 +418,7 @@ describe('cancelar', () => {
 
       fireEvent.click(
         within(await openPeriodMenu()).getByRole('menuitem', {
-          name: 'Schedule this month again',
+          name: 'Schedule this period again',
         }),
       );
 
@@ -427,7 +430,7 @@ describe('cancelar', () => {
 
       const menu = await openPeriodMenu();
 
-      expect(menu.textContent).toBe('Schedule this month again');
+      expect(menu.textContent).toBe('Schedule this period again');
       expect(screen.queryByRole('menuitem', { name: 'Cancel this period' })).toBeNull();
       expect(screen.queryByLabelText('Assign')).toBeNull();
     });
@@ -513,7 +516,11 @@ describe('la nueva regla', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create rule' }));
 
     await waitFor(() => {
-      expect(createSchedule).toHaveBeenCalledWith({ site_id: SITE, template_id: TEMPLATE });
+      expect(createSchedule).toHaveBeenCalledWith({
+        site_id: SITE,
+        template_id: TEMPLATE,
+        frequency_months: 1,
+      });
     });
   });
 });
@@ -563,7 +570,7 @@ describe('el calendario del año', () => {
     await within(select).findByRole('option', { name: 'Dana Okafor (E-4471)' });
     fireEvent.change(select, { target: { value: CANDIDATE } });
 
-    fireEvent.click(within(decemberRow).getByRole('button', { name: /Open this month/ }));
+    fireEvent.click(within(decemberRow).getByRole('button', { name: /Open this period/ }));
 
     await waitFor(() => {
       expect(createScheduledInspection).toHaveBeenCalledWith({
@@ -627,9 +634,10 @@ describe('las plantas dadas de baja', () => {
 
     const select = await screen.findByLabelText('Site');
     expect(within(select).queryByRole('option', { name: /Rodney/ })).toBeNull();
+    // En el orden que vino la respuesta —`GET /sites` ordena por antigüedad—, sin Rodney.
     expect(within(select).getAllByRole('option').map((option) => option.textContent)).toEqual([
-      'Glencoe',
       'St. Thomas',
+      'Glencoe',
     ]);
   });
 

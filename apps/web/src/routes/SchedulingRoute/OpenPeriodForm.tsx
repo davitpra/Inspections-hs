@@ -11,10 +11,16 @@ import { PersonIcon } from '../../components/icons';
 import { candidateLabel, type UnopenedPeriod } from './presentation';
 
 /**
- * Abrir un mes: elegir inspector —o ninguno— y programarlo.
+ * Abrir un período: elegir inspector —o ninguno— y programarlo.
  *
- * Lo usan los DOS casos en los que un mes del calendario no tiene una inspección viva: la
- * casilla que nunca se abrió (`UnopenedPeriodRow`) y el mes cancelado (`PeriodRow`). Son
+ * NO OFRECE ELEGIR EL PERÍODO, y desde 0029 esa ausencia pasó a importar: el período llega
+ * de la casilla del calendario, que `projectYear` ya filtró por el ancla de la regla, o de
+ * una inspección cancelada, que por existir empieza donde corresponde. Un selector de mes
+ * suelto dejaría abrir un trimestre que arranca a mitad de la serie. El LARGO tampoco
+ * viaja: lo resuelve el servidor con la frecuencia de la regla activa.
+ *
+ * Lo usan los DOS casos en los que una casilla del calendario no tiene una inspección
+ * viva: la que nunca se abrió (`UnopenedPeriodRow`) y la cancelada (`PeriodRow`). Son
  * la misma operación contra el mismo endpoint: `POST /inspections/scheduled` inserta una
  * fila nueva, y el índice parcial de 0008 la deja pasar justamente porque el período
  * cancelado no ocupa el lugar. Lo único que cambia es cómo se llama el botón.

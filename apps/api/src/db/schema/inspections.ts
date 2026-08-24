@@ -7,6 +7,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  smallint,
   text,
   timestamp,
   unique,
@@ -33,11 +34,14 @@ import { template, templateItem, templateVersion, templateVersionItem } from './
  */
 
 /**
- * La regla de recurrencia: qué plantilla debe inspeccionarse mensualmente en qué
- * planta. Es la tabla que lee el trabajo de apertura.
+ * La regla de recurrencia: qué plantilla debe inspeccionarse en qué planta, cada cuántos
+ * meses y anclada en cuál. Es la tabla que lee el trabajo de apertura.
  *
- * Sin campo de frecuencia. La mensualidad está en el período y en el trabajo; el día
- * que haya semanal, ese change agrega la columna.
+ * `frequency_months` y `anchor_month` llegaron en 0029 y son INMUTABLES —están en el
+ * array `frozen` del trigger de guarda y fuera del GRANT UPDATE—. El motivo está escrito
+ * en la migración: el CTE `owed` del reporte GENERA los períodos que el sitio debía a
+ * partir de la regla, así que cambiarle la frecuencia a una regla viva no cambia el
+ * futuro, reescribe el pasado. Cambiar la frecuencia es desactivar y crear otra.
  */
 export const inspectionSchedule = pgTable(
   'inspection_schedule',
@@ -56,6 +60,16 @@ export const inspectionSchedule = pgTable(
     // lo valida el servicio: depende de `user_site_scope`, y una FK no sabe expresar
     // "y además su alcance vigente incluye este sitio".
     defaultInspectorId: uuid('default_inspector_id').references(() => appUser.id),
+
+    /**
+     * Cada cuántos meses. Los divisores de 12 y nada más (1, 3, 6, 12): es exactamente
+     * el conjunto para el que un ancla de 1 a 12 alcanza para decidir, sin mirar el año,
+     * si un mes empieza período. El CHECK vive en 0029.
+     */
+    frequencyMonths: smallint('frequency_months').notNull(),
+
+    /** El mes 1-12 en el que la serie empieza. Para una regla mensual no significa nada. */
+    anchorMonth: smallint('anchor_month').notNull(),
 
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 
@@ -98,10 +112,15 @@ export const scheduledInspection = pgTable(
     // El período como fecha civil, no como instante: el primer día del mes que cubre.
     periodStart: date('period_start').notNull(),
 
+    // Cuánto dura ESTE período, copiado de la regla al abrir — igual que `templateId` e
+    // `inspectorId`, y por el mismo motivo: la regla es una fábrica, no un padre.
+    // Desactivarla no puede reescribir la forma de un período que ya se inspeccionó.
+    periodMonths: smallint('period_months').notNull(),
+
     // Generada por el motor. Nunca se escribe desde acá — febrero de un año bisiesto
     // no puede estar mal porque nadie lo calcula dos veces.
     periodEnd: date('period_end').notNull().generatedAlwaysAs(
-      sql`(period_start + INTERVAL '1 month' - INTERVAL '1 day')::date`,
+      sql`(period_start + (period_months * INTERVAL '1 month') - INTERVAL '1 day')::date`,
     ),
 
     // Copiado de la regla, no leído por join: desactivar una regla no puede alterar

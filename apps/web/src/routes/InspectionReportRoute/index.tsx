@@ -5,7 +5,7 @@ import { Link, useParams } from '@tanstack/react-router';
 import { getSubmittedInspection } from '../../api/inspections';
 import { queryKeys } from '../../api/query-keys';
 import { CalendarIcon, ClockIcon, PersonIcon, PinIcon } from '../../components/icons';
-import { formatCivilDay, monthName } from '../../presentation/dates';
+import { formatCivilDay, periodLabel } from '../../presentation/dates';
 import { answerText, photoCountText } from './presentation';
 
 /**
@@ -71,7 +71,7 @@ export function InspectionReportRoute(): React.JSX.Element {
             <h1>{report.template_name}</h1>
           </div>
           <p className="scheduling__subtitle">
-            {monthName(report.period_start)} {report.period_start.slice(0, 4)} — submitted and
+            {periodLabel(report.period_start, report.period_months)} — submitted and
             accepted. This record cannot be changed.
           </p>
         </div>
@@ -89,7 +89,7 @@ export function InspectionReportRoute(): React.JSX.Element {
             <CalendarIcon size={16} /> Month
           </span>
           <span className="facts__value">
-            {monthName(report.period_start)} {report.period_start.slice(0, 4)}
+            {periodLabel(report.period_start, report.period_months)}
           </span>
         </div>
 

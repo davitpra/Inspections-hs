@@ -44,8 +44,7 @@ describe('los tipos que la bandeja sabe leer', () => {
   it('acepta el payload de cada tipo', () => {
     const payloads: Record<string, unknown> = {
       inspection_period_opened: {
-        period_start: '2026-08-01',
-        period_end: '2026-08-31',
+        opened_for_month: '2026-08-01',
         opened: [],
       },
       corrective_action_assigned: {

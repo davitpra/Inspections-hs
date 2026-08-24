@@ -23,7 +23,7 @@ export function NotificationBody({
         <span>
           {notification.payload.opened.length} inspection
           {notification.payload.opened.length === 1 ? '' : 's'} opened for{' '}
-          {notification.payload.period_start.slice(0, 7)}
+          {notification.payload.opened_for_month.slice(0, 7)}
         </span>
       );
 

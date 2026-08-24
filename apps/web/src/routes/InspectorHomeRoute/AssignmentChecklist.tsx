@@ -13,7 +13,7 @@ import { readiness } from './presentation';
 /**
  * El progreso de la asignación destacada, leído SOLO del dispositivo.
  *
- * La misma consulta `fieldReady` que `PendingRow` y `AssignmentHero` decide si hay algo
+ * La misma consulta `fieldReady` que `AssignmentHero` decide si hay algo
  * que mostrar: sin paquete no hay progreso posible — la tarjeta ES la llamada a
  * descargar, con el mismo mensaje que nombra lo que falta, no un 0% sobre un documento
  * que no está.

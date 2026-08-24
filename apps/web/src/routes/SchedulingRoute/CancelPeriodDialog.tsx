@@ -4,7 +4,7 @@ import type { ScheduledInspection } from '@hs/contracts';
 
 import { cancelScheduledInspection } from '../../api/inspections';
 import { queryKeys } from '../../api/query-keys';
-import { monthName } from '../../presentation/dates';
+import { periodLabel } from '../../presentation/dates';
 
 /**
  * Cancelar un período abierto: primero la decisión, después el motivo.
@@ -50,7 +50,8 @@ export function CancelPeriodDialog({
   return (
     <dialog ref={dialogRef} className="modal" onClose={onClose}>
       <h2>
-        Cancel {monthName(inspection.period_start)} — {inspection.template_name}?
+        Cancel {periodLabel(inspection.period_start, inspection.period_months)} —{' '}
+        {inspection.template_name}?
       </h2>
 
       <p>Cancelling cannot be undone. The period is scheduled again instead.</p>

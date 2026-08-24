@@ -12,6 +12,7 @@ import {
   type ComplianceReport,
   type ComplianceReportSummary,
   type ComplianceView,
+  type PeriodMonths,
   type PeriodStatus,
   type RecurrenceSeries,
 } from '@hs/contracts';
@@ -377,6 +378,7 @@ async function readLastRender(
 
 interface PeriodRow {
   period_start: Date;
+  period_months: PeriodMonths;
   period_end: Date;
   status: PeriodStatus;
   scheduled_inspection_id: string | null;
@@ -439,6 +441,7 @@ function toDate(value: Date | string): string {
 function toPeriod(row: PeriodRow): CompliancePeriod {
   return {
     period_start: toDate(row.period_start),
+    period_months: row.period_months,
     period_end: toDate(row.period_end),
     status: row.status,
     scheduled_inspection_id: row.scheduled_inspection_id,

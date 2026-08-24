@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { periodStatusSchema } from './compliance.js';
+import { periodMonthsSchema, periodStatusSchema } from './compliance.js';
 
 /**
  * Requisitos §4 — InspecciónProgramada: la obligación de inspeccionar.
@@ -17,11 +17,12 @@ import { periodStatusSchema } from './compliance.js';
  * publicar una nueva no mueve una inspección abierta. Un `PATCH` que la aceptara sería
  * una promesa que el motor rechaza con 42501.
  *
- * **El `status` se importa de `compliance.js` y no se redefine acá.** Los cuatro
+ * **El `status` y la FRECUENCIA se importan de `compliance.js` y no se redefinen acá.** Los cuatro
  * estados son uno solo en todo el sistema: si el listado tuviera su propio enum,
  * tendríamos dos definiciones de lo mismo y la que lleva digest sería la que envejece.
  * La dirección del import es la única acíclica —`compliance.ts` no conoce este archivo—
- * y conviene que siga así.
+ * y conviene que siga así. `periodMonthsSchema` llegó en 0029 por el mismo camino y por
+ * la misma razón: viaja dentro del payload que se hashea.
  */
 
 const reasonSchema = z.string().trim().min(1).max(500);
@@ -32,15 +33,21 @@ export const periodStartSchema = z
   .date()
   .refine((value) => value.endsWith('-01'), 'period_start: el primer día del mes');
 
+/** El mes en el que la serie de una regla empieza. Para una mensual no significa nada. */
+export const anchorMonthSchema = z.number().int().min(1).max(12);
+
 /**
  * La regla de recurrencia. Una regla activa por planta y plantilla significa que esa
- * planta debe una inspección de esa plantilla todos los meses.
+ * planta debe una inspección de esa plantilla cada `frequency_months` meses, contados
+ * desde `anchor_month`.
  */
 export const inspectionScheduleSchema = z.strictObject({
   id: z.uuid(),
   site_id: z.uuid(),
   template_id: z.uuid(),
   template_name: z.string().min(1),
+  frequency_months: periodMonthsSchema,
+  anchor_month: anchorMonthSchema,
   default_inspector_id: z.uuid().nullable(),
   /** Ver `inspector_name` en `scheduledInspectionSchema`: mismo criterio, mismo nulo. */
   default_inspector_name: z.string().nullable(),
@@ -60,6 +67,17 @@ export const createInspectionScheduleSchema = z.strictObject({
   site_id: z.uuid(),
   template_id: z.uuid(),
   default_inspector_id: z.uuid().nullable().optional(),
+
+  /** Mensual si no se dice otra cosa: es el default del dominio, no un relleno. */
+  frequency_months: periodMonthsSchema.optional(),
+
+  /**
+   * OPCIONAL A PROPÓSITO, y cuando falta **lo resuelve el servidor** con el mes civil de
+   * Ontario. El cliente no tiene por qué saber la zona de la planta, y si la calculara
+   * con el reloj del dispositivo una regla creada el 31 a las 21:00 nacería anclada al
+   * mes siguiente.
+   */
+  anchor_month: anchorMonthSchema.optional(),
 });
 
 export type CreateInspectionSchedule = z.infer<typeof createInspectionScheduleSchema>;
@@ -68,6 +86,17 @@ export type CreateInspectionSchedule = z.infer<typeof createInspectionScheduleSc
  * Lo único que se puede cambiar de una regla: a quién le toca por defecto, y si sigue
  * abriendo períodos. `site_id` y `template_id` no están — una regla no se muda de
  * planta ni de plantilla, se desactiva y se crea otra.
+ *
+ * **`frequency_months` y `anchor_month` tampoco están, y ahí el motivo es más fuerte que
+ * la coherencia.** El CTE `owed` del reporte de cumplimiento no cuenta las inspecciones
+ * que existen: GENERA los períodos que el sitio DEBÍA a partir de la regla. Cambiarle la
+ * frecuencia a una regla viva no cambiaría el futuro, reescribiría el pasado — un año que
+ * se reportó como «12 de 12» pasaría a leerse «4 de 12» sin que nadie tocara una
+ * inspección. Desactivar y crear otra deja las dos ventanas contiguas, que es lo que el
+ * reporte necesita para decir la verdad sobre los dos tramos.
+ *
+ * El motor lo hace cumplir por partida doble (0029): fuera del `GRANT UPDATE` y dentro
+ * del array `frozen` del trigger de guarda.
  */
 export const updateInspectionScheduleSchema = z
   .strictObject({
@@ -86,6 +115,14 @@ export const scheduledInspectionSchema = z.strictObject({
   id: z.uuid(),
   site_id: z.uuid(),
   period_start: periodStartSchema,
+  /**
+   * Cuánto dura ESTE período, copiado de la regla al abrirlo.
+   *
+   * Viaja hasta acá y no se deduce de la regla porque la pantalla tiene que poder
+   * escribir «Q1 2026» sobre una fila cuya regla quizás ya se desactivó — y porque la
+   * regla de hoy puede tener otra frecuencia que la que abrió esta fila.
+   */
+  period_months: periodMonthsSchema,
   period_end: z.iso.date(),
   template_id: z.uuid(),
   template_name: z.string().min(1),
@@ -151,6 +188,11 @@ export type ScheduledInspection = z.infer<typeof scheduledInspectionSchema>;
  * como la más alta publicada de la plantilla, en el momento de programar. Dejar que
  * el cliente la eligiera abriría la puerta a abrir una inspección contra una versión
  * vieja sin que quede registrado que fue una decisión.
+ *
+ * **`period_months` tampoco viaja, y por el mismo motivo**: lo resuelve el servidor con la
+ * frecuencia de la regla activa de esa planta y plantilla, y mensual si no hay regla. Si
+ * lo eligiera el cliente, reprogramar un trimestre cancelado podría producir un período de
+ * un mes que se solapa con el resto de la serie sin que nadie lo haya decidido.
  */
 export const createScheduledInspectionSchema = z.strictObject({
   site_id: z.uuid(),
@@ -189,6 +231,8 @@ export const pendingInspectionSchema = z.strictObject({
   id: z.uuid(),
   site_id: z.uuid(),
   period_start: periodStartSchema,
+  /** El largo del período, para que la pantalla diga «Q1 2026» y no «January». */
+  period_months: periodMonthsSchema,
   period_end: z.iso.date(),
   template_name: z.string().min(1),
   template_version_id: z.uuid(),

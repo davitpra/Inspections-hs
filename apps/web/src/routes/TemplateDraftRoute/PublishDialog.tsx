@@ -2,15 +2,27 @@ import { useEffect, useRef } from 'react';
 
 import { CheckIcon } from '../../components/icons';
 
-/** Confirmación del punto de no retorno de publicar un borrador. */
+/**
+ * Confirmación del punto de no retorno de publicar un borrador.
+ *
+ * **Nombra el número de versión que va a crear**, y no dice siempre «version 1»: quien confirma
+ * un punto de no retorno tiene derecho a saber qué registro está por escribir. El número lo
+ * calcula el servidor al leer el borrador (`next_version`); es una lectura y no una reserva,
+ * pero es la mejor respuesta que hay antes de publicar.
+ */
 export function PublishDialog({
   draftName,
+  nextVersion,
+  revising,
   publishing,
   error,
   onClose,
   onConfirm,
 }: {
   draftName: string;
+  nextVersion: number;
+  /** Corrige una plantilla publicada: la versión anterior sigue donde está. */
+  revising: boolean;
   publishing: boolean;
   error: string | null;
   onClose: () => void;
@@ -32,7 +44,10 @@ export function PublishDialog({
       </div>
 
       <p className="modal__text">
-        This creates version 1. A published version cannot be edited, and this draft will close.
+        This creates version {nextVersion}.{' '}
+        {revising
+          ? 'The version it replaces stays readable and keeps every inspection already bound to it.'
+          : 'A published version cannot be edited, and this draft will close.'}{' '}
         There is no undo.
       </p>
 

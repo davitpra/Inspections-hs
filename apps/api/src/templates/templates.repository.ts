@@ -19,18 +19,41 @@ export interface TemplateDraftRecord extends Record<string, unknown> {
   document: TemplateDraftDocument;
   updated_at: Date;
   site_ids: string[];
+  /** La plantilla que este borrador corrige, o `null` si va a crear una (0028 §1). */
+  template_id: string | null;
+  /** `max + 1` de la plantilla, o `1` cuando no hay ninguna. Lectura, no reserva. */
+  next_version: number;
 }
 
-const DRAFT_COLUMNS = 'id, key, name, document, updated_at, site_ids';
+const DRAFT_COLUMNS = 'id, key, name, document, updated_at, site_ids, template_id';
+
+/**
+ * El número que va a tener la versión que publique este borrador.
+ *
+ * `LEFT JOIN LATERAL` y no un subselect en la lista de columnas para que la lectura sea una
+ * sola por fila y no una por columna el día que haga falta más de un campo de la plantilla.
+ *
+ * NO ES UNA RESERVA. Entre esta lectura y la publicación puede aparecer otra versión —solo
+ * puede ponerla un seed, porque hay una sola revisión viva por plantilla—, y el número que
+ * queda escrito lo decide `hs_template_version_next()` bajo su advisory lock.
+ */
+const NEXT_VERSION_LATERAL = `LEFT JOIN LATERAL (
+         SELECT coalesce(max(tv.version), 0) + 1 AS next_version
+           FROM template_version tv
+          WHERE tv.template_id = d.template_id
+       ) v ON true`;
+
+const NEXT_VERSION_COLUMN = 'coalesce(v.next_version, 1)::int AS next_version';
 
 /** Los borradores vivos, el más trabajado primero. */
 export async function findDrafts(client: PoolClient): Promise<TemplateDraftRecord[]> {
   const { rows } = await client.query<TemplateDraftRecord>(
-    `SELECT ${DRAFT_COLUMNS}
-       FROM template_draft
-       WHERE discarded_at IS NULL
-         AND published_at IS NULL
-      ORDER BY updated_at DESC`,
+    `SELECT ${DRAFT_COLUMNS}, ${NEXT_VERSION_COLUMN}
+       FROM template_draft d
+       ${NEXT_VERSION_LATERAL}
+      WHERE d.discarded_at IS NULL
+        AND d.published_at IS NULL
+      ORDER BY d.updated_at DESC`,
   );
 
   return rows;
@@ -41,9 +64,10 @@ export async function findDraft(
   id: string,
 ): Promise<TemplateDraftRecord | null> {
   const { rows } = await client.query<TemplateDraftRecord>(
-    `SELECT ${DRAFT_COLUMNS}
-       FROM template_draft
-       WHERE id = $1 AND discarded_at IS NULL AND published_at IS NULL`,
+    `SELECT ${DRAFT_COLUMNS}, ${NEXT_VERSION_COLUMN}
+       FROM template_draft d
+       ${NEXT_VERSION_LATERAL}
+      WHERE d.id = $1 AND d.discarded_at IS NULL AND d.published_at IS NULL`,
     [id],
   );
 
@@ -82,6 +106,11 @@ export async function activeSiteIds(
  *
  * `lower(btrim(...))` es la misma expresión del índice de 0017: comparar de otra forma haría
  * que esta comprobación dijera "libre" sobre un nombre que el índice después rechaza.
+ *
+ * LOS BORRADORES DE REVISIÓN NO CUENTAN (`template_id IS NULL`), igual que en los índices de
+ * 0028 §3: llevan a propósito la clave y el nombre de su plantilla, y esa plantilla ya está
+ * en la mitad de abajo de este `UNION`. Contarlos sería contar dos veces al mismo dueño, y el
+ * mensaje hablaría de un borrador cuando lo que ocupa el nombre es la plantilla publicada.
  */
 export async function isNameTaken(
   client: PoolClient,
@@ -93,6 +122,7 @@ export async function isNameTaken(
               SELECT 1 FROM template_draft
                 WHERE discarded_at IS NULL
                   AND published_at IS NULL
+                  AND template_id IS NULL
                  AND (lower(btrim(name)) = lower(btrim($1)) OR key = $2)
               UNION ALL
               SELECT 1 FROM template
@@ -122,6 +152,7 @@ export async function isNameTakenByAnother(
               SELECT 1 FROM template_draft
                 WHERE discarded_at IS NULL
                   AND published_at IS NULL
+                  AND template_id IS NULL
                  AND ($2::uuid IS NULL OR id <> $2::uuid)
                  AND lower(btrim(name)) = lower(btrim($1))
               UNION ALL
@@ -162,6 +193,112 @@ export function isTemplateItemKeyUniqueViolation(caught: unknown): boolean {
   return candidate?.code === '23505' && candidate.constraint === 'template_item_pkey';
 }
 
+/**
+ * La plantilla que se va a revisar, con la última versión publicada que le sirve de origen.
+ *
+ * Se lee `template` y `template_version` en una sola consulta porque la revisión necesita las
+ * dos cosas juntas —la identidad de la plantilla y el documento a copiar— y separarlas dejaría
+ * un hueco entre las dos lecturas.
+ *
+ * Una plantilla dada de baja no aparece: no se puede programar, así que corregirla sería
+ * escribir una versión que nadie va a poder usar.
+ *
+ * `DISTINCT ON` no hace falta: `ORDER BY version DESC LIMIT 1` sobre una sola plantilla usa el
+ * mismo índice `template_version_current_idx` que `LATEST_PUBLISHED_VERSION_CTE`.
+ */
+export async function findTemplateForRevision(
+  client: PoolClient,
+  templateId: string,
+): Promise<TemplateForRevision | null> {
+  const { rows } = await client.query<TemplateForRevision>(
+    `SELECT t.id,
+            t.key,
+            t.name,
+            tv.id       AS version_id,
+            tv.version,
+            tv.document
+       FROM template t
+       LEFT JOIN LATERAL (
+              SELECT id, version, document
+                FROM template_version
+               WHERE template_id = t.id
+               ORDER BY version DESC
+               LIMIT 1
+            ) tv ON true
+      WHERE t.id = $1 AND t.deactivated_at IS NULL`,
+    [templateId],
+  );
+
+  return rows[0] ?? null;
+}
+
+export interface TemplateForRevision extends Record<string, unknown> {
+  id: string;
+  key: string;
+  name: string;
+  /** Nulos juntos: la plantilla existe y todavía no publicó nada. */
+  version_id: string | null;
+  version: number | null;
+  document: TemplateDocument | null;
+}
+
+/**
+ * El borrador de revisión vivo de una plantilla, si lo hay.
+ *
+ * Hay a lo sumo uno y lo garantiza `template_draft_revision_live_idx` (0028 §2). Esta lectura
+ * existe para devolverlo en vez de crear un segundo: el coordinador que aprieta «Revise» sobre
+ * una plantilla que ya está revisando quiere llegar a su trabajo en curso, no a un conflicto.
+ */
+export async function findLiveRevisionDraft(
+  client: PoolClient,
+  templateId: string,
+): Promise<TemplateDraftRecord | null> {
+  const { rows } = await client.query<TemplateDraftRecord>(
+    `SELECT ${DRAFT_COLUMNS}, ${NEXT_VERSION_COLUMN}
+       FROM template_draft d
+       ${NEXT_VERSION_LATERAL}
+      WHERE d.template_id = $1
+        AND d.discarded_at IS NULL
+        AND d.published_at IS NULL`,
+    [templateId],
+  );
+
+  return rows[0] ?? null;
+}
+
+/**
+ * Qué se sabe ya de cada `item_key` que el documento declara.
+ *
+ * Devuelve una fila por clave YA REGISTRADA; las que no vuelven son las nuevas. El servicio
+ * decide con eso: registra las nuevas, deja como están las de esta plantilla, y rechaza las de
+ * otra plantilla o las desactivadas.
+ *
+ * Un `INSERT ... ON CONFLICT DO NOTHING` habría sido más corto y habría aceptado en silencio
+ * un `item_key` de otra plantilla — el error más caro que hay acá, porque fundiría las series
+ * de recurrencia de dos plantillas y no se puede deshacer.
+ */
+export async function findRegisteredItems(
+  client: PoolClient,
+  itemKeys: readonly string[],
+): Promise<RegisteredItem[]> {
+  const { rows } = await client.query<RegisteredItem>(
+    `SELECT item_key,
+            template_id,
+            deactivated_at IS NOT NULL AS deactivated
+       FROM template_item
+      WHERE item_key = ANY($1::text[])`,
+    [[...itemKeys]],
+  );
+
+  return rows;
+}
+
+export interface RegisteredItem extends Record<string, unknown> {
+  item_key: string;
+  template_id: string;
+  deactivated: boolean;
+}
+
 export async function insertTemplate(
   client: PoolClient,
   template: { key: string; name: string },
@@ -189,6 +326,17 @@ export async function registerItems(
   );
 }
 
+/**
+ * La versión siguiente de la plantilla, sea la primera o la quinta.
+ *
+ * El `coalesce(max(version), 0) + 1` NO es la garantía: es el número que este request propone.
+ * La garantía es `hs_template_version_next()` (0003 §5), que toma un advisory lock sobre la
+ * plantilla, lo recalcula y levanta `HS002` si no coincide. Dos publicaciones concurrentes se
+ * serializan en ese lock y la segunda muere en vez de pisar a la primera.
+ *
+ * Una plantilla recién insertada tiene máximo cero y sale 1, así que no hay una rama para la
+ * primera versión: es el caso general con la tabla vacía.
+ */
 export async function insertVersion(
   client: PoolClient,
   version: {
@@ -199,7 +347,9 @@ export async function insertVersion(
 ): Promise<{ id: string; version: number }> {
   const { rows } = await client.query<{ id: string; version: number }>(
     `INSERT INTO template_version (template_id, version, document, published_by)
-          VALUES ($1, 1, $2::jsonb, $3)
+     SELECT $1, coalesce(max(version), 0) + 1, $2::jsonb, $3
+       FROM template_version
+      WHERE template_id = $1
        RETURNING id, version`,
     [version.templateId, JSON.stringify(version.document), version.publishedBy],
   );
@@ -237,13 +387,27 @@ export async function insertDraft(
     document: TemplateDraftDocument;
     createdBy: string;
     siteIds: readonly string[];
+    /** La plantilla que el borrador corrige. Ausente en un borrador de plantilla nueva. */
+    templateId?: string | null;
   },
 ): Promise<TemplateDraftRecord> {
   const { rows } = await client.query<TemplateDraftRecord>(
-    `INSERT INTO template_draft (key, name, document, created_by, site_ids)
-          VALUES ($1, $2, $3, $4, $5::uuid[])
-       RETURNING ${DRAFT_COLUMNS}`,
-    [draft.key, draft.name, JSON.stringify(draft.document), draft.createdBy, draft.siteIds],
+    `WITH saved AS (
+       INSERT INTO template_draft (key, name, document, created_by, site_ids, template_id)
+            VALUES ($1, $2, $3, $4, $5::uuid[], $6)
+         RETURNING ${DRAFT_COLUMNS}
+     )
+     SELECT ${DRAFT_COLUMNS}, ${NEXT_VERSION_COLUMN}
+       FROM saved d
+       ${NEXT_VERSION_LATERAL}`,
+    [
+      draft.key,
+      draft.name,
+      JSON.stringify(draft.document),
+      draft.createdBy,
+      draft.siteIds,
+      draft.templateId ?? null,
+    ],
   );
 
   // El INSERT devuelve fila o tira; no hay caso vacío.
@@ -271,15 +435,20 @@ export async function updateDraft(
   },
 ): Promise<TemplateDraftRecord | null> {
   const { rows } = await client.query<TemplateDraftRecord>(
-    `UPDATE template_draft
-        SET name = $2,
-            document = $3,
-             updated_at = now(),
-             site_ids = $4::uuid[]
-       WHERE id = $1
-         AND discarded_at IS NULL
-         AND published_at IS NULL
-  RETURNING ${DRAFT_COLUMNS}`,
+    `WITH saved AS (
+       UPDATE template_draft
+          SET name = $2,
+              document = $3,
+              updated_at = now(),
+              site_ids = $4::uuid[]
+        WHERE id = $1
+          AND discarded_at IS NULL
+          AND published_at IS NULL
+    RETURNING ${DRAFT_COLUMNS}
+     )
+     SELECT ${DRAFT_COLUMNS}, ${NEXT_VERSION_COLUMN}
+       FROM saved d
+       ${NEXT_VERSION_LATERAL}`,
     [
       update.id,
       update.name,

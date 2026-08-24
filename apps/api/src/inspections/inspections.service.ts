@@ -7,6 +7,7 @@ import type {
   InspectorOption,
   LocationPackage,
   PendingInspection,
+  PeriodMonths,
   PeriodStatus,
   Role,
   RosterPackage,
@@ -84,15 +85,30 @@ export class InspectionsService {
         await this.requireInspector(client, input.default_inspector_id, input.site_id);
       }
 
+      // EL ANCLA LA RESUELVE EL SERVIDOR cuando el cliente no la manda, y con el mes
+      // CIVIL DE ONTARIO: el mismo calendario en el que el trabajo de apertura resuelve
+      // el período. Con el reloj del dispositivo, una regla creada el 31 a las 21:00
+      // nacería anclada al mes siguiente y su primera obligación caería un período tarde.
+      const anchorMonth =
+        input.anchor_month ?? Number(civilDate(new Date(), SITE_TIME_ZONE).slice(5, 7));
+
       // El único parcial de 0008 es quien rechaza la segunda regla activa; acá solo se
       // traduce. Comprobar antes del INSERT no serviría: dos altas concurrentes pasarían
       // las dos comprobaciones y chocarían igual contra el índice.
       const rows = await client
         .query<{ id: string }>(
-          `INSERT INTO inspection_schedule (site_id, template_id, default_inspector_id, created_by)
-           VALUES ($1, $2, $3, $4)
+          `INSERT INTO inspection_schedule
+             (site_id, template_id, frequency_months, anchor_month, default_inspector_id, created_by)
+           VALUES ($1, $2, $3, $4, $5, $6)
            RETURNING id`,
-          [input.site_id, input.template_id, input.default_inspector_id ?? null, session.userId],
+          [
+            input.site_id,
+            input.template_id,
+            input.frequency_months ?? 1,
+            anchorMonth,
+            input.default_inspector_id ?? null,
+            session.userId,
+          ],
         )
         .then((result) => result.rows)
         .catch((caught: unknown) => {
@@ -226,14 +242,30 @@ export class InspectionsService {
         await this.requireInspector(client, input.inspector_id, input.site_id);
       }
 
+      // EL LARGO DEL PERÍODO SALE DE LA REGLA ACTIVA, no del cliente. Reprogramar un
+      // trimestre cancelado tiene que volver a producir un trimestre: si el largo lo
+      // eligiera quien llama, un descuido metería un período de un mes en el medio de una
+      // serie trimestral, solapado con el resto y sin que el único parcial —que es sobre
+      // `period_start`— tuviera nada que objetar.
+      //
+      // Mensual cuando no hay regla: una programación suelta sobre una plantilla que la
+      // planta no debe periódicamente es, por definición, un período y no una serie.
+      const periodMonths = await this.activeRuleFrequency(
+        client,
+        input.site_id,
+        input.template_id,
+      );
+
       const { rows } = await client.query<{ id: string }>(
         `INSERT INTO scheduled_inspection
-           (site_id, period_start, template_id, template_version_id, inspector_id, scheduled_by)
-         VALUES ($1, $2::date, $3, $4, $5, $6)
+           (site_id, period_start, period_months, template_id, template_version_id,
+            inspector_id, scheduled_by)
+         VALUES ($1, $2::date, $3, $4, $5, $6, $7)
          RETURNING id`,
         [
           input.site_id,
           input.period_start,
+          periodMonths,
           input.template_id,
           versionId,
           input.inspector_id ?? null,
@@ -311,6 +343,7 @@ export class InspectionsService {
         `SELECT si.id,
                 si.site_id,
                 si.period_start::text AS period_start,
+                si.period_months,
                 si.period_end::text AS period_end,
                 t.name AS template_name,
                 si.template_version_id,
@@ -329,6 +362,7 @@ export class InspectionsService {
         id: row.id,
         site_id: row.site_id,
         period_start: row.period_start,
+        period_months: row.period_months,
         period_end: row.period_end,
         template_name: row.template_name,
         template_version_id: row.template_version_id,
@@ -417,6 +451,7 @@ export class InspectionsService {
                 insp.received_at,
                 insp.answer_count,
                 si.period_start::text AS period_start,
+                si.period_months,
                 t.name AS template_name,
                 tv.version AS template_version,
                 tv.document,
@@ -447,6 +482,7 @@ export class InspectionsService {
         inspection_id: row.id,
         site_id: scheduled.site_id,
         period_start: row.period_start,
+        period_months: row.period_months,
         template_name: row.template_name,
         template_version_id: row.template_version_id,
         template_version: row.template_version,
@@ -607,6 +643,29 @@ export class InspectionsService {
     }
   }
 
+  /**
+   * La frecuencia de la regla activa de esa planta y plantilla, o mensual si no hay.
+   *
+   * Sin `WHERE site_id`: el alcance lo aplica la política, como en todo este servicio. El
+   * `site_id` del parámetro SELECCIONA entre lo que la sesión ya puede ver, y una planta
+   * fuera del alcance simplemente no devuelve fila — que es el mismo default correcto que
+   * tiene el INSERT que la usa.
+   */
+  private async activeRuleFrequency(
+    client: PoolClient,
+    siteId: string,
+    templateId: string,
+  ): Promise<number> {
+    const { rows } = await client.query<{ frequency_months: number }>(
+      `SELECT frequency_months
+         FROM inspection_schedule
+        WHERE site_id = $1::uuid AND template_id = $2::uuid AND deactivated_at IS NULL`,
+      [siteId, templateId],
+    );
+
+    return rows[0]?.frequency_months ?? 1;
+  }
+
   private async scheduleById(client: PoolClient, id: string): Promise<InspectionSchedule> {
     const { rows } = await client.query<ScheduleRow>(`${SCHEDULE_SELECT} AND s.id = $1`, [id]);
 
@@ -668,6 +727,8 @@ const SCHEDULE_SELECT = `
          s.site_id,
          s.template_id,
          t.name AS template_name,
+         s.frequency_months,
+         s.anchor_month,
          s.default_inspector_id,
          ${INSPECTOR_NAME_EXPR('dp')} AS default_inspector_name,
          s.created_at,
@@ -693,6 +754,7 @@ const SCHEDULED_SELECT = `
   SELECT si.id,
          si.site_id,
          si.period_start::text AS period_start,
+         si.period_months,
          si.period_end::text AS period_end,
          si.template_id,
          t.name AS template_name,
@@ -723,6 +785,8 @@ interface ScheduleRow extends Record<string, unknown> {
   site_id: string;
   template_id: string;
   template_name: string;
+  frequency_months: PeriodMonths;
+  anchor_month: number;
   default_inspector_id: string | null;
   default_inspector_name: string | null;
   created_at: Date;
@@ -733,6 +797,7 @@ interface ScheduledRow extends Record<string, unknown> {
   id: string;
   site_id: string;
   period_start: string;
+  period_months: PeriodMonths;
   period_end: string;
   template_id: string;
   template_name: string;
@@ -756,6 +821,7 @@ interface SubmittedRow extends Record<string, unknown> {
   template_name: string;
   document: TemplateDocument;
   period_start: string;
+  period_months: PeriodMonths;
   submitted_by: string;
   submitted_by_name: string | null;
   signed_at: Date;
@@ -767,6 +833,7 @@ interface PendingRow extends Record<string, unknown> {
   id: string;
   site_id: string;
   period_start: string;
+  period_months: PeriodMonths;
   period_end: string;
   template_name: string;
   template_version_id: string;
@@ -779,6 +846,8 @@ function toSchedule(row: ScheduleRow): InspectionSchedule {
     site_id: row.site_id,
     template_id: row.template_id,
     template_name: row.template_name,
+    frequency_months: row.frequency_months,
+    anchor_month: row.anchor_month,
     default_inspector_id: row.default_inspector_id,
     default_inspector_name: row.default_inspector_name,
     created_at: row.created_at.toISOString(),
@@ -791,6 +860,7 @@ function toScheduled(row: ScheduledRow): ScheduledInspection {
     id: row.id,
     site_id: row.site_id,
     period_start: row.period_start,
+    period_months: row.period_months,
     period_end: row.period_end,
     template_id: row.template_id,
     template_name: row.template_name,

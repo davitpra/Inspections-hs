@@ -41,6 +41,21 @@ export function monthName(periodStart: string): string {
 }
 
 /**
+ * EL NOMBRE COMPLETO DE UN PERÍODO: `August 2026`, `Q1 2026`, `H2 2026`, `2026`.
+ *
+ * **Se reexporta de `@hs/contracts` y no se implementa acá**, a diferencia de `monthName`
+ * y de `civilDate`, que sí son copias deliberadas. La diferencia es quién más lo usa: la
+ * zona horaria la repite el cliente porque no puede importar de `apps/api`, pero esta
+ * etiqueta la escribe TAMBIÉN el PDF que se le entrega al MLITSD, y `contracts` es el
+ * único lugar que los dos ya comparten. Dos implementaciones serían dos formas de nombrar
+ * el mismo trimestre, y la que envejecería es la del documento regulatorio.
+ *
+ * Se reexporta desde acá igual, y no se importa de `@hs/contracts` en cada componente,
+ * para que el lugar donde se busca «cómo se lee una fecha» siga siendo uno solo.
+ */
+export { periodLabel } from '@hs/contracts';
+
+/**
  * La zona de la planta. La misma que resuelve el trabajo automático
  * (`apps/api/src/jobs/job-registry.ts` `SITE_TIME_ZONE`) — el cliente no puede importar
  * ese archivo, así que el valor se repite acá, y por eso el borde de horario de verano

@@ -13,11 +13,6 @@ export const STATUS_LABELS: Readonly<Record<PeriodStatus, string>> = {
   open: 'Still open',
 };
 
-/** `2026-04-01` → `2026-04`. La grilla es de meses, no de días. */
-export function monthLabel(periodStart: string): string {
-  return periodStart.slice(0, 7);
-}
-
 export function yearOf(year: number): { rangeStart: string; rangeEnd: string } {
   return { rangeStart: `${year}-01-01`, rangeEnd: `${year}-12-31` };
 }

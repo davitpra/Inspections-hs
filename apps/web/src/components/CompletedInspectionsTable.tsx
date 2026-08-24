@@ -1,7 +1,7 @@
 import type { ScheduledInspection } from "@hs/contracts";
 import { Link } from "@tanstack/react-router";
 
-import { formatCivilDay, monthName } from "../presentation/dates";
+import { formatCivilDay, periodLabel } from "../presentation/dates";
 import { ExternalLinkIcon } from "./icons";
 
 /**
@@ -39,7 +39,7 @@ export function CompletedInspectionsTable({
         {inspections.map((item) => (
           <tr key={item.id}>
             <th scope="row">
-              {monthName(item.period_start)} {item.period_start.slice(0, 4)}
+              {periodLabel(item.period_start, item.period_months)}
             </th>
             <td>{siteName(item.site_id)}</td>
             <td>

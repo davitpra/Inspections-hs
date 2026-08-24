@@ -4,7 +4,11 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { canonicalize, type ComplianceReport } from '@hs/contracts';
+import {
+  canonicalize,
+  COMPLIANCE_PAYLOAD_SCHEMA_VERSION,
+  type ComplianceReport,
+} from '@hs/contracts';
 import { createHash } from 'node:crypto';
 
 import { ComplianceService } from '../src/reporting/compliance.service';
@@ -106,8 +110,9 @@ beforeAll(async () => {
   await inScope(
     db.app,
     [SITE_A],
-    `INSERT INTO inspection_schedule (site_id, template_id, created_at)
-     VALUES ($1, $2, '2025-12-01T00:00:00Z')`,
+    `INSERT INTO inspection_schedule
+       (site_id, template_id, frequency_months, anchor_month, created_at)
+     VALUES ($1, $2, 1, 1, '2025-12-01T00:00:00Z')`,
     [SITE_A, templateId],
   );
 
@@ -118,8 +123,8 @@ beforeAll(async () => {
         db.app,
         [SITE_A],
         `INSERT INTO scheduled_inspection
-           (site_id, period_start, template_id, template_version_id, inspector_id)
-         VALUES ($1, $2::date, $3, $4, $5) RETURNING id`,
+           (site_id, period_start, period_months, template_id, template_version_id, inspector_id)
+         VALUES ($1, $2::date, 1, $3, $4, $5) RETURNING id`,
         [SITE_A, `2026-${month}-01`, templateId, versionId, coordinator.accountId],
       ),
     ).id;
@@ -185,7 +190,11 @@ describe('congelar un reporte', () => {
   it('el payload declara la versión de su forma', async () => {
     const report = await generate();
 
-    expect(report.payload.schema_version).toBe(1);
+    // Se sube A MANO cuando cambia `compliancePayloadSchema`, y este número tiene que
+    // moverse con él: es lo único que explica por qué dos reportes del mismo rango,
+    // generados a los dos lados de un cambio de forma, tienen digests distintos.
+    expect(report.payload.schema_version).toBe(COMPLIANCE_PAYLOAD_SCHEMA_VERSION);
+    expect(COMPLIANCE_PAYLOAD_SCHEMA_VERSION).toBe(2);
   });
 
   it('UN REPORTE NO CAMBIA CUANDO CAMBIAN LOS DATOS', async () => {
@@ -584,8 +593,9 @@ describe('la verificación de punta a punta', () => {
     await inScope(
       db.app,
       [SITE_B],
-      `INSERT INTO inspection_schedule (site_id, template_id, created_at)
-       VALUES ($1, $2, '2025-12-01T00:00:00Z')`,
+      `INSERT INTO inspection_schedule
+         (site_id, template_id, frequency_months, anchor_month, created_at)
+       VALUES ($1, $2, 1, 1, '2025-12-01T00:00:00Z')`,
       [SITE_B, templateId],
     );
 
@@ -597,8 +607,8 @@ describe('la verificación de punta a punta', () => {
           db.app,
           [SITE_B],
           `INSERT INTO scheduled_inspection
-             (site_id, period_start, template_id, template_version_id, inspector_id)
-           VALUES ($1, $2::date, $3, $4, $5) RETURNING id`,
+             (site_id, period_start, period_months, template_id, template_version_id, inspector_id)
+           VALUES ($1, $2::date, 1, $3, $4, $5) RETURNING id`,
           [SITE_B, period, templateId, versionId, coordinatorB.accountId],
         ),
       ).id;

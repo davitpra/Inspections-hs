@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router';
 
 import { formatInstant } from '../../presentation/dates';
 import { draftStatusClass, draftStatusLabel } from '../../presentation/templates';
+import { draftKindLabel } from './presentation';
 
 export function DraftRow({
   draft,
@@ -31,7 +32,7 @@ export function DraftRow({
           por el nombre.
         */}
         <p className="note">
-          {draft.key} · last saved {formatInstant(draft.updated_at)}
+          {draft.key} · {draftKindLabel(draft)} · last saved {formatInstant(draft.updated_at)}
         </p>
       </div>
 

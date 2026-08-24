@@ -8,6 +8,7 @@ import {
   complianceQuerySchema,
   complianceRenderSchema,
   complianceReportSchema,
+  periodLabel,
 } from './compliance.js';
 
 const SITE_ID = '11111111-1111-4111-8111-111111111111';
@@ -189,11 +190,23 @@ describe('compliancePayloadSchema', () => {
     expect(compliancePayloadSchema.parse(validPayload())).toEqual(validPayload());
   });
 
-  it('rechaza una versión de forma que no es la vigente', () => {
+  it('acepta las versiones de forma que este contrato sabe leer', () => {
+    // La 2 es la vigente; la 1 es la de los reportes congelados antes de 0029, que no
+    // llevan `period_months` y que tienen que seguir leyéndose. Un reporte regulatorio se
+    // consulta años después de generarse: si el contrato solo aceptara la forma que
+    // escribe hoy, el documento de 2026 dejaría de validar en cuanto cambiara el payload.
+    for (const version of [1, 2]) {
+      expect(
+        compliancePayloadSchema.safeParse({ ...validPayload(), schema_version: version }).success,
+      ).toBe(true);
+    }
+  });
+
+  it('rechaza una versión de forma que no conoce', () => {
     // Si esto pasara, el digest se estaría calculando sobre una forma que este código no
-    // es el que produce.
+    // sabe interpretar.
     expect(
-      compliancePayloadSchema.safeParse({ ...validPayload(), schema_version: 2 }).success,
+      compliancePayloadSchema.safeParse({ ...validPayload(), schema_version: 3 }).success,
     ).toBe(false);
   });
 
@@ -287,5 +300,49 @@ describe('complianceReportSchema y complianceRenderSchema', () => {
     expect(
       complianceReportSchema.safeParse({ ...base, payload_hash: HASH.toUpperCase() }).success,
     ).toBe(false);
+  });
+});
+
+/**
+ * El nombre de un período. Vive en contracts porque lo escriben las cuatro pantallas Y el
+ * PDF regulatorio; estos casos son los que separan una etiqueta correcta de una que miente
+ * sobre qué meses cubre la evidencia.
+ */
+describe('periodLabel', () => {
+  it('mensual: el mes y el año', () => {
+    expect(periodLabel('2026-08-01', 1)).toBe('August 2026');
+    expect(periodLabel('2026-01-01', 1)).toBe('January 2026');
+  });
+
+  it('sin largo se lee mensual, que es lo que era antes de 0029', () => {
+    expect(periodLabel('2026-08-01')).toBe('August 2026');
+  });
+
+  it('trimestral alineado al calendario: Q1 a Q4', () => {
+    expect(periodLabel('2026-01-01', 3)).toBe('Q1 2026');
+    expect(periodLabel('2026-07-01', 3)).toBe('Q3 2026');
+    expect(periodLabel('2026-10-01', 3)).toBe('Q4 2026');
+  });
+
+  it('NO llama Q a un trimestre que no cae en el trimestre civil', () => {
+    // Anclado en febrero cubre feb-abr, que no es Q1. Decir «Q1» mentiría sobre el
+    // alcance de la evidencia en un documento que lee un regulador.
+    expect(periodLabel('2026-02-01', 3)).toBe('Feb–Apr 2026');
+    expect(periodLabel('2026-06-01', 3)).toBe('Jun–Aug 2026');
+  });
+
+  it('un período que cruza el año escribe los dos años', () => {
+    expect(periodLabel('2026-11-01', 3)).toBe('Nov 2026–Jan 2027');
+    expect(periodLabel('2026-09-01', 12)).toBe('Sep 2026–Aug 2027');
+  });
+
+  it('semestral y anual alineados', () => {
+    expect(periodLabel('2026-01-01', 6)).toBe('H1 2026');
+    expect(periodLabel('2026-07-01', 6)).toBe('H2 2026');
+    expect(periodLabel('2026-01-01', 12)).toBe('2026');
+  });
+
+  it('semestral desalineado escribe los extremos, no H1', () => {
+    expect(periodLabel('2026-03-01', 6)).toBe('Mar–Aug 2026');
   });
 });

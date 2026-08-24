@@ -107,6 +107,20 @@ function Walkthrough({ id }: { id: string }): React.JSX.Element {
 
   const loadedDraft = draft.data?.kind === 'loaded' ? draft.data.loaded : undefined;
 
+  /**
+   * El paquete guardado, para saber CONTRA QUÉ se abrió este borrador.
+   *
+   * Misma clave que la asignación destacada, así que no agrega una lectura: es la caché
+   * que las dos comparten. `documentForDraft` ya se niega a interpretar un borrador con
+   * una versión que no es la suya —y hace bien, un envío construido con el documento
+   * equivocado vuelve rechazado después del recorrido— pero devuelve el mismo `null` que
+   * "todavía no cargó", y la pantalla no puede distinguirlos sola.
+   */
+  const stored = useQuery({
+    queryKey: queryKeys.storedTemplateVersion(id),
+    queryFn: () => storedTemplateVersion(id),
+  });
+
   const document = useQuery({
     queryKey: queryKeys.document(loadedDraft?.draft.client_submission_id),
     enabled: Boolean(loadedDraft),
@@ -202,6 +216,51 @@ function Walkthrough({ id }: { id: string }): React.JSX.Element {
         <p>
           <Link className="back-link" to="/">
             Back to pending inspections
+          </Link>
+        </p>
+      </>
+    );
+  }
+
+  /**
+   * Spec: "A draft bound to a version the device no longer holds is named".
+   *
+   * Sin esta rama el desajuste era un "Loading the inspection…" para siempre: sin texto,
+   * sin salida y sin nada que el inspector pudiera hacer. Lo que lo resuelve no es
+   * refrescar —el borrador quedó atado a un documento que ya no está— sino descartarlo, y
+   * eso se hace en la pantalla de inicio.
+   */
+  if (
+    loadedDraft &&
+    stored.data &&
+    stored.data.template_version_id !== loadedDraft.draft.template_version_id
+  ) {
+    const signed = loadedDraft.draft.status === 'signed';
+
+    return (
+      <>
+        <h1>Started against a different version</h1>
+        <p className="notice notice--warn">
+          This draft was started against a version of the form that is no longer on this device,
+          so it cannot be continued.
+        </p>
+        <p>
+          {signed
+            ? 'It is signed and on its way. It cannot be discarded, and the server will refuse it because it was built against the wrong version.'
+            : 'Discard this draft from your inspections and start the inspection over.'}
+        </p>
+
+        {/*
+          Refrescar se ofrece igual, y no es una contradicción: si lo que se desalineó fue
+          el paquete y no el borrador, volver a bajar la versión congelada del servidor
+          los vuelve a alinear y el trabajo ya hecho se sigue leyendo. Es lo único que
+          puede recuperar el borrador sin perderlo.
+        */}
+        <DownloadForField id={id} label="Refresh field package" className="button--outline" />
+
+        <p>
+          <Link className="back-link" to="/">
+            Back to my inspections
           </Link>
         </p>
       </>

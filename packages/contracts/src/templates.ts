@@ -141,6 +141,29 @@ export const templateDraftSummarySchema = z.strictObject({
   updated_at: z.string(),
   publishable: z.boolean(),
   site_ids: siteScopeSchema,
+
+  /**
+   * LA PLANTILLA QUE ESTE BORRADOR CORRIGE, o `null` si va a crear una.
+   *
+   * Es lo que decide qué significa publicarlo —una versión más de esa plantilla,
+   * o la primera de una nueva— y no cambia nada de cómo se escribe, se guarda o se
+   * descarta. Viaja en el listado porque «¿esto es una plantilla nueva o una
+   * corrección?» se responde sin abrir el borrador.
+   */
+  template_id: z.uuid().nullable(),
+
+  /**
+   * EL NÚMERO QUE VA A TENER LA VERSIÓN QUE PUBLIQUE.
+   *
+   * `1` para un borrador de plantilla nueva; `max + 1` para una revisión. Existe
+   * porque el diálogo que pide confirmar un punto de no retorno tiene que poder
+   * nombrar el registro que está por escribir, en vez de decir siempre «version 1».
+   *
+   * **Es una lectura, no una reserva.** Se resuelve cuando se lee el borrador; el
+   * número que queda escrito lo decide `hs_template_version_next()` bajo su lock, y
+   * la respuesta de la publicación informa cuál fue.
+   */
+  next_version: z.int().positive(),
 });
 
 export type TemplateDraftSummary = z.infer<typeof templateDraftSummarySchema>;
