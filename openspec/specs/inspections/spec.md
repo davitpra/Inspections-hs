@@ -12,14 +12,17 @@ groups by.
 
 ## Requirements
 
-### Requirement: A scheduled inspection binds a site, a monthly period and a frozen template version
+### Requirement: A scheduled inspection binds a site, a period of a stated length and a frozen template version
 
 The system SHALL store every scheduled inspection in `scheduled_inspection` with `site_id`,
-`period_start`, `template_id`, `template_version_id`, `inspector_id`, `scheduled_at` and
-`scheduled_by`. `period_start` SHALL be the first calendar day of the month the inspection covers,
-and `period_end` SHALL be derived from it as the last calendar day of that same month rather than
-stored independently. `template_version_id` SHALL reference a published version of `template_id`,
-and the pair SHALL be enforced by the engine so that a scheduled inspection cannot name a version
+`period_start`, `period_months`, `template_id`, `template_version_id`, `inspector_id`,
+`scheduled_at` and `scheduled_by`. `period_start` SHALL be the first calendar day of the first
+month the inspection covers. `period_months` SHALL be copied from the rule that opened it rather
+than read from the rule by reference, so that deactivating or replacing a rule cannot change the
+shape of a period that already exists. `period_end` SHALL be derived from `period_start` and
+`period_months` as the last calendar day of the last month covered, rather than stored
+independently. `template_version_id` SHALL reference a published version of `template_id`, and
+the pair SHALL be enforced by the engine so that a scheduled inspection cannot name a version
 belonging to a different template.
 
 #### Scenario: A period that does not start on the first of a month is rejected
@@ -27,12 +30,35 @@ belonging to a different template.
 - **WHEN** a row is inserted with `period_start` `2026-08-15`
 - **THEN** the insert fails with a check violation on `period_start`
 
-#### Scenario: The period end is the last day of the period month
+#### Scenario: A quarterly period ends on the last day of its third month
 
-- **WHEN** a scheduled inspection is read back with `period_start` `2026-02-01`
-- **THEN** `period_end` is `2026-02-28`
-- **AND** a scheduled inspection with `period_start` `2028-02-01` reads back `period_end`
-  `2028-02-29`
+- **WHEN** a scheduled inspection is read back with `period_start` `2026-01-01` and
+  `period_months` `3`
+- **THEN** `period_end` is `2026-03-31`
+
+#### Scenario: A period end still lands correctly on a leap February
+
+- **WHEN** a scheduled inspection is read back with `period_start` `2027-12-01` and
+  `period_months` `3`
+- **THEN** `period_end` is `2028-02-29`
+
+#### Scenario: The length of a period cannot be changed
+
+- **WHEN** any role runs
+  `UPDATE scheduled_inspection SET period_months = 1 WHERE id = <existing id>`
+- **THEN** the statement fails and `period_months` is unchanged when read back
+
+#### Scenario: Scheduling outside the calendar inherits the length from the active rule
+
+- **GIVEN** an active quarterly rule for a site and template
+- **WHEN** the coordinator schedules that template for a period outside the calendar
+- **THEN** the created scheduled inspection has `period_months` `3`
+
+#### Scenario: Scheduling a template with no rule produces a monthly period
+
+- **GIVEN** no active rule for a site and template
+- **WHEN** the coordinator schedules that template for a period
+- **THEN** the created scheduled inspection has `period_months` `1`
 
 #### Scenario: A version belonging to another template is rejected
 
@@ -76,21 +102,41 @@ a new one, never by updating it.
 - **WHEN** any role runs `DELETE FROM scheduled_inspection WHERE id = <existing id>`
 - **THEN** the statement fails and the row is still present
 
-### Requirement: A schedule rule declares what a site owes every month
+### Requirement: A schedule rule declares what a site owes and how often
 
-The system SHALL store recurrence rules in `inspection_schedule` with `site_id`, `template_id`,
-`default_inspector_id`, `created_at` and `deactivated_at`. A rule SHALL mean that the site owes one
-inspection of that template for every monthly period while the rule is active. At most one active
-rule SHALL exist per `(site_id, template_id)`. A rule SHALL never be deleted: it is deactivated,
-and a deactivated rule SHALL stop producing new periods while every inspection it already produced
-stays valid.
+The system SHALL store recurrence rules in `inspection_schedule` with `site_id`,
+`template_id`, `frequency_months`, `anchor_month`, `default_inspector_id`, `created_at` and
+`deactivated_at`. `frequency_months` SHALL be one of `1`, `3`, `6` or `12`, and `anchor_month`
+SHALL be between `1` and `12`. A rule SHALL mean that the site owes one inspection of that template
+for every period that begins in a month `M` where `(M - anchor_month) mod frequency_months` is
+zero, while the rule is active. At most one active rule SHALL exist per `(site_id, template_id)`,
+regardless of frequency. A rule SHALL never be deleted: it is deactivated, and a deactivated rule
+SHALL stop producing new periods while every inspection it already produced stays valid.
 
 An attempt to create a rule that collides with an active one SHALL be refused with a stated reason
 naming the site and the template, and SHALL NOT surface as an unhandled failure. The uniqueness
 SHALL remain enforced by the database rather than by a check performed before the insert, so that
 two concurrent creations converge on one rule.
 
-#### Scenario: A second active rule for the same site and template is rejected
+#### Scenario: A quarterly rule owes four periods a year, not twelve
+
+- **GIVEN** an active rule for site St. Thomas with `frequency_months` `3` and `anchor_month` `1`
+- **WHEN** the periods that site owes for 2026 are listed
+- **THEN** exactly four periods are owed, starting `2026-01-01`, `2026-04-01`, `2026-07-01` and
+  `2026-10-01`
+
+#### Scenario: The anchor month shifts the series
+
+- **GIVEN** an active rule with `frequency_months` `3` and `anchor_month` `2`
+- **WHEN** the periods that site owes for 2026 are listed
+- **THEN** the periods start `2026-02-01`, `2026-05-01`, `2026-08-01` and `2026-11-01`
+
+#### Scenario: A frequency that does not divide twelve is rejected
+
+- **WHEN** a rule is inserted with `frequency_months` `5`
+- **THEN** the insert fails with a check violation on `frequency_months`
+
+#### Scenario: A second active rule for the same site and template is rejected regardless of frequency
 
 - **GIVEN** an active rule for site St. Thomas and the monthly safety template
 - **WHEN** a second rule is created for the same site and the same template
@@ -117,10 +163,42 @@ two concurrent creations converge on one rule.
 - **THEN** no scheduled inspection is created for that rule
 - **AND** the inspections that rule opened in previous periods are unchanged
 
+#### Scenario: The anchor month is resolved by the server when it is not stated
+
+- **GIVEN** the current civil month at the site is September
+- **WHEN** the coordinator creates an annual rule without stating an anchor month
+- **THEN** the stored rule has `anchor_month` `9`
+
 #### Scenario: A rule whose template has no published version cannot be created
 
 - **WHEN** a rule is created for a template that has no `template_version` row
 - **THEN** the request is rejected and names the template as having nothing publishable to inspect
+
+### Requirement: The frequency and anchor of a rule are assigned once
+
+The system SHALL make `frequency_months` and `anchor_month` immutable once an
+`inspection_schedule` row exists. Changing how often a site owes an inspection SHALL be done by
+deactivating the rule and creating a new one, never by updating it, so that the coverage already
+reported for past periods cannot be rewritten.
+
+#### Scenario: The application role cannot change the frequency
+
+- **WHEN** a session connected as the application role runs
+  `UPDATE inspection_schedule SET frequency_months = 3 WHERE id = <existing id>`
+- **THEN** the statement fails with SQLSTATE `42501` (`insufficient_privilege`)
+- **AND** `frequency_months` is unchanged when read back
+
+#### Scenario: The owner role cannot change the anchor month
+
+- **WHEN** a session connected as the migration role — which owns the table — runs
+  `UPDATE inspection_schedule SET anchor_month = 4 WHERE id = <existing id>`
+- **THEN** the statement fails with the guard trigger's dedicated SQLSTATE, not with a privilege
+  error
+
+#### Scenario: The update contract does not accept the frequency
+
+- **WHEN** a request to update a rule carries `frequency_months`
+- **THEN** the request is rejected as malformed rather than silently ignoring the field
 
 ### Requirement: A schedule rule carries the window during which it owes periods
 
@@ -151,16 +229,20 @@ late in the evening owes that month and not the next one.
 - **WHEN** the months that rule owes are derived
 - **THEN** the first month it owes is `2026-03`, not `2026-04`
 
-### Requirement: The current period is opened automatically once per site
+### Requirement: The period opening job opens the period that contains the current month
 
-The system SHALL run a recurring job that, for every active schedule rule of every active site,
-creates the scheduled inspection of the current monthly period if it does not already exist. The
-job SHALL resolve the current period in the `America/Toronto` calendar, not in UTC. The job SHALL
-bind the newly created inspection to the highest published version of the rule's template at the
-moment it runs, and SHALL assign the rule's `default_inspector_id` as `inspector_id`. The job SHALL
-be idempotent: running it any number of times within a period SHALL leave exactly one
-non-cancelled scheduled inspection per `(site_id, template_id, period_start)`, and that uniqueness
-SHALL be enforced by the database rather than by the job.
+The system SHALL, for each active rule, open the period that contains the current civil month in
+the site's calendar, rather than opening only when the current month is the first month of a period.
+Running the job on any day of a period SHALL converge on the same `period_start`, and repeated runs
+SHALL leave exactly one scheduled inspection for that period.
+
+#### Scenario: A quarter is still opened when the job did not run on its first day
+
+- **GIVEN** an active rule with `frequency_months` `3` and `anchor_month` `1`
+- **AND** the job did not run during January
+- **WHEN** the job runs on 15 February 2026
+- **THEN** one scheduled inspection is created with `period_start` `2026-01-01` and `period_end`
+  `2026-03-31`
 
 #### Scenario: Running the job twice creates one inspection
 
@@ -169,18 +251,31 @@ SHALL be enforced by the database rather than by the job.
 - **THEN** exactly one `scheduled_inspection` row exists for that site, template and period
 - **AND** the second run reports zero inspections created
 
+#### Scenario: Running every day of a quarter opens it once
+
+- **GIVEN** an active rule with `frequency_months` `3` and `anchor_month` `1`
+- **WHEN** the job runs on every day of January, February and March 2026
+- **THEN** exactly one scheduled inspection exists for `period_start` `2026-01-01`
+
+#### Scenario: A period anchored late in the year is resolved across the year boundary
+
+- **GIVEN** an active rule with `frequency_months` `3` and `anchor_month` `11`
+- **WHEN** the job runs in January 2027
+- **THEN** the period it resolves starts `2026-11-01`
+
+#### Scenario: The period is resolved in the site's calendar
+
+- **GIVEN** the job runs at `2026-09-01T02:00:00Z`, which is `2026-08-31` in
+  `America/Toronto`
+- **WHEN** the job resolves the current period
+- **THEN** `period_start` is `2026-08-01`, not `2026-09-01`
+
 #### Scenario: Concurrent runs cannot create a duplicate
 
 - **WHEN** two runs of the job attempt to insert the same `(site_id, template_id, period_start)`
   concurrently
 - **THEN** exactly one row exists afterwards
 - **AND** neither run fails with an unhandled error
-
-#### Scenario: The period is resolved in the site's calendar
-
-- **GIVEN** the job runs at `2026-09-01T02:00:00Z`, which is `2026-08-31` in `America/Toronto`
-- **WHEN** the job resolves the current period
-- **THEN** `period_start` is `2026-08-01`, not `2026-09-01`
 
 #### Scenario: The opened inspection is bound to the latest published version
 
@@ -514,16 +609,17 @@ by a filter in the endpoint.
 - **WHEN** the pending list is read in a transaction that declares no site scope
 - **THEN** no rows are returned
 
-### Requirement: The HS coordinator is notified when a period is opened
+### Requirement: The coordinator is notified once per site for each opening run
 
-The system SHALL create, for every site where the opening job created at least one scheduled
-inspection, one `notification` row per active `hs_coordinator` account whose site scope includes
-that site, with `kind` `inspection_period_opened` and a payload naming the period and the
-inspections opened. The notification SHALL be delivered in the application; the system SHALL NOT
-depend on outbound email. At most one such notification SHALL exist per recipient, site and
-period, enforced by the database, so that a repeated job run does not produce a second one. A
-recipient SHALL be able to mark a notification as read, and `read_at` SHALL be the only value a
-notification ever changes.
+The system SHALL notify every active coordinator with scope on a site when that run opened at least
+one inspection there, deduplicated by site and by the month the run resolved. The notification
+payload SHALL carry the period start, end and length of each opened inspection individually,
+because rules of different frequencies opened by the same run cover different periods.
+
+The notification SHALL be delivered in the application; the system SHALL NOT depend on outbound
+email. At most one such notification SHALL exist per recipient, site and period, enforced by the
+database, so that a repeated job run does not produce a second one. A recipient SHALL be able to
+mark a notification as read, and `read_at` SHALL be the only value a notification ever changes.
 
 `inspection_period_opened` SHALL be one of several notification kinds, and the shape of
 `notification.payload` SHALL be determined by `kind`: a reader SHALL NOT assume that every
@@ -537,6 +633,14 @@ a change that has to state how it is shown.
 - **WHEN** the opening job creates the St. Thomas inspection for the current period
 - **THEN** a `notification` row exists for that account with `kind` `inspection_period_opened`
 - **AND** its payload names the period and the inspections opened
+
+#### Scenario: One notification lists inspections of different lengths
+
+- **GIVEN** a monthly rule and a quarterly rule that both open in the same run
+- **WHEN** the job runs
+- **THEN** the coordinator receives one notification
+- **AND** its payload lists both inspections, each with its own `period_start`, `period_end` and
+  `period_months`
 
 #### Scenario: A repeated run does not notify twice
 

@@ -209,27 +209,45 @@ compute an aggregate score for a series.
 - **THEN** the view lists the series for the new parameters
 - **AND** the parameters in use are visible in the view
 
-### Requirement: Compliance coverage is reported per site and per monthly period
+### Requirement: Coverage counts the periods the site owed, at the frequency its rules declare
 
-The system SHALL report, for a site and a range of monthly periods, one entry per period the site
-owed an inspection under its schedule rules — whether or not a `scheduled_inspection` was ever
-opened for it — each carrying its `period_start`, its `period_end`, its `status`, the
-`template_id` and `template_version_id` the period's inspection was bound to, and — when the
-period was completed — the `inspection_id`, its `submitted_by` and its `occurred_at`. Alongside
-the entries the system SHALL report `required_count`, `completed_count`, `missed_count`,
-`cancelled_count` and `open_count`, so that the coverage of a site over a range is a fraction of
-counted rows and never an estimate. The range SHALL be expressed as `range_start`, the first
-calendar day of the first month, and `range_end`, the last calendar day of the last month, and a
-range whose `range_start` is not the first day of a month or whose `range_end` precedes it SHALL
-be rejected with the code `validation_failed`.
+The system SHALL derive the periods a site owed from `inspection_schedule` rather than from the
+scheduled inspections that exist, so that a period the opening job never opened still appears in
+the report. A rule SHALL contribute one owed period per period of its own series — one every
+`frequency_months` months, counted from `anchor_month` — and not one per month. Every
+`scheduled_inspection` in the range SHALL be added to that set, so that a period opened outside the
+calendar, or left behind by a rule that has since been deactivated, is still reported.
+`required_count` SHALL be the number of owed periods.
 
-#### Scenario: A full year of coverage is reported as twelve entries and a fraction
+The range of a report SHALL select periods by the month in which they begin.
 
-- **GIVEN** a site with twelve scheduled inspections over the twelve months of `2026`, of which
-  eleven were submitted
-- **WHEN** compliance is requested for `range_start` `2026-01-01` and `range_end` `2026-12-31`
-- **THEN** twelve period entries are returned
-- **AND** `required_count` is `12` and `completed_count` is `11`
+#### Scenario: A year covered by a quarterly rule reports four required periods
+
+- **GIVEN** a site whose only active rule has `frequency_months` `3` and `anchor_month` `1`
+- **AND** all four quarters of 2026 were inspected
+- **WHEN** the compliance report for 2026 is generated
+- **THEN** `required_count` is `4` and `completed_count` is `4`
+- **AND** the document reads "4 of 4 required periods completed"
+
+#### Scenario: A quarter the opening job never opened is still counted as owed
+
+- **GIVEN** a site whose only active rule is quarterly and anchored in January
+- **AND** no scheduled inspection exists for the quarter starting `2026-07-01`
+- **WHEN** the compliance report for 2026 is generated
+- **THEN** the quarter starting `2026-07-01` appears with status `missed`
+- **AND** `required_count` is `4`
+
+#### Scenario: An owed quarterly period reports the end of its third month
+
+- **GIVEN** a site whose only active rule is quarterly and anchored in January
+- **WHEN** the compliance report for 2026 is generated
+- **THEN** the first period reports `period_start` `2026-01-01` and `period_end` `2026-03-31`
+
+#### Scenario: Rules of different frequencies are both counted
+
+- **GIVEN** a site with an active monthly rule and an active annual rule
+- **WHEN** the compliance report for 2026 is generated
+- **THEN** `required_count` is `13`
 
 #### Scenario: A completed period names its inspection and its inspector
 
@@ -243,6 +261,49 @@ be rejected with the code `validation_failed`.
 
 - **WHEN** compliance is requested with `range_start` `2026-01-15`
 - **THEN** the request is rejected with the code `validation_failed`
+
+### Requirement: A frozen report stays readable after the payload shape changes
+
+The system SHALL keep every compliance report payload exactly as it was hashed, and SHALL be able
+to read a payload produced by any shape version it has ever written. The length of a period SHALL
+be optional in the payload, and its absence SHALL mean the report was frozen when every period was
+monthly.
+
+#### Scenario: A report frozen before frequencies existed still validates
+
+- **GIVEN** a stored report whose payload has `schema_version` `1` and whose periods carry no
+  `period_months`
+- **WHEN** the report is read back
+- **THEN** it validates against the current contract
+- **AND** its stored digest still verifies against its stored payload
+
+#### Scenario: An unknown shape version is refused
+
+- **WHEN** a payload with a `schema_version` the contract has never written is validated
+- **THEN** validation fails
+
+### Requirement: The exported document names each period unambiguously
+
+The system SHALL write, for every period of the exported document, both a human-readable name of
+the period and its exact first and last day. The name SHALL use a calendar shorthand only when the
+period coincides with that calendar unit, so that a period which does not align with the civil
+quarter, half or year is written as its two endpoints instead.
+
+#### Scenario: An aligned quarter is named by its shorthand
+
+- **WHEN** a period starting `2026-01-01` with length `3` is written to the document
+- **THEN** it is named `Q1 2026`
+- **AND** the exact range `2026-01-01` – `2026-03-31` is shown alongside it
+
+#### Scenario: A quarter that does not align with the civil quarter is named by its endpoints
+
+- **WHEN** a period starting `2026-02-01` with length `3` is written to the document
+- **THEN** it is named `Feb–Apr 2026` rather than `Q1 2026`
+
+#### Scenario: A period that crosses the year names both years
+
+- **WHEN** a period starting `2026-09-01` with length `12` is written to the document
+- **THEN** it is named `Sep 2026–Aug 2027` rather than `2026`
 
 ### Requirement: A period has exactly four states and the open one is never counted as missed
 
