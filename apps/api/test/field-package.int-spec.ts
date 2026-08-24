@@ -34,10 +34,12 @@ let stack: SchedulingStack;
 
 let templateId: string;
 let versionV2: string;
+let versionV3: string;
 let inspectionA: string;
 let inspectionB: string;
 
 let inspector: { accountId: string };
+let otherInspector: { accountId: string };
 let outsider: { accountId: string };
 let coordinator: { accountId: string };
 
@@ -83,6 +85,7 @@ beforeAll(async () => {
   versionV2 = await publishVersion(db.migrator, templateId, 2, documentFor('pkg.guard', 'Version two'));
 
   inspector = await createAccount(db.app, { siteIds: [SITE_A], role: 'jhsc_member' });
+  otherInspector = await createAccount(db.app, { siteIds: [SITE_A], role: 'jhsc_member' });
   outsider = await createAccount(db.app, { siteIds: [SITE_B], role: 'jhsc_member' });
   coordinator = await createAccount(db.app, {
     siteIds: [SITE_A, SITE_B],
@@ -254,7 +257,12 @@ describe('el congelamiento de la versión', () => {
     const before = await stack.inspections.templateVersionPackage(session, inspectionA);
     expect(before.version).toBe(2);
 
-    await publishVersion(db.migrator, templateId, 3, documentFor('pkg.guard', 'Version three'));
+    versionV3 = await publishVersion(
+      db.migrator,
+      templateId,
+      3,
+      documentFor('pkg.guard', 'Version three'),
+    );
 
     const after = await stack.inspections.templateVersionPackage(session, inspectionA);
 
@@ -263,6 +271,47 @@ describe('el congelamiento de la versión', () => {
     expect(after.document).toEqual(before.document);
     expect(JSON.stringify(after.document)).toContain('Version two');
     expect(JSON.stringify(after.document)).not.toContain('Version three');
+  });
+
+  it('el POST de avance devuelve la versión nueva y es idempotente', async () => {
+    const session = sessionFor(inspector.accountId, [SITE_A]);
+
+    const first = await stack.inspections.advanceTemplateVersion(session, inspectionA);
+    const second = await stack.inspections.advanceTemplateVersion(session, inspectionA);
+
+    expect(first.template_version_id).toBe(versionV3);
+    expect(first.version).toBe(3);
+    expect(JSON.stringify(first.document)).toContain('Version three');
+    expect(second).toEqual(first);
+
+    const pending = await stack.inspections.pendingFor(session);
+    const current = pending.find((entry) => entry.id === inspectionA);
+    expect(current).toMatchObject({
+      template_version: 3,
+      latest_template_version: 3,
+      latest_template_version_id: versionV3,
+    });
+
+    const entries = await inScope<{ count: string }>(
+      db.app,
+      [SITE_A],
+      `SELECT count(*)::text AS count
+         FROM audit_log
+        WHERE site_id = $1
+          AND event_type = 'inspection.version_advanced'
+          AND payload->>'scheduled_inspection_id' = $2`,
+      [SITE_A, inspectionA],
+    );
+    expect(one(entries).count).toBe('1');
+  });
+
+  it('rechaza el avance a una cuenta que no es la asignada ni coordinadora', async () => {
+    await expect(
+      stack.inspections.advanceTemplateVersion(
+        sessionFor(otherInspector.accountId, [SITE_A]),
+        inspectionA,
+      ),
+    ).rejects.toMatchObject({ status: 403 });
   });
 });
 

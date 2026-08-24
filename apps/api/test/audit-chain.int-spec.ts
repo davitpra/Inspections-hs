@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { SubmissionsService } from '../src/inspections/submissions.service';
 import { registerSite } from './helpers/catalog';
 import { createAccount } from './helpers/identity';
-import { scheduleInspection } from './helpers/inspections';
+import { inScopeAs, scheduleInspection } from './helpers/inspections';
 import { createSchedulingStack, type SchedulingStack } from './helpers/scheduling';
 import { createTemplate, publishVersion, registerItems } from './helpers/templates';
 import {
@@ -264,6 +264,7 @@ describe('el envío de una inspección en la cadena', () => {
   let submissions: SubmissionsService;
   let templateId: string;
   let versionId: string;
+  let versionTwoId: string;
   let inspector: { accountId: string };
   let periodCursor = 0;
 
@@ -474,7 +475,7 @@ describe('el envío de una inspección en la cadena', () => {
     // El spike 3 visto desde el lado de las respuestas. Dos inspecciones contra dos
     // versiones distintas contestan el MISMO concepto: la recurrencia las cuenta juntas
     // y la fidelidad legal las distingue.
-    const versionTwo = await publishVersion(db.migrator, templateId, 2, {
+    versionTwoId = await publishVersion(db.migrator, templateId, 2, {
       sections: [
         {
           section_key: 'general',
@@ -498,12 +499,12 @@ describe('el envío de una inspección en la cadena', () => {
       siteId: SITE_SUBMIT,
       periodStart: `2033-${String(periodCursor % 12 || 12).padStart(2, '0')}-01`,
       templateId,
-      templateVersionId: versionTwo,
+      templateVersionId: versionTwoId,
       inspectorId: inspector.accountId,
     });
 
     const payload = submissionFor(second);
-    payload.template_version_id = versionTwo;
+    payload.template_version_id = versionTwoId;
 
     await submissions.ingest(sessionFor(inspector.accountId), payload);
 
@@ -524,5 +525,43 @@ describe('el envío de una inspección en la cadena', () => {
     // Un solo grupo, varias respuestas, y filas publicadas distintas dentro de él.
     expect(Number(row.answers)).toBeGreaterThan(1);
     expect(Number(row.versions)).toBe(2);
+  });
+
+  it('un avance escribe una sola entrada con las dos versiones', async () => {
+    const scheduled = await freshInspection();
+
+    await inScopeAs(
+      db.app,
+      [SITE_SUBMIT],
+      inspector.accountId,
+      'UPDATE scheduled_inspection SET template_version_id = $2 WHERE id = $1',
+      [scheduled, versionTwoId],
+    );
+
+    const first = await inScope<AuditRow>(
+      db.app,
+      [SITE_SUBMIT],
+      `SELECT event_type, payload FROM audit_log
+        WHERE site_id = $1
+          AND payload->>'scheduled_inspection_id' = $2
+        ORDER BY seq DESC LIMIT 1`,
+      [SITE_SUBMIT, scheduled],
+    );
+    const entry = one(first);
+    const payload = entry.payload as Record<string, unknown>;
+
+    expect(entry.event_type).toBe('inspection.version_advanced');
+    expect(payload.previous_template_version_id).toBe(versionId);
+    expect(payload.template_version_id).toBe(versionTwoId);
+
+    const before = await linkCount();
+    await inScopeAs(
+      db.app,
+      [SITE_SUBMIT],
+      inspector.accountId,
+      'UPDATE scheduled_inspection SET template_version_id = $2 WHERE id = $1',
+      [scheduled, versionTwoId],
+    );
+    expect(await linkCount()).toBe(before);
   });
 });

@@ -134,6 +134,16 @@ export class InspectionsController {
     return this.inspections.templateVersionPackage(session, id);
   }
 
+  /** Avanza explícitamente la inspección a la versión publicada más alta. */
+  @Post('scheduled-inspections/:id/template-version/advance')
+  @HttpCode(HttpStatus.OK)
+  async advanceTemplateVersion(
+    @CurrentSession() session: SessionContext,
+    @Param('id') id: string,
+  ): Promise<TemplateVersionPackage> {
+    return this.inspections.advanceTemplateVersion(session, id);
+  }
+
   /** El catálogo cerrado de ubicaciones activas de la planta de la inspección. */
   @Get('scheduled-inspections/:id/locations')
   async locationPackage(

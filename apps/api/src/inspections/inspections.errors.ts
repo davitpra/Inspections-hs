@@ -10,7 +10,8 @@ export type SchedulingErrorCode =
   | 'inspection_not_found'
   | 'inspector_invalid'
   | 'schedule_already_active'
-  | 'template_not_publishable';
+  | 'template_not_publishable'
+  | 'version_not_advanceable';
 
 export class SchedulingException extends HttpException {
   constructor(
@@ -61,3 +62,19 @@ export const templateNotPublishable = (templateId: string): SchedulingException 
     `Template ${templateId} has no published version to inspect against`,
     HttpStatus.BAD_REQUEST,
   );
+
+export type VersionAdvanceReason = 'submitted' | 'cancelled' | 'no_newer_version';
+
+export const versionNotAdvanceable = (reason: VersionAdvanceReason): SchedulingException => {
+  const messages: Record<VersionAdvanceReason, string> = {
+    submitted: 'This inspection was already submitted and cannot change template version',
+    cancelled: 'This inspection was cancelled and cannot change template version',
+    no_newer_version: 'There is no newer published version to advance to',
+  };
+
+  return new SchedulingException(
+    'version_not_advanceable',
+    messages[reason],
+    HttpStatus.CONFLICT,
+  );
+};

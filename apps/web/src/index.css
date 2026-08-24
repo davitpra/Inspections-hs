@@ -1781,6 +1781,11 @@ select:disabled {
   border-color: var(--state-ok);
 }
 
+.status-pill--open {
+  color: var(--state-info);
+  border-color: var(--state-info);
+}
+
 .status-pill--missed {
   background: var(--warn-bg);
   color: var(--state-danger);
@@ -1932,6 +1937,399 @@ select:disabled {
   border-color: var(--brand);
   color: var(--brand);
   font-weight: var(--weight-strong);
+}
+
+/* ---------------------------------------------------------------------------
+   Scheduling workspace. The annual plan is one surface; individual periods are
+   lightweight cells or rows and their operations live in a focused dialog.
+   --------------------------------------------------------------------------- */
+
+.requirements-section,
+.schedule-section {
+  margin: 0 0 var(--space-6);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+}
+
+.requirements-section {
+  padding: var(--space-4);
+}
+
+.requirements-section__head,
+.schedule-section__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.requirements-section__head h2,
+.schedule-section__head h2 {
+  margin: 0;
+}
+
+.requirements-section__head .note,
+.schedule-section__head .note {
+  margin: var(--space-1) 0 0;
+}
+
+.requirements-section__add {
+  width: auto;
+  min-width: 11rem;
+}
+
+.requirements-list,
+.schedule-list {
+  list-style: none;
+  margin: var(--space-4) 0 0;
+  padding: 0;
+}
+
+.requirement-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(14rem, 1.3fr) minmax(12rem, 1fr) minmax(12rem, 1fr) 3rem;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 4.5rem;
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--line);
+}
+
+.requirement-row__identity,
+.requirement-row__inspector {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.requirement-row__cadence,
+.requirement-row__inspector {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.inline-dialog {
+  position: absolute;
+  right: var(--space-4);
+  top: 100%;
+  z-index: 2;
+  width: min(28rem, calc(100vw - var(--space-8)));
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+  box-shadow: 0 0.5rem 1rem var(--scrim);
+}
+
+.inline-dialog h3 {
+  margin: 0 0 var(--space-3);
+}
+
+.inline-dialog p {
+  color: var(--muted);
+}
+
+.schedule-section {
+  overflow: hidden;
+}
+
+.schedule-section__head,
+.schedule-section__foot {
+  padding: var(--space-4);
+}
+
+.schedule-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: var(--tint-bg);
+}
+
+.schedule-toolbar__controls {
+  display: flex;
+  flex: 1 1 28rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.schedule-toolbar__controls label {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.schedule-toolbar__states {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.schedule-filter,
+.schedule-toolbar__clear {
+  min-height: 48px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--paper);
+}
+
+.schedule-filter[aria-pressed="true"] {
+  border-color: var(--brand);
+  color: var(--brand);
+  background: var(--paper);
+}
+
+.schedule-toolbar__clear {
+  border-color: transparent;
+  color: var(--brand);
+  text-decoration: underline;
+}
+
+.schedule-matrix-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.schedule-matrix {
+  width: 100%;
+  min-width: 58rem;
+  border-collapse: collapse;
+}
+
+.schedule-matrix th,
+.schedule-matrix td {
+  min-width: 4.25rem;
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  text-align: center;
+}
+
+.schedule-matrix thead th {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
+}
+
+.schedule-matrix tbody th {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  min-width: 15rem;
+  max-width: 18rem;
+  background: var(--paper);
+  text-align: left;
+}
+
+.schedule-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 48px;
+  padding: var(--space-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.schedule-cell__status {
+  font-size: var(--text-xs);
+  line-height: 1.15;
+}
+
+.schedule-cell--completed,
+.schedule-cell--open {
+  border-color: var(--state-info);
+}
+
+.schedule-cell--missed,
+.schedule-cell--unassigned {
+  border-color: var(--state-danger);
+  background: var(--warn-bg);
+}
+
+.schedule-cell--cancelled,
+.schedule-cell--unopened {
+  border-color: var(--muted);
+  background: var(--disabled-bg);
+}
+
+.schedule-matrix__not-due {
+  color: var(--muted);
+  background: var(--disabled-bg);
+}
+
+.schedule-list {
+  margin: 0;
+}
+
+.schedule-list li + li {
+  border-top: 1px solid var(--line);
+}
+
+.schedule-list__row {
+  display: grid;
+  grid-template-columns: 9rem minmax(12rem, 1.5fr) 7rem minmax(10rem, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 64px;
+  padding: var(--space-2) var(--space-4);
+  border: 0;
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+  text-align: left;
+}
+
+.schedule-list__row:hover,
+.schedule-list__row:focus-visible {
+  background: var(--tint-bg);
+}
+
+.schedule-list__period,
+.schedule-list__requirement {
+  font-weight: var(--weight-strong);
+}
+
+.schedule-list__inspector {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.schedule-empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: var(--space-4);
+  padding: var(--space-5);
+  border: 1px dashed var(--line-control);
+  color: var(--muted);
+}
+
+.schedule-empty strong {
+  color: var(--ink);
+}
+
+.schedule-section__foot {
+  margin: 0;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.modal__form,
+.period-dialog__details,
+.period-dialog__assign {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.modal__form label,
+.period-dialog__details .field-label,
+.period-dialog__assign label {
+  margin-top: var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
+}
+
+.requirement-dialog__preview {
+  margin: var(--space-3) 0 0;
+  padding: var(--space-3);
+  border-left: 3px solid var(--state-info);
+  background: var(--tint-bg);
+}
+
+.period-dialog__details > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--line);
+}
+
+.period-dialog__assign {
+  padding-top: var(--space-2);
+}
+
+@media (max-width: 48rem) {
+  .requirement-row {
+    grid-template-columns: minmax(0, 1fr) 3rem;
+    gap: var(--space-1) var(--space-3);
+  }
+
+  .requirement-row__identity,
+  .requirement-row__cadence,
+  .requirement-row__inspector {
+    grid-column: 1;
+  }
+
+  .requirement-row .row-menu {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .schedule-toolbar .year-nav {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .schedule-toolbar__controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .schedule-toolbar__controls select,
+  .schedule-toolbar__states {
+    width: 100%;
+  }
+
+  .schedule-toolbar__states {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .schedule-filter,
+  .schedule-toolbar__clear {
+    width: 100%;
+  }
+
+  .schedule-section > .view-toggle {
+    padding: 0 var(--space-4) var(--space-3);
+  }
+
+  .schedule-list__row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-1) var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    text-align: left;
+  }
+
+  .schedule-list__period,
+  .schedule-list__requirement,
+  .schedule-list__inspector {
+    grid-column: 1;
+  }
+
+  .schedule-list__row .status-pill {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+
+  .requirements-section__add {
+    width: 100%;
+  }
 }
 
 /* ---------------------------------------------------------------------------

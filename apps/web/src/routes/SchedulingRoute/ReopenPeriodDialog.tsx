@@ -26,19 +26,21 @@ export function ReopenPeriodDialog({
   onClose: () => void;
 }): React.JSX.Element {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
+    returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     dialogRef.current?.showModal();
   }, []);
 
   return (
-    <dialog ref={dialogRef} className="modal" onClose={onClose}>
-      <h2>
+    <dialog ref={dialogRef} className="modal" aria-label="Schedule period again" onClose={() => { onClose(); returnFocusRef.current?.focus(); }}>
+      <div className="modal__head"><h2>
         Schedule {periodLabel(inspection.period_start, inspection.period_months)} —{' '}
         {inspection.template_name} again?
-      </h2>
+      </h2></div>
 
-      <p>
+      <p className="modal__text">
         The cancellation stays on the record. This schedules the month again as a new
         inspection, with the template version published today.
       </p>
@@ -60,9 +62,7 @@ export function ReopenPeriodDialog({
         onOpened={() => dialogRef.current?.close()}
       />
 
-      <button type="button" onClick={() => dialogRef.current?.close()}>
-        Keep it cancelled
-      </button>
+      <div className="modal__actions"><button type="button" onClick={() => dialogRef.current?.close()}>Keep it cancelled</button></div>
     </dialog>
   );
 }

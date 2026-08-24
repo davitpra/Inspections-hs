@@ -126,8 +126,8 @@ export function PeriodsSection({
             <CalendarIcon size={22} />
           </span>
           <span>
-            <span className="stats-bar__number">{stats.assigned}</span>
-            <span className="stats-bar__label">Assigned</span>
+            <span className="stats-bar__number">{stats.completed}</span>
+            <span className="stats-bar__label">Completed</span>
           </span>
         </div>
         <div className="stats-bar__item">
@@ -144,8 +144,8 @@ export function PeriodsSection({
             <CalendarIcon size={22} />
           </span>
           <span>
-            <span className="stats-bar__number">{stats.notOpened}</span>
-            <span className="stats-bar__label">Not opened yet</span>
+            <span className="stats-bar__number">{stats.unopened}</span>
+            <span className="stats-bar__label">Not opened</span>
           </span>
         </div>
 

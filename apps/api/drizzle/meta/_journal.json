@@ -204,6 +204,13 @@
       "when": 1754524800028,
       "tag": "0029_inspection_frequency",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1754524800029,
+      "tag": "0030_advance_template_version",
+      "breakpoints": true
     }
   ]
 }

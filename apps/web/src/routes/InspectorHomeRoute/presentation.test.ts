@@ -295,4 +295,19 @@ describe('driftMessage', () => {
     expect(message).not.toContain('Discard it');
     expect(message).toContain('the server will refuse it');
   });
+
+  it('una versión publicada más alta manda a refrescar sin borrador', () => {
+    expect(driftMessage('newer-version')).toContain('Refresh the package');
+  });
+
+  it('una versión publicada más alta con borrador manda a descartarlo', () => {
+    expect(driftMessage('newer-version', 'capturing')).toContain('Discard this draft');
+  });
+
+  it('una versión publicada más alta con borrador firmado no ofrece descarte', () => {
+    const message = driftMessage('newer-version', 'signed');
+
+    expect(message).not.toContain('Discard this draft');
+    expect(message).toContain('server will refuse it');
+  });
 });

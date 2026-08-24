@@ -4,170 +4,99 @@ import { useState } from 'react';
 import { listScheduled, listSchedules, listSites } from '../../api/inspections';
 import { queryKeys } from '../../api/query-keys';
 import { useAppSession } from '../../app/session-context';
+import { CalendarIcon, InfoIcon, PinIcon } from '../../components/icons';
 import { SitePicker } from '../../components/SitePicker';
 import { canAdministerScheduling } from '../../permissions/session';
-import { CalendarIcon, InfoIcon, PinIcon } from '../../components/icons';
-import { PeriodsSection } from './PeriodsSection';
 import { currentCivilYear } from '../../presentation/dates';
 import { resolveSiteId } from '../../presentation/sites';
-import { isUnassigned, unassignedNotice } from './presentation';
-import { RulesSection } from './RulesSection';
+import { PeriodDialog } from './PeriodDialog';
+import { RequirementsSection } from './RequirementsSection';
+import { ScheduleSection } from './ScheduleSection';
+import {
+  filterEntries,
+  isUnassigned,
+  projectYear,
+  unassignedNotice,
+  yearStats,
+  type ScheduleFilters,
+  type YearEntry,
+} from './presentation';
 
-/**
- * §4 — La consola de programación: qué debe esta planta y quién lo está haciendo.
- *
- * POR QUÉ ESTA PANTALLA EXISTE. La obligación mensual la abre un trabajo automático, y
- * cuando la regla no tiene inspector por defecto —que es como la deja el seed, a
- * propósito— la inspección nace con `inspector_id` nulo. `GET /me/pending-inspections`
- * filtra por inspector, así que esa inspección **no está en la lista de nadie**. El
- * coordinador recibe la notificación de que el período se abrió y, hasta acá, no tenía
- * dónde asignarla. Ese era el único eslabón de R1 que se resolvía con curl.
- *
- * UNA PANTALLA Y NO DOS. Las reglas y los períodos que esas reglas abrieron son la misma
- * pregunta; separarlas obligaría a llevar un UUID de una pantalla a la otra.
- *
- * **Administrar es del coordinador.** Los controles no aparecen para nadie más; el
- * servidor los rechaza igual, y esa duplicación es deliberada: la comprobación del
- * cliente evita ofrecer algo que va a fallar, y la del servidor es la que manda. Leer, en
- * cambio, queda abierto — un miembro del JHSC viendo la programación de su planta es
- * legítimo, y RLS ya recorta lo que puede ver.
- */
 export function SchedulingRoute(): React.JSX.Element {
   const { account } = useAppSession();
-
   const sites = useQuery({ queryKey: queryKeys.sites(), queryFn: listSites, retry: false });
+  const schedules = useQuery({ queryKey: queryKeys.inspectionSchedules(), queryFn: listSchedules, retry: false });
+  const scheduled = useQuery({ queryKey: queryKeys.scheduledInspections(), queryFn: listScheduled, retry: false });
   const [chosenSite, setChosenSite] = useState<string | null>(null);
   const [year, setYear] = useState(() => currentCivilYear());
+  const [filters, setFilters] = useState<ScheduleFilters>({ templateId: 'all', state: 'all' });
+  const [selectedEntry, setSelectedEntry] = useState<YearEntry | null>(null);
+  const [view, setView] = useState<'matrix' | 'list'>(() =>
+    typeof window !== 'undefined' && window.innerWidth < 768 ? 'list' : 'matrix',
+  );
 
-  /*
-    La planta por defecto NO es `siteScope[0]`: la baja no saca la planta del alcance, así
-    que esa línea abría la consola en una planta cerrada —un calendario vacío que además no
-    se podía cambiar por otra cosa que no fuera cerrada. `resolveSiteId` es el mismo criterio
-    que aplica `SitePicker` a las opciones.
-  */
   const siteId = resolveSiteId(sites.data ?? [], account?.siteScope ?? [], chosenSite);
-
-  const schedules = useQuery({
-    queryKey: queryKeys.inspectionSchedules(),
-    queryFn: listSchedules,
-    retry: false,
-  });
-
-  const scheduled = useQuery({
-    queryKey: queryKeys.scheduledInspections(),
-    queryFn: listScheduled,
-    retry: false,
-  });
-
   const canAdminister = canAdministerScheduling(account);
-
-  /*
-    Todas las plantas del alcance están dadas de baja. No es un error ni una carga: no hay
-    nada que programar, y se dice. Dibujar el año entero de una planta que no existe es lo
-    que hacía la consola antes y es lo que confundía.
-  */
+  const siteName = (id: string): string => sites.data?.find((site) => site.id === id)?.name ?? '';
   const noActiveSite = sites.isSuccess && siteId === '';
-
-  const siteName = (id: string): string =>
-    sites.data?.find((site) => site.id === id)?.name ?? id;
-
+  const ready = sites.isSuccess && schedules.isSuccess && scheduled.isSuccess && siteId !== '';
   const rules = (schedules.data ?? []).filter((rule) => rule.site_id === siteId);
   const periods = (scheduled.data ?? []).filter((entry) => entry.site_id === siteId);
-  const notice = unassignedNotice(periods);
-  const firstUnassigned = periods.find(isUnassigned);
+  const entries = ready ? projectYear(rules, periods, year) : [];
+  const visibleEntries = filterEntries(entries, filters);
+  const stats = yearStats(entries);
+  const yearUnassigned = entries.filter((entry): entry is Extract<YearEntry, { kind: 'opened' }> => entry.kind === 'opened' && isUnassigned(entry.inspection));
+  const notice = unassignedNotice(yearUnassigned.map((entry) => entry.inspection));
+
+  const setYearAndResetSelection = (nextYear: string) => {
+    setYear(nextYear);
+    setSelectedEntry(null);
+  };
 
   return (
     <>
-      {/*
-        El título a la izquierda y la planta a la derecha, en la misma línea: la planta no
-        es un filtro más de la pantalla, es de qué planta habla TODO lo que sigue.
-      */}
       <header className="scheduling__top">
         <div className="scheduling__header">
-          <div className="scheduling__title">
-            <span className="scheduling__icon">
-              <CalendarIcon size={22} />
-            </span>
-            <h1>Scheduling</h1>
-          </div>
-          <p className="scheduling__subtitle">
-            Assign an inspector to each month to ensure inspections are completed on time.
-          </p>
+          <div className="scheduling__title"><span className="scheduling__icon"><CalendarIcon size={22} /></span><h1>Scheduling</h1></div>
+          <p className="scheduling__subtitle">Plan and assign each inspection period this site owes throughout the year.</p>
         </div>
-
-        {noActiveSite ? null : (
-          <div className="site-card">
-            <span className="site-card__icon">
-              <PinIcon />
-            </span>
-            <SitePicker
-              sites={sites.data ?? []}
-              value={siteId}
-              onChange={setChosenSite}
-              siteName={siteName}
-            />
-          </div>
-        )}
+        {sites.isSuccess && !noActiveSite ? <div className="site-card"><span className="site-card__icon"><PinIcon /></span><SitePicker sites={sites.data ?? []} value={siteId} onChange={setChosenSite} siteName={siteName} /></div> : null}
       </header>
 
-      {/*
-        El estado de la conexión se lee dentro de la misma pila de tarjetas que todo lo
-        demás, así que tiene la silueta de una tarjeta y no la del `.notice` suelto del
-        resto de la app — que es global y lo dibujan otras cinco rutas.
-      */}
-      {schedules.isError || scheduled.isError ? (
-        <p className="status-card status-card--error">
-          <InfoIcon size={20} /> This view needs a connection.
-        </p>
-      ) : null}
-      {schedules.isLoading || scheduled.isLoading ? (
-        <p className="status-card">
-          <CalendarIcon size={20} /> Loading…
-        </p>
-      ) : null}
+      {sites.isLoading || schedules.isLoading || scheduled.isLoading ? <p className="status-card"><CalendarIcon size={20} /> Loading scheduling data…</p> : null}
+      {sites.isError || schedules.isError || scheduled.isError ? <p className="status-card status-card--error"><InfoIcon size={20} /> This view needs a connection. Scheduling data could not be loaded.</p> : null}
+      {noActiveSite ? <p className="status-card"><InfoIcon size={20} /> No active sites.</p> : null}
 
-      {noActiveSite ? (
-        <p className="status-card">
-          <InfoIcon size={20} /> No active sites.
-        </p>
-      ) : null}
-
-      {notice ? (
+      {ready && notice ? (
         <div className="notice-card">
-          <div className="notice-card__body">
-            <span className="notice-card__icon">
-              <CalendarIcon size={22} />
-            </span>
-            <p className="notice-card__text">{notice}</p>
-          </div>
-
-          {firstUnassigned ? (
-            <a href={`#period-${firstUnassigned.id}`} className="choices__button notice-card__cta">
-              View unassigned ({periods.filter(isUnassigned).length})
-            </a>
-          ) : null}
+          <div className="notice-card__body"><span className="notice-card__icon"><InfoIcon size={22} /></span><p className="notice-card__text">{notice} This notice is limited to {year}.</p></div>
+          <button type="button" className="notice-card__cta" onClick={() => setFilters((current) => ({ ...current, state: 'unassigned' }))}>View unassigned ({stats.unassigned})</button>
         </div>
       ) : null}
 
-      {noActiveSite ? null : (
-        <>
-          <RulesSection
-            rules={rules}
-            siteId={siteId}
-            canAdminister={canAdminister}
-            ready={schedules.isSuccess}
-          />
+      {ready ? <>
+        <RequirementsSection rules={rules} siteId={siteId} canAdminister={canAdminister} ready={schedules.isSuccess} />
+        <ScheduleSection
+          rules={rules}
+          periods={periods}
+          entries={entries}
+          visibleEntries={visibleEntries}
+          year={year}
+          onYearChange={setYearAndResetSelection}
+          filters={filters}
+          onFiltersChange={setFilters}
+          stats={stats}
+          view={view}
+          onViewChange={setView}
+          onSelect={setSelectedEntry}
+        />
+      </> : null}
 
-          <PeriodsSection
-            rules={rules}
-            periods={periods}
-            siteId={siteId}
-            canAdminister={canAdminister}
-            year={year}
-            onYearChange={setYear}
-          />
-        </>
-      )}
+      {selectedEntry && ready ? <PeriodDialog key={entryKey(selectedEntry)} entry={selectedEntry} year={year} siteId={siteId} canAdminister={canAdminister} onClose={() => setSelectedEntry(null)} /> : null}
     </>
   );
+}
+
+function entryKey(entry: YearEntry): string {
+  return entry.kind === 'opened' ? entry.inspection.id : `${entry.period.template_id}|${entry.period.period_start}`;
 }

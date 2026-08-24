@@ -26,7 +26,7 @@ import { template, templateItem, templateVersion, templateVersionItem } from './
  *
  * Acá solo viven los tipos con los que el repositorio consulta. El SQL lleva además
  * el trigger `hs_scheduling_guard` —que es lo que hace que la versión de plantilla
- * quede congelada—, los de prohibición de DELETE/TRUNCATE, los de auditoría,
+ * avance de forma monótona—, los de prohibición de DELETE/TRUNCATE, los de auditoría,
  * `hs_apply_site_isolation` y los GRANT por columna. Nada de eso lo sabe expresar un
  * esquema de ORM. Por eso `drizzle-kit generate` está prohibido: regeneraría el
  * `.sql` a partir de esto y se llevaría puesto el mecanismo. Si el SQL cambia, este
@@ -96,9 +96,9 @@ export const inspectionSchedule = pgTable(
  * una `inspection` enviada, que llega en el change de captura. Un `status` hoy sería
  * una máquina de estados que nadie puede hacer avanzar.
  *
- * **`templateVersionId` se fija al programar y no se mueve nunca.** No está en el
- * `GRANT UPDATE` de la migración y el trigger de guarda la rechaza para todos los
- * roles: publicar una versión nueva no puede tocar una inspección ya abierta.
+   * **`templateVersionId` se fija al programar y solo avanza.** El motor permite moverla
+   * a una versión publicada superior de la misma plantilla mientras el período esté vivo
+   * y no tenga envío; publicar una versión nueva no la mueve por sí solo.
  */
 export const scheduledInspection = pgTable(
   'scheduled_inspection',
@@ -310,8 +310,8 @@ export type InspectionScheduleUpdate = Partial<
 
 /**
  * Lo que un caller puede cambiar de una inspección programada. `template_version_id`
- * no está, y esa ausencia es el requisito entero del change: el GRANT por columna se
- * lo niega a hs_app y el trigger `scheduled_inspection_guard` se lo niega a todos.
+ * no está: el avance es una operación explícita que pasa por el servicio y por las
+ * barreras del motor.
  */
 export type ScheduledInspectionUpdate = Partial<
   Pick<ScheduledInspection, 'inspectorId' | 'cancelledAt' | 'cancellationReason'>

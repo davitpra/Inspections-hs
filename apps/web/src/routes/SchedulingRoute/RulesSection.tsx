@@ -23,7 +23,7 @@ export function RulesSection({
     <section className="card rules-card">
       <details open>
         <summary>
-          <strong>Recurrence rules</strong> <InfoIcon />{" "}
+          <strong>Inspection requirements</strong> <InfoIcon />{" "}
           <span className="note">({visible.length})</span>
         </summary>
 

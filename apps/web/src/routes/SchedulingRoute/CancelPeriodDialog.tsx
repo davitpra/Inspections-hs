@@ -30,10 +30,12 @@ export function CancelPeriodDialog({
 }): React.JSX.Element {
   const queryClient = useQueryClient();
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
   const controlId = useId();
   const [reason, setReason] = useState('');
 
   useEffect(() => {
+    returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     dialogRef.current?.showModal();
   }, []);
 
@@ -48,13 +50,13 @@ export function CancelPeriodDialog({
   });
 
   return (
-    <dialog ref={dialogRef} className="modal" onClose={onClose}>
-      <h2>
+    <dialog ref={dialogRef} className="modal" aria-label="Cancel period" onClose={() => { onClose(); returnFocusRef.current?.focus(); }}>
+      <div className="modal__head"><h2>
         Cancel {periodLabel(inspection.period_start, inspection.period_months)} —{' '}
         {inspection.template_name}?
-      </h2>
+      </h2></div>
 
-      <p>Cancelling cannot be undone. The period is scheduled again instead.</p>
+      <p className="modal__text">Cancelling cannot be undone. The period is scheduled again instead.</p>
 
       {/*
         `htmlFor`/`id` y no un `<label>` que envuelve al control, igual que en
@@ -69,19 +71,13 @@ export function CancelPeriodDialog({
         placeholder="Why this period will not be inspected"
       />
 
-      <button
-        type="button"
-        onClick={() => cancel.mutate()}
-        disabled={reason.trim() === '' || cancel.isPending}
-      >
-        {cancel.isPending ? 'Cancelling…' : 'Confirm cancellation'}
-      </button>
-
       {cancel.isError ? <p className="notice">{(cancel.error as Error).message}</p> : null}
-
-      <button type="button" onClick={() => dialogRef.current?.close()}>
-        Keep this period
-      </button>
+      <div className="modal__actions">
+        <button type="button" className="button--danger" onClick={() => cancel.mutate()} disabled={reason.trim() === '' || cancel.isPending}>
+          {cancel.isPending ? 'Cancelling…' : 'Confirm cancellation'}
+        </button>
+        <button type="button" onClick={() => dialogRef.current?.close()}>Keep this period</button>
+      </div>
     </dialog>
   );
 }

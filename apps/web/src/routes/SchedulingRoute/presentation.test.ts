@@ -6,9 +6,13 @@ import {
   currentPeriod,
   currentRules,
   earliestEligibleYear,
+  filterEntries,
+  listEntries,
+  matrixRows,
   inspectorLabel,
   isUnassigned,
   missedNote,
+  newerVersionNote,
   projectYear,
   ruleOwesPeriod,
   startsPeriod,
@@ -171,6 +175,16 @@ describe('el mes omitido', () => {
     for (const status of ['open', 'completed', 'cancelled'] as const) {
       expect(missedNote(inspection({ status }))).toBeNull();
     }
+  });
+});
+
+describe('la versión publicada del período', () => {
+  it('avisa cuando hay una versión más alta', () => {
+    expect(newerVersionNote(inspection({ template_version: 2 }), 3)).toContain('Version 3');
+  });
+
+  it('no avisa cuando la fila ya está en la versión más alta', () => {
+    expect(newerVersionNote(inspection({ template_version: 3 }), 3)).toBeNull();
   });
 });
 
@@ -467,7 +481,7 @@ describe('los conteos del pie del calendario', () => {
       { kind: 'opened', inspection: inspection({ inspector_id: USER, inspector_name: 'Dana Okafor' }) },
     ];
 
-    expect(yearStats(entries)).toEqual({ total: 3, assigned: 1, unassigned: 1, notOpened: 1 });
+    expect(yearStats(entries)).toEqual({ total: 3, completed: 0, missed: 0, unassigned: 1, unopened: 1 });
   });
 
   it('un período cancelado cuenta como resuelto, no como pendiente', () => {
@@ -481,10 +495,45 @@ describe('los conteos del pie del calendario', () => {
 
     expect(yearStats([{ kind: 'opened', inspection: cancelled }])).toEqual({
       total: 1,
-      assigned: 1,
+      completed: 0,
+      missed: 0,
       unassigned: 0,
-      notOpened: 0,
+      unopened: 0,
     });
+  });
+});
+
+describe('la presentacion anual', () => {
+  it('cuenta completadas, vencidas y sin asignar sin excluir el solapamiento', () => {
+    const entries: YearEntry[] = [
+      { kind: 'opened', inspection: inspection({ id: 'complete', status: 'completed' }) },
+      { kind: 'opened', inspection: inspection({ id: 'missed', status: 'missed', inspector_id: USER }) },
+      { kind: 'opened', inspection: inspection({ id: 'unassigned', status: 'missed', inspector_id: null, inspector_name: null }) },
+      { kind: 'opened', inspection: inspection({ id: 'cancelled', status: 'cancelled', cancelled_at: '2026-08-02T00:00:00.000Z', inspector_id: null }) },
+    ];
+
+    expect(yearStats(entries)).toEqual({ total: 4, completed: 1, missed: 2, unassigned: 1, unopened: 0 });
+  });
+
+  it('mantiene las mismas entradas al agrupar la matrix y ordenar la lista', () => {
+    const entries = projectYear([
+      rule({ template_id: TEMPLATE_A, template_name: 'Monthly general workplace inspection' }),
+      rule({ template_id: TEMPLATE_B, template_name: 'Quarterly electrical inspection', frequency_months: 3, anchor_month: 2 }),
+    ], [], '2026');
+    const matrixEntries = matrixRows(entries).flatMap((row) => row.cells.filter(Boolean));
+
+    expect(matrixEntries).toHaveLength(entries.length);
+    expect(listEntries(entries)).toEqual(entries);
+  });
+
+  it('distingue una posición no debida de una no abierta y filtra por estado/requisito', () => {
+    const entries = projectYear([
+      rule({ template_id: TEMPLATE_B, template_name: 'Quarterly electrical inspection', frequency_months: 3, anchor_month: 1 }),
+    ], [], '2026');
+
+    expect(matrixRows(entries)[0]?.cells.filter((entry) => entry === null)).toHaveLength(8);
+    expect(filterEntries(entries, { templateId: TEMPLATE_B, state: 'unopened' })).toHaveLength(4);
+    expect(filterEntries(entries, { templateId: 'all', state: 'completed' })).toHaveLength(0);
   });
 });
 

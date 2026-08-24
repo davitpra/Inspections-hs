@@ -41,6 +41,8 @@ export interface PrefetchResult {
 export interface PrefetchOptions {
   database?: OfflineDatabase;
   client?: SessionClient;
+  /** El caller decide si hay borrador; esta función no puede verlo de forma fiable. */
+  advance?: boolean;
 }
 
 /**
@@ -64,10 +66,13 @@ export async function prefetchInspection(
     [
       'template_version',
       async () => {
-        const body = await fetchJson(
-          client,
-          `/scheduled-inspections/${scheduledInspectionId}/template-version`,
-        );
+         const body = await fetchJson(
+           client,
+           options.advance
+             ? `/scheduled-inspections/${scheduledInspectionId}/template-version/advance`
+             : `/scheduled-inspections/${scheduledInspectionId}/template-version`,
+           options.advance ? { method: 'POST' } : undefined,
+         );
         const parsed = templateVersionPackageSchema.parse(body);
 
         return { kind: 'template_version', ...parsed };
@@ -201,16 +206,18 @@ export async function prefetchedAt(
  * inspección está atada: comparar no cuesta una llamada. Pedir el paquete por red para
  * compararlo convertiría una lectura que funciona sin señal en una que no.
  */
-export type PackageDrift = 'none' | 'stale-package' | 'draft-orphaned';
+export type PackageDrift = 'none' | 'stale-package' | 'draft-orphaned' | 'newer-version';
 
 export function packageDrift({
   storedVersionId,
   frozenVersionId,
   draftVersionId,
+  latestVersionId,
 }: {
   storedVersionId: string | null | undefined;
   frozenVersionId: string | null | undefined;
   draftVersionId?: string | null;
+  latestVersionId?: string | null;
 }): PackageDrift {
   if (!storedVersionId) return 'none';
 
@@ -220,7 +227,11 @@ export function packageDrift({
 
   if (!frozenVersionId) return 'none';
 
-  return storedVersionId === frozenVersionId ? 'none' : 'stale-package';
+  if (storedVersionId !== frozenVersionId) return 'stale-package';
+
+  if (latestVersionId && latestVersionId !== frozenVersionId) return 'newer-version';
+
+  return 'none';
 }
 
 export async function storedLocations(
@@ -241,8 +252,12 @@ export async function storedRoster(
   return row?.payload.kind === 'roster' ? row.payload.people : [];
 }
 
-async function fetchJson(client: SessionClient, path: string): Promise<unknown> {
-  const result = await client.request<unknown>(path);
+async function fetchJson(
+  client: SessionClient,
+  path: string,
+  init?: RequestInit,
+): Promise<unknown> {
+  const result = await client.request<unknown>(path, init);
 
   // Un `401` que no se pudo renovar llega acá como `session_ended`. La descarga previa
   // FALLA, que es lo correcto —no hay nada que guardar—, pero no descarta nada: no hay

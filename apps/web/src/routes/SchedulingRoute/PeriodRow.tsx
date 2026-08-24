@@ -1,6 +1,9 @@
 import { useState } from "react";
 import type { ScheduledInspection } from "@hs/contracts";
+import { useQuery } from "@tanstack/react-query";
 
+import { listTemplates } from "../../api/inspections";
+import { queryKeys } from "../../api/query-keys";
 import { CancelPeriodDialog } from "./CancelPeriodDialog";
 import { CalendarIcon } from "../../components/icons";
 import { ReopenPeriodDialog } from "./ReopenPeriodDialog";
@@ -9,6 +12,7 @@ import {
   inspectorLabel,
   isUnassigned,
   missedNote,
+  newerVersionNote,
   statusClass,
   statusPillClass,
   STATUS_LABELS,
@@ -52,6 +56,15 @@ export function PeriodRow({
   const cancelled = inspection.cancelled_at !== null;
   const administrable = canAdminister && !cancelled;
   const missed = missedNote(inspection);
+  const templates = useQuery({
+    queryKey: queryKeys.templates(),
+    queryFn: listTemplates,
+    retry: false,
+  });
+  const versionNote = newerVersionNote(
+    inspection,
+    templates.data?.find((template) => template.id === inspection.template_id)?.latest_version,
+  );
 
   /**
    * Las dos son excepcionales y son excluyentes: un mes abierto se cancela, uno cancelado
@@ -110,6 +123,8 @@ export function PeriodRow({
         </span>
       </div>
       <span className="period__status">{inspection.template_name}</span>
+
+      {versionNote ? <span className="period__note period__note--warn">{versionNote}</span> : null}
 
       {/* Quien no administra no tiene el selector, así que el inspector se lee acá. */}
       {administrable || isUnassigned(inspection) ? null : (

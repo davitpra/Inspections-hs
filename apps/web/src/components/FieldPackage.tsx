@@ -45,10 +45,12 @@ export function DownloadForField({
   id,
   label = 'Download for the field',
   className,
+  advance = false,
 }: {
   id: string;
   label?: string;
   className?: string;
+  advance?: boolean;
 }): React.JSX.Element {
   const queryClient = useQueryClient();
 
@@ -65,7 +67,8 @@ export function DownloadForField({
    * identificador para que el prefijo las alcance a las dos.
    */
   const download = useMutation({
-    mutationFn: () => prefetchInspection(id),
+    mutationFn: () =>
+      advance ? prefetchInspection(id, { advance: true }) : prefetchInspection(id),
     onSettled: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.fieldReady(id) }),

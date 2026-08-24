@@ -73,6 +73,17 @@ export function missedNote(inspection: ScheduledInspection): string | null {
     : 'The period closed without an inspection. It can still be submitted.';
 }
 
+/** Aviso de que el período conserva su versión, aunque ya haya una revisión publicada. */
+export function newerVersionNote(
+  inspection: Pick<ScheduledInspection, 'template_version'>,
+  latestVersion: number | null | undefined,
+): string | null {
+  if (latestVersion === undefined || latestVersion === null) return null;
+  if (latestVersion <= inspection.template_version) return null;
+
+  return `Version ${latestVersion} is published. This period is still on version ${inspection.template_version}.`;
+}
+
 /** Si esta fila es de las que el coordinador tiene que resolver. */
 export function isUnassigned(inspection: ScheduledInspection): boolean {
   return inspection.inspector_id === null && inspection.cancelled_at === null;
@@ -373,9 +384,10 @@ export function projectYear(
 /** Los conteos del pie del calendario: cuántos meses caen en cada estado del año proyectado. */
 export interface YearStats {
   total: number;
-  assigned: number;
+  completed: number;
+  missed: number;
   unassigned: number;
-  notOpened: number;
+  unopened: number;
 }
 
 /**
@@ -385,24 +397,104 @@ export interface YearStats {
  * pendiente: `isUnassigned` ya lo excluye por la misma razón.
  */
 export function yearStats(entries: readonly YearEntry[]): YearStats {
-  let assigned = 0;
+  let completed = 0;
+  let missed = 0;
   let unassigned = 0;
-  let notOpened = 0;
+  let unopened = 0;
 
   for (const entry of entries) {
     if (entry.kind === 'unopened') {
-      notOpened += 1;
+      unopened += 1;
       continue;
     }
 
+    if (entry.inspection.cancelled_at !== null) continue;
+    if (entry.inspection.status === 'completed') completed += 1;
+    if (entry.inspection.status === 'missed') missed += 1;
     if (isUnassigned(entry.inspection)) {
       unassigned += 1;
-    } else {
-      assigned += 1;
     }
   }
 
-  return { total: entries.length, assigned, unassigned, notOpened };
+  return { total: entries.length, completed, missed, unassigned, unopened };
+}
+
+export type ScheduleFilter =
+  | 'all'
+  | 'completed'
+  | 'missed'
+  | 'unassigned'
+  | 'unopened'
+  | 'open'
+  | 'cancelled';
+
+export interface ScheduleFilters {
+  templateId: string;
+  state: ScheduleFilter;
+}
+
+export function entryTemplateId(entry: YearEntry): string {
+  return entry.kind === 'opened' ? entry.inspection.template_id : entry.period.template_id;
+}
+
+export function entryTemplateName(entry: YearEntry): string {
+  return entry.kind === 'opened' ? entry.inspection.template_name : entry.period.template_name;
+}
+
+export function entryPeriodStart(entry: YearEntry): string {
+  return entry.kind === 'opened' ? entry.inspection.period_start : entry.period.period_start;
+}
+
+export function entryStatus(entry: YearEntry): ScheduleFilter {
+  if (entry.kind === 'unopened') return 'unopened';
+  if (entry.inspection.cancelled_at !== null) return 'cancelled';
+  return entry.inspection.status;
+}
+
+export function filterEntries(
+  entries: readonly YearEntry[],
+  filters: ScheduleFilters,
+): YearEntry[] {
+  return entries.filter((entry) => {
+    const matchesTemplate = filters.templateId === 'all' || entryTemplateId(entry) === filters.templateId;
+    const matchesState = filters.state === 'all' || entryStatus(entry) === filters.state ||
+      (filters.state === 'unassigned' && entry.kind === 'opened' && isUnassigned(entry.inspection));
+
+    return matchesTemplate && matchesState;
+  });
+}
+
+export interface MatrixRow {
+  templateId: string;
+  templateName: string;
+  cells: readonly (YearEntry | null)[];
+}
+
+/** Agrupa entradas ya proyectadas; no vuelve a decidir qué debe una regla. */
+export function matrixRows(entries: readonly YearEntry[]): MatrixRow[] {
+  const groups = new Map<string, { templateName: string; cells: (YearEntry | null)[] }>();
+
+  for (const entry of entries) {
+    const templateId = entryTemplateId(entry);
+    const group = groups.get(templateId) ?? {
+      templateName: entryTemplateName(entry),
+      cells: Array.from({ length: 12 }, () => null),
+    };
+    const month = Number(entryPeriodStart(entry).slice(5, 7)) - 1;
+    group.cells[month] = entry;
+    groups.set(templateId, group);
+  }
+
+  return [...groups.entries()]
+    .map(([templateId, group]) => ({ templateId, ...group }))
+    .sort((left, right) => left.templateName.localeCompare(right.templateName));
+}
+
+export function listEntries(entries: readonly YearEntry[]): YearEntry[] {
+  return [...entries].sort((left, right) => {
+    return entryPeriodStart(left).localeCompare(entryPeriodStart(right)) ||
+      entryTemplateName(left).localeCompare(entryTemplateName(right));
+  });
 }
 
 /**

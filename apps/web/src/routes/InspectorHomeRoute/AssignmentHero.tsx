@@ -78,6 +78,7 @@ export function AssignmentHero({
     storedVersionId: stored.data?.template_version_id,
     frozenVersionId: inspection.template_version_id,
     draftVersionId: draftTemplateVersionId,
+    latestVersionId: inspection.latest_template_version_id,
   });
   const driftNotice = driftMessage(drift, draftStatus);
   const decision = assignmentState({
@@ -109,13 +110,16 @@ export function AssignmentHero({
             </Link>
           ) : null}
 
-          {decision.action === 'download' ? <DownloadForField id={inspection.id} /> : null}
+          {decision.action === 'download' ? (
+            <DownloadForField id={inspection.id} advance={draftStatus === null} />
+          ) : null}
 
           {decision.showsRefresh ? (
             <DownloadForField
               id={inspection.id}
               label="Refresh field package"
               className="button--outline"
+              advance={draftStatus === null}
             />
           ) : null}
         </div>
@@ -174,6 +178,11 @@ export function AssignmentHero({
               <span className="facts__hint">
                 {fetchedAt.data ? `Downloaded ${formatInstant(fetchedAt.data)}` : 'Locked'}
               </span>
+              {inspection.latest_template_version > inspection.template_version ? (
+                <span className="facts__hint">
+                  Version {inspection.latest_template_version} is published
+                </span>
+              ) : null}
             </span>
           </div>
         ) : null}

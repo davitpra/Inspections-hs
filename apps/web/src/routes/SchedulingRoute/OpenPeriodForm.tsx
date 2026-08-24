@@ -62,6 +62,7 @@ export function OpenPeriodForm({
 
   const version = templates.data?.find((template) => template.id === period.template_id)
     ?.latest_version;
+  const supportingDataFailed = templates.isError;
 
   const open = useMutation({
     mutationFn: () =>
@@ -108,7 +109,7 @@ export function OpenPeriodForm({
       <button
         type="button"
         className="period__action button--primary"
-        disabled={open.isPending}
+        disabled={open.isPending || templates.isLoading || supportingDataFailed || !version}
         onClick={() => open.mutate()}
       >
         {open.isPending
@@ -119,6 +120,11 @@ export function OpenPeriodForm({
       </button>
 
       {error ? <p className="notice">{error}</p> : null}
+      {templates.isLoading ? <p className="note">Loading published template…</p> : null}
+      {templates.isError ? <p className="notice notice--warn">Published template could not be loaded. This operation is unavailable.</p> : null}
+      {!templates.isLoading && !templates.isError && !version ? <p className="note">No published version is available for this requirement.</p> : null}
+      {candidates.isLoading ? <p className="note">Loading eligible inspectors…</p> : null}
+      {candidates.isError ? <p className="notice notice--warn">Eligible inspectors could not be loaded. You can continue without assigning one.</p> : null}
     </>
   );
 }

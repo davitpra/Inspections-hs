@@ -17,16 +17,15 @@ import { createTemplate, publishVersion, registerItems } from './helpers/templat
  * Lo que el MOTOR rechaza. Los caminos felices son de los specs de servicio; acá se
  * prueba que las invariantes no dependen de que el código de aplicación se acuerde.
  *
- * La propiedad central del change: `template_version_id` queda congelada al programar.
- * Se prueba en las dos barreras —privilegio para `hs_app`, trigger para el dueño— y se
- * prueba además el hecho que importa de verdad, que es que publicar una versión nueva
- * no toca ninguna fila.
+ * La propiedad central del change: `template_version_id` solo puede avanzar antes del
+ * envío y sobre un período vivo. Se prueba que la aplicación puede hacer el avance, que
+ * el trigger rechaza todos los movimientos inválidos, y que publicar no avanza nada.
  */
 
-const INSUFFICIENT_PRIVILEGE = '42501';
 const UNIQUE_VIOLATION = '23505';
 const CHECK_VIOLATION = '23514';
 const FOREIGN_KEY_VIOLATION = '23503';
+const INSUFFICIENT_PRIVILEGE = '42501';
 const HS_FROZEN = 'HS001';
 
 const SITE_A = '9a000000-0000-4000-8000-000000000001';
@@ -115,6 +114,10 @@ describe('el período', () => {
 
 describe('la versión congelada', () => {
   let inspectionId: string;
+  let submittedInspectionId: string;
+  let cancelledInspectionId: string;
+  let untouchedInspectionId: string;
+  let versionA2: string;
 
   beforeAll(async () => {
     inspectionId = await scheduleInspection(db.app, {
@@ -123,42 +126,102 @@ describe('la versión congelada', () => {
       templateId: templateA,
       templateVersionId: versionA1,
     });
+
+    submittedInspectionId = await scheduleInspection(db.app, {
+      siteId: SITE_A,
+      periodStart: '2026-04-01',
+      templateId: templateA,
+      templateVersionId: versionA1,
+    });
+
+    cancelledInspectionId = await scheduleInspection(db.app, {
+      siteId: SITE_A,
+      periodStart: '2027-05-01',
+      templateId: templateA,
+      templateVersionId: versionA1,
+    });
+
+    untouchedInspectionId = await scheduleInspection(db.app, {
+      siteId: SITE_A,
+      periodStart: '2026-12-01',
+      templateId: templateA,
+      templateVersionId: versionA1,
+    });
+
+    await registerItems(db.migrator, templateA, ['a.exits']);
+    versionA2 = await publishVersion(db.migrator, templateA, 2, documentFor('a.exits'));
+
+    const submittedBy = await createAccount(db.app, { siteIds: [SITE_A], role: 'jhsc_member' });
+    await inScope(
+      db.app,
+      [SITE_A],
+      `INSERT INTO inspection
+         (site_id, scheduled_inspection_id, template_version_id, client_submission_id,
+          submitted_by, signed_at, answer_count)
+       VALUES ($1, $2, $3, gen_random_uuid(), $4, now(), 0)`,
+      [SITE_A, submittedInspectionId, versionA1, submittedBy.accountId],
+    );
+
+    await inScope(
+      db.app,
+      [SITE_A],
+      `UPDATE scheduled_inspection
+          SET cancelled_at = now(), cancellation_reason = 'plant shutdown'
+        WHERE id = $1`,
+      [cancelledInspectionId],
+    );
   });
 
-  it('no la puede mover el rol de la aplicación: le falta el privilegio', async () => {
+  it('hs_app puede avanzar a una versión más alta y la fila la refleja', async () => {
     await expect(
       inScope(
         db.app,
         [SITE_A],
         'UPDATE scheduled_inspection SET template_version_id = $2 WHERE id = $1',
-        [inspectionId, versionA1],
+        [inspectionId, versionA2],
       ),
-    ).rejects.toSatisfy((error) => sqlstate(error) === INSUFFICIENT_PRIVILEGE);
+    ).resolves.toBeDefined();
 
     const row = await scheduledById(db.app, [SITE_A], inspectionId);
-    expect(row.template_version_id).toBe(versionA1);
+    expect(row.template_version_id).toBe(versionA2);
   });
 
-  it('no la puede mover el rol dueño: lo frena el trigger, no el privilegio', async () => {
-    // hs_migrator es dueño de la tabla, así que el GRANT por columna no lo alcanza.
-    // Sin la segunda barrera, "congelada" querría decir "congelada para la API".
+  it('rechaza retroceder incluso para el rol dueño', async () => {
     await expect(
       inScope(
         db.migrator,
         [SITE_A],
         'UPDATE scheduled_inspection SET template_version_id = $2 WHERE id = $1',
-        [inspectionId, versionB1],
+        [inspectionId, versionA1],
+      ),
+    ).rejects.toSatisfy((error) => sqlstate(error) === HS_FROZEN);
+  });
+
+  it('rechaza mover una inspección ya enviada', async () => {
+    await expect(
+      inScope(
+        db.app,
+        [SITE_A],
+        'UPDATE scheduled_inspection SET template_version_id = $2 WHERE id = $1',
+        [submittedInspectionId, versionA2],
+      ),
+    ).rejects.toSatisfy((error) => sqlstate(error) === HS_FROZEN);
+  });
+
+  it('rechaza mover una inspección cancelada', async () => {
+    await expect(
+      inScope(
+        db.app,
+        [SITE_A],
+        'UPDATE scheduled_inspection SET template_version_id = $2 WHERE id = $1',
+        [cancelledInspectionId, versionA2],
       ),
     ).rejects.toSatisfy((error) => sqlstate(error) === HS_FROZEN);
   });
 
   it('publicar una versión nueva no toca ninguna fila ya programada', async () => {
-    const before = await scheduledById(db.app, [SITE_A], inspectionId);
-
-    await registerItems(db.migrator, templateA, ['a.exits']);
-    const versionA2 = await publishVersion(db.migrator, templateA, 2, documentFor('a.exits'));
-
-    const after = await scheduledById(db.app, [SITE_A], inspectionId);
+    const before = await scheduledById(db.app, [SITE_A], untouchedInspectionId);
+    const after = await scheduledById(db.app, [SITE_A], untouchedInspectionId);
 
     expect(after).toEqual(before);
     expect(after.template_version_id).toBe(versionA1);
@@ -169,7 +232,7 @@ describe('la versión congelada', () => {
     await expect(
       scheduleInspection(db.app, {
         siteId: SITE_A,
-        periodStart: '2026-04-01',
+        periodStart: '2026-11-01',
         templateId: templateA,
         templateVersionId: versionB1,
       }),

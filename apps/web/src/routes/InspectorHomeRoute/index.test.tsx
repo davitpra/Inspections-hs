@@ -66,7 +66,7 @@ const SITE = '22222222-2222-4222-8222-222222222222';
 const USER = '33333333-3333-4333-8333-333333333333';
 const VERSION = '44444444-4444-4444-8444-444444444444';
 
-function pending() {
+function pending(overrides: Record<string, unknown> = {}) {
   return [
     {
       id: INSPECTION,
@@ -76,7 +76,11 @@ function pending() {
       period_end: '2026-03-31',
       template_name: 'Monthly general workplace inspection',
       template_version_id: VERSION,
+      template_version: 2,
+      latest_template_version: 2,
+      latest_template_version_id: VERSION,
       overdue: true,
+      ...overrides,
     },
   ];
 }
@@ -171,7 +175,9 @@ describe('InspectorHomeRoute', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Download for the field' }));
 
-    await waitFor(() => expect(prefetchInspection).toHaveBeenCalledWith(INSPECTION));
+     await waitFor(() =>
+       expect(prefetchInspection).toHaveBeenCalledWith(INSPECTION, { advance: true }),
+     );
 
     const start = await screen.findByRole('link', { name: 'Start inspection' });
     expect(start.getAttribute('href')).toBe(`/inspections/${INSPECTION}/capture`);
@@ -237,7 +243,9 @@ describe('InspectorHomeRoute', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Refresh field package' }));
 
-    await waitFor(() => expect(prefetchInspection).toHaveBeenCalledWith(INSPECTION));
+     await waitFor(() =>
+       expect(prefetchInspection).toHaveBeenCalledWith(INSPECTION, { advance: true }),
+     );
   });
 
   /**
@@ -276,6 +284,86 @@ describe('InspectorHomeRoute', () => {
 
     await screen.findByRole('button', { name: 'Refresh field package' });
     expect(screen.queryByText(/not the version this inspection is locked to/)).toBeNull();
+  });
+
+  it('nombra la versión nueva y la toma al refrescar sin borrador', async () => {
+    missingForField.mockResolvedValue([]);
+    request.mockResolvedValue({
+      ok: true,
+      value: pending({
+        latest_template_version: 3,
+        latest_template_version_id: '77777777-7777-4777-8777-777777777777',
+      }),
+    });
+    storedTemplateVersion.mockResolvedValue({
+      kind: 'template_version',
+      site_id: SITE,
+      template_version_id: VERSION,
+      version: 2,
+      document: { sections: [] },
+      inspector_id: USER,
+    });
+    prefetchInspection.mockResolvedValue({
+      scheduled_inspection_id: INSPECTION,
+      stored: ['template_version', 'locations', 'roster'],
+      missing: [],
+      errors: {},
+    });
+
+    renderRoute();
+
+    expect(await screen.findByText('Version 3 is published')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh field package' }));
+
+    await waitFor(() =>
+      expect(prefetchInspection).toHaveBeenCalledWith(INSPECTION, { advance: true }),
+    );
+  });
+
+  it('con borrador nombra el descarte y refresca sin avanzar', async () => {
+    missingForField.mockResolvedValue([]);
+    request.mockResolvedValue({
+      ok: true,
+      value: pending({
+        latest_template_version: 3,
+        latest_template_version_id: '77777777-7777-4777-8777-777777777777',
+      }),
+    });
+    storedTemplateVersion.mockResolvedValue({
+      kind: 'template_version',
+      site_id: SITE,
+      template_version_id: VERSION,
+      version: 2,
+      document: { sections: [] },
+      inspector_id: USER,
+    });
+    listDrafts.mockResolvedValue([
+      {
+        client_submission_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        scheduled_inspection_id: INSPECTION,
+        account_id: USER,
+        site_id: SITE,
+        template_version_id: VERSION,
+        created_at: '2026-03-01T10:00:00.000Z',
+        updated_at: '2026-03-01T10:00:00.000Z',
+        current_item_key: null,
+        status: 'capturing',
+        signed_at: null,
+      },
+    ]);
+    prefetchInspection.mockResolvedValue({
+      scheduled_inspection_id: INSPECTION,
+      stored: ['template_version', 'locations', 'roster'],
+      missing: [],
+      errors: {},
+    });
+
+    renderRoute();
+
+    expect(await screen.findByText(/Discard this draft before refreshing/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh field package' }));
+
+    await waitFor(() => expect(prefetchInspection).toHaveBeenCalledWith(INSPECTION));
   });
 });
 
@@ -317,6 +405,9 @@ describe('InspectorHomeRoute — la asignación destacada', () => {
           period_end: '2099-01-31',
           template_name: 'Un mes al día',
           template_version_id: VERSION,
+          template_version: 2,
+          latest_template_version: 2,
+          latest_template_version_id: VERSION,
           overdue: false,
         },
         ...pending(),

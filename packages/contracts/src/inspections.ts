@@ -236,6 +236,12 @@ export const pendingInspectionSchema = z.strictObject({
   period_end: z.iso.date(),
   template_name: z.string().min(1),
   template_version_id: z.uuid(),
+  /** La versión a la que esta inspección está atada. */
+  template_version: z.int().positive(),
+  /** Lectura de lo publicado hoy; no es una promesa hasta que alguien avanza. */
+  latest_template_version: z.int().positive(),
+  /** Lectura de lo publicado hoy; la inspección no queda atada sin un avance explícito. */
+  latest_template_version_id: z.uuid(),
   overdue: z.boolean(),
 });
 

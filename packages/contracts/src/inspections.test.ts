@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   inspectionScheduleSchema,
   inspectorOptionSchema,
+  pendingInspectionSchema,
   scheduledInspectionSchema,
 } from './inspections.js';
 import { templateOptionSchema } from './templates.js';
@@ -194,6 +195,44 @@ describe('inspectorOptionSchema', () => {
       last_name: 'Okafor',
       email: 'dana@example.com',
       role: 'jhsc_member',
+    });
+
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('pendingInspectionSchema', () => {
+  it('acepta las versiones congelada y publicada más alta', () => {
+    const result = pendingInspectionSchema.safeParse({
+      id: SCHEDULED_ID,
+      site_id: SITE_ID,
+      period_start: '2026-08-01',
+      period_months: 1,
+      period_end: '2026-08-31',
+      template_name: 'Monthly general workplace inspection',
+      template_version_id: VERSION_ID,
+      template_version: 2,
+      latest_template_version: 3,
+      latest_template_version_id: '77777777-7777-4777-8777-777777777777',
+      overdue: false,
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rechaza una versión publicada cero', () => {
+    const result = pendingInspectionSchema.safeParse({
+      id: SCHEDULED_ID,
+      site_id: SITE_ID,
+      period_start: '2026-08-01',
+      period_months: 1,
+      period_end: '2026-08-31',
+      template_name: 'Monthly general workplace inspection',
+      template_version_id: VERSION_ID,
+      template_version: 2,
+      latest_template_version: 0,
+      latest_template_version_id: '77777777-7777-4777-8777-777777777777',
+      overdue: false,
     });
 
     expect(result.success).toBe(false);

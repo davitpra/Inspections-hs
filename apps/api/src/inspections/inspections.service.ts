@@ -17,7 +17,7 @@ import type {
   UpdateInspectionSchedule,
 } from '@hs/contracts';
 import type { TemplateDocument } from '@hs/forms';
-import type { PoolClient } from 'pg';
+import type { DatabaseError, PoolClient } from 'pg';
 
 import { DbService } from '../db/db.service';
 import { forbidden } from '../auth/auth.errors';
@@ -34,6 +34,7 @@ import {
   inspectorInvalid,
   scheduleAlreadyActive,
   templateNotPublishable,
+  versionNotAdvanceable,
 } from './inspections.errors';
 
 /**
@@ -340,16 +341,22 @@ export class InspectionsService {
 
     return this.db.withSessionClient(session, async (client) => {
       const { rows } = await client.query<PendingRow>(
-        `SELECT si.id,
+        `WITH latest AS (${LATEST_PUBLISHED_VERSION_CTE})
+         SELECT si.id,
                 si.site_id,
                 si.period_start::text AS period_start,
                 si.period_months,
                 si.period_end::text AS period_end,
                 t.name AS template_name,
                 si.template_version_id,
+                frozen.version AS template_version,
+                latest.version AS latest_template_version,
+                latest.version_id AS latest_template_version_id,
                 (si.period_end < $2::date) AS overdue
            FROM scheduled_inspection si
            JOIN template t ON t.id = si.template_id
+           JOIN template_version frozen ON frozen.id = si.template_version_id
+           LEFT JOIN latest ON latest.template_id = si.template_id
            LEFT JOIN inspection insp ON insp.scheduled_inspection_id = si.id
           WHERE si.inspector_id = $1
             AND si.cancelled_at IS NULL
@@ -366,6 +373,9 @@ export class InspectionsService {
         period_end: row.period_end,
         template_name: row.template_name,
         template_version_id: row.template_version_id,
+        template_version: row.template_version,
+        latest_template_version: row.latest_template_version,
+        latest_template_version_id: row.latest_template_version_id,
         overdue: row.overdue,
       }));
     });
@@ -398,26 +408,55 @@ export class InspectionsService {
     id: string,
   ): Promise<TemplateVersionPackage> {
     return this.db.withSessionClient(session, async (client) => {
-      const inspection = await this.requireActive(client, id);
+      return this.templateVersionPackageFromClient(client, id);
+    });
+  }
 
-      const { rows } = await client.query<{ version: number; document: TemplateDocument }>(
-        `SELECT version, document
-           FROM template_version
-          WHERE id = $1`,
-        [inspection.template_version_id],
+  /**
+   * Avanza una asignación y devuelve el paquete dentro de la misma transacción. El trigger
+   * es la autoridad para las invariantes; las comprobaciones locales solo permiten nombrar
+   * un período cancelado o enviado cuando la operación sería un no-op.
+   */
+  async advanceTemplateVersion(
+    session: SessionScope,
+    id: string,
+  ): Promise<TemplateVersionPackage> {
+    return this.db.withSessionClient(session, async (client) => {
+      const scheduled = await this.scheduledForAdvance(client, id);
+
+      if (scheduled.inspector_id !== session.userId && session.role !== 'hs_coordinator') {
+        throw forbidden('Only the assigned inspector or an HS coordinator can advance the template version');
+      }
+
+      if (scheduled.cancelled_at !== null) {
+        throw versionNotAdvanceable('cancelled');
+      }
+
+      const submitted = await client.query<{ exists: boolean }>(
+        'SELECT EXISTS (SELECT 1 FROM inspection WHERE scheduled_inspection_id = $1) AS exists',
+        [id],
       );
+      if (submitted.rows[0]?.exists) throw versionNotAdvanceable('submitted');
 
-      // La FK garantiza que exista: si no está, la base está rota y el 404 es honesto.
-      const row = rows[0];
-      if (!row) throw inspectionNotFound();
+      try {
+        await client.query(
+          `WITH latest AS (${LATEST_PUBLISHED_VERSION_CTE})
+           UPDATE scheduled_inspection si
+              SET template_version_id = latest.version_id
+             FROM latest
+            WHERE si.id = $1
+              AND latest.template_id = si.template_id
+              AND si.template_version_id IS DISTINCT FROM latest.version_id`,
+          [id],
+        );
+      } catch (caught) {
+        if (isSqlState(caught, 'HS001')) {
+          throw versionAdvanceError(caught);
+        }
+        throw caught;
+      }
 
-      return {
-        site_id: inspection.site_id,
-        template_version_id: inspection.template_version_id,
-        version: row.version,
-        document: row.document,
-        inspector_id: inspection.inspector_id,
-      };
+      return this.templateVersionPackageFromClient(client, id);
     });
   }
 
@@ -571,6 +610,47 @@ export class InspectionsService {
     if (!inspection) throw inspectionNotFound();
 
     return inspection;
+  }
+
+  private async scheduledForAdvance(
+    client: PoolClient,
+    id: string,
+  ): Promise<AdvanceInspection> {
+    const { rows } = await client.query<AdvanceInspection>(
+      `SELECT id, site_id, template_version_id, inspector_id, cancelled_at
+         FROM scheduled_inspection
+        WHERE id = $1`,
+      [id],
+    );
+    const row = rows[0];
+    if (!row) throw inspectionNotFound();
+
+    return row;
+  }
+
+  private async templateVersionPackageFromClient(
+    client: PoolClient,
+    id: string,
+  ): Promise<TemplateVersionPackage> {
+    const inspection = await this.requireActive(client, id);
+
+    const { rows } = await client.query<{ version: number; document: TemplateDocument }>(
+      `SELECT version, document
+         FROM template_version
+        WHERE id = $1`,
+      [inspection.template_version_id],
+    );
+
+    const row = rows[0];
+    if (!row) throw inspectionNotFound();
+
+    return {
+      site_id: inspection.site_id,
+      template_version_id: inspection.template_version_id,
+      version: row.version,
+      document: row.document,
+      inspector_id: inspection.inspector_id,
+    };
   }
 
   // -------------------------------------------------------------------------
@@ -837,7 +917,18 @@ interface PendingRow extends Record<string, unknown> {
   period_end: string;
   template_name: string;
   template_version_id: string;
+  template_version: number;
+  latest_template_version: number;
+  latest_template_version_id: string;
   overdue: boolean;
+}
+
+interface AdvanceInspection extends Record<string, unknown> {
+  id: string;
+  site_id: string;
+  template_version_id: string;
+  inspector_id: string | null;
+  cancelled_at: Date | null;
 }
 
 function toSchedule(row: ScheduleRow): InspectionSchedule {
@@ -886,6 +977,21 @@ function isUniqueViolation(caught: unknown): boolean {
   return typeof caught === 'object' && caught !== null && 'code' in caught
     ? (caught as { code?: unknown }).code === '23505'
     : false;
+}
+
+function isSqlState(caught: unknown, code: string): caught is DatabaseError {
+  return typeof caught === 'object' && caught !== null && 'code' in caught
+    ? (caught as { code?: unknown }).code === code
+    : false;
+}
+
+function versionAdvanceError(caught: DatabaseError) {
+  const message = caught.message.toLowerCase();
+
+  if (message.includes('submitted')) return versionNotAdvanceable('submitted');
+  if (message.includes('cancelled')) return versionNotAdvanceable('cancelled');
+
+  return versionNotAdvanceable('no_newer_version');
 }
 
 function requireRow<T>(rows: readonly T[]): T {

@@ -39,7 +39,7 @@ afterEach(() => {
 function fullServer(version = 2, versionId = VERSION_2) {
   return fakeSessionClient({
     respond: (path) => {
-      if (path.endsWith('/template-version')) {
+       if (path.endsWith('/template-version') || path.endsWith('/template-version/advance')) {
         return ok(templateVersionPackage({ template_version_id: versionId, version }));
       }
       if (path.endsWith('/locations')) return ok(locationPackage());
@@ -144,6 +144,18 @@ describe('prefetchInspection', () => {
     expect(stored?.version).toBe(3);
     expect(stored?.template_version_id).toBe(VERSION_3);
   });
+
+  it('pide el avance explícito cuando no hay borrador', async () => {
+    database = freshDatabase();
+    const client = fullServer(3, VERSION_3);
+
+    await prefetchInspection(INSPECTION_ID, { database, client, advance: true });
+
+    expect(client.calls[0]).toMatchObject({
+      path: `/scheduled-inspections/${INSPECTION_ID}/template-version/advance`,
+      init: { method: 'POST' },
+    });
+  });
 });
 
 describe('prefetchedAt', () => {
@@ -211,5 +223,26 @@ describe('packageDrift', () => {
         draftVersionId: VERSION_2,
       }),
     ).toBe('none');
+  });
+
+  it('nombra una versión publicada más alta cuando el paquete está alineado', () => {
+    expect(
+      packageDrift({
+        storedVersionId: VERSION_2,
+        frozenVersionId: VERSION_2,
+        latestVersionId: VERSION_3,
+      }),
+    ).toBe('newer-version');
+  });
+
+  it('da prioridad al borrador huérfano sobre una versión publicada más alta', () => {
+    expect(
+      packageDrift({
+        storedVersionId: VERSION_3,
+        frozenVersionId: VERSION_2,
+        draftVersionId: VERSION_2,
+        latestVersionId: VERSION_3,
+      }),
+    ).toBe('draft-orphaned');
   });
 });

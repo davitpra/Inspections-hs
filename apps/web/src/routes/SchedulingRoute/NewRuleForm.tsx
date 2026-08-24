@@ -81,7 +81,7 @@ export function NewRuleForm({
 
   return (
     <div className="filters">
-      <label htmlFor={`${controlId}-template`}>New rule</label>
+      <label htmlFor={`${controlId}-template`}>Add inspection requirement</label>
       <select
         id={`${controlId}-template`}
         value={templateId}
@@ -136,7 +136,7 @@ export function NewRuleForm({
         onClick={() => create.mutate()}
         disabled={templateId === '' || create.isPending}
       >
-        {create.isPending ? 'Creating…' : 'Create rule'}
+        {create.isPending ? 'Adding…' : 'Add requirement'}
       </button>
 
       <p className="note">
