@@ -15,6 +15,7 @@ const RULE = '77777777-7777-4777-8777-777777777777';
 const CANDIDATE = '88888888-8888-4888-8888-888888888888';
 const OTHER_TEMPLATE = '99999999-9999-4999-8999-999999999999';
 const OTHER_VERSION = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const ARCHIVED_RULE = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
 const listSites = vi.hoisted(() => vi.fn());
 const listTemplates = vi.hoisted(() => vi.fn());
@@ -40,7 +41,7 @@ function site(): Site {
 }
 
 function rule(overrides: Partial<InspectionSchedule> = {}): InspectionSchedule {
-  return { id: RULE, site_id: SITE, template_id: TEMPLATE, template_name: 'Monthly general workplace inspection', frequency_months: 1, anchor_month: 1, default_inspector_id: null, default_inspector_name: null, created_at: '2020-01-01T00:00:00.000Z', deactivated_at: null, ...overrides };
+  return { id: RULE, site_id: SITE, template_id: TEMPLATE, template_name: 'Monthly general workplace inspection', frequency_months: 1, anchor_month: 1, default_inspector_id: null, default_inspector_name: null, created_at: '2020-01-01T00:00:00.000Z', deactivated_at: null, archived_at: null, ...overrides };
 }
 
 function inspection(overrides: Partial<ScheduledInspection> = {}): ScheduledInspection {
@@ -167,14 +168,31 @@ describe('requirements y permisos', () => {
   });
 
   it('un miembro del JHSC lee requirements y periodos sin controles de escritura', async () => {
+    listSchedules.mockResolvedValue([
+      rule(),
+      rule({ id: ARCHIVED_RULE, template_name: 'Archived workplace inspection', deactivated_at: '2025-01-01T00:00:00.000Z', archived_at: '2026-01-01T00:00:00.000Z' }),
+    ]);
     useAppSession.mockReturnValue(session('jhsc_member'));
     renderRoute();
-    expect(await screen.findByText('Default inspector: None')).toBeTruthy();
+    const requirements = await screen.findByRole('table', { name: 'Inspection requirements' });
+    expect(within(requirements).getByRole('columnheader', { name: 'Default inspector' })).toBeTruthy();
+    expect(within(requirements).getByRole('cell', { name: 'None' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Add requirement' })).toBeNull();
     expect(screen.queryByRole('button', { name: /More actions/ })).toBeNull();
+    expect(screen.queryByLabelText('Show archived')).toBeNull();
+    expect(screen.queryByText('Archived workplace inspection')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /August/ }));
     expect(await screen.findByRole('dialog')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Cancel period|Confirm assignment|Open this period/ })).toBeNull();
+  });
+
+  it('muestra solo el menú de acciones en cada requisito', async () => {
+    renderRoute();
+    const requirements = await screen.findByRole('table', { name: 'Inspection requirements' });
+    expect(within(requirements).getByRole('columnheader', { name: 'Frequency' })).toBeTruthy();
+    expect(within(requirements).getByRole('cell', { name: 'Monthly' })).toBeTruthy();
+    expect(within(requirements).queryByRole('button', { name: 'Edit' })).toBeNull();
+    expect(within(requirements).getByRole('button', { name: /More actions/ })).toBeTruthy();
   });
 
   it('distingue error de plantillas del vacío de plantillas', async () => {
@@ -184,5 +202,70 @@ describe('requirements y permisos', () => {
     const dialog = await screen.findByRole('dialog');
     expect(await within(dialog).findByText(/could not be loaded/)).toBeTruthy();
     expect(within(dialog).getByRole('button', { name: 'Add requirement' }).hasAttribute('disabled')).toBe(true);
+  });
+
+  it('oculta archivadas por defecto y permite mostrarlas como filas independientes', async () => {
+    listSchedules.mockResolvedValue([
+      rule(),
+      rule({ id: ARCHIVED_RULE, template_name: 'Archived workplace inspection', deactivated_at: '2025-01-01T00:00:00.000Z', archived_at: '2026-01-01T00:00:00.000Z' }),
+    ]);
+    renderRoute();
+
+    const toggle = await screen.findByLabelText('Show archived');
+    expect(screen.queryByText('Archived workplace inspection')).toBeNull();
+    fireEvent.click(toggle);
+
+    const requirements = screen.getByRole('table', { name: 'Inspection requirements' });
+    expect(within(requirements).getByText('Archived workplace inspection')).toBeTruthy();
+    expect(within(requirements).getByText('Archived')).toBeTruthy();
+    expect(within(requirements).getAllByRole('row')).toHaveLength(3);
+  });
+
+  it('confirma el archivo solo para una regla desactivada', async () => {
+    listSchedules.mockResolvedValue([
+      rule({ deactivated_at: '2026-01-01T00:00:00.000Z' }),
+    ]);
+    renderRoute();
+
+    fireEvent.click(await screen.findByRole('button', { name: /More actions/ }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Archive requirement' }));
+    const dialog = screen.getByRole('dialog', { name: 'Archive requirement' });
+    expect(within(dialog).getByText(/past obligations and scheduled inspections remain unchanged/)).toBeTruthy();
+    expect(updateSchedule).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Archive requirement' }));
+    await waitFor(() => expect(updateSchedule).toHaveBeenCalledWith(RULE, { archived: true }));
+  });
+
+  it('permite reactivar una regla desde el menú de tres puntos', async () => {
+    listSchedules.mockResolvedValue([rule({ deactivated_at: '2026-01-01T00:00:00.000Z' })]);
+    renderRoute();
+
+    fireEvent.click(await screen.findByRole('button', { name: /More actions/ }));
+    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Reactivate requirement' }));
+
+    await waitFor(() => expect(updateSchedule).toHaveBeenCalledWith(RULE, { deactivated: false }));
+  });
+
+  it('no ofrece archivo para una regla activa', async () => {
+    renderRoute();
+    fireEvent.click(await screen.findByRole('button', { name: /More actions/ }));
+    expect(screen.queryByRole('menuitem', { name: 'Archive requirement' })).toBeNull();
+  });
+
+  it('restaura sin reactivar y muestra los rechazos del servidor', async () => {
+    listSchedules.mockResolvedValue([
+      rule({ id: ARCHIVED_RULE, deactivated_at: '2025-01-01T00:00:00.000Z', archived_at: '2026-01-01T00:00:00.000Z' }),
+    ]);
+    updateSchedule.mockRejectedValueOnce(new Error('Another non-archived requirement exists'));
+    renderRoute();
+
+    fireEvent.click(await screen.findByLabelText('Show archived'));
+    fireEvent.click(screen.getByRole('button', { name: /More actions/ }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Restore' }));
+
+    await waitFor(() => expect(updateSchedule).toHaveBeenCalledWith(ARCHIVED_RULE, { archived: false }));
+    expect((await screen.findByRole('alert')).textContent).toContain('Another non-archived requirement exists');
+    expect(screen.getByText('Archived')).toBeTruthy();
   });
 });

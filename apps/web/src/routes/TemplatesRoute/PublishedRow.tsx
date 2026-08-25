@@ -1,22 +1,122 @@
-import type { TemplateOption } from '@hs/contracts';
-import { Link } from '@tanstack/react-router';
+import type { PublishedTemplateSummary } from '@hs/contracts';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { Link, useNavigate } from '@tanstack/react-router';
 
+import { RowMenu, type RowAction } from '../../components/RowMenu';
+import { reactivateTemplate, reviseTemplate } from '../../api/templates';
+import { queryKeys } from '../../api/query-keys';
 import { formatDay } from '../../presentation/dates';
-import { publishedVersionLabel } from './presentation';
+import {
+  isTemplateActive,
+  publishedVersionLabel,
+  templateStatusClass,
+  templateStatusLabel,
+} from './presentation';
 
-/** Una plantilla congelada: el nombre abre exactamente la versión que la fila nombra. */
-export function PublishedRow({ template }: { template: TemplateOption }): React.JSX.Element {
+/**
+ * Una plantilla congelada: el nombre abre exactamente la versión que la fila nombra.
+ *
+ * RETIRAR NO ES BORRAR y la fila tiene que decirlo. Una plantilla retirada sigue acá, con
+ * su versión y su fecha, porque sigue siendo la referencia de las inspecciones que se
+ * hicieron con ella; lo único que cambia es que deja de ofrecerse al programar.
+ *
+ * "Edit template" desaparece del menú cuando está retirada, y no queda gris: el servidor
+ * rechaza revisar una plantilla dada de baja (`findTemplateForRevision` filtra por
+ * `deactivated_at`), así que ofrecerla sería ofrecer un error. Primero se reactiva.
+ *
+ * Reactivar no pregunta y retirar sí. La confirmación es para lo que cambia lo que la
+ * organización puede programar mañana, no para todo lo que abre un menú.
+ */
+export function PublishedRow({
+  template,
+  canManage,
+  onDeactivate,
+}: {
+  template: PublishedTemplateSummary;
+  canManage: boolean;
+  /** Retirar se confirma fuera de la fila: al aplicarse, la fila se redibuja (ver `DeactivateTemplateDialog`). */
+  onDeactivate: () => void;
+}): React.JSX.Element {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const active = isTemplateActive(template);
+
+  const revise = useMutation({
+    mutationFn: () => reviseTemplate(template.id),
+    onSuccess: (draft) => {
+      void navigate({ to: '/templates/drafts/$id', params: { id: draft.id } });
+    },
+  });
+
+  /**
+   * Las dos claves, siempre. La consola cambia porque la fila cambia de estado, y
+   * `templates()` cambia porque es el listado de lo programable y esta plantilla acaba de
+   * entrar o de salir de él. Invalidar solo la primera dejaría a `/scheduling` ofreciendo
+   * una plantilla retirada hasta el próximo refresco.
+   */
+  const reactivate = useMutation({
+    mutationFn: () => reactivateTemplate(template.id),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.publishedTemplates() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.templates() }),
+      ]);
+    },
+  });
+
+  const actions: RowAction[] = active
+    ? [
+        {
+          label: revise.isPending ? 'Opening…' : 'Edit template',
+          disabled: revise.isPending,
+          onSelect: () => revise.mutate(),
+        },
+      ]
+    : [];
+
+  if (canManage) {
+    actions.push(
+      active
+        ? {
+            label: 'Deactivate template',
+            tone: 'danger',
+            onSelect: onDeactivate,
+          }
+        : {
+            label: reactivate.isPending ? 'Reactivating…' : 'Reactivate template',
+            disabled: reactivate.isPending,
+            onSelect: () => reactivate.mutate(),
+          },
+    );
+  }
+
   return (
-    <li className="list__row">
-      <div>
+    <tr className="published-row">
+      <th scope="row" data-label="Name">
         <Link className="published-name" to="/templates/versions/$versionId" params={{ versionId: template.latest_version_id }}>
           {template.name}
         </Link>
-        <p className="note">
-          {template.key} · {publishedVersionLabel(template.latest_version)} · published{' '}
-          {formatDay(template.latest_published_at)}
-        </p>
-      </div>
-    </li>
+      </th>
+      <td data-label="Version" className="published-row__meta">{publishedVersionLabel(template.latest_version)}</td>
+      <td data-label="Published" className="published-row__meta">{formatDay(template.latest_published_at)}</td>
+      <td data-label="Status">
+        <span className={templateStatusClass(template)}>{templateStatusLabel(template)}</span>
+      </td>
+      <td data-label="Actions" className="published-card__actions-cell">
+        <div className="table__actions">
+          <RowMenu label={`More actions for ${template.name}`} actions={actions} />
+        </div>
+        {revise.isError ? (
+          <p className="notice notice--warn" role="alert">
+            Could not open revision.
+          </p>
+        ) : null}
+        {reactivate.isError ? (
+          <p className="notice notice--warn" role="alert">
+            {reactivate.error.message}
+          </p>
+        ) : null}
+      </td>
+    </tr>
   );
 }

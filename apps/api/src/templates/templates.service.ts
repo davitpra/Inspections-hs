@@ -8,6 +8,7 @@ import {
   templateDocumentSchema,
   type CreateTemplateDraft,
   type PublishedTemplate,
+  type PublishedTemplateSummary,
   type PublishedTemplateVersion,
   type SaveTemplateDraft,
   type TemplateDraft,
@@ -31,6 +32,8 @@ import {
   templateItemDeactivated,
   templateItemKeyTaken,
   templateKeyTaken,
+  templateAlreadyDeactivated,
+  templateNotDeactivated,
   templateNotFound,
   templateVersionNotFound,
 } from './templates.errors';
@@ -106,6 +109,97 @@ export class TemplatesService {
       );
 
       return rows;
+    });
+  }
+
+  /**
+   * El MISMO catálogo, para administrarlo en vez de para elegir de él.
+   *
+   * La única diferencia con `list()` es el `WHERE` que no está, y es toda la diferencia:
+   * acá vienen también las retiradas. Si no vinieran, retirar una plantilla la borraría de
+   * la pantalla que la retiró y no habría forma de volver a activarla nunca.
+   *
+   * `list()` no se toca ni se le agrega un parámetro: lo consumen cinco puntos de
+   * `/scheduling` y lo que ofrece tiene que seguir siendo lo programable. Dos consumidores
+   * con dos preguntas distintas son dos consultas, no una con una bandera.
+   *
+   * El `JOIN latest` sí se conserva: una plantilla sin ninguna versión publicada no es una
+   * plantilla publicada, esté activa o no.
+   */
+  async listPublished(session: SessionScope): Promise<PublishedTemplateSummary[]> {
+    requireCoordinator(session);
+
+    return this.db.withSessionClient(session, async (client) => {
+      const { rows } = await client.query<PublishedTemplateSummary>(
+        `WITH latest AS (${LATEST_PUBLISHED_VERSION_CTE})
+          SELECT t.id,
+                 t.key,
+                 t.name,
+                 latest.version    AS latest_version,
+                 latest.version_id AS latest_version_id,
+                 latest.published_at AS latest_published_at,
+                 t.deactivated_at
+           FROM template t
+           JOIN latest ON latest.template_id = t.id
+          ORDER BY t.name`,
+      );
+
+      return rows;
+    });
+  }
+
+  /**
+   * Retirar una plantilla del catálogo. Nunca DELETE: `deactivated_at` (ADR-002).
+   *
+   * QUÉ SIGNIFICA Y QUÉ NO. Deja de ofrecerse al crear una regla de recurrencia y al
+   * programar fuera de calendario, porque `list()` filtra por esta columna. NO frena las
+   * reglas que ya la nombran ni toca una sola inspección abierta: el planificador congela
+   * la versión más alta publicada y no vuelve a mirar la cabecera. Para frenar una regla
+   * está la baja de la regla.
+   *
+   * SIN `SELECT ... FOR UPDATE`, por la misma razón que la baja de una planta
+   * (`sites.service.ts`): el motor concede UPDATE sobre `template` POR COLUMNA (0033) y
+   * bloquear la fila exige el privilegio de tabla entero. La propia baja arbitra la
+   * carrera — la segunda pestaña no encuentra fila y se entera de que llegó tarde.
+   */
+  async deactivate(session: SessionScope, templateId: string): Promise<void> {
+    requireCoordinator(session);
+
+    await this.db.withSessionClient(session, async (client) => {
+      const { rowCount } = await client.query(
+        `UPDATE template
+            SET deactivated_at = now()
+          WHERE id = $1 AND deactivated_at IS NULL
+          RETURNING id`,
+        [templateId],
+      );
+
+      if (rowCount === 0) {
+        throw (await templateExists(client, templateId))
+          ? templateAlreadyDeactivated()
+          : templateNotFound();
+      }
+    });
+  }
+
+  /** El simétrico exacto. Vuelve a ofrecerse desde el próximo listado, sin más efecto. */
+  async reactivate(session: SessionScope, templateId: string): Promise<void> {
+    requireCoordinator(session);
+
+    await this.db.withSessionClient(session, async (client) => {
+      const { rowCount } = await client.query(
+        `UPDATE template
+            SET deactivated_at = NULL
+          WHERE id = $1 AND deactivated_at IS NOT NULL
+          RETURNING id`,
+        [templateId],
+      );
+
+      if (rowCount === 0) {
+        throw (await templateExists(client, templateId))
+          ? templateNotDeactivated()
+          : templateNotFound();
+      }
     });
   }
 
@@ -420,6 +514,19 @@ export class TemplatesService {
 
 function requireCoordinator(session: SessionScope): void {
   if (session.role !== 'hs_coordinator') throw templateDraftForbidden();
+}
+
+/**
+ * Solo para DISTINGUIR el error después de que la baja no encontró fila.
+ *
+ * No es una comprobación previa —eso sería el `SELECT` que la carrera vuelve mentira—:
+ * corre cuando la escritura ya falló, y lo único que decide es cuál de los dos `4xx`
+ * describe lo que pasó.
+ */
+async function templateExists(client: PoolClient, templateId: string): Promise<boolean> {
+  const { rowCount } = await client.query('SELECT 1 FROM template WHERE id = $1', [templateId]);
+
+  return rowCount === 1;
 }
 
 /**

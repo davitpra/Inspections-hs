@@ -42,6 +42,14 @@ export const queryKeys = {
   organizationLocations: () => key('organization-locations'),
   catalogLocations: () => key('catalog-locations'),
   templates: () => key('templates'),
+  /**
+   * El catálogo COMPLETO de la consola de plantillas —retiradas incluidas—, que no es lo
+   * mismo que `templates()`: aquella pregunta qué se puede programar y la consumen cinco
+   * puntos de `/scheduling`. Clave propia y no un hijo, por lo mismo que los borradores:
+   * son dos preguntas con dos respuestas distintas sobre las mismas filas, y retirar una
+   * plantilla tiene que invalidar las DOS a mano, que es lo que hace la fila.
+   */
+  publishedTemplates: () => key('published-templates'),
   /** Documento congelado pedido por su versión; no comparte caché con el catálogo ni campo. */
   publishedTemplateVersion: (id?: string) => key('published-template-version', id),
 
@@ -128,12 +136,4 @@ export const queryKeys = {
   recurrence: (windowMonths?: number, groupBy?: RecurrenceGrouping) =>
     key('recurrence', windowMonths, groupBy),
 
-  /**
-   * El cumplimiento se ramifica: la cobertura al vuelo y los reportes ya congelados son
-   * dos cosas distintas de la misma planta. `compliance()` invalida las dos.
-   */
-  compliance: () => key('compliance'),
-  complianceCoverage: (siteId?: string, rangeStart?: string, rangeEnd?: string) =>
-    key('compliance', 'coverage', siteId, rangeStart, rangeEnd),
-  complianceReports: (siteId?: string) => key('compliance', 'reports', siteId),
 } as const;

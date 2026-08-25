@@ -6,7 +6,6 @@ import { queryKeys } from "../../api/query-keys";
 import { DocumentIcon, GridIcon, InfoIcon } from "../../components/icons";
 import { DiscardDraftDialog } from "./DiscardDraftDialog";
 import { DraftList } from "./DraftList";
-import { NewDraftForm } from "./NewDraftForm";
 import { draftCountLabel, sortDrafts } from "./presentation";
 
 export function TemplateDrafts(): React.JSX.Element {
@@ -31,15 +30,14 @@ export function TemplateDrafts(): React.JSX.Element {
   return (
     <>
       {/**
-        Lo que esta pantalla NO hace, dicho arriba y no escondido en un botón deshabilitado:
+        Lo que esta pantalla NO hace, dicho antes del listado y no escondido en el editor:
         sin esta línea, el coordinador escribe una plantilla entera y recién al final
-        descubre que no puede usarla.
+        descubre cómo llega a estar disponible.
 
-        Es un `.notice-card` y no un `.notice`: enmarcado y tintado se lee antes que el
-        formulario que tiene debajo, que es exactamente el orden en que hace falta.
+        Es un `.notice-card` y no un `.notice`: enmarcado y tintado separa las publicadas
+        de los borradores y explica la relación entre ambas poblaciones.
       */}
 
-      <NewDraftForm />
       <div className="notice-card">
         <div className="notice-card__body">
           <span className="notice-card__icon">
@@ -52,7 +50,7 @@ export function TemplateDrafts(): React.JSX.Element {
             <p className="notice-card__text">
               Publish a completed draft to make it available for scheduling.
               Published versions are frozen, so review the questions carefully
-              before you publish. Your published templates appear below.
+              before you publish. Your published templates appear above.
             </p>
           </div>
         </div>
@@ -75,7 +73,7 @@ export function TemplateDrafts(): React.JSX.Element {
             <DocumentIcon size={22} />
           </span>
           <p className="drafts-empty__title">No drafts yet</p>
-          <p className="note">Start one above. You can rename it later.</p>
+          <p className="note">Select Add Template above to start one.</p>
         </div>
       ) : null}
 

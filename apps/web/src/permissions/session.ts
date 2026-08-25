@@ -57,10 +57,6 @@ export function canAdministerScheduling(account: Session | null): account is Ses
   return account?.role === 'hs_coordinator';
 }
 
-export function canGenerateComplianceReport(account: Session | null): account is Session {
-  return account?.role === 'hs_coordinator';
-}
-
 /**
  * Quién escribe plantillas (§6 — "el coordinador administra plantillas y roster").
  *
@@ -77,6 +73,19 @@ export function canAuthorTemplates(account: Session | null): account is Session 
 
 /** Quién puede convertir un borrador guardado en una versión publicada. */
 export function canPublishTemplates(account: Session | null): account is Session {
+  return account?.role === 'hs_coordinator';
+}
+
+/**
+ * Quién puede RETIRAR una plantilla ya publicada del catálogo, y devolverla.
+ *
+ * Separada de `canAuthorTemplates` aunque hoy comparen el mismo rol, porque no es la misma
+ * decisión: aquella habla de escribir un documento que todavía no existe, y esta de sacar
+ * de circulación uno que ya se usó para inspeccionar. El día que una de las dos se abra a
+ * otro rol, el que las tenga separadas no va a tener que averiguar cuál de los usos de una
+ * función compartida quería decir qué.
+ */
+export function canDeactivateTemplates(account: Session | null): account is Session {
   return account?.role === 'hs_coordinator';
 }
 

@@ -1,7 +1,6 @@
 import type { TemplateDocument } from '@hs/contracts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { COMPLIANCE_PERIODS_SQL } from '../src/reporting/compliance.sql';
 import { SitesService } from '../src/catalog/sites.service';
 import { TemplatesService } from '../src/templates/templates.service';
 import { registerSite } from './helpers/catalog';
@@ -39,6 +38,7 @@ let unpublishedTemplateId: string;
 let coordinator: SeededAccount;
 let coordinatorB: SeededAccount;
 let inspector: SeededAccount;
+let archiveTemplateSequence = 0;
 
 const session = (account: SeededAccount, role: string, siteIds: readonly string[]) => ({
   userId: account.accountId,
@@ -65,6 +65,16 @@ function documentFor(itemKey: string): TemplateDocument {
       },
     ],
   };
+}
+
+async function publishedArchiveTemplate(): Promise<{ templateId: string; versionId: string }> {
+  archiveTemplateSequence += 1;
+  const suffix = `archive-${archiveTemplateSequence}`;
+  const id = await createTemplate(db.migrator, suffix, `Archive requirement ${archiveTemplateSequence}`);
+  const itemKey = `${suffix}.guard`;
+  await registerItems(db.migrator, id, [itemKey]);
+  const versionId = await publishVersion(db.migrator, id, 1, documentFor(itemKey));
+  return { templateId: id, versionId };
 }
 
 beforeAll(async () => {
@@ -369,35 +379,6 @@ describe('el listado de plantillas', () => {
 describe('el estado en el listado de programadas', () => {
   const asCoordinator = () => session(coordinator, 'hs_coordinator', [SITE_A]);
 
-  /**
-   * ANTI-DIVERGENCIA. El listado y el reporte de cobertura derivan el estado de la misma
-   * expresión; este test lo comprueba fila por fila. Si alguien vuelve a escribir el
-   * `CASE` en uno de los dos lugares, esto se pone rojo.
-   */
-  it('coincide con el que da el reporte de cobertura para la misma fila', async () => {
-    const listed = await stack.inspections.listScheduled(asCoordinator());
-
-    const rows = await inScope(db.app, [SITE_A], COMPLIANCE_PERIODS_SQL, [
-      SITE_A,
-      '2026-01-01',
-      '2026-12-31',
-      null,
-    ]);
-
-    const fromReport = new Map(
-      rows
-        .filter((row) => row.scheduled_inspection_id !== null)
-        .map((row) => [row.scheduled_inspection_id as string, row.status as string]),
-    );
-
-    const compared = listed.filter((entry) => fromReport.has(entry.id));
-    expect(compared.length).toBeGreaterThan(0);
-
-    for (const entry of compared) {
-      expect(entry.status).toBe(fromReport.get(entry.id));
-    }
-  });
-
   it('un período cerrado sin envío es missed', async () => {
     const scheduledId = await scheduleInspection(db.app, {
       siteId: SITE_A,
@@ -526,5 +507,143 @@ describe('la regla duplicada', () => {
         template_id: templateId,
       }),
     ).rejects.toMatchObject({ code: 'schedule_already_active' });
+  });
+});
+
+describe('el archivo de requisitos desactivados', () => {
+  const asCoordinator = () => session(coordinator, 'hs_coordinator', [SITE_A]);
+
+  it('archiva y restaura sin alterar la baja ni las inspecciones existentes', async () => {
+    const template = await publishedArchiveTemplate();
+    const created = await stack.inspections.createSchedule(asCoordinator(), {
+      site_id: SITE_A,
+      template_id: template.templateId,
+    });
+    const scheduledId = await scheduleInspection(db.app, {
+      siteId: SITE_A,
+      periodStart: '2027-01-01',
+      templateId: template.templateId,
+      templateVersionId: template.versionId,
+    });
+
+    const deactivated = await stack.inspections.updateSchedule(asCoordinator(), created.id, {
+      deactivated: true,
+    });
+    const archived = await stack.inspections.updateSchedule(asCoordinator(), created.id, {
+      archived: true,
+    });
+
+    expect(archived.archived_at).not.toBeNull();
+    expect(archived.deactivated_at).toBe(deactivated.deactivated_at);
+    expect(
+      (await stack.inspections.listSchedules(asCoordinator())).find((rule) => rule.id === created.id)
+        ?.archived_at,
+    ).toBe(archived.archived_at);
+    expect(
+      await inScope(db.app, [SITE_A], 'SELECT id FROM scheduled_inspection WHERE id = $1', [
+        scheduledId,
+      ]),
+    ).toHaveLength(1);
+
+    const restored = await stack.inspections.updateSchedule(asCoordinator(), created.id, {
+      archived: false,
+    });
+    expect(restored.archived_at).toBeNull();
+    expect(restored.deactivated_at).toBe(deactivated.deactivated_at);
+
+    const audit = await inScope<{
+      event_type: string;
+      actor_user_id: string | null;
+      payload: Record<string, unknown>;
+    }>(
+      db.app,
+      [SITE_A],
+      `SELECT event_type, actor_user_id, payload
+         FROM audit_log
+        WHERE site_id = $1
+          AND payload ->> 'inspection_schedule_id' = $2
+          AND event_type IN ('inspection_schedule.archived', 'inspection_schedule.restored')
+        ORDER BY seq`,
+      [SITE_A, created.id],
+    );
+
+    expect(audit.map((entry) => entry.event_type)).toEqual([
+      'inspection_schedule.archived',
+      'inspection_schedule.restored',
+    ]);
+    expect(audit.every((entry) => entry.actor_user_id === coordinator.accountId)).toBe(true);
+    expect(audit[0]?.payload).toMatchObject({
+      inspection_schedule_id: created.id,
+      site_id: SITE_A,
+      template_id: template.templateId,
+    });
+    expect(audit[0]?.payload.archived_at).not.toBeNull();
+    expect(audit[1]?.payload.archived_at).toBeNull();
+  });
+
+  it('rechaza archivar una regla activa y reactivar una archivada', async () => {
+    const template = await publishedArchiveTemplate();
+    const created = await stack.inspections.createSchedule(asCoordinator(), {
+      site_id: SITE_A,
+      template_id: template.templateId,
+    });
+
+    await expect(
+      stack.inspections.updateSchedule(asCoordinator(), created.id, { archived: true }),
+    ).rejects.toMatchObject({ code: 'schedule_must_be_deactivated' });
+
+    await stack.inspections.updateSchedule(asCoordinator(), created.id, { deactivated: true });
+    await stack.inspections.updateSchedule(asCoordinator(), created.id, { archived: true });
+
+    await expect(
+      stack.inspections.updateSchedule(asCoordinator(), created.id, { deactivated: false }),
+    ).rejects.toMatchObject({ code: 'schedule_must_be_restored' });
+  });
+
+  it('rechaza restaurar una regla reemplazada', async () => {
+    const template = await publishedArchiveTemplate();
+    const archived = await stack.inspections.createSchedule(asCoordinator(), {
+      site_id: SITE_A,
+      template_id: template.templateId,
+    });
+    await stack.inspections.updateSchedule(asCoordinator(), archived.id, { deactivated: true });
+    await stack.inspections.updateSchedule(asCoordinator(), archived.id, { archived: true });
+    await stack.inspections.createSchedule(asCoordinator(), {
+      site_id: SITE_A,
+      template_id: template.templateId,
+    });
+
+    await expect(
+      stack.inspections.updateSchedule(asCoordinator(), archived.id, { archived: false }),
+    ).rejects.toMatchObject({ code: 'schedule_restore_conflict' });
+  });
+
+  it('serializa dos restauraciones concurrentes del mismo par', async () => {
+    const template = await publishedArchiveTemplate();
+    const first = await stack.inspections.createSchedule(asCoordinator(), {
+      site_id: SITE_A,
+      template_id: template.templateId,
+    });
+    await stack.inspections.updateSchedule(asCoordinator(), first.id, { deactivated: true });
+    await stack.inspections.updateSchedule(asCoordinator(), first.id, { archived: true });
+
+    const second = await stack.inspections.createSchedule(asCoordinator(), {
+      site_id: SITE_A,
+      template_id: template.templateId,
+    });
+    await stack.inspections.updateSchedule(asCoordinator(), second.id, { deactivated: true });
+    await stack.inspections.updateSchedule(asCoordinator(), second.id, { archived: true });
+
+    const results = await Promise.allSettled([
+      stack.inspections.updateSchedule(asCoordinator(), first.id, { archived: false }),
+      stack.inspections.updateSchedule(asCoordinator(), second.id, { archived: false }),
+    ]);
+
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    const rejected = results.find((result) => result.status === 'rejected');
+    expect(rejected).toMatchObject({
+      status: 'rejected',
+      reason: { code: 'schedule_restore_conflict' },
+    });
   });
 });

@@ -13,10 +13,6 @@ import { UploadsService } from './uploads.service';
 @Module({
   controllers: [UploadsController],
   providers: [UploadsService, ObjectStorageService],
-  // `ObjectStorageService` se exporta desde la etapa 7: el reporte de cumplimiento sube
-  // su PDF y firma su descarga por el mismo cliente, con la misma credencial —la que no
-  // lleva `DeleteObject`—. Un segundo cliente sería una segunda credencial que alguien
-  // tendría que acordarse de dejar igual de recortada.
-  exports: [UploadsService, ObjectStorageService],
+  exports: [UploadsService],
 })
 export class UploadsModule {}

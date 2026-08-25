@@ -1,11 +1,13 @@
 import { z } from 'zod';
 import {
   publishedTemplateSchema,
+  publishedTemplateSummarySchema,
   publishedTemplateVersionSchema,
   templateDraftSchema,
   templateDraftSummarySchema,
   type CreateTemplateDraft,
   type PublishedTemplate,
+  type PublishedTemplateSummary,
   type PublishedTemplateVersion,
   type SaveTemplateDraft,
   type TemplateDraft,
@@ -83,9 +85,38 @@ export async function reviseTemplate(templateId: string): Promise<TemplateDraft>
   );
 }
 
+/**
+ * El catálogo publicado TAL COMO SE ADMINISTRA: las retiradas vienen también.
+ *
+ * No es `listTemplates` de `inspections.ts` con un campo de más. Aquella contesta qué se
+ * puede programar y la mira `/scheduling`; esta contesta qué existe, y es la única que
+ * puede mostrar una plantilla retirada — sin ella, retirarla la borraría de la pantalla y
+ * nadie podría volver a activarla.
+ */
+export async function listPublishedTemplates(): Promise<PublishedTemplateSummary[]> {
+  return get('/templates/published', (value) =>
+    z.array(publishedTemplateSummarySchema).parse(value),
+  );
+}
+
+/**
+ * Retirar una plantilla del catálogo, y devolverla.
+ *
+ * Las dos contestan 204 y no la fila: lo que cambia es el listado entero y además lo que
+ * `/scheduling` ofrece, así que la pantalla invalida las dos claves en vez de parchear una
+ * fila con la mitad de lo que pasó.
+ */
+export async function deactivateTemplate(templateId: string): Promise<void> {
+  await send('POST', `/templates/${templateId}/deactivate`, {}, () => undefined);
+}
+
+export async function reactivateTemplate(templateId: string): Promise<void> {
+  await send('POST', `/templates/${templateId}/reactivate`, {}, () => undefined);
+}
+
 /** La lectura de plantillas publicadas también es online, como el resto de este archivo. */
 export async function getPublishedTemplateVersion(id: string): Promise<PublishedTemplateVersion> {
   return get(`/templates/versions/${id}`, (value) => publishedTemplateVersionSchema.parse(value));
 }
 
-export type { TemplateDraft, TemplateDraftSummary };
+export type { PublishedTemplateSummary, TemplateDraft, TemplateDraftSummary };

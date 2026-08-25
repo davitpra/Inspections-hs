@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { periodMonthsSchema, periodStatusSchema } from './compliance.js';
+import { periodMonthsSchema, periodStatusSchema } from './periods.js';
 
 /**
  * Requisitos §4 — InspecciónProgramada: la obligación de inspeccionar.
@@ -17,12 +17,10 @@ import { periodMonthsSchema, periodStatusSchema } from './compliance.js';
  * publicar una nueva no mueve una inspección abierta. Un `PATCH` que la aceptara sería
  * una promesa que el motor rechaza con 42501.
  *
- * **El `status` y la FRECUENCIA se importan de `compliance.js` y no se redefinen acá.** Los cuatro
+ * **El `status` y la FRECUENCIA se importan de `periods.js` y no se redefinen acá.** Los cuatro
  * estados son uno solo en todo el sistema: si el listado tuviera su propio enum,
- * tendríamos dos definiciones de lo mismo y la que lleva digest sería la que envejece.
- * La dirección del import es la única acíclica —`compliance.ts` no conoce este archivo—
- * y conviene que siga así. `periodMonthsSchema` llegó en 0029 por el mismo camino y por
- * la misma razón: viaja dentro del payload que se hashea.
+ * tendríamos dos definiciones de lo mismo. `periodMonthsSchema` llegó en 0029 y sigue
+ * siendo el contrato neutral de Scheduling, Inspections y Notifications.
  */
 
 const reasonSchema = z.string().trim().min(1).max(500);
@@ -54,6 +52,7 @@ export const inspectionScheduleSchema = z.strictObject({
   /** Desde cuándo la regla debe períodos — el otro extremo de la ventana que cierra `deactivated_at`. */
   created_at: z.iso.datetime({ offset: true }),
   deactivated_at: z.iso.datetime({ offset: true }).nullable(),
+  archived_at: z.iso.datetime({ offset: true }).nullable(),
 });
 
 export type InspectionSchedule = z.infer<typeof inspectionScheduleSchema>;
@@ -88,12 +87,9 @@ export type CreateInspectionSchedule = z.infer<typeof createInspectionScheduleSc
  * planta ni de plantilla, se desactiva y se crea otra.
  *
  * **`frequency_months` y `anchor_month` tampoco están, y ahí el motivo es más fuerte que
- * la coherencia.** El CTE `owed` del reporte de cumplimiento no cuenta las inspecciones
- * que existen: GENERA los períodos que el sitio DEBÍA a partir de la regla. Cambiarle la
- * frecuencia a una regla viva no cambiaría el futuro, reescribiría el pasado — un año que
- * se reportó como «12 de 12» pasaría a leerse «4 de 12» sin que nadie tocara una
- * inspección. Desactivar y crear otra deja las dos ventanas contiguas, que es lo que el
- * reporte necesita para decir la verdad sobre los dos tramos.
+ * la coherencia.** Una regla viva no puede reescribir el pasado: cambiar su frecuencia
+ * alteraría los períodos ya abiertos. Desactivar y crear otra deja las dos ventanas
+ * contiguas y conserva la historia operativa de ambos tramos.
  *
  * El motor lo hace cumplir por partida doble (0029): fuera del `GRANT UPDATE` y dentro
  * del array `frozen` del trigger de guarda.
@@ -102,10 +98,14 @@ export const updateInspectionScheduleSchema = z
   .strictObject({
     default_inspector_id: z.uuid().nullable().optional(),
     deactivated: z.boolean().optional(),
+    archived: z.boolean().optional(),
   })
   .refine(
-    (value) => value.default_inspector_id !== undefined || value.deactivated !== undefined,
-    'un update tiene que cambiar el inspector por defecto, el estado, o los dos',
+    (value) =>
+      value.default_inspector_id !== undefined ||
+      value.deactivated !== undefined ||
+      value.archived !== undefined,
+    'un update tiene que cambiar el inspector por defecto, el estado operativo o el archivo',
   );
 
 export type UpdateInspectionSchedule = z.infer<typeof updateInspectionScheduleSchema>;
@@ -151,8 +151,7 @@ export const scheduledInspectionSchema = z.strictObject({
   cancellation_reason: z.string().nullable(),
   /**
    * El estado del período, derivado por el motor y nunca almacenado. Acompaña a la
-   * inspección donde sea que se liste — no solo dentro del reporte de cobertura, que
-   * exige un sitio y un rango de meses enteros.
+   * inspección donde sea que se liste.
    */
   status: periodStatusSchema,
   /**
@@ -174,8 +173,7 @@ export const scheduledInspectionSchema = z.strictObject({
    * regulador: una inspección caminada y firmada el 29 de marzo que sincroniza el 2 de
    * abril se fecha en marzo, que es cuando pasó.
    *
-   * Es el mismo instante que `compliance.sql.ts` llama `occurred_at` y que heredan los
-   * hallazgos derivados del envío. Que sea un reloj de dispositivo se dice acá a propósito:
+   * Es el instante operativo del envío. Que sea un reloj de dispositivo se dice acá a propósito:
    * quien lea `completed_at` sin saberlo va a suponer que es del servidor.
    */
   completed_at: z.iso.datetime({ offset: true }).nullable(),

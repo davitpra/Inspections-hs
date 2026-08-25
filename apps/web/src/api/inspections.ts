@@ -15,6 +15,7 @@ import {
   type SubmittedInspection,
   type TemplateOption,
   type TemplateVersionPackage,
+  type UpdateInspectionSchedule,
 } from '@hs/contracts';
 import { z } from 'zod';
 
@@ -77,12 +78,12 @@ export async function createSchedule(
 }
 
 /**
- * Lo único que se puede cambiar de una regla: el inspector por defecto, y si sigue
- * abriendo períodos. No se borra nunca — desactivar es el verbo.
+ * Cambia el inspector, el estado operativo o su presencia en la tabla administrativa.
+ * No se borra nunca: desactivar y archivar son decisiones distintas.
  */
 export async function updateSchedule(
   id: string,
-  body: { default_inspector_id?: string | null; deactivated?: boolean },
+  body: UpdateInspectionSchedule,
 ): Promise<InspectionSchedule> {
   return send('PATCH', `/inspection-schedules/${id}`, body, (value) =>
     inspectionScheduleSchema.parse(value),

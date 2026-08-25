@@ -1,11 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 
-import { listTemplates } from "../../api/inspections";
 import { queryKeys } from "../../api/query-keys";
-import { listTemplateDrafts } from "../../api/templates";
+import { listPublishedTemplates, listTemplateDrafts } from "../../api/templates";
 import { DocumentIcon, LockIcon } from "../../components/icons";
 import { useAppSession } from "../../app/session-context";
-import { canAuthorTemplates } from "../../permissions/session";
+import { canAuthorTemplates, canDeactivateTemplates } from "../../permissions/session";
 import { PublishedTemplates } from "./PublishedTemplates";
 import { TemplateCounts } from "./TemplateCounts";
 import { TemplateDrafts } from "./TemplateDrafts";
@@ -41,6 +40,7 @@ import { TemplateDrafts } from "./TemplateDrafts";
 export function TemplatesRoute(): React.JSX.Element {
   const { account } = useAppSession();
   const canAuthor = canAuthorTemplates(account);
+  const canManage = canDeactivateTemplates(account);
 
   /**
    * Las dos consultas de la pantalla, ACÁ: cada una alimenta a la vez su tarjeta y su
@@ -58,9 +58,15 @@ export function TemplatesRoute(): React.JSX.Element {
     enabled: canAuthor,
   });
 
+  /**
+   * El catálogo de la consola —retiradas incluidas—, que NO es `queryKeys.templates()`.
+   * Aquella clave la comparten los cinco puntos de `/scheduling` y responde qué se puede
+   * programar; si esta pantalla la reusara, mostrar una plantilla retirada acá la haría
+   * aparecer allá.
+   */
   const published = useQuery({
-    queryKey: queryKeys.templates(),
-    queryFn: listTemplates,
+    queryKey: queryKeys.publishedTemplates(),
+    queryFn: listPublishedTemplates,
     retry: false,
     enabled: canAuthor,
   });
@@ -103,6 +109,7 @@ export function TemplatesRoute(): React.JSX.Element {
             templates={published.data ?? []}
             isLoading={published.isLoading}
             isError={published.isError}
+            canManage={canManage}
           />
           <TemplateDrafts />
         </>

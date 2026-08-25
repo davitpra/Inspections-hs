@@ -10,6 +10,9 @@ export type SchedulingErrorCode =
   | 'inspection_not_found'
   | 'inspector_invalid'
   | 'schedule_already_active'
+  | 'schedule_must_be_deactivated'
+  | 'schedule_must_be_restored'
+  | 'schedule_restore_conflict'
   | 'template_not_publishable'
   | 'version_not_advanceable';
 
@@ -53,6 +56,30 @@ export const scheduleAlreadyActive = (siteId: string, templateId: string): Sched
   new SchedulingException(
     'schedule_already_active',
     `Site ${siteId} already has an active schedule rule for template ${templateId}`,
+    HttpStatus.CONFLICT,
+  );
+
+export const scheduleMustBeDeactivated = (): SchedulingException =>
+  new SchedulingException(
+    'schedule_must_be_deactivated',
+    'Deactivate this inspection requirement in a separate change before archiving it',
+    HttpStatus.CONFLICT,
+  );
+
+export const scheduleMustBeRestored = (): SchedulingException =>
+  new SchedulingException(
+    'schedule_must_be_restored',
+    'Restore this inspection requirement before reactivating it',
+    HttpStatus.CONFLICT,
+  );
+
+export const scheduleRestoreConflict = (
+  siteId: string,
+  templateId: string,
+): SchedulingException =>
+  new SchedulingException(
+    'schedule_restore_conflict',
+    `Another non-archived inspection requirement exists for site ${siteId} and template ${templateId}`,
     HttpStatus.CONFLICT,
   );
 

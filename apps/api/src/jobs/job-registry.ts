@@ -34,16 +34,6 @@ export interface JobPayloads {
    */
   'actions.escalate-overdue': { now?: string };
 
-  /**
-   * Renderiza el PDF de un reporte de cumplimiento ya congelado (etapa 7).
-   *
-   * **EL PRIMER TRABAJO QUE DISPARA UNA PERSONA Y NO UN CRON**, y por eso su payload no
-   * lleva `now`: no hay nada que resolver contra el reloj, hay un documento concreto que
-   * procesar. Lo que viaja es su id, y el reporte —con su payload y su digest— ya está
-   * guardado antes de que este trabajo exista. Un Chromium que falla es una fila
-   * `failed` y un reintento, no un reporte perdido.
-   */
-  'reporting.render-compliance-pdf': { report_id: string };
 }
 
 export type JobName = keyof JobPayloads;
@@ -88,13 +78,3 @@ export const ESCALATE_OVERDUE_CRON = '0 4 * * *';
  * haya una planta fuera de Ontario, ese change la agrega.
  */
 export const SITE_TIME_ZONE = 'America/Toronto';
-
-/**
- * El nombre de la cola del render, escrito una sola vez.
- *
- * SIN CRON, a diferencia de los otros dos. Un reporte de cumplimiento lo pide una
- * persona cuando lo necesita; programar la generación por calendario produciría
- * documentos que nadie pidió, cada uno con su entrada en la cadena de auditoría diciendo
- * que se generó evidencia regulatoria.
- */
-export const RENDER_COMPLIANCE_PDF_JOB = 'reporting.render-compliance-pdf' satisfies JobName;

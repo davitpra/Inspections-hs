@@ -1,16 +1,19 @@
-import type { TemplateDraftSummary, TemplateOption } from '@hs/contracts';
+import type { PublishedTemplateSummary, TemplateDraftSummary } from '@hs/contracts';
 import { describe, expect, it } from 'vitest';
 
 import {
   draftKindLabel,
+  isTemplateActive,
   publishedCountLabel,
   publishedVersionLabel,
   sortPublishedTemplates,
+  templateStatusClass,
+  templateStatusLabel,
 } from './presentation';
 
 const VERSION_ID = '22222222-2222-4222-8222-222222222222';
 
-function template(name: string): TemplateOption {
+function template(name: string, deactivatedAt: string | null = null): PublishedTemplateSummary {
   return {
     id: name === 'Alpha' ? '11111111-1111-4111-8111-111111111111' : '33333333-3333-4333-8333-333333333333',
     key: name.toLowerCase(),
@@ -18,6 +21,7 @@ function template(name: string): TemplateOption {
     latest_version: 2,
     latest_version_id: VERSION_ID,
     latest_published_at: '2026-08-22 10:00:00+00',
+    deactivated_at: deactivatedAt,
   };
 }
 
@@ -36,6 +40,37 @@ describe('plantillas publicadas', () => {
   it('etiqueta el conteo en singular y plural', () => {
     expect(publishedCountLabel(1)).toBe('1 template');
     expect(publishedCountLabel(2)).toBe('2 templates');
+  });
+
+  /**
+   * Una retirada NO se va al fondo ni se filtra: se la busca por su nombre igual que a
+   * cualquier otra, y más a menudo, porque se la busca para reactivarla.
+   */
+  it('ordena por nombre sin separar las retiradas', () => {
+    expect(
+      sortPublishedTemplates([
+        template('Zeta'),
+        template('Alpha', '2026-08-23T10:00:00.000Z'),
+      ]).map((item) => item.name),
+    ).toEqual(['Alpha', 'Zeta']);
+  });
+
+  it('distingue la activa de la retirada', () => {
+    expect(isTemplateActive(template('Alpha'))).toBe(true);
+    expect(isTemplateActive(template('Alpha', '2026-08-23T10:00:00.000Z'))).toBe(false);
+  });
+
+  it('dice el estado en palabras', () => {
+    expect(templateStatusLabel(template('Alpha'))).toBe('Active');
+    expect(templateStatusLabel(template('Alpha', '2026-08-23T10:00:00.000Z'))).toBe('Deactivated');
+  });
+
+  /** Las mismas clases que la tabla de requisitos: el mismo hecho no se pinta de dos formas. */
+  it('pinta el pill del estado', () => {
+    expect(templateStatusClass(template('Alpha'))).toBe('status-pill status-pill--open');
+    expect(templateStatusClass(template('Alpha', '2026-08-23T10:00:00.000Z'))).toBe(
+      'status-pill status-pill--cancelled',
+    );
   });
 });
 

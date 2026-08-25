@@ -13,8 +13,7 @@ const { get, post, send } = await import('./request');
  * `SessionClient.request` no pone `content-type` —es transporte, no sabe qué viaja— y
  * `fetch` con un body string rotula `text/plain`, que Nest no parsea: el controlador
  * recibe un objeto vacío y su Zod contesta 400 con todos los campos en `undefined`. Eso
- * es exactamente lo que le pasaba a `POST /reports/compliance`, la única llamada escrita
- * a mano fuera de un helper.
+ * Esto protege todas las escrituras de la API, incluso cuando el controlador espera JSON.
  *
  * Ningún test de ruta puede ver esto: todos mockean el módulo de `api/` entero. Tiene que
  * probarse acá, contra el cliente de sesión, o no se prueba en ningún lado.
@@ -28,11 +27,11 @@ describe('el cliente HTTP', () => {
   const parse = (value: unknown): { id: string } => z.object({ id: z.string() }).parse(value);
 
   it('manda content-type: application/json en toda escritura', async () => {
-    await send('POST', '/reports/compliance', { site_id: 'a' }, parse);
+    await send('POST', '/actions/1/transitions', { to: 'closed' }, parse);
 
-    expect(request).toHaveBeenCalledWith('/reports/compliance', {
+    expect(request).toHaveBeenCalledWith('/actions/1/transitions', {
       method: 'POST',
-      body: JSON.stringify({ site_id: 'a' }),
+      body: JSON.stringify({ to: 'closed' }),
       headers: { 'content-type': 'application/json' },
     });
   });

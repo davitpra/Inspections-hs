@@ -1,7 +1,7 @@
 # hs-platform
 
 Plataforma de higiene y seguridad para dos plantas de Ontario: inspecciones mensuales
-del JHSC, hallazgos, acciones correctivas, incidentes y el reporte de cumplimiento.
+del JHSC, hallazgos, acciones correctivas, incidentes y recurrencia de hallazgos.
 
 - `apps/api` — NestJS + Postgres (RLS por planta, ADR-002) + pg-boss (ADR-005).
 - `apps/web` — PWA offline-first: React, TanStack Router/Query, Dexie.
@@ -129,7 +129,7 @@ misma pantalla.
 
 `demo:data` deja el entorno *usable* y ahí se detiene. Con eso `/` tiene una fila y el
 resto de la aplicación está en blanco: acciones correctivas, incidentes, recurrencia y
-cumplimiento son consecuencias de meses de trabajo que un entorno recién levantado no
+ recurrencia son consecuencias de meses de trabajo que un entorno recién levantado no
 tuvo.
 
 ```bash
@@ -140,7 +140,7 @@ Siembra cinco meses de historial en St. Thomas —tres inspecciones enviadas, un
 y un período omitido—, y con eso: hallazgos derivados y clasificados, una serie recurrente
 de tres ocurrencias, un hallazgo de entrada manual, acciones correctivas en los cuatro
 estados más una vencida, tres incidentes (cerrado, en investigación y recién reportado) y
-un reporte de cumplimiento congelado con su PDF.
+recurrencia y acciones correctivas en distintos estados.
 
 **Todo pasa por la API, con sesión**, salvo dos cosas que ningún endpoint puede hacer y no
 debería poder: las inspecciones programadas de los meses pasados —el planificador abre el
@@ -193,7 +193,7 @@ espera, y la credencial la revoca el coordinador desde la aplicación
 | `pnpm db:jobs:install` | Instala/actualiza el esquema `pgboss`. Paso de despliegue, no de arranque. |
 | `pnpm db:seed` | Datos de referencia idempotentes. Sin credenciales. |
 | `pnpm demo:data` | Entorno de demo local usable. Solo a mano. |
-| `pnpm demo:content` | Historial de demo: hallazgos, acciones, incidentes, recurrencia y cumplimiento. |
+| `pnpm demo:content` | Historial de demo: hallazgos, acciones, incidentes y recurrencia. |
 | `pnpm auth:create-account` | Crea la cuenta de una persona del roster. El único `auth:*` que corre en producción. |
 | `pnpm auth:bootstrap [userId]` | Emite la invitación de una cuenta sin credencial. |
 | `pnpm auth:reset-password <userId\|email>` | Contraseña nueva, o `--unlock` para destrabar. Solo fuera de producción. |

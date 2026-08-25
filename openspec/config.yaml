@@ -8,7 +8,7 @@ context: |
 
   Stack: pnpm workspaces (apps/web Vite+React+TanStack, apps/api NestJS,
   packages/forms, packages/contracts). Postgres + Drizzle + RLS. pg-boss.
-  Dexie + Serwist offline. Zod compartido. S3-compatible + Playwright PDF.
+  Dexie + Serwist offline. Zod compartido. S3-compatible para evidencia.
 
   Invariantes que ningún change puede violar:
   - Inmutabilidad forzada por el motor (REVOKE UPDATE/DELETE + triggers),

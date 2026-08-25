@@ -14,7 +14,7 @@ import { DEFAULT_PASSWORD, INSPECTOR, ST_THOMAS, currentPeriodStart } from './de
  * `demo:data` deja el entorno *usable* —una cuenta que entra y la inspección del período
  * corriente asignada— y ahí se detiene a propósito. Con eso `/` tiene una fila y el resto
  * de la aplicación está en blanco: acciones correctivas, incidentes, recurrencia y
- * cumplimiento son todos consecuencias de meses de trabajo que un entorno recién
+  * recurrencia son consecuencias de meses de trabajo que un entorno recién
  * levantado no tuvo. Esto los produce.
  *
  * TODO PASA POR LA API, CON SESIÓN, SALVO DOS EXCEPCIONES DECLARADAS (abajo). No es
@@ -54,13 +54,10 @@ const COORDINATOR_EMAIL = 'coordinator@example.com';
  * QUÉ PASÓ CADA MES, contado desde el corriente hacia atrás.
  *
  * Cinco meses hacia atrás y no más: alcanzan para que la recurrencia tenga una serie de
- * tres ocurrencias y para que el cumplimiento tenga los tres estados, y entran enteros en
- * el año en curso —que es el rango que `ComplianceRoute` pide por defecto—.
+ * tres ocurrencias y cubren los estados operativos de la programación.
  *
- * La forma de este arreglo es el contenido de la pantalla de cumplimiento: `submitted`
- * es un período cumplido, `cancelled` es uno cancelado con motivo y `missed` es uno que
- * nadie hizo y ya cerró. Los tres estados existen en `COMPLIANCE_PERIODS_SQL` y ninguno
- * se puede ver si el entorno solo tiene el mes corriente.
+ * `submitted` es un período cumplido, `cancelled` es uno cancelado con motivo y `missed`
+ * es uno que nadie hizo y ya cerró. Así la consola de programación tiene estados variados.
  *
  * `negatives` son las respuestas «no» del envío, que es de donde salen los hallazgos:
  * la ingesta los deriva sola (`deriveFindings`), no se crean acá.
@@ -957,54 +954,6 @@ async function seedIncidents(token, references) {
   return created;
 }
 
-// ---------------------------------------------------------------------------
-// Cumplimiento
-
-/**
- * El reporte congelado del año en curso hasta el mes pasado.
- *
- * El rango termina en el último día del mes ANTERIOR y no en el corriente: un período que
- * todavía no cerró no es un período omitido, y `complianceQuerySchema` exige además que
- * `range_end` sea el último día de un mes.
- *
- * Responde antes de que el PDF exista —la asimetría del change de la etapa 7—: si el
- * render falla porque falta Playwright, el reporte y su digest ya están y la pantalla los
- * muestra igual.
- */
-async function ensureComplianceReport(token, currentPeriod) {
-  const [year, month] = currentPeriod.split('-').map(Number);
-  const rangeStart = `${year}-01-01`;
-  const previousEnd = new Date(Date.UTC(year, month - 1, 0));
-
-  if (previousEnd.getUTCFullYear() !== year) return null;
-
-  const rangeEnd = previousEnd.toISOString().slice(0, 10);
-  const reports = await request(
-    'GET',
-    `/reports/compliance/list?site_id=${encodeURIComponent(ST_THOMAS)}`,
-    { token },
-  );
-
-  // Los diez primeros caracteres y no la cadena entera: el rango del contrato es
-  // `YYYY-MM-DD`, y comparar contra lo que devuelva el servidor sin recortar haría que
-  // este comando dependa de una normalización que no le corresponde vigilar.
-  const already = reports.find(
-    (report) =>
-      report.range_start.slice(0, 10) === rangeStart && report.range_end.slice(0, 10) === rangeEnd,
-  );
-
-  if (already) return { rangeStart, rangeEnd, created: false };
-
-  await request('POST', '/reports/compliance', {
-    token,
-    body: { site_id: ST_THOMAS, range_start: rangeStart, range_end: rangeEnd },
-  });
-
-  return { rangeStart, rangeEnd, created: true };
-}
-
-// ---------------------------------------------------------------------------
-
 async function main() {
   if (process.env.NODE_ENV === 'production') {
     throw new Error('demo:content no corre con NODE_ENV=production. Siembra datos inventados.');
@@ -1106,18 +1055,6 @@ async function main() {
         `${incidents.length > 0 ? ` (${incidents.map((incident) => incident.state).join(', ')})` : ''}.`,
     );
 
-    // 5. El reporte de cumplimiento.
-    const compliance = await ensureComplianceReport(tokens.coordinator, currentPeriod);
-
-    if (compliance === null) {
-      log('Cumplimiento: sin rango cerrado en el año en curso; no se generó reporte.');
-    } else {
-      log(
-        `Cumplimiento: reporte ${compliance.created ? 'generado' : 'ya existente'} ` +
-          `${compliance.rangeStart} → ${compliance.rangeEnd}.`,
-      );
-    }
-
     process.stdout.write(
       [
         '',
@@ -1125,7 +1062,7 @@ async function main() {
         '',
         `  ${COORDINATOR_EMAIL} / ${coordinatorPassword}`,
         '    hs_coordinator. Ve las dos plantas y TODAS las pantallas salvo el pendiente:',
-        '    acciones, recurrencia, cumplimiento, incidentes y la bandeja.',
+         '    acciones, recurrencia, incidentes y la bandeja.',
         '',
         `  ${INSPECTOR.email} / ${password}`,
         '    jhsc_member. Es el único rol que ejecuta inspecciones: `/` tiene la del mes',

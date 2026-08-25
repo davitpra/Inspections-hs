@@ -1,4 +1,4 @@
-import type { TemplateDraftSummary, TemplateOption } from '@hs/contracts';
+import type { PublishedTemplateSummary, TemplateDraftSummary } from '@hs/contracts';
 
 /**
  * La lógica pura del listado de borradores.
@@ -56,11 +56,46 @@ export function draftKindLabel(draft: TemplateDraftSummary): string {
     : `Revision · version ${draft.next_version}`;
 }
 
-/** Las publicadas son referencia: se buscan por nombre, no por la fecha de publicación. */
+/**
+ * Las publicadas son referencia: se buscan por nombre, no por la fecha de publicación.
+ *
+ * Las retiradas NO se van al fondo ni se filtran. Esta tabla es el catálogo entero y una
+ * plantilla retirada se busca por su nombre igual que cualquier otra —de hecho, más: se la
+ * busca justamente para volver a activarla—. Lo que la distingue es la columna de estado.
+ */
 export function sortPublishedTemplates(
-  templates: readonly TemplateOption[],
-): TemplateOption[] {
+  templates: readonly PublishedTemplateSummary[],
+): PublishedTemplateSummary[] {
   return [...templates].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Si la plantilla sigue en circulación.
+ *
+ * Una función y no `template.deactivated_at === null` escrito en cada lugar: la fila lo
+ * pregunta tres veces —el estado, el menú y el diálogo— y las tres tienen que estar de
+ * acuerdo sobre qué significa la columna.
+ */
+export function isTemplateActive(template: PublishedTemplateSummary): boolean {
+  return template.deactivated_at === null;
+}
+
+/** El estado en palabras, que es como se lee una tabla. */
+export function templateStatusLabel(template: PublishedTemplateSummary): string {
+  return isTemplateActive(template) ? 'Active' : 'Deactivated';
+}
+
+/**
+ * El pill del estado, con las mismas clases que la tabla de requisitos de `/scheduling`.
+ *
+ * Se reusa `status-pill--cancelled` para lo retirado y `--open` para lo vivo en vez de
+ * estrenar un par de clases: el coordinador se mueve entre las dos pantallas, y dos formas
+ * distintas de pintar el mismo hecho se leen como dos hechos distintos.
+ */
+export function templateStatusClass(template: PublishedTemplateSummary): string {
+  return isTemplateActive(template)
+    ? 'status-pill status-pill--open'
+    : 'status-pill status-pill--cancelled';
 }
 
 /** La versión es el dato que distingue el documento congelado que se está nombrando. */

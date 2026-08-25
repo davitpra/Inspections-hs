@@ -5,6 +5,7 @@ import {
   inspectorOptionSchema,
   pendingInspectionSchema,
   scheduledInspectionSchema,
+  updateInspectionScheduleSchema,
 } from './inspections.js';
 import { templateOptionSchema } from './templates.js';
 
@@ -125,6 +126,7 @@ describe('inspectionScheduleSchema', () => {
       default_inspector_name: 'Dana Okafor',
       created_at: '2026-01-01T00:00:00.000Z',
       deactivated_at: null,
+      archived_at: null,
     });
 
     expect(result.success).toBe(true);
@@ -143,10 +145,66 @@ describe('inspectionScheduleSchema', () => {
       default_inspector_name: null,
       created_at: '2026-01-01T00:00:00.000Z',
       deactivated_at: null,
+      archived_at: null,
     });
 
     expect(result.success).toBe(true);
   });
+
+  it('acepta una regla desactivada y archivada', () => {
+    const result = inspectionScheduleSchema.safeParse({
+      id: SCHEDULED_ID,
+      site_id: SITE_ID,
+      template_id: TEMPLATE_ID,
+      template_name: 'Monthly general workplace inspection',
+      frequency_months: 1,
+      anchor_month: 1,
+      default_inspector_id: null,
+      default_inspector_name: null,
+      created_at: '2026-01-01T00:00:00.000Z',
+      deactivated_at: '2026-06-01T00:00:00.000Z',
+      archived_at: '2026-07-01T00:00:00.000Z',
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('exige archived_at aunque la regla no esté archivada', () => {
+    const result = inspectionScheduleSchema.safeParse({
+      id: SCHEDULED_ID,
+      site_id: SITE_ID,
+      template_id: TEMPLATE_ID,
+      template_name: 'Monthly general workplace inspection',
+      frequency_months: 1,
+      anchor_month: 1,
+      default_inspector_id: null,
+      default_inspector_name: null,
+      created_at: '2026-01-01T00:00:00.000Z',
+      deactivated_at: null,
+    });
+
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('updateInspectionScheduleSchema', () => {
+  it.each([{ archived: true }, { archived: false }])('acepta archivo y restauración', (body) => {
+    expect(updateInspectionScheduleSchema.safeParse(body).success).toBe(true);
+  });
+
+  it('acepta combinar archivo con otro cambio permitido', () => {
+    expect(
+      updateInspectionScheduleSchema.safeParse({ archived: true, default_inspector_id: null })
+        .success,
+    ).toBe(true);
+  });
+
+  it.each([{}, { archived: 'yes' }, { archived: true, site_id: SITE_ID }])(
+    'rechaza updates sin cambios, con tipos inválidos o campos desconocidos',
+    (body) => {
+      expect(updateInspectionScheduleSchema.safeParse(body).success).toBe(false);
+    },
+  );
 });
 
 describe('inspectorOptionSchema', () => {

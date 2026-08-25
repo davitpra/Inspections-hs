@@ -1,8 +1,11 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Put } from '@nestjs/common';
 import {
   createTemplateDraftSchema,
+  deactivateTemplateSchema,
   type PublishedTemplate,
+  type PublishedTemplateSummary,
   type PublishedTemplateVersion,
+  reactivateTemplateSchema,
   saveTemplateDraftSchema,
   type TemplateDraft,
   type TemplateDraftSummary,
@@ -20,6 +23,11 @@ import { TemplatesService } from './templates.service';
  * `GET /templates` es de siempre y responde lo de siempre —las plantillas PUBLICADAS, para
  * que el coordinador elija una al programar—, y lo puede llamar cualquiera. No se le agregó
  * ninguna comprobación de rol: es lo que `/scheduling` consume, y gatearlo lo rompería.
+ *
+ * `GET /templates/published` es OTRA pregunta sobre las mismas filas —el catálogo tal como
+ * se ADMINISTRA, retiradas incluidas— y por eso es del coordinador. Junto con
+ * `POST :id/deactivate` y `POST :id/reactivate` forman la consola: retirar una plantilla la
+ * saca de lo que se puede programar sin borrar nada y sin tocar lo ya programado.
  *
  * `/templates/drafts` es otra cosa, y por eso son rutas separadas y no un parámetro de la
  * misma: un borrador no es una plantilla que todavía no se puede elegir, es un documento
@@ -41,6 +49,21 @@ export class TemplatesController {
   @Get()
   async list(@CurrentSession() session: SessionContext): Promise<TemplateOption[]> {
     return this.templates.list(session);
+  }
+
+  /**
+   * El catálogo COMPLETO, retiradas incluidas. Es del coordinador, como los borradores.
+   *
+   * Ruta aparte y no un parámetro de `GET /templates` a propósito: aquel listado es lo que
+   * se puede programar y lo consume `/scheduling`; este es lo que se administra. Una sola
+   * ruta con una bandera dejaría que quien la llama decida cuál de las dos preguntas está
+   * haciendo, y la de programar no admite otra respuesta.
+   */
+  @Get('published')
+  async listPublished(
+    @CurrentSession() session: SessionContext,
+  ): Promise<PublishedTemplateSummary[]> {
+    return this.templates.listPublished(session);
   }
 
   @Get('versions/:versionId')
@@ -67,6 +90,44 @@ export class TemplatesController {
     @Param('templateId') templateId: string,
   ): Promise<TemplateDraft> {
     return this.templates.reviseTemplate(session, z.uuid().parse(templateId));
+  }
+
+  /**
+   * Retirar y volver a poner una plantilla en el catálogo.
+   *
+   * Dos rutas y no un `PATCH` con una bandera: son dos decisiones distintas —una saca del
+   * catálogo, la otra devuelve— y el verbo de la ruta lo dice sin que haya que leer el
+   * cuerpo. Es el mismo par que `POST /sites/:id/deactivate` y `/reactivate`.
+   *
+   * El cuerpo se valida contra un objeto ESTRICTO VACÍO: la fecha la pone el motor con
+   * `now()`, y aceptar una del cliente sería aceptar una baja fechada en cualquier día.
+   *
+   * `204` y no la fila resultante: el estado que la pantalla necesita después es el listado
+   * entero —también cambia lo que ofrece `/scheduling`—, así que devolver una fila suelta
+   * invitaría a parchear la caché con la mitad de lo que cambió.
+   */
+  @Post(':templateId/deactivate')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deactivate(
+    @CurrentSession() session: SessionContext,
+    @Param('templateId') templateId: string,
+    @Body() body: unknown,
+  ): Promise<void> {
+    deactivateTemplateSchema.parse(body ?? {});
+
+    return this.templates.deactivate(session, z.uuid().parse(templateId));
+  }
+
+  @Post(':templateId/reactivate')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async reactivate(
+    @CurrentSession() session: SessionContext,
+    @Param('templateId') templateId: string,
+    @Body() body: unknown,
+  ): Promise<void> {
+    reactivateTemplateSchema.parse(body ?? {});
+
+    return this.templates.reactivate(session, z.uuid().parse(templateId));
   }
 
   @Get('drafts')

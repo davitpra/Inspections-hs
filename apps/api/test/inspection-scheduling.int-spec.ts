@@ -38,6 +38,9 @@ let templateA: string;
 let templateB: string;
 let versionA1: string;
 let versionB1: string;
+let archiveTemplateA: string;
+let archiveTemplateB: string;
+let archiveTemplateC: string;
 
 function documentFor(itemKey: string): TemplateDocument {
   return {
@@ -68,6 +71,9 @@ beforeAll(async () => {
 
   templateA = await createTemplate(db.migrator, 'scheduling-a');
   templateB = await createTemplate(db.migrator, 'scheduling-b');
+  archiveTemplateA = await createTemplate(db.migrator, 'scheduling-archive-a');
+  archiveTemplateB = await createTemplate(db.migrator, 'scheduling-archive-b');
+  archiveTemplateC = await createTemplate(db.migrator, 'scheduling-archive-c');
 
   await registerItems(db.migrator, templateA, ['a.guard']);
   await registerItems(db.migrator, templateB, ['b.guard']);
@@ -401,6 +407,62 @@ describe('lo que ninguna de las tres tablas admite', () => {
     ]);
 
     await expect(createSchedule(db.app, SITE_B, templateA)).resolves.toEqual(expect.any(String));
+  });
+});
+
+describe('las barreras del archivo de requisitos', () => {
+  it('rechaza archivar una regla activa por CHECK', async () => {
+    const id = await createSchedule(db.app, SITE_A, archiveTemplateA);
+
+    await expect(
+      inScope(db.app, [SITE_A], 'UPDATE inspection_schedule SET archived_at = now() WHERE id = $1', [
+        id,
+      ]),
+    ).rejects.toSatisfy((error) => sqlstate(error) === CHECK_VIOLATION);
+  });
+
+  it('permite archivar y restaurar solo la columna concedida', async () => {
+    const id = await createSchedule(db.app, SITE_B, archiveTemplateB);
+    await inScope(
+      db.app,
+      [SITE_B],
+      'UPDATE inspection_schedule SET deactivated_at = now(), archived_at = now() WHERE id = $1',
+      [id],
+    );
+
+    const archived = await inScope<{ archived_at: Date | null }>(
+      db.app,
+      [SITE_B],
+      'SELECT archived_at FROM inspection_schedule WHERE id = $1',
+      [id],
+    );
+    expect(one(archived).archived_at).not.toBeNull();
+
+    await inScope(db.app, [SITE_B], 'UPDATE inspection_schedule SET archived_at = NULL WHERE id = $1', [
+      id,
+    ]);
+    const restored = await inScope<{ archived_at: Date | null }>(
+      db.app,
+      [SITE_B],
+      'SELECT archived_at FROM inspection_schedule WHERE id = $1',
+      [id],
+    );
+    expect(one(restored).archived_at).toBeNull();
+  });
+
+  it('mantiene el archivo aislado por RLS', async () => {
+    const id = await createSchedule(db.app, SITE_A, archiveTemplateC);
+    await inScope(db.app, [SITE_A], 'UPDATE inspection_schedule SET deactivated_at = now() WHERE id = $1', [
+      id,
+    ]);
+
+    const updated = await inScope(
+      db.app,
+      [SITE_B],
+      'UPDATE inspection_schedule SET archived_at = now() WHERE id = $1 RETURNING id',
+      [id],
+    );
+    expect(updated).toHaveLength(0);
   });
 });
 

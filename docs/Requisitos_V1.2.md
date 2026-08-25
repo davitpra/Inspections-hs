@@ -78,7 +78,6 @@ amplias y demasiado caras para la operación.
 | Métrica                                         | Objetivo                     | Cómo se mide                                                    |
 | ----------------------------------------------- | ---------------------------- | --------------------------------------------------------------- |
 | Inspecciones perdidas por conectividad          | **0** en el primer trimestre | Envíos con fallo permanente en el outbox / envíos totales       |
-| Cobertura de períodos                           | **24 de 24** (12 × 2 sitios) | Reporte de cumplimiento por sitio (R5)                          |
 | Usuarios con acceso fuera de su alcance         | **0**                        | Auditoría trimestral de roles vs. sitio de operación            |
 | Incidentes bloqueados por roster desactualizado | **0**                        | Reportes abandonados porque la persona no estaba en el selector |
 | Tiempo de actualización del roster completo     | **≤ 15 minutos**             | Cronometrado en la importación de CSV                           |
@@ -190,11 +189,6 @@ perfil**, clasifica el evento, y describe qué pasó. Registra la categoría de 
 El sistema muestra los relojes regulatorios que aplican y notifica al coordinador de HS.
 **El sistema no envía nada al MLITSD ni al WSIB.** La responsabilidad legal es de una persona.
 
-### R5 — Cumplimiento ante el MLITSD
-
-El coordinador consulta, por sitio, la lista de períodos con inspección completada vs. omitida,
-y exporta a PDF con hash del contenido. Esa es la evidencia de cobertura.
-
 ---
 
 ## 4. Modelo de dominio
@@ -213,7 +207,7 @@ acceso al sistema a esa persona, y sin poder ver su perfil.
 ### Entidades
 
 **Sitio** — St. Thomas, Glencoe. Entidad de primer nivel: atraviesa calendario, permisos,
-hallazgos, incidentes y métricas. Calendarios y reportes de cumplimiento son por sitio.
+hallazgos, incidentes y métricas. La programación y la recurrencia se consultan por sitio.
 
 **Persona** — identificada por número de empleado de ADP (no por nombre). Estado activo/inactivo.
 Una persona inactiva **no se borra nunca** — queda referenciada en registros inmutables — pero
@@ -690,7 +684,7 @@ del proyecto antes de que la siguiente dependa de ella.
 | 4     | Hallazgos, clasificación de riesgo, jerarquía de controles                     | R1 y R2 completos                                 |
 | 5     | Acciones correctivas, eventos, escalamientos con pg-boss                       | R3 completo                                       |
 | 6     | Incidentes, campos guiados, estados, relojes regulatorios, pantalla del Form 7 | R4 completo                                       |
-| 7     | Recurrencia, reporte de cumplimiento, exportación a PDF con hash               | R5 completo                                       |
+| 7     | Recurrencia y consulta operativa de períodos                               | Recurrencia disponible; R5 retirado antes de producción |
 | 8     | Builder visual                                                                 | El coordinador deja de depender del desarrollador |
 
 **El builder va último a propósito.** Es la pieza más cara (riesgo B) y el sistema es

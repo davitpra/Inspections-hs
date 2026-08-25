@@ -38,13 +38,14 @@ bloquea el recorrido crítico.
 | [003](003-vite-client-not-nextjs.md)        | Cliente con Vite, no Next.js                      | Aceptada |
 | [004](004-postgres-drizzle-rls.md)          | PostgreSQL + Drizzle + Row Level Security         | Aceptada |
 | [005](005-pg-boss-not-bullmq.md)            | pg-boss, no BullMQ + Redis                        | Aceptada |
-| [006](006-object-storage-and-pdf.md)        | Almacenamiento de objetos y generación de PDF     | Aceptada |
+| [006](006-object-storage-and-pdf.md)        | Almacenamiento de objetos versionado              | Aceptada |
 | [007](007-pnpm-monorepo.md)                 | Monorepo con pnpm workspaces                      | Aceptada |
 | [008](008-system-architecture.md)           | Arquitectura del sistema                          | Aceptada |
 | [009](009-data-residency.md)                | Residencia de datos (ex-S1)                       | Aceptada |
 | [010](010-target-devices.md)                | Dispositivos objetivo: Android (ex-S2)            | Aceptada |
 | [011](011-authentication.md)                | Autenticación: better-auth en apps/api (ex-S3)    | Aceptada |
 | [012](012-css-tokens-not-tailwind.md)       | CSS con tokens semánticos, no Tailwind + shadcn   | Aceptada |
+| [013](013-retirada-reportes-cumplimiento.md) | Retirada preproducción del reporte de cumplimiento | Aceptada |
 
 Los ADR 001–008 conservan la numeración original citada en el encabezado de
 `docs/requisitos-v1.2.md`. Los 009–011 eran las "decisiones de contexto resueltas" S1, S2 y S3:
@@ -65,8 +66,8 @@ son ADRs en todo salvo el nombre y se promueven para que los agentes las lean ig
 | Base de datos         | PostgreSQL + RLS                         | 004      |
 | ORM / migraciones     | Drizzle                                  | 004      |
 | Trabajos programados  | pg-boss                                  | 005      |
-| Archivos              | S3-compatible con versioning             | 006      |
-| PDF                   | Playwright                               | 006      |
+| Archivos              | S3-compatible con versioning             | 006, 013 |
+| PDF                   | No hay renderer de documentos            | 013      |
 | Tests de integración  | Vitest + Testcontainers                  | —        |
 | Monorepo              | pnpm workspaces                          | 007      |
 | Hosting API           | Plataforma de contenedores, región única | 008, 009 |

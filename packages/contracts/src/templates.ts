@@ -58,6 +58,35 @@ export const templateOptionSchema = z.strictObject({
 
 export type TemplateOption = z.infer<typeof templateOptionSchema>;
 
+/**
+ * La misma plantilla, pero TAL COMO SE ADMINISTRA y no tal como se elige.
+ *
+ * La diferencia con `templateOptionSchema` no es un campo de más: son dos poblaciones.
+ * El listado de arriba ofrece lo que se puede programar, y una plantilla retirada no
+ * está ahí — ofrecerla sería ofrecer un error. La consola de plantillas necesita
+ * exactamente lo contrario: ver también las retiradas, porque si desaparecieran de la
+ * pantalla al retirarlas no habría forma de volver a activarlas nunca.
+ *
+ * Por eso `deactivated_at` viaja acá y no allá. Que el DTO de programar lo llevara sería
+ * invitar a que la pantalla de reglas decidiera por su cuenta qué ofrecer, que es
+ * justamente la decisión que toma el servidor.
+ */
+export const publishedTemplateSummarySchema = templateOptionSchema.extend({
+  deactivated_at: z.iso.datetime({ offset: true }).nullable(),
+});
+
+export type PublishedTemplateSummary = z.infer<typeof publishedTemplateSummarySchema>;
+
+/** La baja de una plantilla no acepta una fecha fabricada por el cliente. */
+export const deactivateTemplateSchema = z.strictObject({});
+
+export type DeactivateTemplate = z.infer<typeof deactivateTemplateSchema>;
+
+/** La reactivación tampoco acepta una fecha fabricada por el cliente. */
+export const reactivateTemplateSchema = z.strictObject({});
+
+export type ReactivateTemplate = z.infer<typeof reactivateTemplateSchema>;
+
 /** Identidad de la versión creada al publicar un borrador. */
 export const publishedTemplateSchema = z.strictObject({
   template_id: z.uuid(),

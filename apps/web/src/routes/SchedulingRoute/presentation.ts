@@ -176,8 +176,8 @@ function entrySortKey(entry: YearEntry): { periodStart: string; templateName: st
 /**
  * El nombre del período DENTRO del calendario de un año.
  *
- * `periodLabel` siempre lleva el año, y tiene que llevarlo: la usan el PDF y la pantalla
- * del inspector, donde no hay ningún encabezado que lo diga. Acá sí lo hay —el navegador
+ * `periodLabel` siempre lleva el año, y tiene que llevarlo en la pantalla del inspector,
+ * donde no hay ningún encabezado que lo diga. Acá sí lo hay —el navegador
  * de año lo muestra en grande arriba— así que repetirlo en las doce filas es ruido.
  *
  * Se recorta SOLO cuando la etiqueta termina en el año que se está mirando. Un período que

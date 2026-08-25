@@ -12,8 +12,7 @@ import { sessionClient } from './client';
  * existir.** `SessionClient.request` no lo agrega —es transporte, no sabe qué viaja—, y
  * `fetch` con un body de tipo string rotula `text/plain`, que Nest no parsea: el handler
  * recibe un objeto vacío y el Zod del controlador contesta 400 con todos los campos en
- * `undefined`. Estuvo pasando de verdad en `POST /reports/compliance`, que era la única
- * llamada escrita a mano fuera de un helper. Los tests de integración no lo veían porque
+ * `undefined`. Los tests de integración no lo veían porque
  * supertest pone el header solo.
  *
  * El error se convierte en `Error(message)` y se pierde el `code`, que es lo que estas

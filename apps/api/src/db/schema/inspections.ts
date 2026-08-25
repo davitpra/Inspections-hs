@@ -78,8 +78,15 @@ export const inspectionSchedule = pgTable(
 
     // La baja es lógica: no hay DELETE.
     deactivatedAt: timestamp('deactivated_at', { withTimezone: true }),
+
+    // El archivo solo retira una regla desactivada de la vista administrativa.
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
   },
   (table) => [
+    check(
+      'inspection_schedule_archive_check',
+      sql`${table.archivedAt} IS NULL OR ${table.deactivatedAt} IS NOT NULL`,
+    ),
     uniqueIndex('inspection_schedule_active_uq')
       .on(table.siteId, table.templateId)
       .where(sql`${table.deactivatedAt} IS NULL`),
@@ -305,7 +312,7 @@ export type NewInspection = Pick<
  * regla no se muda de planta ni de plantilla, se desactiva y se crea otra.
  */
 export type InspectionScheduleUpdate = Partial<
-  Pick<InspectionSchedule, 'defaultInspectorId' | 'deactivatedAt'>
+  Pick<InspectionSchedule, 'defaultInspectorId' | 'deactivatedAt' | 'archivedAt'>
 >;
 
 /**

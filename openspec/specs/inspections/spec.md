@@ -69,26 +69,58 @@ belonging to a different template.
 
 ### Requirement: The template version of a scheduled inspection is frozen by the engine
 
-The system SHALL make `site_id`, `period_start`, `template_id`, `template_version_id`,
-`scheduled_at` and `scheduled_by` immutable once a `scheduled_inspection` row exists. Publishing a
-new version of a template SHALL have no effect on any scheduled inspection that already exists.
-Correcting the version an inspection is bound to SHALL be done by cancelling the row and scheduling
-a new one, never by updating it.
+The system SHALL make `site_id`, `period_start`, `period_months`, `template_id`,
+`scheduled_at` and `scheduled_by` immutable once a `scheduled_inspection` row exists.
 
-#### Scenario: The application role cannot move a scheduled inspection to another version
+`template_version_id` SHALL be monotonic rather than immutable: it SHALL only ever be
+replaced by a version of the same `template_id` whose `version` is strictly greater, it
+SHALL NOT be changed once an `inspection` row exists for that scheduled inspection, and it
+SHALL NOT be changed on a cancelled row. Every other move — to a lower version, to a version
+of another template, on a submitted period, on a cancelled period — SHALL be refused by the
+engine for every role, the owning role included.
 
+Publishing a new version of a template SHALL have no effect of its own on any scheduled
+inspection that already exists. Moving an inspection to a newer version SHALL always be an
+explicit act.
+
+#### Scenario: The application role can advance a scheduled inspection to a newer version
+
+- **GIVEN** a scheduled inspection bound to version `2` of a template whose version `3` is
+  published
 - **WHEN** a session connected as the application role runs
-  `UPDATE scheduled_inspection SET template_version_id = <another version of the same template>
+  `UPDATE scheduled_inspection SET template_version_id = <version 3 of the same template>
   WHERE id = <existing id>`
-- **THEN** the statement fails with SQLSTATE `42501` (`insufficient_privilege`)
+- **THEN** the statement succeeds
+- **AND** `template_version_id` reads back as version `3`
+
+#### Scenario: No role can move a scheduled inspection to a lower version
+
+- **GIVEN** a scheduled inspection bound to version `3` of a template
+- **WHEN** any role — the application role or the migration role that owns the table — runs
+  `UPDATE scheduled_inspection SET template_version_id = <version 2 of the same template>
+  WHERE id = <existing id>`
+- **THEN** the statement fails with the guard trigger's dedicated SQLSTATE
 - **AND** `template_version_id` is unchanged when read back
 
-#### Scenario: The owner role cannot move a scheduled inspection to another version
+#### Scenario: A version belonging to another template is still refused
 
-- **WHEN** a session connected as the migration role — which owns the table — runs the same
-  `UPDATE`
-- **THEN** the statement fails with the guard trigger's dedicated SQLSTATE, not with a privilege
-  error
+- **WHEN** the `template_version_id` of a scheduled inspection whose `template_id` is
+  template A is updated to a published version of template B
+- **THEN** the statement fails with the foreign key violation on the
+  `(template_version_id, template_id)` pair
+
+#### Scenario: A submitted inspection cannot be moved to another version
+
+- **GIVEN** a scheduled inspection for which an `inspection` row exists
+- **WHEN** its `template_version_id` is updated to a higher version of the same template
+- **THEN** the statement fails with the guard trigger's dedicated SQLSTATE
+- **AND** the `inspection` row's own `template_version_id` is unchanged
+
+#### Scenario: A cancelled period cannot be moved to another version
+
+- **GIVEN** a scheduled inspection whose `cancelled_at` is not null
+- **WHEN** its `template_version_id` is updated to a higher version of the same template
+- **THEN** the statement fails with the guard trigger's dedicated SQLSTATE
 
 #### Scenario: Publishing a newer version leaves an open inspection untouched
 
@@ -97,10 +129,101 @@ a new one, never by updating it.
 - **THEN** the scheduled inspection still reports `template_version_id` for version `2`
 - **AND** no row of `scheduled_inspection` was written by the publication
 
-#### Scenario: A scheduled inspection cannot be deleted
+### Requirement: A scheduled inspection can be advanced to the newest published version of its template
 
-- **WHEN** any role runs `DELETE FROM scheduled_inspection WHERE id = <existing id>`
-- **THEN** the statement fails and the row is still present
+The system SHALL accept a request to advance one scheduled inspection to the highest
+published version of its own template, and SHALL respond with the same field package the
+frozen template version read returns: the complete document, its `template_version_id`, its
+`version`, the inspection's `site_id` and the inspection's `inspector_id`.
+
+The request SHALL be restricted to the account the inspection is assigned to and to accounts
+whose role is `hs_coordinator`, and SHALL be refused as forbidden to every other account.
+Advancing SHALL be resolvable only within the requester's session scope, on the same terms as
+every other read of the field package.
+
+The request SHALL be idempotent: when the inspection is already bound to the highest published
+version, it SHALL write nothing and SHALL still return the package. It SHALL be refused when
+the period already has a submission, when the period is cancelled, and when the template has
+no version higher than the one the inspection is bound to.
+
+Advancing SHALL be recorded in the audit log of the inspection's site as an event of its own,
+naming the acting account, the `template_version_id` the inspection was bound to and the one
+it is now bound to. It SHALL NOT be recorded as a reassignment or as a cancellation, and a
+request that writes nothing SHALL add no entry.
+
+#### Scenario: The assigned inspector advances to the newest version
+
+- **GIVEN** a scheduled inspection assigned to the requesting account and bound to version `2`
+  of a template whose version `3` is published
+- **WHEN** the account requests the advance
+- **THEN** the inspection reports `template_version_id` for version `3`
+- **AND** the response carries the document of version `3` and its `version` number
+
+#### Scenario: Advancing twice writes once
+
+- **GIVEN** a scheduled inspection that has just been advanced to version `3`
+- **WHEN** the same advance is requested again
+- **THEN** the response carries version `3`
+- **AND** exactly one `inspection.version_advanced` entry exists for that inspection
+
+#### Scenario: An inspection already on the newest version is not an error
+
+- **GIVEN** a scheduled inspection bound to the highest published version of its template
+- **WHEN** the advance is requested
+- **THEN** the response carries that same version
+- **AND** no audit entry is added
+
+#### Scenario: A submitted period cannot be advanced
+
+- **GIVEN** a scheduled inspection whose submission has been accepted
+- **WHEN** the advance is requested
+- **THEN** the request is refused and names that the period was already submitted
+- **AND** `template_version_id` is unchanged
+
+#### Scenario: A cancelled period cannot be advanced
+
+- **GIVEN** a scheduled inspection whose `cancelled_at` is not null
+- **WHEN** the advance is requested
+- **THEN** the request is refused and names that the period was cancelled
+
+#### Scenario: An account that is neither the inspector nor a coordinator is refused
+
+- **GIVEN** a scheduled inspection assigned to another account
+- **WHEN** an account whose role is `supervisor` requests the advance
+- **THEN** the request is refused as forbidden
+- **AND** `template_version_id` is unchanged
+
+#### Scenario: The advance is audited with both versions
+
+- **WHEN** an inspection bound to version `2` is advanced to version `3`
+- **THEN** an audit log entry of type `inspection.version_advanced` is written for the
+  inspection's `site_id` naming the acting account, the `scheduled_inspection_id`, the
+  previous `template_version_id` and the new one
+
+### Requirement: An inspector's pending list names the version published today
+
+The system SHALL carry, on every entry of the pending list, the `version` of the
+`template_version_id` the inspection is bound to, together with the `version` and the
+`template_version_id` of the highest published version of that template.
+
+The two SHALL be distinct fields and SHALL NOT be conflated: the inspection is bound to the
+first and is not bound to the second until an advance is requested. They SHALL be resolved by
+the server with the same expression the period opening job uses to freeze a version, so that
+what the screen offers and what an advance would produce cannot disagree.
+
+#### Scenario: The pending list carries both versions
+
+- **GIVEN** an inspection bound to version `2` of a template whose version `3` is published
+- **WHEN** the assigned inspector reads their pending list
+- **THEN** the entry reports `template_version` `2`
+- **AND** it reports `latest_template_version` `3` and the `template_version_id` of version `3`
+
+#### Scenario: An inspection on the newest version reports the same version twice
+
+- **GIVEN** an inspection bound to the highest published version of a template
+- **WHEN** the assigned inspector reads their pending list
+- **THEN** `template_version` and `latest_template_version` are the same number
+- **AND** `template_version_id` and `latest_template_version_id` are the same identifier
 
 ### Requirement: A schedule rule declares what a site owes and how often
 
@@ -297,51 +420,66 @@ SHALL leave exactly one scheduled inspection for that period.
 
 ### Requirement: The scheduling surface projects every period a site owes for a calendar year
 
-The system SHALL present the scheduled inspections of a site as a calendar year: for a chosen
-year, every month that year that any of the site's schedule rules owes, one entry per rule per
-owed month, ordered from January to December.
+The system SHALL present the scheduled inspections of a site as an annual schedule for a chosen
+year. The schedule SHALL offer a matrix organized by requirement and calendar month and an
+operational list ordered by period start and requirement name. Both presentations SHALL contain
+the same entries and SHALL preserve one entry per schedule rule per owed period.
 
-An entry whose period has been opened SHALL carry the scheduled inspection itself — its status,
-its `inspector_id` and its inspector's name — exactly as the scheduled inspections listing
-describes it today. An entry whose period has **not** been opened SHALL still be present and
-SHALL be identified as not opened, rather than omitted.
+An entry whose period has been opened SHALL carry the scheduled inspection itself, including its
+status, `inspector_id` and inspector name. An entry whose period has not been opened SHALL still be
+present and SHALL be identified as not opened rather than omitted. A month in which a rule does
+not begin a period SHALL remain visually distinct from a period that is owed but not opened.
 
-The reader SHALL be able to move to another calendar year, in both directions, without limit on
-how far ahead: the obligation is monthly and therefore known for any future year.
+The reader SHALL be able to move to another calendar year in both directions, without limit on
+how far ahead. On a small viewport the operational list SHALL be the initial presentation so that
+the schedule remains operable without requiring a twelve-column viewport.
 
-A month a rule does not owe — outside the window of that rule's `created_at` and
-`deactivated_at` — SHALL NOT be projected as a missing period, because the site never owed it.
+A period a rule does not owe, either because its month does not match `frequency_months` and
+`anchor_month` or because it falls outside the window bounded by `created_at` and `deactivated_at`,
+SHALL NOT be projected as a missing period.
 
-A scheduled inspection whose `period_start` falls outside every rule's owing window — one
-scheduled outside the automatic calendar, or one left behind by a rule that was deactivated —
-SHALL still be shown in the year it belongs to. The projection adds months that are owed; it
-never hides a period that exists.
+A scheduled inspection whose `period_start` falls outside every rule's owing window SHALL still be
+shown in the year it belongs to. The projection adds periods that are owed; it never hides a
+period that exists.
 
-#### Scenario: A year with one rule shows twelve entries
+#### Scenario: A year with one monthly rule shows twelve entries
 
-- **GIVEN** a site with one active schedule rule created in `2025`
+- **GIVEN** a site with one active monthly schedule rule created in `2025`
 - **AND** scheduled inspections opened for `2026-01-01` through `2026-08-01`
 - **WHEN** the coordinator views the year `2026`
 - **THEN** twelve entries are shown for that rule, one per month
 - **AND** the entries for January through August carry their scheduled inspection
 - **AND** the entries for September through December are identified as not opened
 
+#### Scenario: A quarterly rule distinguishes not due from not opened
+
+- **GIVEN** an active rule with `frequency_months` `3` and `anchor_month` `1`
+- **WHEN** the coordinator views the year `2026` in the matrix
+- **THEN** January, April, July and October contain period entries
+- **AND** the other month positions do not read as not opened
+
+#### Scenario: Matrix and list present the same schedule
+
+- **GIVEN** a year containing opened, unopened, missed and cancelled periods
+- **WHEN** the reader switches between the matrix and operational list
+- **THEN** both presentations contain the same projected periods and statuses
+
 #### Scenario: A future year is entirely unopened
 
-- **GIVEN** the same site and rule
-- **WHEN** the coordinator moves to the year `2027`
+- **GIVEN** a site with one monthly schedule rule
+- **WHEN** the coordinator moves to a future year with no scheduled inspections
 - **THEN** twelve entries are shown, every one of them identified as not opened
 
-#### Scenario: A month before the rule existed is not projected
+#### Scenario: A period before the rule existed is not projected
 
-- **GIVEN** a schedule rule whose `created_at` is in `2026-03`
+- **GIVEN** a monthly schedule rule whose `created_at` is in `2026-03`
 - **WHEN** the coordinator views the year `2026`
-- **THEN** the entries for January and February are not shown for that rule
+- **THEN** entries for January and February are not shown for that rule
 - **AND** the entry for March is shown
 
-#### Scenario: A month after the rule was deactivated is not projected
+#### Scenario: A period after the rule was deactivated is not projected
 
-- **GIVEN** a schedule rule whose `deactivated_at` is in `2026-09`
+- **GIVEN** a monthly schedule rule whose `deactivated_at` is in `2026-09`
 - **WHEN** the coordinator views the year `2026`
 - **THEN** the entry for September is shown
 - **AND** no entry is shown for that rule for October through December
@@ -358,6 +496,135 @@ never hides a period that exists.
 - **WHEN** the coordinator views the year `2026`
 - **THEN** the May entry carries the cancelled inspection and its cancellation reason
 - **AND** May is not identified as not opened
+
+### Requirement: The annual schedule exposes year-scoped operational summaries and filters
+
+The system SHALL summarize only the projected periods of the selected site and year. It SHALL
+identify the total periods due and the subsets that are completed, missed, unassigned and not
+opened. A cancelled period SHALL remain part of the annual schedule but SHALL NOT be classified as
+completed, missed, unassigned or not opened.
+
+The reader SHALL be able to filter the schedule by requirement and operational state. Selecting an
+actionable summary SHALL apply its corresponding filter. Any notice that counts unassigned periods
+SHALL use the same selected year and SHALL lead to entries present in the current schedule.
+
+#### Scenario: A cancelled period is not reported as assigned work
+
+- **GIVEN** a cancelled scheduled inspection whose `inspector_id` is null
+- **WHEN** the annual summaries are calculated
+- **THEN** the period remains included in the total due count
+- **AND** it is excluded from completed, missed, unassigned and not-opened counts
+
+#### Scenario: The unassigned notice follows the selected year
+
+- **GIVEN** one unassigned scheduled inspection in `2026` and another in `2027`
+- **WHEN** the coordinator views `2026`
+- **THEN** the unassigned notice reports one period
+- **AND** activating the notice reveals the `2026` entry in the current schedule
+
+#### Scenario: A summary filters the visible schedule
+
+- **GIVEN** the selected year contains completed and unassigned periods
+- **WHEN** the coordinator activates the unassigned summary
+- **THEN** only unassigned periods remain in the visible schedule
+- **AND** the coordinator can clear the filter to restore all projected periods
+
+### Requirement: Schedule requirements are configured as one focused operation
+
+The system SHALL let an `hs_coordinator` create an inspection requirement by selecting a published
+`template_id`, `frequency_months`, an applicable `anchor_month` and an optional
+`default_inspector_id` before confirmation. Before creation, the surface SHALL describe the annual
+cadence produced by the selected frequency and anchor and SHALL state that `frequency_months` and
+`anchor_month` cannot be changed later.
+
+The surface SHALL present one current requirement per template. It SHALL let the coordinator change
+`default_inspector_id`, deactivate an active requirement after confirming the consequence for future
+periods, and reactivate a deactivated requirement. Accounts without scheduling administration
+permission SHALL see the requirements without any of those controls.
+
+#### Scenario: A requirement is created with a default inspector
+
+- **GIVEN** a published template with no active rule for the selected site
+- **WHEN** the coordinator creates a quarterly requirement with `anchor_month` `2` and an eligible
+  `default_inspector_id`
+- **THEN** the create request carries the selected `template_id`, `frequency_months`,
+  `anchor_month` and `default_inspector_id`
+- **AND** the new requirement describes periods beginning in February, May, August and November
+
+#### Scenario: A monthly requirement does not request a meaningless anchor
+
+- **WHEN** the coordinator selects `frequency_months` `1`
+- **THEN** the requirement form does not ask the coordinator to choose an `anchor_month`
+- **AND** the cadence preview states that one period begins every month
+
+#### Scenario: Deactivation explains what remains unchanged
+
+- **GIVEN** an active schedule requirement
+- **WHEN** the coordinator chooses to deactivate it
+- **THEN** the confirmation states that no future period will be opened from the requirement
+- **AND** the confirmation states that periods already opened remain unchanged
+
+#### Scenario: A reader cannot administer requirements
+
+- **WHEN** an account whose role is `jhsc_member` views the scheduling surface
+- **THEN** the current requirements and their default inspectors are readable
+- **AND** no control to create, update, deactivate or reactivate a requirement is offered
+
+### Requirement: Period operations are exposed on demand from an annual entry
+
+The system SHALL let a reader select an owed-period entry to inspect its period label, template,
+status and inspector without placing a form in every annual entry. For an `hs_coordinator`, the
+focused period view SHALL expose the operations valid for that entry: opening an unopened period,
+confirming an inspector assignment, cancelling an eligible scheduled inspection with a reason, or
+scheduling a cancelled period again. Other roles SHALL receive the same readable detail without
+administrative controls.
+
+Opening a period SHALL identify the currently published `template_version` that the operation will
+freeze. Changing an inspector selection SHALL NOT send an assignment until the coordinator
+explicitly confirms it. A failed assignment SHALL retain the persisted inspector and display the
+server's reason.
+
+#### Scenario: Selecting an unopened entry offers one opening operation
+
+- **GIVEN** an owed period with no scheduled inspection
+- **WHEN** the coordinator selects its annual entry
+- **THEN** the focused view offers an optional `inspector_id` and one action to open the period
+- **AND** it identifies the published `template_version` that will be frozen
+
+#### Scenario: Selecting an inspector does not immediately assign it
+
+- **GIVEN** an opened period and two eligible inspectors
+- **WHEN** the coordinator selects a different `inspector_id` without confirming
+- **THEN** no assignment request is sent
+- **AND** a separate confirmation action remains available
+
+#### Scenario: A cancelled period offers scheduling again
+
+- **GIVEN** a cancelled scheduled inspection with a `cancellation_reason`
+- **WHEN** the coordinator selects its annual entry
+- **THEN** the focused view shows the cancellation reason
+- **AND** it offers scheduling the period again rather than clearing the cancellation
+
+### Requirement: Supporting-data failures are not presented as empty scheduling choices
+
+The system SHALL distinguish a failure to load published templates or eligible inspector candidates
+from a successful response containing no choices. An operation that depends on failed supporting data
+SHALL remain unavailable and SHALL present a connection or server error where the coordinator
+attempted the operation.
+
+#### Scenario: Inspector candidates fail to load
+
+- **GIVEN** an opened period that can be assigned
+- **WHEN** loading eligible inspector candidates fails
+- **THEN** the focused period view reports that candidates could not be loaded
+- **AND** it does not present the failure as if the site had no eligible inspectors
+- **AND** assignment confirmation is unavailable
+
+#### Scenario: Published templates fail to load
+
+- **WHEN** loading published templates for requirement creation fails
+- **THEN** the requirement form reports that templates could not be loaded
+- **AND** requirement creation is unavailable
 
 ### Requirement: The coordinator can open an owed month ahead of the automatic job
 
@@ -1148,91 +1415,86 @@ inspection.
 
 ### Requirement: A scheduled inspection reports the compliance status of its period
 
-The system SHALL expose, for every non-cancelled `scheduled_inspection`, a compliance status
-derived from the engine rather than stored as a column: `completed` when an `inspection` exists
-for it, `open` when its `period_end` has not yet passed in the `America/Toronto` calendar and no
+The system SHALL expose, for every non-cancelled `scheduled_inspection`, a period status derived
+from the engine rather than stored as a column: `completed` when an `inspection` exists for it,
+`open` when its `period_end` has not yet passed in the `America/Toronto` calendar and no
 `inspection` exists, and `missed` when its `period_end` has passed and no `inspection` exists. A
 cancelled scheduled inspection SHALL report `cancelled` together with its `cancellation_reason`.
 The status SHALL NOT depend on `recorded_at`: an inspection walked before `period_end` and
-synchronised after it SHALL report `completed` for that period, because §5 risk C fixed the device
-clock at signing as the compliance clock.
+synchronised after it SHALL report `completed` for that period because `signed_at` records when
+the inspection occurred.
 
-The status SHALL accompany a scheduled inspection **wherever it is listed**, and SHALL NOT be
-reachable only through the compliance report of a single site over a range of whole months. The
-system SHALL derive it from **one** expression shared by every reader, so that the status a
-listing reports and the status the coverage report reports for the same `scheduled_inspection`
-cannot disagree, and so that the `America/Toronto` boundary exists in one place.
+The status SHALL accompany a scheduled inspection wherever it is listed. The system SHALL derive
+it from one shared expression so that every scheduled-inspection reader applies the same
+`America/Toronto` boundary.
 
 #### Scenario: A late synchronisation still completes its period
 
 - **GIVEN** a scheduled inspection whose `period_end` is `2026-08-31`
 - **AND** a submission whose `signed_at` is `2026-08-28` and whose `received_at` is `2026-09-04`
-- **WHEN** the period's compliance status is read
+- **WHEN** the period's status is read
 - **THEN** it is `completed`
 
-#### Scenario: The listing and the coverage report agree on the same row
+#### Scenario: Every listing agrees on the same scheduled inspection
 
-- **GIVEN** a site with scheduled inspections in four periods, one of each status
-- **WHEN** the scheduled inspections are listed and the coverage report is read for the same range
-- **THEN** for every `scheduled_inspection_id` present in both, the two statuses are equal
+- **GIVEN** a scheduled inspection visible in more than one operational listing
+- **WHEN** those listings are read at the same effective instant
+- **THEN** they report the same status for its `scheduled_inspection_id`
 
 #### Scenario: The status is available without naming a site or a range
 
 - **WHEN** the scheduled inspections within the session's site scope are listed with no site
   parameter and no period range
-- **THEN** every entry carries its compliance status
+- **THEN** every entry carries its period status
 
 #### Scenario: A period still running is open, not missed
 
 - **GIVEN** a scheduled inspection of the current period with no submission
-- **WHEN** its compliance status is read
+- **WHEN** its period status is read
 - **THEN** it is `open`
 
 #### Scenario: A closed period without a submission is missed
 
 - **GIVEN** a scheduled inspection whose `period_end` has passed, not cancelled, with no
   submission
-- **WHEN** its compliance status is read
+- **WHEN** its period status is read
 - **THEN** it is `missed`
 
 #### Scenario: A cancelled period reports its reason
 
 - **GIVEN** a scheduled inspection cancelled with the reason `plant shutdown`
-- **WHEN** its compliance status is read
+- **WHEN** its period status is read
 - **THEN** it is `cancelled` and carries the reason `plant shutdown`
 
-### Requirement: A period the site owed but never opened is reported as missed, not as absent
+### Requirement: Inspection periods have one unambiguous human-readable label
 
-The system SHALL determine the periods a site owed over a range from its schedule rules and their
-active windows, and SHALL report a period in which a rule was active but no `scheduled_inspection`
-was ever created as `missed`, with a null `scheduled_inspection_id` and a null
-`template_version_id`. A period that was never opened SHALL NOT be silently omitted from the
-count of required periods, because the opening job failing for a month is exactly the case a
-coverage report exists to make visible. A period whose rule was deactivated before the period
-began SHALL NOT be counted as owed.
+The system SHALL derive an inspection period's English display label from `period_start` and
+`period_months` through one shared deterministic rule. A monthly period SHALL name its full month
+and year. A quarterly, semiannual or annual period SHALL use a calendar shorthand only when its
+start aligns with that civil calendar unit; otherwise it SHALL name its start and end months. A
+label for a period that crosses a year boundary SHALL name both years. The label SHALL NOT depend
+on the locale or time zone of the reading device.
 
-#### Scenario: A month the opening job never ran is counted and reported as missed
+#### Scenario: An aligned quarter uses calendar shorthand
 
-- **GIVEN** a site with an active monthly schedule rule covering all of `2026`
-- **AND** no `scheduled_inspection` for `2026-04-01` because the opening job did not run that
-  month
-- **WHEN** compliance is reported for the twelve months of `2026`
-- **THEN** `required_count` is `12`
-- **AND** the entry for `2026-04-01` has `status` `missed` and a null `scheduled_inspection_id`
+- **WHEN** a period with `period_start` `2026-01-01` and `period_months` `3` is displayed
+- **THEN** its label is `Q1 2026`
 
-#### Scenario: A period before the rule existed is not owed
+#### Scenario: An unaligned quarter names its endpoints
 
-- **GIVEN** a schedule rule activated in `2026-05`
-- **WHEN** compliance is reported for the twelve months of `2026`
-- **THEN** no period entry is returned for `2026-01-01`
-- **AND** `required_count` counts only the periods from `2026-05` onward
+- **WHEN** a period with `period_start` `2026-02-01` and `period_months` `3` is displayed
+- **THEN** its label is `Feb–Apr 2026`
+- **AND** it is not labelled `Q1 2026`
 
-#### Scenario: A deactivated rule stops the site owing later periods
+#### Scenario: A period crossing a year names both years
 
-- **GIVEN** a schedule rule deactivated during `2026-09`
-- **WHEN** compliance is reported for the twelve months of `2026`
-- **THEN** no period entry is returned for `2026-11-01`
-- **AND** the inspections the rule already opened remain reported for their own periods
+- **WHEN** a period with `period_start` `2026-09-01` and `period_months` `12` is displayed
+- **THEN** its label is `Sep 2026–Aug 2027`
+
+#### Scenario: A monthly period names its month and year
+
+- **WHEN** a period with `period_start` `2026-08-01` and `period_months` `1` is displayed
+- **THEN** its label is `August 2026`
 
 ### Requirement: A listed scheduled inspection carries when it was completed
 

@@ -57,7 +57,7 @@ export function OfflineRoute(): React.JSX.Element {
         <h3>What is served by the server</h3>
         <ul className="checklist">
           <li>
-            <ListIcon size={16} /> Reports and compliance records.
+             <ListIcon size={16} /> Recurring findings and operational records.
           </li>
           <li>
             <ListIcon size={16} /> Template administration.

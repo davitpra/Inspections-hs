@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Session, TemplateDraftSummary, TemplateOption } from '@hs/contracts';
+import type { PublishedTemplateSummary, Session, TemplateDraftSummary } from '@hs/contracts';
 
 import { TemplatesRoute } from './index';
 
@@ -12,19 +12,24 @@ const DRAFT = '44444444-4444-4444-8444-444444444444';
 const OTHER_DRAFT = '55555555-5555-4555-8555-555555555555';
 
 const listTemplateDrafts = vi.hoisted(() => vi.fn());
-const listTemplates = vi.hoisted(() => vi.fn());
+const listPublishedTemplates = vi.hoisted(() => vi.fn());
 const createTemplateDraft = vi.hoisted(() => vi.fn());
 const discardTemplateDraft = vi.hoisted(() => vi.fn());
+const reviseTemplate = vi.hoisted(() => vi.fn());
+const deactivateTemplate = vi.hoisted(() => vi.fn());
+const reactivateTemplate = vi.hoisted(() => vi.fn());
 const useAppSession = vi.hoisted(() => vi.fn());
 const navigate = vi.hoisted(() => vi.fn());
 
 vi.mock('../../api/templates', () => ({
   listTemplateDrafts,
+  listPublishedTemplates,
   createTemplateDraft,
   discardTemplateDraft,
+  reviseTemplate,
+  deactivateTemplate,
+  reactivateTemplate,
 }));
-
-vi.mock('../../api/inspections', () => ({ listTemplates }));
 
 vi.mock('../../app/session-context', () => ({ useAppSession }));
 
@@ -85,7 +90,9 @@ function draft(overrides: Partial<TemplateDraftSummary> = {}): TemplateDraftSumm
   };
 }
 
-function published(overrides: Partial<TemplateOption> = {}): TemplateOption {
+function published(
+  overrides: Partial<PublishedTemplateSummary> = {},
+): PublishedTemplateSummary {
   return {
     id: '66666666-6666-4666-8666-666666666666',
     key: 'published-electrical',
@@ -93,6 +100,7 @@ function published(overrides: Partial<TemplateOption> = {}): TemplateOption {
     latest_version: 1,
     latest_version_id: '77777777-7777-4777-8777-777777777777',
     latest_published_at: '2026-08-22 10:00:00+00',
+    deactivated_at: null,
     ...overrides,
   };
 }
@@ -112,13 +120,20 @@ function renderRoute(): QueryClient {
 beforeEach(() => {
   useAppSession.mockReset().mockReturnValue(session('hs_coordinator'));
   listTemplateDrafts.mockReset().mockResolvedValue([draft()]);
-  listTemplates.mockReset().mockResolvedValue([]);
+  listPublishedTemplates.mockReset().mockResolvedValue([]);
   createTemplateDraft.mockReset().mockResolvedValue({
     ...draft({ id: OTHER_DRAFT }),
     document: { sections: [] },
     issues: [],
   });
   discardTemplateDraft.mockReset().mockResolvedValue(undefined);
+  reviseTemplate.mockReset().mockResolvedValue({
+    ...draft({ id: OTHER_DRAFT, template_id: published().id, next_version: 2 }),
+    document: { sections: [] },
+    issues: [],
+  });
+  deactivateTemplate.mockReset().mockResolvedValue(undefined);
+  reactivateTemplate.mockReset().mockResolvedValue(undefined);
   navigate.mockReset();
 });
 
@@ -196,7 +211,7 @@ describe('el listado', () => {
     renderRoute();
 
     expect(await screen.findByText('No drafts yet')).toBeTruthy();
-    expect(screen.getByText(/Start one above/)).toBeTruthy();
+    expect(screen.getByText(/Select Add Template above/)).toBeTruthy();
   });
 
   it('sin conexión lo dice en vez de mostrar una lista vacía', async () => {
@@ -210,7 +225,7 @@ describe('el listado', () => {
 
 describe('las plantillas publicadas', () => {
   it('muestra una publicada y no mezcla el borrador en ese bloque', async () => {
-    listTemplates.mockResolvedValue([published()]);
+    listPublishedTemplates.mockResolvedValue([published()]);
 
     renderRoute();
 
@@ -221,14 +236,110 @@ describe('las plantillas publicadas', () => {
 
     expect(publishedBlock).toBeTruthy();
     expect(within(publishedBlock!).getByText('Published electrical inspection')).toBeTruthy();
-    expect(within(publishedBlock!).getByText(/published-electrical/)).toBeTruthy();
     expect(within(publishedBlock!).getByText(/Version 1/)).toBeTruthy();
-    expect(within(publishedBlock!).getByText(/published 2026-08-22/)).toBeTruthy();
+    expect(within(publishedBlock!).getByText('2026-08-22')).toBeTruthy();
+    expect(within(publishedBlock!).getByRole('columnheader', { name: 'Name' })).toBeTruthy();
+    expect(within(publishedBlock!).getByRole('columnheader', { name: 'Version' })).toBeTruthy();
+    expect(within(publishedBlock!).getByRole('columnheader', { name: 'Published' })).toBeTruthy();
+    expect(within(publishedBlock!).getByRole('columnheader', { name: 'Status' })).toBeTruthy();
+    expect(within(publishedBlock!).getByRole('columnheader', { name: 'Actions' })).toBeTruthy();
+    expect(within(publishedBlock!).getByText('Active')).toBeTruthy();
+    expect(
+      within(publishedBlock!).getByRole('button', {
+        name: 'More actions for Published electrical inspection',
+      }),
+    ).toBeTruthy();
     expect(within(publishedBlock!).queryByText('Monthly electrical inspection')).toBeNull();
   });
 
+  it('abre una revisión editable sin modificar la versión publicada', async () => {
+    listPublishedTemplates.mockResolvedValue([published()]);
+    renderRoute();
+
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'More actions for Published electrical inspection',
+      }),
+    );
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Edit template' }));
+
+    await waitFor(() => expect(reviseTemplate).toHaveBeenCalledWith(published().id));
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/templates/drafts/$id',
+      params: { id: OTHER_DRAFT },
+    });
+  });
+
+  /**
+   * Retirar es una decisión de catálogo y se confirma. Lo que la confirmación tiene que
+   * decir es lo que NO pasa: lo ya programado no se toca.
+   */
+  it('retira una plantilla después de confirmar', async () => {
+    listPublishedTemplates.mockResolvedValue([published()]);
+    renderRoute();
+
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'More actions for Published electrical inspection',
+      }),
+    );
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Deactivate template' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Deactivate template' });
+
+    expect(within(dialog).getByText(/stops being offered when scheduling/)).toBeTruthy();
+    expect(deactivateTemplate).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Deactivate template' }));
+
+    await waitFor(() => expect(deactivateTemplate).toHaveBeenCalledWith(published().id));
+  });
+
+  it('deja salir del diálogo sin retirar nada', async () => {
+    listPublishedTemplates.mockResolvedValue([published()]);
+    renderRoute();
+
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'More actions for Published electrical inspection',
+      }),
+    );
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Deactivate template' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Keep active' }));
+
+    expect(screen.queryByRole('dialog', { name: 'Deactivate template' })).toBeNull();
+    expect(deactivateTemplate).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Una retirada sigue en la tabla —si desapareciera no habría forma de reactivarla— y no
+   * ofrece "Edit template": el servidor rechaza revisar una plantilla dada de baja, así que
+   * ofrecerlo sería ofrecer un error.
+   */
+  it('muestra la retirada como Deactivated y solo ofrece reactivarla', async () => {
+    listPublishedTemplates.mockResolvedValue([
+      published({ deactivated_at: '2026-08-23T10:00:00.000Z' }),
+    ]);
+    renderRoute();
+
+    expect(await screen.findByText('Deactivated')).toBeTruthy();
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'More actions for Published electrical inspection',
+      }),
+    );
+
+    expect(screen.queryByRole('menuitem', { name: 'Edit template' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Reactivate template' }));
+
+    await waitFor(() => expect(reactivateTemplate).toHaveBeenCalledWith(published().id));
+    expect(screen.queryByRole('dialog', { name: 'Deactivate template' })).toBeNull();
+  });
+
   it('enlaza la publicada a la versión que la fila nombra', async () => {
-    listTemplates.mockResolvedValue([published()]);
+    listPublishedTemplates.mockResolvedValue([published()]);
 
     renderRoute();
 
@@ -240,7 +351,7 @@ describe('las plantillas publicadas', () => {
   });
 
   it('explica cómo llenar la lista cuando no hay publicadas', async () => {
-    listTemplates.mockResolvedValue([]);
+    listPublishedTemplates.mockResolvedValue([]);
 
     renderRoute();
 
@@ -253,11 +364,11 @@ describe('las plantillas publicadas', () => {
 
     await screen.findByText('Monthly electrical inspection');
     listTemplateDrafts.mockResolvedValue([]);
-    listTemplates.mockResolvedValue([published({ name: 'Monthly electrical inspection' })]);
+    listPublishedTemplates.mockResolvedValue([published({ name: 'Monthly electrical inspection' })]);
 
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['template-drafts'] }),
-      queryClient.invalidateQueries({ queryKey: ['templates'] }),
+      queryClient.invalidateQueries({ queryKey: ['published-templates'] }),
     ]);
 
     await waitFor(() =>
@@ -286,7 +397,7 @@ describe('los conteos del encabezado', () => {
 
   it('cuenta las dos poblaciones por separado', async () => {
     listTemplateDrafts.mockResolvedValue([draft(), draft({ id: OTHER_DRAFT })]);
-    listTemplates.mockResolvedValue([published()]);
+    listPublishedTemplates.mockResolvedValue([published()]);
 
     renderRoute();
 
@@ -298,7 +409,7 @@ describe('los conteos del encabezado', () => {
 
   /** "0 drafts" mientras la consulta falla es una afirmación falsa sobre el trabajo de alguien. */
   it('no dice cero cuando lo que hay es un error', async () => {
-    listTemplates.mockRejectedValue(new Error('offline'));
+    listPublishedTemplates.mockRejectedValue(new Error('offline'));
 
     renderRoute();
 
@@ -310,6 +421,36 @@ describe('los conteos del encabezado', () => {
 });
 
 describe('empezar una plantilla', () => {
+  async function openStartTemplate(): Promise<HTMLElement> {
+    const trigger = await screen.findByRole('button', { name: 'Add Template' });
+    trigger.focus();
+    fireEvent.click(trigger);
+
+    return screen.findByRole('dialog', { name: 'Start Template' });
+  }
+
+  it('abre el formulario desde la acción de la tabla publicada', async () => {
+    renderRoute();
+
+    expect(screen.queryByRole('dialog', { name: 'Start Template' })).toBeNull();
+
+    const dialog = await openStartTemplate();
+
+    expect(within(dialog).getByRole('heading', { name: 'Start Template' })).toBeTruthy();
+    expect(within(dialog).getByLabelText('Name')).toBeTruthy();
+  });
+
+  it('cierra el diálogo sin crear y devuelve el foco a Add Template', async () => {
+    renderRoute();
+
+    const dialog = await openStartTemplate();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByRole('dialog', { name: 'Start Template' })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Add Template' }));
+    expect(createTemplateDraft).not.toHaveBeenCalled();
+  });
+
   /**
    * La decisión de fondo de la pantalla: la clave es del servidor. Pedirla acá era pedirle
    * al coordinador una decisión que no tiene forma de tomar bien, y abría la puerta a dos
@@ -317,26 +458,27 @@ describe('empezar una plantilla', () => {
    */
   it('pide el nombre y NADA más: la clave no se escribe', async () => {
     renderRoute();
+    const dialog = await openStartTemplate();
 
-    expect(await screen.findByLabelText('Name')).toBeTruthy();
-    expect(screen.queryByLabelText('Key')).toBeNull();
+    expect(within(dialog).getByLabelText('Name')).toBeTruthy();
+    expect(within(dialog).queryByLabelText('Key')).toBeNull();
   });
 
   it('no deja crear sin nombre', async () => {
     renderRoute();
+    const dialog = await openStartTemplate();
 
-    await screen.findByLabelText('Name');
-
-    expect((screen.getByRole('button', { name: 'Create draft' }) as HTMLButtonElement).disabled)
+    expect((within(dialog).getByRole('button', { name: 'Create draft' }) as HTMLButtonElement).disabled)
       .toBe(true);
   });
 
   it('crea y abre el borrador nuevo', async () => {
     renderRoute();
+    const dialog = await openStartTemplate();
 
-    const name = await screen.findByLabelText('Name');
+    const name = within(dialog).getByLabelText('Name');
     fireEvent.change(name, { target: { value: 'Monthly electrical' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Create draft' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create draft' }));
 
     await waitFor(() =>
       expect(createTemplateDraft).toHaveBeenCalledWith({ name: 'Monthly electrical' }),
@@ -348,6 +490,7 @@ describe('empezar una plantilla', () => {
         params: { id: OTHER_DRAFT },
       }),
     );
+    expect(screen.queryByRole('dialog', { name: 'Start Template' })).toBeNull();
   });
 
   /** El rechazo más probable de la pantalla, y no puede perder lo escrito. */
@@ -357,13 +500,15 @@ describe('empezar una plantilla', () => {
     );
 
     renderRoute();
+    const dialog = await openStartTemplate();
 
-    const name = await screen.findByLabelText('Name');
+    const name = within(dialog).getByLabelText('Name');
     fireEvent.change(name, { target: { value: 'Monthly electrical' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Create draft' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create draft' }));
 
-    expect(await screen.findByText(/already exists/)).toBeTruthy();
-    expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('Monthly electrical');
+    expect(await within(dialog).findByText(/already exists/)).toBeTruthy();
+    expect((within(dialog).getByLabelText('Name') as HTMLInputElement).value)
+      .toBe('Monthly electrical');
     expect(navigate).not.toHaveBeenCalled();
   });
 
@@ -374,11 +519,12 @@ describe('empezar una plantilla', () => {
     );
 
     renderRoute();
+    const dialog = await openStartTemplate();
 
-    fireEvent.change(await screen.findByLabelText('Name'), { target: { value: '???' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Create draft' }));
+    fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: '???' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create draft' }));
 
-    expect(await screen.findByText(/at least one letter or digit/)).toBeTruthy();
+    expect(await within(dialog).findByText(/at least one letter or digit/)).toBeTruthy();
   });
 });
 

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { severitySchema } from './findings.js';
-import { periodMonthsSchema } from './compliance.js';
+import { periodMonthsSchema } from './periods.js';
 import { incidentClassificationSchema } from './incidents.js';
 
 /**

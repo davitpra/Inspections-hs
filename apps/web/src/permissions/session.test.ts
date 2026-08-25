@@ -5,8 +5,8 @@ import {
   canAdministerRoster,
   canAdministerScheduling,
   canAuthorTemplates,
+  canDeactivateTemplates,
   canPublishTemplates,
-  canGenerateComplianceReport,
   canInviteFromRoster,
 } from './session';
 
@@ -26,10 +26,10 @@ function session(role: Role): Session {
 const permissions = [
   ['canAdministerRoster', canAdministerRoster],
   ['canAdministerScheduling', canAdministerScheduling],
-  ['canGenerateComplianceReport', canGenerateComplianceReport],
   ['canInviteFromRoster', canInviteFromRoster],
   ['canAuthorTemplates', canAuthorTemplates],
   ['canPublishTemplates', canPublishTemplates],
+  ['canDeactivateTemplates', canDeactivateTemplates],
 ] as const;
 
 describe.each(permissions)('%s', (_name, allows) => {

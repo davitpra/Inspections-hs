@@ -923,11 +923,15 @@ select:disabled {
 .modal {
   width: min(28rem, 92vw);
   max-width: 100%;
+  max-height: min(85dvh, 100%);
+  overflow-y: auto;
   padding: var(--space-6);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--paper);
   color: var(--ink);
+  /* Sobre el scrim, un modal sin sombra se lee plano contra la página apagada. */
+  box-shadow: 0 1rem 2rem var(--scrim);
 }
 
 .modal::backdrop {
@@ -1217,27 +1221,10 @@ select:disabled {
 }
 
 /* ---------------------------------------------------------------------------
-   Cumplimiento y recurrencia (etapa 7).
+   Períodos operativos y recurrencia (etapa 7).
 
    La grilla de períodos es de doce celdas y no una tabla: lo que se lee de un vistazo
-   es cuáles están en rojo, no una fila por mes con cinco columnas. El estado va también
-   en TEXTO dentro de la celda y no solo en el color — un documento de cumplimiento que
-   solo se pueda leer viendo colores no lo puede leer todo el mundo. */
-
-.fraction {
-  font-size: var(--text-lg);
-  font-weight: var(--weight-strong);
-  margin: var(--space-2) 0;
-}
-
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
-  gap: var(--space-2);
-  list-style: none;
-  padding: 0;
-  margin: var(--space-2) 0 var(--space-4);
-}
+    es cuáles están en rojo, no una fila por mes con cinco columnas. */
 
 .period {
   border: 1px solid var(--line);
@@ -1306,22 +1293,6 @@ select:disabled {
 .note {
   font-size: var(--text-sm);
   color: var(--muted);
-}
-
-.report {
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: var(--space-3);
-  margin-bottom: var(--space-2);
-}
-
-/* El digest ENTERO, y por eso `word-break`: 64 caracteres no entran en una línea de
-   teléfono y truncarlos lo volvería inverificable, que es lo único para lo que sirve. */
-.report__hash code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: var(--text-xs);
-  word-break: break-all;
-  user-select: all;
 }
 
 /* ---------------------------------------------------------------------------
@@ -1980,57 +1951,51 @@ select:disabled {
   min-width: 11rem;
 }
 
-.requirements-list,
+.requirements-section__controls,
+.requirements-section__archive-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.requirements-section__archive-toggle {
+  gap: var(--space-2);
+  white-space: nowrap;
+}
+
 .schedule-list {
   list-style: none;
   margin: var(--space-4) 0 0;
   padding: 0;
 }
 
-.requirement-row {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(14rem, 1.3fr) minmax(12rem, 1fr) minmax(12rem, 1fr) 3rem;
-  align-items: center;
-  gap: var(--space-3);
-  min-height: 4.5rem;
-  padding: var(--space-3) 0;
-  border-top: 1px solid var(--line);
+.requirements-table {
+  margin: var(--space-4) 0 0;
 }
 
-.requirement-row__identity,
-.requirement-row__inspector {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
+.requirements-table th:first-child,
+.requirements-table td:first-child {
+  padding-left: 0;
 }
 
-.requirement-row__cadence,
-.requirement-row__inspector {
+.requirements-table th:last-child,
+.requirements-table td:last-child {
+  padding-right: 0;
+}
+
+.requirement-row__cadence {
   color: var(--muted);
   font-size: var(--text-sm);
 }
 
-.inline-dialog {
-  position: absolute;
-  right: var(--space-4);
-  top: 100%;
-  z-index: 2;
-  width: min(28rem, calc(100vw - var(--space-8)));
-  padding: var(--space-4);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--paper);
-  box-shadow: 0 0.5rem 1rem var(--scrim);
+.requirements-table__actions-cell {
+  position: relative;
+  width: 1%;
+  white-space: nowrap;
 }
 
-.inline-dialog h3 {
-  margin: 0 0 var(--space-3);
-}
-
-.inline-dialog p {
-  color: var(--muted);
+.requirements-table__actions-cell .table__actions {
+  flex-wrap: nowrap;
 }
 
 .schedule-section {
@@ -2264,20 +2229,57 @@ select:disabled {
 }
 
 @media (max-width: 48rem) {
-  .requirement-row {
-    grid-template-columns: minmax(0, 1fr) 3rem;
-    gap: var(--space-1) var(--space-3);
+  .requirements-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
   }
 
-  .requirement-row__identity,
-  .requirement-row__cadence,
-  .requirement-row__inspector {
-    grid-column: 1;
+  .requirements-table,
+  .requirements-table tbody,
+  .requirements-table tr,
+  .requirements-table th,
+  .requirements-table td {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
   }
 
-  .requirement-row .row-menu {
-    grid-column: 2;
-    grid-row: 1;
+  .requirements-table tr {
+    padding: var(--space-3) 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .requirements-table th,
+  .requirements-table td,
+  .requirements-table th:first-child,
+  .requirements-table td:first-child,
+  .requirements-table th:last-child,
+  .requirements-table td:last-child {
+    display: grid;
+    grid-template-columns: minmax(7rem, 0.42fr) minmax(0, 1fr);
+    gap: var(--space-2);
+    padding: var(--space-1) 0;
+    border: 0;
+  }
+
+  .requirements-table th::before,
+  .requirements-table td::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-strong);
+  }
+
+  .requirements-table__actions-cell {
+    white-space: normal;
+  }
+
+  .requirements-table__actions-cell .table__actions {
+    justify-content: flex-start;
   }
 
   .schedule-toolbar .year-nav {
@@ -2329,6 +2331,11 @@ select:disabled {
 
   .requirements-section__add {
     width: 100%;
+  }
+
+  .requirements-section__controls {
+    width: 100%;
+    flex-wrap: wrap;
   }
 }
 
@@ -4165,26 +4172,85 @@ select:disabled {
   margin: var(--space-0-5) 0 0;
 }
 
-/* La tarjeta publicada comparte la silueta de borradores, pero no sus acciones: cada fila
-   es un registro terminado, no un link de edición. */
-.published-card .list {
+/* Las publicadas usan la misma silueta que los requisitos de programación: título y
+   contexto a la izquierda, acción principal contra el borde y la tabla como cuerpo de
+   una única superficie. */
+.published-card {
+  margin: 0 0 var(--space-6);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+  background: var(--paper);
+}
+
+.published-card__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.published-card__head h2 {
   margin: 0;
 }
 
-.published-card .list__row:last-child {
+.published-card__head .note {
+  margin: var(--space-1) 0 0;
+}
+
+.published-card__head h2 .note {
+  margin: 0;
+}
+
+.published-card__add {
+  width: auto;
+  min-width: 11rem;
+}
+
+/* Misma mesa que `.requirements-table`: el cuerpo llega hasta los bordes de la tarjeta y
+   la columna de acciones ocupa lo mínimo, contra el borde derecho. */
+.published-card__table {
+  margin: var(--space-4) 0 0;
+}
+
+.published-card__table th:first-child,
+.published-card__table td:first-child {
+  padding-left: 0;
+}
+
+.published-card__table th:last-child,
+.published-card__table td:last-child {
+  padding-right: 0;
+}
+
+.published-card__table tbody tr:last-child th,
+.published-card__table tbody tr:last-child td {
   border-bottom: 0;
-  padding-bottom: 0;
 }
 
-.published-card .list__row > div {
-  min-width: 0;
+/* Clave, versión y fecha son el contexto de la fila, no lo que se lee primero. */
+.published-row__meta {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
 }
 
-.published-card .list__row .note {
-  margin: var(--space-0-5) 0 0;
+/* `relative` para anclar el `.row-menu`, y sin `overflow` alrededor: un menú abierto
+   dentro de un contenedor con scroll se recortaría. */
+.published-card__actions-cell {
+  position: relative;
+  width: 1%;
+  white-space: nowrap;
+}
+
+.published-card__actions-cell .table__actions {
+  flex-wrap: nowrap;
+  justify-content: flex-end;
 }
 
 .published-empty {
+  margin-top: var(--space-4);
   padding: var(--space-6);
   border: 1px dashed var(--line-control);
   border-radius: var(--radius);
@@ -4203,6 +4269,67 @@ select:disabled {
 
 .published-empty .note {
   margin: var(--space-1) 0 0;
+}
+
+/* En un teléfono cada fila pasa a ficha con su etiqueta, igual que los requisitos de
+   programación: cinco columnas no entran, y el desplazamiento lateral esconde columnas. */
+@media (max-width: 48rem) {
+  .published-card__add {
+    width: 100%;
+  }
+
+  .published-card__table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .published-card__table,
+  .published-card__table tbody,
+  .published-card__table tr,
+  .published-card__table th,
+  .published-card__table td {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .published-card__table tr {
+    padding: var(--space-3) 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .published-card__table th,
+  .published-card__table td,
+  .published-card__table th:first-child,
+  .published-card__table td:first-child,
+  .published-card__table th:last-child,
+  .published-card__table td:last-child {
+    display: grid;
+    grid-template-columns: minmax(7rem, 0.42fr) minmax(0, 1fr);
+    gap: var(--space-2);
+    padding: var(--space-1) 0;
+    border: 0;
+  }
+
+  .published-card__table th::before,
+  .published-card__table td::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-strong);
+  }
+
+  .published-card__actions-cell {
+    white-space: normal;
+  }
+
+  .published-card__actions-cell .table__actions {
+    justify-content: flex-start;
+  }
 }
 
 /*
@@ -4247,6 +4374,8 @@ select:disabled {
 .modal__head h2 {
   margin: 0;
   font-size: var(--text-lg);
+  /* El nombre de una plantilla puede ser una sola palabra larga; que corte, no que desborde. */
+  overflow-wrap: anywhere;
 }
 
 .modal__icon {

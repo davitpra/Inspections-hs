@@ -40,7 +40,11 @@ export class TemplateDraftException extends HttpException {
   }
 }
 
-export type TemplateVersionErrorCode = 'template_version_not_found' | 'template_not_found';
+export type TemplateVersionErrorCode =
+  | 'template_version_not_found'
+  | 'template_not_found'
+  | 'template_already_deactivated'
+  | 'template_not_deactivated';
 
 export class TemplateVersionException extends HttpException {
   constructor(readonly code: TemplateVersionErrorCode, message: string, status: HttpStatus) {
@@ -69,6 +73,28 @@ export const templateNotFound = (): TemplateVersionException =>
     'template_not_found',
     'That template does not exist',
     HttpStatus.NOT_FOUND,
+  );
+
+/**
+ * La baja pedida ya estaba hecha.
+ *
+ * `409` y no un `200` silencioso: la respuesta lleva la fila resultante, y contestar «listo»
+ * a la segunda pestaña haría creer que fue ella la que la retiró. La primera dio de baja, la
+ * segunda no hizo nada, y eso es exactamente lo que dice este código.
+ */
+export const templateAlreadyDeactivated = (): TemplateVersionException =>
+  new TemplateVersionException(
+    'template_already_deactivated',
+    'That template is already deactivated',
+    HttpStatus.CONFLICT,
+  );
+
+/** El simétrico: reactivar una que nunca dejó de estar activa. */
+export const templateNotDeactivated = (): TemplateVersionException =>
+  new TemplateVersionException(
+    'template_not_deactivated',
+    'That template is already active',
+    HttpStatus.CONFLICT,
   );
 
 /**

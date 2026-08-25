@@ -29,7 +29,11 @@ import {
  * mecanismo. Si el SQL cambia, este espejo se actualiza a mano.
  */
 
-/** La cabecera. Mutable en `name` y `deactivated_at`, y solo para hs_migrator. */
+/**
+ * La cabecera. Lo único mutable es `deactivated_at` —la baja lógica del catálogo, que
+ * `0033` concedió a hs_app columna por columna—; `id`, `key` y `created_at` los rechaza el
+ * trigger `template_guard`, y `name` solo lo puede tocar hs_migrator.
+ */
 export const template = pgTable('template', {
   id: uuid('id').defaultRandom().primaryKey(),
   key: text('key').notNull().unique(),

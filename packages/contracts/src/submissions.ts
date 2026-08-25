@@ -1,7 +1,7 @@
 import { ITEM_KEY_PATTERN, signatureAnswerSchema, templateDocumentSchema } from '@hs/forms';
 import { z } from 'zod';
 
-import { periodMonthsSchema } from './compliance.js';
+import { periodMonthsSchema } from './periods.js';
 import { findingSchema, submissionFindingsSchema } from './findings.js';
 
 /**

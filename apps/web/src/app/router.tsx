@@ -20,7 +20,6 @@ import { IncidentsRoute } from '../routes/IncidentsRoute';
 import { OfflineRoute } from '../routes/OfflineRoute';
 import { OutboxRoute } from '../routes/OutboxRoute';
 import { PastInspectionsRoute } from '../routes/PastInspectionsRoute';
-import { ComplianceRoute } from '../routes/ComplianceRoute';
 import { RecurrenceRoute } from '../routes/RecurrenceRoute';
 import { ReportIncidentRoute } from '../routes/ReportIncidentRoute';
 import { ReviewRoute } from '../routes/ReviewRoute';
@@ -251,15 +250,9 @@ const recurrenceRoute = createRoute({
  * lo mismo que la recurrencia: un reporte regulatorio se genera sentado y con conexión.
  * Guardarlo offline guardaría además una copia de un payload cuyo digest nadie recomputó.
  */
-const complianceRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/compliance',
-  component: ComplianceRoute,
-});
-
 /**
  * La consola de programación (§4). ONLINE y fuera del precacheo del service worker, por
- * lo mismo que la recurrencia y el cumplimiento —se planifica sentado— y por una razón
+   * lo mismo que la recurrencia —se planifica sentado— y por una razón
  * propia y más fuerte: una asignación en cola sería un inspector que no sabe que fue
  * asignado. El offline existe para que no se pierda el trabajo de campo, no para diferir
  * decisiones de coordinación.
@@ -377,7 +370,6 @@ const routeTree = rootRoute.addChildren([
   incidentRoute,
   form7Route,
   recurrenceRoute,
-  complianceRoute,
   inboxRoute,
   acceptInvitationRoute,
 ]);

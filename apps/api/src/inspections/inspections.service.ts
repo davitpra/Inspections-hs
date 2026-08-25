@@ -33,6 +33,9 @@ import {
   inspectionNotFound,
   inspectorInvalid,
   scheduleAlreadyActive,
+  scheduleMustBeDeactivated,
+  scheduleMustBeRestored,
+  scheduleRestoreConflict,
   templateNotPublishable,
   versionNotAdvanceable,
 } from './inspections.errors';
@@ -86,6 +89,8 @@ export class InspectionsService {
         await this.requireInspector(client, input.default_inspector_id, input.site_id);
       }
 
+      await lockSchedulePair(client, input.site_id, input.template_id);
+
       // EL ANCLA LA RESUELVE EL SERVIDOR cuando el cliente no la manda, y con el mes
       // CIVIL DE ONTARIO: el mismo calendario en el que el trabajo de apertura resuelve
       // el período. Con el reloj del dispositivo, una regla creada el 31 a las 21:00
@@ -130,11 +135,25 @@ export class InspectionsService {
   ): Promise<InspectionSchedule> {
     this.requireCoordinator(session);
 
-    return this.db.withSiteScopeClient(sessionScope(session), async (client) => {
-      const current = await this.scheduleById(client, id);
+    return this.db.withSessionClient(session, async (client) => {
+      let current = await this.scheduleById(client, id);
+
+      await lockSchedulePair(client, current.site_id, current.template_id);
+      current = await this.scheduleById(client, id);
 
       if (input.default_inspector_id) {
         await this.requireInspector(client, input.default_inspector_id, current.site_id);
+      }
+
+      if (
+        input.archived === true &&
+        (current.deactivated_at === null || input.deactivated === false)
+      ) {
+        throw scheduleMustBeDeactivated();
+      }
+
+      if (input.deactivated === false && current.archived_at !== null) {
+        throw scheduleMustBeRestored();
       }
 
       // Reactivar (deactivated: false) vuelve a chocar contra el mismo parcial de 0008
@@ -144,16 +163,34 @@ export class InspectionsService {
           `UPDATE inspection_schedule
               SET default_inspector_id = CASE WHEN $2::bool
                                               THEN $3::uuid ELSE default_inspector_id END,
-                  deactivated_at = CASE WHEN $4::bool
-                                        THEN CASE WHEN $5::bool THEN now() ELSE NULL END
-                                        ELSE deactivated_at END
-            WHERE id = $1`,
+                   deactivated_at = CASE WHEN $4::bool
+                                         THEN CASE WHEN $5::bool THEN now() ELSE NULL END
+                                         ELSE deactivated_at END,
+                   archived_at = CASE WHEN $6::bool
+                                      THEN CASE WHEN $7::bool
+                                                THEN COALESCE(archived_at, now())
+                                                ELSE NULL END
+                                      ELSE archived_at END
+            WHERE id = $1
+              AND (NOT $6::bool
+                   OR $7::bool
+                   OR archived_at IS NULL
+                   OR NOT EXISTS (
+                     SELECT 1
+                       FROM inspection_schedule other
+                      WHERE other.site_id = inspection_schedule.site_id
+                        AND other.template_id = inspection_schedule.template_id
+                        AND other.id <> inspection_schedule.id
+                        AND other.archived_at IS NULL
+                   ))`,
           [
             id,
             input.default_inspector_id !== undefined,
             input.default_inspector_id ?? null,
             input.deactivated !== undefined,
             input.deactivated ?? false,
+            input.archived !== undefined,
+            input.archived ?? false,
           ],
         )
         .catch((caught: unknown) => {
@@ -163,7 +200,12 @@ export class InspectionsService {
           throw caught;
         });
 
-      if (rowCount === 0) throw inspectionNotFound();
+      if (rowCount === 0) {
+        if (input.archived === false && current.archived_at !== null) {
+          throw scheduleRestoreConflict(current.site_id, current.template_id);
+        }
+        throw inspectionNotFound();
+      }
 
       return this.scheduleById(client, id);
     });
@@ -812,7 +854,8 @@ const SCHEDULE_SELECT = `
          s.default_inspector_id,
          ${INSPECTOR_NAME_EXPR('dp')} AS default_inspector_name,
          s.created_at,
-         s.deactivated_at
+         s.deactivated_at,
+         s.archived_at
     FROM inspection_schedule s
     JOIN template t ON t.id = s.template_id
     ${INSPECTOR_NAME_JOIN('s.default_inspector_id', 'du', 'dp')}
@@ -826,7 +869,7 @@ const SCHEDULE_SELECT = `
  * **`signed_at` y NO `received_at`.** El período se fecha por cuándo se FIRMÓ el recorrido,
  * no por cuándo volvió la red: los dos se separan por todo lo que el dispositivo haya
  * estado sin señal, y el mes es lo que identifica la obligación ante el regulador. Es el
- * mismo instante que `compliance.sql.ts` proyecta como `occurred_at` y que heredan los
+   * mismo instante que las consultas operativas proyectan como `occurred_at` y que heredan los
  * hallazgos del envío. Que sea un reloj de dispositivo está anotado en el campo de
  * `scheduledInspectionSchema`.
  */
@@ -871,6 +914,7 @@ interface ScheduleRow extends Record<string, unknown> {
   default_inspector_name: string | null;
   created_at: Date;
   deactivated_at: Date | null;
+  archived_at: Date | null;
 }
 
 interface ScheduledRow extends Record<string, unknown> {
@@ -943,6 +987,7 @@ function toSchedule(row: ScheduleRow): InspectionSchedule {
     default_inspector_name: row.default_inspector_name,
     created_at: row.created_at.toISOString(),
     deactivated_at: row.deactivated_at?.toISOString() ?? null,
+    archived_at: row.archived_at?.toISOString() ?? null,
   };
 }
 
@@ -977,6 +1022,19 @@ function isUniqueViolation(caught: unknown): boolean {
   return typeof caught === 'object' && caught !== null && 'code' in caught
     ? (caught as { code?: unknown }).code === '23505'
     : false;
+}
+
+async function lockSchedulePair(
+  client: PoolClient,
+  siteId: string,
+  templateId: string,
+): Promise<void> {
+  await client.query(
+    `SELECT pg_advisory_xact_lock(
+       hashtextextended($1::uuid::text || ':' || $2::uuid::text, 0)
+     )`,
+    [siteId, templateId],
+  );
 }
 
 function isSqlState(caught: unknown, code: string): caught is DatabaseError {

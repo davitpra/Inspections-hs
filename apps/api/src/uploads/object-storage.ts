@@ -1,39 +1,11 @@
 import { randomUUID } from 'node:crypto';
 
 import { Injectable } from '@nestjs/common';
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { UploadContentType } from '@hs/contracts';
 
-/**
- * ADR-006 — El almacenamiento de objetos, y las únicas operaciones que la aplicación
- * puede pedirle: escribir y leer. Nunca borrar.
- *
- * Desde la etapa 7 son tres verbos y no uno: firmar un PUT para el dispositivo, subir el
- * PDF del reporte de cumplimiento desde el servidor, y firmar un GET para descargarlo.
- * Los dos últimos existen porque los bytes del reporte nacen en este proceso —los produce
- * Chromium— y no en un teléfono.
- *
- * **La credencial de esta aplicación no lleva `DeleteObject`, y eso es del bucket, no
- * de este archivo.** Acá no hay método para borrar porque no existe un camino de
- * código que lo intente; que además la política del bucket lo niegue es lo que hace
- * que el día que alguien escriba ese método, falle. Las dos mitades hacen falta: el
- * bucket tiene versioning activado, así que ni siquiera una sobreescritura pierde la
- * foto que respalda un hallazgo.
- *
- * El PUT va DIRECTO del dispositivo al bucket y no pasa por la API: una foto de una
- * planta sin señal no tiene por qué atravesar dos saltos, y el proceso de Node no
- * tiene por qué sostener un multipart de 20 MB mientras el inspector espera.
- */
-
 export interface PresignedUpload {
-  url: string;
-  object_key: string;
-  expires_at: string;
-}
-
-/** Lo mismo, del otro lado: una lectura firmada y corta (etapa 7). */
-export interface PresignedDownload {
   url: string;
   object_key: string;
   expires_at: string;
@@ -46,7 +18,6 @@ export interface PresignInput {
   content_length: number;
 }
 
-/** Lo mismo, para la foto de un hallazgo de entrada manual (design D9). */
 export interface PresignManualInput {
   site_id: string;
   draft_finding_id: string;
@@ -54,7 +25,6 @@ export interface PresignManualInput {
   content_length: number;
 }
 
-/** Lo mismo, para la evidencia de una acción correctiva (etapa 5, design D9). */
 export interface PresignActionInput {
   site_id: string;
   action_id: string;
@@ -62,11 +32,6 @@ export interface PresignActionInput {
   content_length: number;
 }
 
-/**
- * Corta a propósito (design D7). La URL se pide justo antes del PUT y se usa en el
- * acto; una expiración larga es una URL de escritura circulando por el `fetch` de un
- * teléfono más tiempo del que hace falta.
- */
 const DEFAULT_TTL_SECONDS = 300;
 
 @Injectable()
@@ -83,21 +48,11 @@ export class ObjectStorageService {
     this.client = new S3Client({
       region: config.region,
       endpoint: config.endpoint,
-      // Los bucket S3-compatibles (MinIO, Garage, R2 con endpoint propio) sirven por
-      // path y no por subdominio. Con virtual-hosted style el PUT iría a un host que
-      // no resuelve, y el error aparecería en el dispositivo y no acá.
       forcePathStyle: config.forcePathStyle,
       credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
     });
   }
 
-  /**
-   * Firma un PUT para UNA foto y devuelve dónde va a quedar.
-   *
-   * **La key la deriva el servidor y no se acepta una del cliente** (design D7). Dejar
-   * que el dispositivo la eligiera es dejar que escriba dentro del prefijo de otra
-   * inspección, o de otra planta: el prefijo es lo único que separa las dos.
-   */
   async presignPut(input: PresignInput): Promise<PresignedUpload> {
     return this.sign(
       deriveObjectKey(input.site_id, input.scheduled_inspection_id),
@@ -106,10 +61,6 @@ export class ObjectStorageService {
     );
   }
 
-  /**
-   * La misma firma, en el prefijo del hallazgo manual. Mismo principio que arriba: la
-   * key la deriva el servidor, y el cliente solo dice de qué borrador es la foto.
-   */
   async presignManualPut(input: PresignManualInput): Promise<PresignedUpload> {
     return this.sign(
       deriveManualObjectKey(input.site_id, input.draft_finding_id),
@@ -118,62 +69,12 @@ export class ObjectStorageService {
     );
   }
 
-  /**
-   * La misma firma, en el prefijo de una acción correctiva. La acción ya existe, así
-   * que su id es la carpeta y el cliente sigue sin elegir dónde escribe.
-   */
   async presignActionPut(input: PresignActionInput): Promise<PresignedUpload> {
     return this.sign(
       deriveActionObjectKey(input.site_id, input.action_id),
       input.content_type,
       input.content_length,
     );
-  }
-
-  /**
-   * ETAPA 7 — El PDF del reporte de cumplimiento, escrito por el SERVIDOR.
-   *
-   * Es la primera vez que la aplicación sube un objeto por sí misma en vez de firmarle
-   * un PUT a un dispositivo, y el motivo es que acá los bytes nacen del lado del
-   * servidor: los produce Chromium dentro de este proceso, no hay ningún teléfono que
-   * pueda subirlos. La credencial gana `PutObject` por eso.
-   *
-   * **Sigue sin haber `DeleteObject`**, ni en la credencial ni en esta clase. El bucket
-   * tiene versioning, así que ni siquiera una sobreescritura pierde un documento — y de
-   * todos modos cada render escribe su propia key, así que no hay sobreescritura.
-   */
-  async putComplianceReport(objectKey: string, body: Uint8Array): Promise<void> {
-    await this.client.send(
-      new PutObjectCommand({
-        Bucket: this.bucket,
-        Key: objectKey,
-        Body: body,
-        ContentType: 'application/pdf',
-      }),
-    );
-  }
-
-  /**
-   * ETAPA 7 — La descarga del PDF, firmada y corta.
-   *
-   * POR QUÉ UNA URL FIRMADA Y NO STREAMING POR LA API: un PDF de cientos de kilobytes
-   * atravesando el proceso de Node no gana nada, y es el mismo mecanismo que ya se usa
-   * para subir, con el mismo TTL corto. Quién puede descargar lo decide el endpoint
-   * —alcance de sitio y render exitoso— antes de firmar; la URL firmada es el resultado
-   * de esa decisión, no un sustituto de ella.
-   */
-  async presignComplianceGet(objectKey: string): Promise<PresignedDownload> {
-    const url = await getSignedUrl(
-      this.client,
-      new GetObjectCommand({ Bucket: this.bucket, Key: objectKey }),
-      { expiresIn: this.ttlSeconds },
-    );
-
-    return {
-      url,
-      object_key: objectKey,
-      expires_at: new Date(Date.now() + this.ttlSeconds * 1000).toISOString(),
-    };
   }
 
   private async sign(
@@ -200,69 +101,16 @@ export class ObjectStorageService {
   }
 }
 
-/**
- * `{site_id}/{scheduled_inspection_id}/{uuid}`.
- *
- * El sitio va primero para que una política del bucket pueda acotarse por prefijo el
- * día que haga falta, y el UUID último para que dos fotos del mismo ítem no puedan
- * colisionar — ni siquiera si el dispositivo reintenta una subida que sí había
- * terminado.
- */
 export function deriveObjectKey(siteId: string, scheduledInspectionId: string): string {
   return `${siteId}/${scheduledInspectionId}/${randomUUID()}`;
 }
 
-/**
- * `{site_id}/manual/{draft_finding_id}/{uuid}` — la foto de un hallazgo de entrada
- * manual (design D9).
- *
- * Un hallazgo manual no cuelga de ninguna inspección programada, así que no hay un
- * `scheduled_inspection_id` que ponga en el segundo segmento. El literal `manual/`
- * ocupa ese lugar a propósito: sin él, el `draft_finding_id` sería un uuid en la misma
- * posición que el de una inspección y los dos prefijos dejarían de distinguirse.
- *
- * Esta función dice DÓNDE SE ESCRIBE. Qué se acepta lo dice `foreignManualKeys` en
- * `findings/object-key.ts`, escrito por separado y a propósito: son dos afirmaciones
- * que tienen que coincidir, y un test las compara. Mismo criterio que con
- * `objectKeyPrefix` de `inspections/submission.ts`.
- */
 export function deriveManualObjectKey(siteId: string, draftFindingId: string): string {
   return `${siteId}/manual/${draftFindingId}/${randomUUID()}`;
 }
 
-/**
- * `{site_id}/actions/{action_id}/{uuid}` — la evidencia de una acción correctiva
- * (etapa 5, design D9).
- *
- * La más simple de las tres: cuando se sube evidencia la acción YA EXISTE, así que su
- * id sirve de carpeta y no hace falta un borrador que el cliente invente antes. El
- * literal `actions/` cumple el mismo papel que `manual/`: sin él, el `action_id` sería
- * un uuid en la misma posición que el de una inspección programada.
- */
 export function deriveActionObjectKey(siteId: string, actionId: string): string {
   return `${siteId}/actions/${actionId}/${randomUUID()}`;
-}
-
-/**
- * `{site_id}/reports/{report_id}/{render_id}.pdf` — el PDF de un reporte de cumplimiento
- * (etapa 7, design D3).
- *
- * **La key incluye el INTENTO y no solo el reporte**, y esa es la diferencia con las tres
- * de arriba. Regenerar el PDF de un reporte de julio es legítimo —el payload y su digest
- * no cambian— y con la key por intento el segundo render escribe un objeto propio en vez
- * de tapar el primero. Con versioning activo tapar tampoco perdería nada, pero dejaría el
- * archivo anterior alcanzable solo por la API de versiones; así, cada fila de
- * `compliance_report_render` apunta a un objeto que existe por sí mismo.
- *
- * La extensión va explícita porque este objeto se descarga por una URL firmada que el
- * navegador abre: sin ella, el archivo llega sin nombre útil.
- */
-export function deriveComplianceReportKey(
-  siteId: string,
-  reportId: string,
-  renderId: string,
-): string {
-  return `${siteId}/reports/${reportId}/${renderId}.pdf`;
 }
 
 interface ObjectStorageConfig {
@@ -275,11 +123,6 @@ interface ObjectStorageConfig {
   ttlSeconds: number;
 }
 
-/**
- * Sin bucket ni credencial no se arranca, por el mismo motivo que
- * `BETTER_AUTH_SECRET`: un default acá sería un default en producción, y lo que se
- * perdería es la foto que respalda un hallazgo.
- */
 function readConfig(): ObjectStorageConfig {
   const bucket = process.env.S3_BUCKET;
   const accessKeyId = process.env.S3_ACCESS_KEY_ID;

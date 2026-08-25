@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 
 import { createTemplateDraft } from '../../api/templates';
 import { queryKeys } from '../../api/query-keys';
@@ -23,13 +23,26 @@ import { canCreate } from './presentation';
  * lo tiene una plantilla publicada, o no deja derivar ninguna clave— el error se lee acá y
  * el formulario conserva lo escrito. Es el rechazo más probable de toda la pantalla.
  */
-export function NewDraftForm(): React.JSX.Element {
+export function NewDraftForm({ onClose }: { onClose: () => void }): React.JSX.Element {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const controlId = useId();
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
 
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    returnFocusRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    dialogRef.current?.showModal();
+  }, []);
+
+  const close = () => {
+    dialogRef.current?.close();
+    returnFocusRef.current?.focus();
+  };
 
   const create = useMutation({
     mutationFn: () => createTemplateDraft({ name: name.trim() }),
@@ -39,18 +52,27 @@ export function NewDraftForm(): React.JSX.Element {
       void queryClient.invalidateQueries({ queryKey: queryKeys.templateDrafts() });
 
       // Crear un borrador es querer escribirlo. Dejarlo en la lista obligaría a buscarlo.
+      close();
       void navigate({ to: '/templates/drafts/$id', params: { id: draft.id } });
     },
     onError: (caught: Error) => setError(caught.message),
   });
 
   return (
-    <div className="card">
-      <div className="card__head">
-        <h3>Start a template</h3>
+    <dialog
+      ref={dialogRef}
+      className="modal"
+      aria-label="Start Template"
+      onClose={() => {
+        onClose();
+        returnFocusRef.current?.focus();
+      }}
+    >
+      <div className="modal__head">
+        <h2>Start Template</h2>
       </div>
 
-      <div className="filters">
+      <div className="modal__form">
         <label htmlFor={`${controlId}-name`}>Name</label>
         <input
           id={`${controlId}-name`}
@@ -59,6 +81,12 @@ export function NewDraftForm(): React.JSX.Element {
           placeholder="Monthly electrical inspection"
           onChange={(event) => setName(event.target.value)}
         />
+        <p className="note">
+          The name identifies the template, so no two can share one. You can rename it later.
+        </p>
+      </div>
+
+      <div className="modal__actions">
         <button
           type="button"
           className="button--primary"
@@ -67,13 +95,10 @@ export function NewDraftForm(): React.JSX.Element {
         >
           {create.isPending ? 'Creating…' : 'Create draft'}
         </button>
+        <button type="button" onClick={close}>Cancel</button>
       </div>
 
-      <p className="note">
-        The name identifies the template, so no two can share one. You can rename it later.
-      </p>
-
       {error ? <p className="notice">{error}</p> : null}
-    </div>
+    </dialog>
   );
 }

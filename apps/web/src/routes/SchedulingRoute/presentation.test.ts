@@ -76,6 +76,7 @@ function rule(overrides: Partial<InspectionSchedule> = {}): InspectionSchedule {
     default_inspector_name: null,
     created_at: '2020-01-01T00:00:00.000Z',
     deactivated_at: null,
+    archived_at: null,
     ...overrides,
   };
 }
@@ -106,6 +107,22 @@ describe('la fila vigente por plantilla', () => {
     const b = rule({ id: 'b', template_id: TEMPLATE_B });
 
     expect(currentRules([a, b])).toEqual([a, b]);
+  });
+});
+
+describe('el archivo y la proyección anual', () => {
+  it('no cambia los períodos que una regla histórica debe', () => {
+    const deactivated = rule({
+      deactivated_at: '2026-09-10T00:00:00.000Z',
+    });
+
+    expect(
+      projectYear(
+        [{ ...deactivated, archived_at: '2026-10-01T00:00:00.000Z' }],
+        [],
+        '2026',
+      ),
+    ).toEqual(projectYear([deactivated], [], '2026'));
   });
 });
 

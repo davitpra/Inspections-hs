@@ -46,9 +46,8 @@ export function monthName(periodStart: string): string {
  * **Se reexporta de `@hs/contracts` y no se implementa acá**, a diferencia de `monthName`
  * y de `civilDate`, que sí son copias deliberadas. La diferencia es quién más lo usa: la
  * zona horaria la repite el cliente porque no puede importar de `apps/api`, pero esta
- * etiqueta la escribe TAMBIÉN el PDF que se le entrega al MLITSD, y `contracts` es el
- * único lugar que los dos ya comparten. Dos implementaciones serían dos formas de nombrar
- * el mismo trimestre, y la que envejecería es la del documento regulatorio.
+ * etiqueta la usan varias pantallas operativas, y `contracts` es el único lugar compartido.
+ * Dos implementaciones serían dos formas de nombrar el mismo trimestre.
  *
  * Se reexporta desde acá igual, y no se importa de `@hs/contracts` en cada componente,
  * para que el lugar donde se busca «cómo se lee una fecha» siga siendo uno solo.

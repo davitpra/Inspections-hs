@@ -7,7 +7,6 @@ import {
   DocumentIcon,
   InboxIcon,
   ListIcon,
-  LockIcon,
   OutboxIcon,
   PersonIcon,
   PinIcon,
@@ -42,7 +41,6 @@ export type NavPath =
   | '/'
   | '/actions'
   | '/recurrence'
-  | '/compliance'
   | '/scheduling'
   | '/roster'
   | '/templates'
@@ -89,7 +87,6 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/', label: 'Inspections', icon: ListIcon },
   { to: '/actions', label: 'Corrective actions', icon: CheckIcon },
   { to: '/recurrence', label: 'Recurring findings', icon: ClockIcon },
-  { to: '/compliance', label: 'Compliance', icon: LockIcon },
   {
     to: '/scheduling',
     label: 'Scheduling',
@@ -137,7 +134,6 @@ const TITLES: readonly (readonly [string, string])[] = [
   ['/incidents/*/form7', 'Form 7'],
   ['/incidents/*', 'Incident'],
   ['/recurrence', 'Recurring findings'],
-  ['/compliance', 'Compliance'],
   ['/scheduling', 'Scheduling'],
   ['/roster', 'Roster'],
   ['/templates', 'Templates'],
