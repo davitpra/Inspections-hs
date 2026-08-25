@@ -97,6 +97,7 @@ function scheduled(overrides: Record<string, unknown> = {}) {
     scheduled_by: null,
     cancelled_at: null,
     cancellation_reason: null,
+    visible_early: false,
     status: 'open' as const,
     inspection_id: null,
     completed_at: null,

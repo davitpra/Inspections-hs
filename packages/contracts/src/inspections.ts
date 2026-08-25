@@ -164,6 +164,13 @@ export const scheduledInspectionSchema = z.strictObject({
    */
   inspection_id: z.uuid().nullable(),
   /**
+   * Decidido al abrir el período a mano y nunca después. `false` en todo lo que abre el
+   * cron de ADR-005 — ese siempre abre un período que ya empezó. Solo importa mientras
+   * el mes corriente todavía no alcanza a `period_start`: es lo que hace que el pendiente
+   * del inspector muestre esta fila antes de tiempo, a propósito, y no por descuido.
+   */
+  visible_early: z.boolean(),
+  /**
    * Cuándo se cerró, y **cuál de los dos relojes es**.
    *
    * Es `inspection.signed_at`: el instante en que el inspector FIRMÓ el recorrido, tomado
@@ -197,6 +204,12 @@ export const createScheduledInspectionSchema = z.strictObject({
   template_id: z.uuid(),
   period_start: periodStartSchema,
   inspector_id: z.uuid().nullable().optional(),
+  /**
+   * Por defecto `false`: el período solo aparece en el pendiente del inspector cuando el
+   * mes corriente lo alcanza. El coordinador que abre un período por adelantado puede
+   * pedir acá que se muestre desde ya.
+   */
+  visible_early: z.boolean().optional(),
 });
 
 export type CreateScheduledInspection = z.infer<typeof createScheduledInspectionSchema>;

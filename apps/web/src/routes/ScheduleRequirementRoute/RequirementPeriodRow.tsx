@@ -4,6 +4,7 @@ import type { InspectionSchedule } from '@hs/contracts';
 
 import { createScheduledInspection } from '../../api/inspections';
 import { queryKeys } from '../../api/query-keys';
+import { civilToday } from '../../presentation/dates';
 import { PeriodAssignment } from './PeriodAssignment';
 import { entryKey, periodLabel, periodStatus, rowControl, rowInspector, rowNote } from './presentation';
 import type { YearEntry } from '../../presentation/scheduling';
@@ -24,6 +25,7 @@ export function RequirementPeriodRow({
   const queryClient = useQueryClient();
   const control = rowControl(entry, canAdminister);
   const [error, setError] = useState<string | null>(null);
+  const [visibleEarly, setVisibleEarly] = useState(false);
   const open = useMutation({
     mutationFn: () => {
       if (entry.kind !== 'unopened') throw new Error('This period is already open');
@@ -31,6 +33,7 @@ export function RequirementPeriodRow({
         site_id: entry.period.site_id,
         template_id: entry.period.template_id,
         period_start: entry.period.period_start,
+        visible_early: visibleEarly,
       });
     },
     onSuccess: () => {
@@ -41,7 +44,7 @@ export function RequirementPeriodRow({
     onError: (caught: Error) => setError(caught.message),
   });
   const opened = entry.kind === 'opened' ? entry.inspection : null;
-  const note = rowNote(entry);
+  const note = rowNote(entry, civilToday());
   const label = periodLabel(entry, year);
 
   return (
@@ -61,6 +64,15 @@ export function RequirementPeriodRow({
               <span className="note">
                 {publishedVersion === null ? 'Published version unavailable' : `Freezes version ${publishedVersion}`}
               </span>
+              <label className="annual-plan__early-toggle">
+                <input
+                  type="checkbox"
+                  checked={visibleEarly}
+                  disabled={open.isPending}
+                  onChange={(event) => setVisibleEarly(event.target.checked)}
+                />
+                Make visible to the inspector before the period starts
+              </label>
               <button
                 type="button"
                 className="button--outline"

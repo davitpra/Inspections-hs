@@ -52,6 +52,7 @@ function scheduled(overrides: Record<string, unknown> = {}) {
     scheduled_by: null,
     cancelled_at: null,
     cancellation_reason: null,
+    visible_early: false,
     status: 'completed',
     inspection_id: 'insp-1',
     completed_at: '2027-07-29T18:00:00.000Z',

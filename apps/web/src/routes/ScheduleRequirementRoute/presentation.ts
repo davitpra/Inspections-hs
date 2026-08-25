@@ -46,9 +46,12 @@ export function rowInspector(entry: YearEntry): string {
   return entry.kind === 'opened' ? inspectorLabel(entry.inspection) : 'Not opened yet';
 }
 
-export function rowNote(entry: YearEntry): string | null {
+export function rowNote(entry: YearEntry, today: string): string | null {
   if (entry.kind === 'unopened') return null;
   if (entry.inspection.cancellation_reason) return `Cancelled: ${entry.inspection.cancellation_reason}`;
+  if (entry.inspection.visible_early && entry.inspection.period_start > today) {
+    return 'Visible to the inspector ahead of its period';
+  }
 
   return missedNote(entry.inspection);
 }

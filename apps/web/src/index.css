@@ -2494,6 +2494,14 @@ button.schedule-cell:focus-visible {
   margin: 0;
 }
 
+.annual-plan__early-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
 .annual-plan__foot {
   margin: 0;
   padding: var(--space-4);

@@ -114,6 +114,7 @@ describe('lo completado por este inspector', () => {
       scheduled_by: null,
       cancelled_at: null,
       cancellation_reason: null,
+      visible_early: false,
       status: 'completed' as const,
       inspection_id: 'insp-1',
       completed_at: '2026-06-28T18:00:00.000Z',

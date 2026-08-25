@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { InspectionSchedule, ScheduledInspection } from '@hs/contracts';
 
-import { requirementYear } from './presentation';
+import { requirementYear, rowNote } from './presentation';
+import type { YearEntry } from '../../presentation/scheduling';
 
 const SITE = '11111111-1111-4111-8111-111111111111';
 const TEMPLATE = '22222222-2222-4222-8222-222222222222';
@@ -23,7 +24,7 @@ function rule(overrides: Partial<InspectionSchedule> = {}): InspectionSchedule {
   };
 }
 
-function period(periodStart: string): ScheduledInspection {
+function period(periodStart: string, visibleEarly = false): ScheduledInspection {
   return {
     id: `44444444-4444-4444-8444-${periodStart.slice(0, 4)}${periodStart.slice(5, 7)}000000`,
     site_id: SITE,
@@ -40,6 +41,7 @@ function period(periodStart: string): ScheduledInspection {
     scheduled_by: null,
     cancelled_at: null,
     cancellation_reason: null,
+    visible_early: visibleEarly,
     status: 'open',
     inspection_id: null,
     completed_at: null,
@@ -82,5 +84,25 @@ describe('proyección del plan de un requisito', () => {
 
     expect(starts(entries)).toContain('2026-10-01');
     expect(entries.find((entry) => entry.kind === 'opened' && entry.inspection.period_start === '2026-10-01')).toBeDefined();
+  });
+});
+
+function opened(inspection: ScheduledInspection): YearEntry {
+  return { kind: 'opened', inspection };
+}
+
+describe('la nota de una fila abierta', () => {
+  it('avisa cuando el coordinador la adelantó y el período todavía no llegó', () => {
+    expect(rowNote(opened(period('2026-12-01', true)), '2026-08-25')).toBe(
+      'Visible to the inspector ahead of its period',
+    );
+  });
+
+  it('no avisa una vez que el mes corriente alcanza al período, aunque siga marcada', () => {
+    expect(rowNote(opened(period('2026-08-01', true)), '2026-08-25')).toBeNull();
+  });
+
+  it('no avisa un período futuro que el coordinador no adelantó', () => {
+    expect(rowNote(opened(period('2026-12-01', false)), '2026-08-25')).toBeNull();
   });
 });

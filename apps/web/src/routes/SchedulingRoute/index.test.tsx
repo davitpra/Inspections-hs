@@ -48,7 +48,7 @@ function rule(overrides: Partial<InspectionSchedule> = {}): InspectionSchedule {
 }
 
 function inspection(overrides: Partial<ScheduledInspection> = {}): ScheduledInspection {
-  return { id: SCHEDULED, site_id: SITE, period_start: '2026-08-01', period_months: 1, period_end: '2026-08-31', template_id: TEMPLATE, template_name: 'Monthly general workplace inspection', template_version_id: VERSION, template_version: 2, inspector_id: null, inspector_name: null, scheduled_at: '2026-08-01T07:00:00.000Z', scheduled_by: null, cancelled_at: null, cancellation_reason: null, status: 'open', inspection_id: null, completed_at: null, ...overrides };
+  return { id: SCHEDULED, site_id: SITE, period_start: '2026-08-01', period_months: 1, period_end: '2026-08-31', template_id: TEMPLATE, template_name: 'Monthly general workplace inspection', template_version_id: VERSION, template_version: 2, inspector_id: null, inspector_name: null, scheduled_at: '2026-08-01T07:00:00.000Z', scheduled_by: null, cancelled_at: null, cancellation_reason: null, visible_early: false, status: 'open', inspection_id: null, completed_at: null, ...overrides };
 }
 
 function renderRoute() {

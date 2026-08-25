@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
+  boolean,
   check,
   date,
   foreignKey,
@@ -153,6 +154,11 @@ export const scheduledInspection = pgTable(
     // Cancelar es esto, nunca un DELETE, y exige motivo.
     cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
     cancellationReason: text('cancellation_reason'),
+
+    // Decidida al abrir el período a mano y nunca después — igual que `templateId`, no
+    // lleva UPDATE. Sin ella, el pendiente del inspector no puede distinguir un período
+    // que ya empezó de uno que el coordinador adelantó a propósito.
+    visibleEarly: boolean('visible_early').notNull().default(false),
   },
   (table) => [
     check(

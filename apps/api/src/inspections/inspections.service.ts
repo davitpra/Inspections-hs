@@ -33,7 +33,7 @@ import {
   siteScopeIsActive,
 } from './inspector-eligibility';
 import { periodStatusCase } from './period-status.sql';
-import { civilDate } from './period';
+import { civilDate, currentPeriodStart } from './period';
 import {
   inspectionNotFound,
   inspectorInvalid,
@@ -307,8 +307,8 @@ export class InspectionsService {
       const { rows } = await client.query<{ id: string }>(
         `INSERT INTO scheduled_inspection
            (site_id, period_start, period_months, template_id, template_version_id,
-            inspector_id, scheduled_by)
-         VALUES ($1, $2::date, $3, $4, $5, $6, $7)
+            inspector_id, scheduled_by, visible_early)
+         VALUES ($1, $2::date, $3, $4, $5, $6, $7, $8)
          RETURNING id`,
         [
           input.site_id,
@@ -318,6 +318,7 @@ export class InspectionsService {
           versionId,
           input.inspector_id ?? null,
           session.userId,
+          input.visible_early ?? false,
         ],
       );
 
@@ -385,6 +386,7 @@ export class InspectionsService {
    */
   async pendingFor(session: SessionScope): Promise<PendingInspection[]> {
     const today = civilDate(new Date(), SITE_TIME_ZONE);
+    const currentMonth = currentPeriodStart(new Date(), SITE_TIME_ZONE);
 
     return this.db.withSessionClient(session, async (client) => {
       const { rows } = await client.query<PendingRow>(
@@ -408,8 +410,9 @@ export class InspectionsService {
           WHERE si.inspector_id = $1
             AND si.cancelled_at IS NULL
             AND insp.id IS NULL
+            AND (si.period_start <= $3::date OR si.visible_early)
           ORDER BY si.period_end`,
-        [session.userId, today],
+        [session.userId, today, currentMonth],
       );
 
       return rows.map((row) => ({
@@ -904,6 +907,7 @@ const SCHEDULED_SELECT = `
          si.scheduled_by,
          si.cancelled_at,
          si.cancellation_reason,
+         si.visible_early,
          ${periodStatusCase({
            scheduled: 'si',
            inspection: 'insp',
@@ -948,6 +952,7 @@ interface ScheduledRow extends Record<string, unknown> {
   scheduled_by: string | null;
   cancelled_at: Date | null;
   cancellation_reason: string | null;
+  visible_early: boolean;
   status: PeriodStatus;
   inspection_id: string | null;
   completed_at: Date | null;
@@ -1023,6 +1028,7 @@ function toScheduled(row: ScheduledRow): ScheduledInspection {
     scheduled_by: row.scheduled_by,
     cancelled_at: row.cancelled_at?.toISOString() ?? null,
     cancellation_reason: row.cancellation_reason,
+    visible_early: row.visible_early,
     status: row.status,
     inspection_id: row.inspection_id,
     completed_at: row.completed_at?.toISOString() ?? null,

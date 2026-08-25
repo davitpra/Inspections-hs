@@ -313,7 +313,10 @@ describe('el pendiente de cada inspector', () => {
       siteIds: [SITE_A],
     };
 
-    // Un período viejo y uno del futuro, para el orden y el flag de vencido.
+    // Un período viejo y uno del futuro, para el orden y el flag de vencido. El del
+    // futuro lleva `visible_early` para que siga contando como pendiente bajo el nuevo
+    // filtro por mes — ver `describe('la visibilidad temprana de un período', ...)` para
+    // el caso sin ese flag.
     await stack.inspections.schedule(coordinatorSession, {
       site_id: SITE_A,
       template_id: templateId,
@@ -326,6 +329,7 @@ describe('el pendiente de cada inspector', () => {
       template_id: templateId,
       period_start: '2099-01-01',
       inspector_id: other.accountId,
+      visible_early: true,
     });
   });
 
@@ -435,6 +439,51 @@ describe('el pendiente de cada inspector', () => {
     });
 
     expect(none).toHaveLength(0);
+  });
+});
+
+describe('la visibilidad temprana de un período abierto a mano', () => {
+  let other: { accountId: string };
+  let coordinatorSession: { userId: string; role: string; siteIds: string[] };
+
+  beforeAll(async () => {
+    other = await createAccount(db.app, { siteIds: [SITE_A], role: 'jhsc_member' });
+    coordinatorSession = { userId: coordinator.accountId, role: 'hs_coordinator', siteIds: [SITE_A] };
+  });
+
+  it('un período futuro sin visible_early no aparece en el pendiente', async () => {
+    const scheduled = await stack.inspections.schedule(coordinatorSession, {
+      site_id: SITE_A,
+      template_id: templateId,
+      period_start: '2099-02-01',
+      inspector_id: other.accountId,
+    });
+
+    const mine = await stack.inspections.pendingFor({
+      userId: other.accountId,
+      role: 'jhsc_member',
+      siteIds: [SITE_A],
+    });
+
+    expect(mine.map((row) => row.id)).not.toContain(scheduled.id);
+  });
+
+  it('un período futuro con visible_early aparece de inmediato', async () => {
+    const scheduled = await stack.inspections.schedule(coordinatorSession, {
+      site_id: SITE_A,
+      template_id: templateId,
+      period_start: '2099-03-01',
+      inspector_id: other.accountId,
+      visible_early: true,
+    });
+
+    const mine = await stack.inspections.pendingFor({
+      userId: other.accountId,
+      role: 'jhsc_member',
+      siteIds: [SITE_A],
+    });
+
+    expect(mine.map((row) => row.id)).toContain(scheduled.id);
   });
 });
 

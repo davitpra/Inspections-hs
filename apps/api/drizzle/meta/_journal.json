@@ -246,6 +246,13 @@
       "when": 1754524800034,
       "tag": "0035_coordinator_jhsc_seat",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1754524800035,
+      "tag": "0036_scheduled_inspection_visible_early",
+      "breakpoints": true
     }
   ]
 }

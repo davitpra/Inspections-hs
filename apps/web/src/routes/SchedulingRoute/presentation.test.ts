@@ -45,6 +45,7 @@ function inspection(overrides: Partial<ScheduledInspection> = {}): ScheduledInsp
     scheduled_by: null,
     cancelled_at: null,
     cancellation_reason: null,
+    visible_early: false,
     status: 'open',
     inspection_id: null,
     completed_at: null,
