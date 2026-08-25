@@ -1300,6 +1300,16 @@ select:disabled {
   margin: var(--space-4) 0 var(--space-6);
 }
 
+/* El lado del encabezado que lleva más de un control — el `SitePicker` y "Add person"
+ * (`add-person-to-roster-by-hand`) — en una sola fila que se envuelve junto con el resto
+ * de `.scheduling__top` en un teléfono. */
+.scheduling__header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
 /*
  * El selector de planta: UNA FILA, no un campo. Alfiler y "Site" contra el borde
  * izquierdo, la planta elegida contra el derecho. El `<select>` pierde su marco porque

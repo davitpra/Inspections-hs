@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest';
 import {
   accountRoleLabel,
   canInvite,
+  dialogFor,
+  rowActions,
   canReissueInvitation,
   canRemoveJhscAccess,
   emailCellLabel,
@@ -22,6 +24,7 @@ import {
   rosterCounts,
   showsAccountRole,
   sortRoster,
+  addPersonButtonText,
   importButtonText,
   importSummary,
   sortRejections,
@@ -102,6 +105,16 @@ describe('la presentación del reporte de importación', () => {
     ['error', 'Try again'],
   ] as const)('nombra el botón en %s', (state, label) => {
     expect(importButtonText(state)).toBe(label);
+  });
+});
+
+describe('addPersonButtonText', () => {
+  it.each([
+    ['ready', 'Add person'],
+    ['pending', 'Adding…'],
+    ['error', 'Try again'],
+  ] as const)('nombra el botón en %s', (state, label) => {
+    expect(addPersonButtonText(state)).toBe(label);
   });
 });
 
@@ -624,5 +637,147 @@ describe('accountRoleLabel — el asiento en la celda Role', () => {
     });
 
     expect(label).toBe(ROLE_LABELS.jhsc_member);
+  });
+});
+
+/**
+ * La celda Actions entera, en una sola tabla de estados: qué botones dibuja cada fila, en
+ * qué orden, y con qué nombre accesible. Las condiciones sueltas ya están probadas arriba;
+ * acá se prueba que la fila las combine como la pantalla las muestra.
+ */
+describe('rowActions', () => {
+  const kinds = (row: PersonWithAccount): string[] =>
+    rowActions(row, true).map((action) => action.kind);
+
+  it('sin acceso y activa: solo invitar', () => {
+    expect(kinds(withAccount())).toEqual(['invite']);
+  });
+
+  it('sin acceso y dada de baja: ningún acto', () => {
+    expect(kinds(withAccount({ deactivated_at: '2026-01-01T00:00:00.000Z' }))).toEqual([]);
+  });
+
+  it('invitación pendiente: reemitir el link y cancelarla', () => {
+    const pending = withAccount(
+      {},
+      { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: false },
+    );
+
+    expect(kinds(pending)).toEqual(['reissue', 'remove']);
+    expect(rowActions(pending, true)[1]?.text).toBe('Cancel invitation');
+  });
+
+  it('miembro que ya entra: solo quitar', () => {
+    const member = withAccount(
+      {},
+      { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true },
+    );
+
+    expect(kinds(member)).toEqual(['remove']);
+    expect(rowActions(member, true)[0]?.text).toBe('Remove');
+  });
+
+  // La dirección del asiento la resuelve `jhscSeatAction` una sola vez, y el botón la
+  // hereda: afordancia y etiqueta no pueden hablar de direcciones distintas.
+  it('la coordinadora ofrece sentarse, y levantarse si ya está sentada', () => {
+    const seated = withAccount(
+      {},
+      { id: ACCOUNT_ID, role: 'hs_coordinator', active: true, can_sign_in: true, jhsc_seat: true },
+    );
+    const unseated = withAccount(
+      {},
+      { id: ACCOUNT_ID, role: 'hs_coordinator', active: true, can_sign_in: true },
+    );
+
+    expect(rowActions(seated, true)).toEqual([
+      expect.objectContaining({ kind: 'seat', seat: 'withdraw', text: 'Leave JHSC' }),
+    ]);
+    expect(rowActions(unseated, true)).toEqual([
+      expect.objectContaining({ kind: 'seat', seat: 'grant', text: 'Join JHSC' }),
+    ]);
+  });
+
+  /**
+   * Quien no puede invitar no ve NINGÚN acto, ni siquiera sobre una fila que los admite:
+   * el permiso se pregunta una vez por la pantalla, no una vez por botón.
+   */
+  it('sin permiso de invitar, ninguna fila ofrece nada', () => {
+    const rows = [
+      withAccount(),
+      withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: false }),
+      withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true }),
+      withAccount({}, { id: ACCOUNT_ID, role: 'hs_coordinator', active: true, can_sign_in: true }),
+    ];
+
+    for (const row of rows) expect(rowActions(row, false)).toEqual([]);
+  });
+
+  it('nombra a la persona en cada botón: "Invite" solo se anuncia igual en las 200 filas', () => {
+    const pending = withAccount(
+      {},
+      { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: false },
+    );
+
+    for (const action of rowActions(pending, true)) {
+      expect(action.label).toContain(personLabel(pending));
+    }
+  });
+});
+
+/**
+ * Lo que el modal se lleva de la fila al abrirse. Es un snapshot a propósito: la mutación
+ * invalida el roster y la fila vuelve con otro estado, así que lo que decide el TEXTO de la
+ * pregunta —`canSignIn`, la dirección del asiento— no se puede releer después.
+ */
+describe('dialogFor', () => {
+  const only = (row: PersonWithAccount) => dialogFor(row, rowActions(row, true)[0]!);
+
+  it('invitar viaja con el id de la PERSONA, que es la que todavía no tiene cuenta', () => {
+    const row = withAccount();
+
+    expect(only(row)).toEqual({ kind: 'invite', personId: row.id, label: personLabel(row) });
+  });
+
+  it('reemitir y cancelar viajan con el id de la cuenta', () => {
+    const pending = withAccount(
+      {},
+      { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: false },
+    );
+    const [reissue, remove] = rowActions(pending, true);
+
+    expect(dialogFor(pending, reissue!)).toEqual({
+      kind: 'reissue',
+      userId: ACCOUNT_ID,
+      label: personLabel(pending),
+    });
+    expect(dialogFor(pending, remove!)).toEqual({
+      kind: 'remove',
+      userId: ACCOUNT_ID,
+      label: personLabel(pending),
+      canSignIn: false,
+    });
+  });
+
+  it('quitar copia `canSignIn`: es lo que decide si la pregunta es cancelar o quitar', () => {
+    const member = withAccount(
+      {},
+      { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true },
+    );
+
+    expect(only(member)).toMatchObject({ kind: 'remove', canSignIn: true });
+  });
+
+  it('el asiento copia la dirección que la fila ofrecía', () => {
+    const seated = withAccount(
+      {},
+      { id: ACCOUNT_ID, role: 'hs_coordinator', active: true, can_sign_in: true, jhsc_seat: true },
+    );
+
+    expect(only(seated)).toEqual({
+      kind: 'seat',
+      userId: ACCOUNT_ID,
+      label: personLabel(seated),
+      action: 'withdraw',
+    });
   });
 });

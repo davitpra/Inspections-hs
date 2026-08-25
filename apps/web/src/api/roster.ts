@@ -1,10 +1,13 @@
 import {
   accountDetailSchema,
   createAccountResponseSchema,
+  personSchema,
   personWithAccountSchema,
   rosterImportReportSchema,
   type AccountDetail,
   type CreateAccountResponse,
+  type CreatePersonRequest,
+  type Person,
   type PersonWithAccount,
   type RosterImportReport,
 } from '@hs/contracts';
@@ -23,8 +26,10 @@ import { get, post, send } from './request';
  * desde caché mostraría un roster viejo sin decir que lo es. El offline existe para que no
  * se pierda el trabajo de campo (ADR-001), y esto no es trabajo de campo.
  *
- * No hay escrituras por persona: nombres, planta y estado se aplican juntos mediante una
- * importación CSV. Las demás escrituras de este cliente administran la cuenta asociada.
+ * La única escritura sobre una persona es el alta (`createPerson`,
+ * `add-person-to-roster-by-hand`): crea una fila y nada más. Corregir un nombre,
+ * transferir de planta o dar de baja siguen aplicándose juntos mediante una importación
+ * CSV. Las demás escrituras de este cliente administran la cuenta asociada.
  */
 
 /**
@@ -42,6 +47,14 @@ export async function listPeople(siteId: string): Promise<PersonWithAccount[]> {
   return get(`/people?${query.toString()}`, (value) =>
     z.array(personWithAccountSchema).parse(value),
   );
+}
+
+/**
+ * El alta de UNA persona (`add-person-to-roster-by-hand`). Solo crea: el CSV sigue
+ * siendo lo único que corrige, transfiere o da de baja a alguien que ya existe.
+ */
+export async function createPerson(input: CreatePersonRequest): Promise<Person> {
+  return post('/people', input, (value) => personSchema.parse(value));
 }
 
 /** Importa el archivo completo; el navegador agrega el boundary multipart. */

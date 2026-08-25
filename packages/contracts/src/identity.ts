@@ -110,9 +110,11 @@ export type PersonOption = z.infer<typeof personOptionSchema>;
 /**
  * Qué pedazo del roster de una planta pide la consola.
  *
- * **La consola es de solo lectura**: no hay ningún esquema de escritura acá porque no hay
- * ninguna ruta que escriba. Corregir un nombre, transferir de planta y dar de baja siguen
- * siendo del CSV (`pnpm roster:import`), que es la fuente de verdad del roster.
+ * **La consola es de solo lectura sobre una persona que ya existe**: no hay ningún
+ * esquema para corregir un nombre, transferir de planta o dar de baja desde acá — eso
+ * sigue siendo del CSV (`pnpm roster:import`), que es la fuente de verdad del roster. Lo
+ * único que se puede escribir es el alta de una persona nueva, con `createPersonRequestSchema`
+ * más abajo.
  *
  * `site_id` es obligatorio y eso acota la respuesta al roster de UNA planta, que es lo
  * que sostiene la decisión de no paginar: doscientas filas entran en una pantalla de
@@ -129,6 +131,25 @@ export const rosterQuerySchema = z.strictObject({
 });
 
 export type RosterQuery = z.infer<typeof rosterQuerySchema>;
+
+/**
+ * El alta de UNA persona (`add-person-to-roster-by-hand`): los mismos cuatro campos que
+ * una fila del CSV, menos `status` — una persona agregada a mano nace activa siempre — y
+ * con `site_id` en vez de `site_code`, porque acá no hay archivo que resolver contra el
+ * catálogo: la pantalla ya sabe de qué planta está hablando.
+ *
+ * Reusa `employeeNumberSchema` y `nameSchema`: la forma de un nombre y de un número de
+ * empleado no cambia porque la fila entre por HTTP en vez de por archivo. La respuesta es
+ * `personSchema`, que ya existe — un alta no necesita un esquema de vuelta propio.
+ */
+export const createPersonRequestSchema = z.strictObject({
+  site_id: z.uuid(),
+  employee_number: employeeNumberSchema,
+  first_name: nameSchema,
+  last_name: nameSchema,
+});
+
+export type CreatePersonRequest = z.infer<typeof createPersonRequestSchema>;
 
 /**
  * La cuenta que referencia a una persona del roster, reducida a lo que decide si el

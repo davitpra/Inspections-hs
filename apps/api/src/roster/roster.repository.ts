@@ -1,5 +1,5 @@
 import type { PoolClient } from 'pg';
-import type { PersonWithAccount, RosterQuery } from '@hs/contracts';
+import type { CreatePersonRequest, Person, PersonWithAccount, RosterQuery } from '@hs/contracts';
 
 /**
  * La consulta del roster, ahora con la cuenta de cada persona (proposal: "GET /people
@@ -55,6 +55,60 @@ interface RosterRow extends Record<string, unknown> {
   account_active: boolean | null;
   can_sign_in: boolean;
   jhsc_seat: boolean;
+}
+
+/**
+ * El alta de UNA persona (`add-person-to-roster-by-hand`). Devuelve `null` cuando el
+ * `employee_number` ya está tomado — nunca actualiza.
+ *
+ * **Por qué NO reusa `upsertPerson` de `apply-roster.ts` (design D2).** Aquel, al chocar
+ * contra el `UNIQUE`, hace un `UPDATE`: aplicado acá convertiría "este número ya existe"
+ * en "acabás de renombrar y mudar de planta a alguien que ni viste". Es exactamente el
+ * write fila por fila que la spec sigue prohibiendo — son dos actos, y por eso dos
+ * funciones.
+ *
+ * **Por qué `ON CONFLICT DO NOTHING` y no un `SELECT` previo.** Con RLS, ese `SELECT` no
+ * ve la fila de otra planta: diría "libre", el `INSERT` reventaría contra el `UNIQUE`, y
+ * el coordinador vería un 500 en el caso que justo hay que manejar con cuidado.
+ * `ON CONFLICT` pregunta al índice, que no lleva RLS, y por eso contesta bien en los dos
+ * casos con una sola sentencia — el mismo mecanismo que ya usa `upsertPerson`, por la
+ * misma razón.
+ */
+export async function insertPerson(
+  client: PoolClient,
+  input: CreatePersonRequest,
+): Promise<Person | null> {
+  const { rows } = await client.query<PersonRow>(
+    `INSERT INTO person (employee_number, first_name, last_name, site_id)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (employee_number) DO NOTHING
+     RETURNING id, site_id, employee_number, first_name, last_name, deactivated_at`,
+    [input.employee_number, input.first_name, input.last_name, input.site_id],
+  );
+
+  const [row] = rows;
+
+  return row === undefined ? null : toPerson(row);
+}
+
+interface PersonRow extends Record<string, unknown> {
+  id: string;
+  site_id: string;
+  employee_number: string;
+  first_name: string;
+  last_name: string;
+  deactivated_at: Date | null;
+}
+
+function toPerson(row: PersonRow): Person {
+  return {
+    id: row.id,
+    site_id: row.site_id,
+    employee_number: row.employee_number,
+    first_name: row.first_name,
+    last_name: row.last_name,
+    deactivated_at: row.deactivated_at?.toISOString() ?? null,
+  };
 }
 
 function toPersonWithAccount(row: RosterRow): PersonWithAccount {

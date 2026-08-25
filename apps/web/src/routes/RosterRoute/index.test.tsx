@@ -22,6 +22,7 @@ const reissueInvitation = vi.hoisted(() => vi.fn());
 const removeJhscAccess = vi.hoisted(() => vi.fn());
 const setJhscSeat = vi.hoisted(() => vi.fn());
 const importRoster = vi.hoisted(() => vi.fn());
+const createPerson = vi.hoisted(() => vi.fn());
 const useAppSession = vi.hoisted(() => vi.fn());
 
 vi.mock('../../api/inspections', () => ({ listSites }));
@@ -33,6 +34,7 @@ vi.mock('../../api/roster', () => ({
   removeJhscAccess,
   setJhscSeat,
   importRoster,
+  createPerson,
 }));
 vi.mock('../../app/session-context', () => ({ useAppSession }));
 
@@ -106,6 +108,7 @@ beforeEach(() => {
   removeJhscAccess.mockReset();
   setJhscSeat.mockReset();
   importRoster.mockReset();
+  createPerson.mockReset();
   useAppSession.mockReset().mockReturnValue(session('hs_coordinator'));
 });
 
@@ -259,6 +262,106 @@ describe('importar el roster', () => {
 
     expect((screen.getByLabelText('Roster CSV file') as HTMLInputElement).files).toHaveLength(0);
     expect(screen.queryByText('4 rows read, 2 applied, 2 rejected.')).toBeNull();
+  });
+});
+
+describe('agregar una persona (add-person-to-roster-by-hand)', () => {
+  async function openAdd(): Promise<void> {
+    renderRoute();
+    fireEvent.click(await screen.findByRole('button', { name: 'Add person' }));
+    await screen.findByRole('dialog', { name: 'Add person' });
+  }
+
+  function fillForm(): void {
+    fireEvent.change(screen.getByLabelText('Employee number'), { target: { value: 'NEW-1' } });
+    fireEvent.change(screen.getByLabelText('First name'), { target: { value: 'Grace' } });
+    fireEvent.change(screen.getByLabelText('Last name'), { target: { value: 'Hopper' } });
+  }
+
+  it('se abre desde el encabezado', async () => {
+    await openAdd();
+
+    expect(screen.getByText(/Adds one person to the roster of St. Thomas/i)).toBeTruthy();
+  });
+
+  it('manda el site_id que el selector muestra', async () => {
+    createPerson.mockResolvedValue({
+      id: 'aaaaaaaa-0000-4000-8000-000000000001',
+      site_id: SITE,
+      employee_number: 'NEW-1',
+      first_name: 'Grace',
+      last_name: 'Hopper',
+      deactivated_at: null,
+    });
+
+    await openAdd();
+    fillForm();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add person' })[1]!);
+
+    await waitFor(() =>
+      expect(createPerson).toHaveBeenCalledWith({
+        site_id: SITE,
+        employee_number: 'NEW-1',
+        first_name: 'Grace',
+        last_name: 'Hopper',
+      }),
+    );
+  });
+
+  it('invalida el roster de esa planta, la persona aparece y el diálogo se cierra', async () => {
+    const created = {
+      id: 'aaaaaaaa-0000-4000-8000-000000000001',
+      site_id: SITE,
+      employee_number: 'NEW-1',
+      first_name: 'Grace',
+      last_name: 'Hopper',
+      deactivated_at: null,
+    };
+    createPerson.mockResolvedValue(created);
+    listPeople.mockResolvedValueOnce([person()]).mockResolvedValue([
+      person(),
+      { ...created, account: null },
+    ]);
+
+    await openAdd();
+    fillForm();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add person' })[1]!);
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(await screen.findByRole('rowheader', { name: 'Hopper, Grace' })).toBeTruthy();
+  });
+
+  it('el foco vuelve al disparador al cerrar', async () => {
+    await openAdd();
+    const trigger = screen.getAllByRole('button', { name: 'Add person' })[0]!;
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+  });
+
+  it('el error del servidor se ve sin cerrar el diálogo', async () => {
+    createPerson.mockRejectedValue(
+      Object.assign(new Error('employee_number "NEW-1" is already in use'), {
+        code: 'person_employee_number_taken',
+      }),
+    );
+
+    await openAdd();
+    fillForm();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add person' })[1]!);
+
+    expect((await screen.findByRole('alert')).textContent).toContain('already in use');
+    expect(screen.getByRole('dialog')).toBeTruthy();
+  });
+
+  it('un rol que no es coordinador no ve el botón', async () => {
+    useAppSession.mockReturnValue(session('supervisor'));
+
+    renderRoute();
+
+    expect(await screen.findByText(/Only the H&S coordinator/i)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Add person' })).toBeNull();
   });
 });
 

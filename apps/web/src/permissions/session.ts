@@ -47,6 +47,16 @@ export function canImportRoster(account: Session | null): account is Session {
 }
 
 /**
+ * Quién puede agregar UNA persona al roster a mano (`add-person-to-roster-by-hand`).
+ * Predicado propio y no reuso de `canImportRoster`: son dos actos distintos —crear una
+ * fila nueva contra aplicar un archivo entero— y el día que uno se abra a otro rol sin
+ * el otro, esta es la que cambia.
+ */
+export function canAddPersonToRoster(account: Session | null): account is Session {
+  return account?.role === 'hs_coordinator';
+}
+
+/**
  * Quién ve el botón de invitar en la fila del roster (proposal — "el rol de la
  * invitación desde el roster es `jhsc_member` y solo ese"). Hoy coincide con
  * `canAdministerRoster` porque los dos preguntan lo mismo con los cinco roles

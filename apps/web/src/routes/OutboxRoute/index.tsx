@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router';
 
 import { queryKeys } from '../../api/query-keys';
 import { useAppSession } from '../../app/session-context';
+import { StatsBar } from '../../components/StatsBar';
 import { UnsyncedIndicator } from '../../components/UnsyncedIndicator';
 import { CheckIcon, ClockIcon, InfoIcon } from '../../components/icons';
 import { outboxFor, runOutbox } from '../../offline/outbox';
@@ -100,32 +101,17 @@ export function OutboxRoute(): React.JSX.Element {
             filas porque con varias entradas acumuladas es lo que dice si hay algo que
             hacer ahora o solo hay que reconectar.
           */}
-          <div className="stats-bar">
-            <div className="stats-bar__item">
-              <span className="stats-bar__icon">
-                <ClockIcon size={18} />
-              </span>
-              <span>
-                <span className="stats-bar__number">{counts.queued}</span>
-                <span className="stats-bar__label">Waiting to send</span>
-              </span>
-            </div>
-
-            <div className="stats-bar__item">
-              <span className="stats-bar__icon">
-                <InfoIcon size={18} />
-              </span>
-              <span>
-                <span className="stats-bar__number">{counts.rejected}</span>
-                <span className="stats-bar__label">Rejected by the server</span>
-              </span>
-            </div>
-
-            <p className="stats-bar__tip">
-              Nothing here has left this device. Sending happens on its own when there is
-              a connection.
-            </p>
-          </div>
+          <StatsBar
+            items={[
+              { icon: <ClockIcon size={18} />, number: counts.queued, label: 'Waiting to send' },
+              {
+                icon: <InfoIcon size={18} />,
+                number: counts.rejected,
+                label: 'Rejected by the server',
+              },
+            ]}
+            tip="Nothing here has left this device. Sending happens on its own when there is a connection."
+          />
 
           <div className="card">
             <div className="card__head">

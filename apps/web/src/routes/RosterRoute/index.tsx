@@ -1,75 +1,42 @@
 import { useQuery } from '@tanstack/react-query';
-import { useId, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { listSites } from '../../api/inspections';
 import { queryKeys } from '../../api/query-keys';
 import { listPeople } from '../../api/roster';
 import { useAppSession } from '../../app/session-context';
-import {
-  CheckIcon,
-  ClockIcon,
-  InfoIcon,
-  PersonIcon,
-  SearchIcon,
-} from '../../components/icons';
+import { CheckIcon, ClockIcon, InfoIcon, PersonIcon } from '../../components/icons';
 import { SitePicker } from '../../components/SitePicker';
+import { StatsBar } from '../../components/StatsBar';
 import {
+  canAddPersonToRoster,
   canAdministerRoster,
   canImportRoster,
   canInviteFromRoster,
 } from '../../permissions/session';
-import { ImportDialog } from './ImportDialog';
 import { resolveSiteId } from '../../presentation/sites';
-import { InviteDialog } from './InviteDialog';
-import { JhscSeatDialog } from './JhscSeatDialog';
-import { ReissueDialog } from './ReissueDialog';
-import { RemoveAccessDialog } from './RemoveAccessDialog';
-import {
-  canInvite,
-  canReissueInvitation,
-  canRemoveJhscAccess,
-  inviteButtonLabel,
-  jhscSeatAction,
-  jhscSeatButtonLabel,
-  jhscSeatButtonText,
-  emailCellLabel,
-  matchesSearch,
-  personLabel,
-  personName,
-  reissueButtonLabel,
-  removeButtonLabel,
-  removeButtonText,
-  roleCellClass,
-  roleCellLabel,
-  rosterCounts,
-  sortRoster,
-} from './presentation';
+import { AddPersonDialog } from './AddPersonDialog';
+import { ImportDialog } from './ImportDialog';
+import { rosterCounts, sortRoster, type RosterDialog } from './presentation';
+import { RosterDialogs } from './RosterDialogs';
+import { RosterTable } from './RosterTable';
 
 /**
  * §6 — La consola del roster: quién trabaja en esta planta.
- *
- * POR QUÉ ESTA PANTALLA EXISTE. El roster es la única entidad de primera clase del sistema
- * que no se podía mirar. Existía en la base desde la etapa 2 —200+ personas—, entraba por
- * `pnpm roster:import`, y la única lectura expuesta era el paquete de campo: cuatro
- * columnas colgadas de una inspección. Para saber si alguien estaba cargado, en qué planta,
- * o si seguía activo, había que abrir `psql`.
- *
- * No se corrige una persona fila por fila: nombres, planta y estado se aplican juntos desde
- * el CSV. Esta pantalla muestra el roster y ofrece esa importación completa al coordinador.
  *
  * **ESTO NO ES EL SELECTOR DE SUJETO, Y LA DISTINCIÓN ES LA QUE SOSTIENE LA PANTALLA.** §4
  * dice que el supervisor elige a una persona *sin poder ver su perfil*, y eso ata al
  * selector —cuatro columnas, `GET /scheduled-inspections/:id/roster`—, no a la
  * administración que §6 le pide al coordinador. Por eso acá el rol se comprueba en la
- * lectura, al revés que la consola de programación, que deja mirar a cualquiera: esta ruta
+ * LECTURA, al revés que la consola de programación, que deja mirar a cualquiera: esta ruta
  * SÍ devuelve el perfil. Si alguien conecta el `PersonPicker` de los incidentes a
  * `GET /people`, rompe lo único que las mantiene separadas.
  *
- * LA FORMA ES LA DE LAS OTRAS CONSOLAS DEL COORDINADOR (§6): encabezado con la planta al
- * costado, la tira de números, y una tarjeta con su buscador arriba de la tabla. Es la misma
- * pila de piezas que programación y ubicaciones —`.scheduling__top`, `.site-card`,
- * `.stats-bar`, `.card`, `.status-card`—, y la comparten porque son la misma pantalla vista
- * tres veces: elegir planta, entender de un vistazo qué falta, y actuar sobre una fila.
+ * No se corrige una persona fila por fila: nombres, planta y estado se aplican juntos desde
+ * el CSV. La pantalla muestra el roster y ofrece esa importación completa al coordinador,
+ * más el alta de UNA persona nueva (`add-person-to-roster-by-hand`) — un adelanto del
+ * archivo, no una excepción a él: el próximo CSV con el mismo número la actualiza igual que
+ * a cualquier otra fila.
  *
  * ONLINE y fuera del precacheo: un roster servido desde caché es un roster viejo que no
  * dice que lo es (ADR-001).
@@ -93,71 +60,33 @@ export function RosterRoute(): React.JSX.Element {
       siteScope={account.siteScope}
       canInviteFromRoster={canInviteFromRoster(account)}
       canImportRoster={canImportRoster(account)}
+      canAddPersonToRoster={canAddPersonToRoster(account)}
     />
   );
 }
 
+/**
+ * La misma pila de piezas que programación y ubicaciones —`.scheduling__top`, `.stats-bar`,
+ * `.card`, `.status-card`—: son la misma pantalla vista tres veces, elegir planta, entender
+ * de un vistazo qué falta, y actuar sobre una fila.
+ */
 function RosterConsole({
   siteScope,
   canInviteFromRoster: mayInvite,
   canImportRoster: mayImport,
+  canAddPersonToRoster: mayAddPerson,
 }: {
   siteScope: readonly string[];
   canInviteFromRoster: boolean;
   canImportRoster: boolean;
+  canAddPersonToRoster: boolean;
 }): React.JSX.Element {
-  const searchId = useId();
   const importTriggerRef = useRef<HTMLButtonElement>(null);
-
+  const addTriggerRef = useRef<HTMLButtonElement>(null);
   const [chosenSite, setChosenSite] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
   const [importing, setImporting] = useState(false);
-
-  /**
-   * La persona que está siendo invitada, ACÁ y no en la fila que lo originó: invitar
-   * invalida el roster, el refetch devuelve a esa persona con cuenta y su celda deja de
-   * renderizar el botón. El modal —y el token que llega a guardar— sobrevive porque la
-   * consola lo monta fuera de la tabla. Ver `InviteDialog.tsx`.
-   */
-  const [inviting, setInviting] = useState<{ id: string; label: string } | null>(null);
-
-  /**
-   * La cuenta a la que se le está reemitiendo el link (`reissue-invitation-link-from-roster`
-   * design D4): mismo criterio que `inviting`, y por la misma razón — reemitir invalida
-   * el roster y el modal tiene que sobrevivir al refetch de la fila que lo abrió.
-   */
-  const [reissuing, setReissuing] = useState<{ userId: string; label: string } | null>(null);
-
-  /**
-   * La cuenta a la que se le está quitando el acceso (`remove-jhsc-access-from-roster`):
-   * mismo criterio que las dos de arriba. Quitar deja la fila sin ese botón, así que el
-   * modal tiene que sobrevivir al refetch de la fila que lo originó.
-   *
-   * `canSignIn` viaja con el estado y no se vuelve a leer de la fila: es lo que decide qué
-   * pregunta hace el diálogo, y si se leyera del roster ya invalidado la confirmación
-   * podría cambiar de texto debajo del cursor.
-   */
-  const [removing, setRemoving] = useState<{
-    userId: string;
-    label: string;
-    canSignIn: boolean;
-  } | null>(null);
-
-  /**
-   * La cuenta que se está sentando en el JHSC o levantando de él
-   * (`coordinator-jhsc-seat`): mismo criterio que las tres de arriba, y por la misma razón
-   * — la mutación invalida el roster y la fila vuelve con el OTRO botón, así que el modal
-   * tiene que vivir fuera de la tabla.
-   *
-   * La dirección viaja con el estado, como `canSignIn` en `removing`: es lo que decide qué
-   * pregunta hace el diálogo, y releerla de una fila ya invalidada podría cambiar el texto
-   * debajo del cursor.
-   */
-  const [seating, setSeating] = useState<{
-    userId: string;
-    label: string;
-    action: 'grant' | 'withdraw';
-  } | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [dialog, setDialog] = useState<RosterDialog | null>(null);
 
   const sites = useQuery({ queryKey: queryKeys.sites(), queryFn: listSites, retry: false });
 
@@ -177,16 +106,14 @@ function RosterConsole({
     sites.data?.find((site) => site.id === id)?.name ?? id;
 
   const all = sortRoster(roster.data ?? []);
-  const visible = all.filter((person) => matchesSearch(person, search));
   const counts = rosterCounts(all);
 
   return (
     <>
       {/*
-        El título a la izquierda y la planta a la derecha, en la misma línea: la planta no
-        es un filtro más de la pantalla, es de qué planta habla TODO lo que sigue. Es el
-        mismo encabezado que la consola de programación, y lo comparten a propósito — son
-        dos vistas de la misma planta y saltar entre ellas no debería mover el título.
+        El título a la izquierda y la planta a la derecha: la planta no es un filtro más, es
+        de qué planta habla TODO lo que sigue. Es el mismo encabezado que la consola de
+        programación, y lo comparten a propósito — saltar entre ellas no mueve el título.
       */}
       <header className="scheduling__top">
         <div className="scheduling__header">
@@ -202,24 +129,34 @@ function RosterConsole({
         </div>
 
         {/*
-          Sin ninguna planta activa no hay roster que pedir —la consulta ya está apagada por
-          `enabled`—, y el selector degradado diría «Site» y nada más.
+          Sin ninguna planta activa no hay roster que pedir, y el selector diría «Site» — ni
+          él ni el alta tienen un destino, así que los dos se ocultan juntos (design D6).
         */}
         {noActiveSite ? null : (
-          <SitePicker
-            sites={sites.data ?? []}
-            value={siteId}
-            onChange={setChosenSite}
-            siteName={siteName}
-          />
+          <div className="scheduling__header-actions">
+            <SitePicker
+              sites={sites.data ?? []}
+              value={siteId}
+              onChange={setChosenSite}
+              siteName={siteName}
+            />
+            {mayAddPerson ? (
+              <button
+                ref={addTriggerRef}
+                type="button"
+                className="button--outline"
+                onClick={() => setAdding(true)}
+              >
+                Add person
+              </button>
+            ) : null}
+          </div>
         )}
       </header>
 
       {/*
-        Dónde se corrige lo que esta pantalla muestra. Sin esta línea, el coordinador ve un
-        apellido mal escrito y no tiene forma de saber por dónde se arregla. Va en la tarjeta
-        de aviso y no en un párrafo suelto porque es lo primero que hay que leer cuando algo
-        de la tabla está mal, y un `.note` gris debajo del título no se leía nunca.
+        Dónde se corrige lo que esta pantalla muestra: es lo primero que hay que leer cuando
+        algo de la tabla está mal, y un `.note` gris debajo del título no se leía nunca.
       */}
       <div className="notice-card">
         <div className="notice-card__body">
@@ -228,15 +165,12 @@ function RosterConsole({
           </span>
           <p className="notice-card__text">
             Use Import roster to apply names, sites and active status from one CSV across any site
-            you administer.
+            you administer, or Add person to get someone on the roster before the next file
+            arrives. Correcting an existing person is still only done from the CSV.
           </p>
         </div>
       </div>
 
-      {/*
-        El estado de la conexión con silueta de tarjeta, como el resto de las consolas del
-        coordinador: se lee dentro de la misma pila que todo lo demás.
-      */}
       {roster.isError ? (
         <p className="status-card status-card--error">
           <InfoIcon size={20} /> This view needs a connection.
@@ -253,293 +187,45 @@ function RosterConsole({
         </p>
       ) : null}
 
-      {/*
-        Los tres números de la planta, antes de la tabla: con doscientas filas, "cuántos del
-        comité entran hoy" y "cuántas invitaciones están esperando" no se cuentan a ojo. Ver
-        `rosterCounts` — se cuentan sobre el roster entero, no sobre lo que filtró la
-        búsqueda.
-      */}
+      {/* Sobre el roster ENTERO, no sobre lo que filtró la búsqueda: son el estado de la
+          planta. Lo que la búsqueda recortó lo dice el contador de la tabla. */}
       {roster.isSuccess && all.length > 0 ? (
-        <div className="stats-bar">
-          <div className="stats-bar__item">
-            <span className="stats-bar__icon">
-              <PersonIcon size={20} />
-            </span>
-            <span>
-              <span className="stats-bar__number">{counts.total}</span>
-              <span className="stats-bar__label">On the roster</span>
-            </span>
-          </div>
-          <div className="stats-bar__item">
-            <span className="stats-bar__icon">
-              <CheckIcon size={20} />
-            </span>
-            <span>
-              <span className="stats-bar__number">{counts.withAccess}</span>
-              <span className="stats-bar__label">Can sign in</span>
-            </span>
-          </div>
-          <div className="stats-bar__item">
-            <span className="stats-bar__icon">
-              <ClockIcon size={20} />
-            </span>
-            <span>
-              <span className="stats-bar__number">{counts.invited}</span>
-              <span className="stats-bar__label">Invitation pending</span>
-            </span>
-          </div>
-        </div>
-      ) : null}
-
-      {/*
-        Una tarjeta y no una tabla suelta: el buscador, el contador y las filas son una sola
-        unidad —qué estoy mirando y cuánto de todo es— y el borde es lo que lo dice.
-      */}
-      <section className="card roster">
-        <div className="roster__toolbar">
-          <label className="roster__search" htmlFor={searchId}>
-            <SearchIcon />
-            <span className="roster__sr">Search</span>
-            <input
-              id={searchId}
-              type="search"
-              value={search}
-              placeholder="Name or employee number"
-              onChange={(event) => setSearch(event.target.value)}
-            />
-          </label>
-
-          {mayImport ? (
-            <button
-              ref={importTriggerRef}
-              type="button"
-              className="button--outline roster__import"
-              onClick={() => setImporting(true)}
-            >
-              Import roster
-            </button>
-          ) : null}
-
-          {/*
-            Cuánto de todo se está viendo. Solo con el roster cargado: "0 of 0 people"
-            mientras carga es un dato falso, no un dato vacío.
-          */}
-          {roster.isSuccess ? (
-            <span className="roster__count">
-              {visible.length} of {all.length} people
-            </span>
-          ) : null}
-        </div>
-
-        <div className="roster__body">
-          {/*
-            "Esta planta no tiene a nadie" y "la búsqueda no encontró nada" son problemas
-            distintos: el primero es un roster sin importar, el segundo es un tipeo.
-          */}
-          {roster.isSuccess && all.length === 0 ? (
-            <p className="note">No one is on the roster of {siteName(siteId)}.</p>
-          ) : null}
-          {roster.isSuccess && all.length > 0 && visible.length === 0 ? (
-            <p className="note">No one matches “{search}”.</p>
-          ) : null}
-
-          {/*
-            Una tabla y no una lista: el roster es la única pantalla donde se comparan filas
-            entre sí —qué número tiene cada quien, qué rol— y comparar necesita columnas
-            alineadas con su encabezado. El `<caption>` no es adorno: es lo que le dice a un
-            lector de pantalla de qué planta es la tabla que va a recorrer.
-
-            La fila va inline y no en su propio archivo: sin estado, sin hooks y sin mutación,
-            no llega al umbral que `CLAUDE.md` pide para separarla.
-          */}
-          {visible.length > 0 ? (
-            <div className="roster__scroll">
-              <table className="table roster__table">
-                <caption className="roster__sr">Roster of {siteName(siteId)}</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Name</th>
-                    <th scope="col">Employee #</th>
-                    <th scope="col">Role</th>
-                    <th scope="col">Email</th>
-                    <th scope="col">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visible.map((person) => {
-                    // El asiento se resuelve UNA vez por fila: la afordancia y la etiqueta
-                    // del botón tienen que hablar de la misma dirección.
-                    const seatAction = jhscSeatAction(person);
-
-                    return (
-                      <tr key={person.id}>
-                        <th scope="row">{personName(person)}</th>
-                        <td className="roster__number">{person.employee_number}</td>
-                        {/*
-                          "Worker" cuando no hay cuenta: la ausencia de acceso se nombra, no se
-                          deja en blanco. No es un rol de `ROLES` — ver `roleCellLabel`. La
-                          píldora la ubica en la escala de las otras consolas —verde entra,
-                          ámbar espera, gris no tiene— sin reemplazar la palabra.
-                        */}
-                        <td>
-                          <span className={roleCellClass(person)}>{roleCellLabel(person)}</span>
-                        </td>
-                        {/*
-                          El correo al que se invitó a esta persona, y solo el de quien tiene
-                          cuenta: el roster del CSV no trae correos. Va pegado a Role porque las dos
-                          columnas responden a la misma pregunta —qué acceso tiene esta fila— y
-                          antes de Actions porque es dato, no acto.
-
-                          El guión y no el vacío: en una tabla donde la mayoría de las filas no tiene
-                          cuenta, la columna en blanco se lee como una columna rota. Acá no hace falta
-                          nombrar la ausencia como sí lo hace `roleCellLabel` con "Worker" —la celda
-                          Role de esa misma fila ya lo dijo—, solo mostrar que el lugar existe y está
-                          vacío a propósito.
-                        */}
-                        <td className="roster__email">{emailCellLabel(person) || '—'}</td>
-                        <td>
-                          {/*
-                            La acción tiene columna propia, separada del rol: el rol es un dato que
-                            se compara hacia abajo —quién tiene acceso hoy— y el botón es un acto.
-                            Mezclados en una celda, la columna cambiaba de ancho fila por fila y el
-                            ojo perdía la lectura vertical del rol, que es para lo que la tabla
-                            existe.
-
-                            Cada fila ofrece SOLO el acto que su estado admite:
-
-                            - sin acceso y activa → invitar. Cuenta acá tanto quien nunca tuvo
-                              cuenta como aquel a quien se le quitó: las dos filas se dibujan
-                              igual, porque son la misma pregunta;
-                            - con cuenta que todavía no puede entrar → reemitir el link, y
-                              cancelar la invitación;
-                            - con cuenta que ya entra → quitar del JHSC.
-
-                            Nada para quien no tiene acceso y está dado de baja — invitar a esa
-                            fila es exactamente lo que 4.5 no ofrece. Esa celda queda vacía, y
-                            vacía está bien: la columna existe porque OTRAS filas tienen un acto.
-                          */}
-                          <div className="table__actions">
-                            {mayInvite && canInvite(person) ? (
-                              <button
-                                type="button"
-                                className="button--outline roster__action"
-                                aria-label={inviteButtonLabel(person)}
-                                onClick={() =>
-                                  setInviting({ id: person.id, label: personLabel(person) })
-                                }
-                              >
-                                Invite to JHSC
-                              </button>
-                            ) : null}
-                            {mayInvite && canReissueInvitation(person) ? (
-                              <button
-                                type="button"
-                                className="roster__action"
-                                aria-label={reissueButtonLabel(person)}
-                                onClick={() =>
-                                  setReissuing({ userId: person.account!.id, label: personLabel(person) })
-                                }
-                              >
-                                New link
-                              </button>
-                            ) : null}
-                            {mayInvite && canRemoveJhscAccess(person) ? (
-                              <button
-                                type="button"
-                                className="button--danger-quiet roster__action"
-                                aria-label={removeButtonLabel(person)}
-                                onClick={() =>
-                                  setRemoving({
-                                    userId: person.account!.id,
-                                    label: personLabel(person),
-                                    canSignIn: person.account!.can_sign_in,
-                                  })
-                                }
-                              >
-                                {removeButtonText(person)}
-                              </button>
-                            ) : null}
-                            {/*
-                              El asiento en el JHSC, y solo sobre una cuenta de coordinador:
-                              para todas las demás filas `jhscSeatAction` devuelve `null` y
-                              la celda queda como estaba. No lleva la clase de peligro que
-                              lleva "Remove" —levantarse del comité no quita ningún acceso—
-                              y por eso tampoco compite visualmente con ella.
-                            */}
-                            {mayInvite && seatAction !== null ? (
-                              <button
-                                type="button"
-                                className="button--outline roster__action"
-                                aria-label={jhscSeatButtonLabel(person, seatAction)}
-                                onClick={() =>
-                                  setSeating({
-                                    userId: person.account!.id,
-                                    label: personLabel(person),
-                                    action: seatAction,
-                                  })
-                                }
-                              >
-                                {jhscSeatButtonText(seatAction)}
-                              </button>
-                            ) : null}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          ) : null}
-        </div>
-      </section>
-
-      {/*
-        Montaje condicional: cada apertura crea el modal de nuevo, así que `showModal()`
-        corre una sola vez por invitación y el email/token nacen limpios cada vez.
-      */}
-      {inviting ? (
-        <InviteDialog
-          personId={inviting.id}
-          personLabel={inviting.label}
-          siteId={siteId}
-          onClose={() => setInviting(null)}
+        <StatsBar
+          items={[
+            { icon: <PersonIcon size={20} />, number: counts.total, label: 'On the roster' },
+            { icon: <CheckIcon size={20} />, number: counts.withAccess, label: 'Can sign in' },
+            { icon: <ClockIcon size={20} />, number: counts.invited, label: 'Invitation pending' },
+          ]}
         />
       ) : null}
 
-      {reissuing ? (
-        <ReissueDialog
-          userId={reissuing.userId}
-          personLabel={reissuing.label}
-          siteId={siteId}
-          onClose={() => setReissuing(null)}
-        />
-      ) : null}
+      <RosterTable
+        people={all}
+        siteName={siteName(siteId)}
+        ready={roster.isSuccess}
+        mayInvite={mayInvite}
+        mayImport={mayImport}
+        importTriggerRef={importTriggerRef}
+        onImport={() => setImporting(true)}
+        onAct={setDialog}
+      />
 
-      {removing ? (
-        <RemoveAccessDialog
-          userId={removing.userId}
-          personLabel={removing.label}
-          canSignIn={removing.canSignIn}
-          siteId={siteId}
-          onClose={() => setRemoving(null)}
-        />
-      ) : null}
-
-      {seating ? (
-        <JhscSeatDialog
-          userId={seating.userId}
-          personLabel={seating.label}
-          action={seating.action}
-          siteId={siteId}
-          onClose={() => setSeating(null)}
-        />
+      {dialog ? (
+        <RosterDialogs dialog={dialog} siteId={siteId} onClose={() => setDialog(null)} />
       ) : null}
 
       {importing ? (
         <ImportDialog onClose={() => setImporting(false)} returnFocusTo={importTriggerRef} />
       ) : null}
 
+      {adding ? (
+        <AddPersonDialog
+          siteId={siteId}
+          siteName={siteName(siteId)}
+          onClose={() => setAdding(false)}
+          returnFocusTo={addTriggerRef}
+        />
+      ) : null}
     </>
   );
 }

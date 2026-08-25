@@ -8,6 +8,7 @@ import {
   createAccountRequestSchema,
   createAccountResponseSchema,
   createAccountSchema,
+  createPersonRequestSchema,
   personAccountSchema,
   personOptionSchema,
   personSchema,
@@ -113,6 +114,49 @@ describe('rosterQuerySchema', () => {
   it('exige la planta — sin ella la respuesta no estaría acotada', () => {
     expect(rosterQuerySchema.safeParse({}).success).toBe(false);
     expect(rosterQuerySchema.safeParse({ site_id: 'st-thomas' }).success).toBe(false);
+  });
+});
+
+describe('createPersonRequestSchema — el alta a mano (add-person-to-roster-by-hand)', () => {
+  /** Un alta válida. Cada test la deforma en un solo punto. */
+  function validCreatePersonInput() {
+    return {
+      site_id: SITE_ID,
+      employee_number: '10472',
+      first_name: 'Ada',
+      last_name: 'Reid',
+    };
+  }
+
+  it('acepta un alta válida', () => {
+    expect(createPersonRequestSchema.safeParse(validCreatePersonInput()).success).toBe(true);
+  });
+
+  it('recorta los espacios de los nombres', () => {
+    const result = createPersonRequestSchema.safeParse({
+      ...validCreatePersonInput(),
+      first_name: '  Ada  ',
+      last_name: '  Reid  ',
+    });
+
+    expect(result.success && result.data.first_name).toBe('Ada');
+    expect(result.success && result.data.last_name).toBe('Reid');
+  });
+
+  it('rechaza un employee_number que no cumple EMPLOYEE_NUMBER_PATTERN', () => {
+    expect(
+      createPersonRequestSchema.safeParse({
+        ...validCreatePersonInput(),
+        employee_number: 'has spaces',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('rechaza una clave de más — no hay status ni site_code en un alta a mano', () => {
+    expect(
+      createPersonRequestSchema.safeParse({ ...validCreatePersonInput(), status: 'active' })
+        .success,
+    ).toBe(false);
   });
 });
 

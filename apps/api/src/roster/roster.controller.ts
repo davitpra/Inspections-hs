@@ -1,5 +1,6 @@
 import { basename } from 'node:path';
 import {
+  Body,
   Controller,
   Get,
   HttpCode,
@@ -11,7 +12,13 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { rosterQuerySchema, type PersonWithAccount, type RosterImportReport } from '@hs/contracts';
+import {
+  createPersonRequestSchema,
+  rosterQuerySchema,
+  type Person,
+  type PersonWithAccount,
+  type RosterImportReport,
+} from '@hs/contracts';
 
 import { CurrentSession } from '../auth/session.decorator';
 import type { SessionContext } from '../auth/session.service';
@@ -30,8 +37,9 @@ import { ROSTER_FILE_LIMIT, RosterUploadExceptionFilter } from './roster-upload.
  * comprueba en la lectura porque esta ruta SÍ devuelve el perfil. Conectar el selector de
  * incidentes a `/people` rompería lo único que las mantiene separadas.
  *
- * No hay escritura por persona: crear, renombrar, transferir y desactivar se hace solo al
- * aplicar el archivo entero, por HTTP o con `pnpm roster:import`.
+ * La única escritura por persona es el alta (`POST /people`, `add-person-to-roster-by-hand`).
+ * Renombrar, transferir y desactivar siguen sin ruta: eso se hace solo al aplicar el archivo
+ * entero, por HTTP o con `pnpm roster:import`.
  */
 @Controller()
 export class RosterController {
@@ -44,6 +52,16 @@ export class RosterController {
     @Query() query: unknown,
   ): Promise<PersonWithAccount[]> {
     return this.roster.list(session, rosterQuerySchema.parse(query));
+  }
+
+  /** El alta de UNA persona (`add-person-to-roster-by-hand`). El CSV sigue siendo lo único que corrige. */
+  @Post('people')
+  @HttpCode(HttpStatus.CREATED)
+  async create(
+    @CurrentSession() session: SessionContext,
+    @Body() body: unknown,
+  ): Promise<Person> {
+    return this.roster.create(session, createPersonRequestSchema.parse(body));
   }
 
   @Post('people/import')

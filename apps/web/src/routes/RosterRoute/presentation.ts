@@ -20,11 +20,19 @@ export function importButtonText(state: ImportState): string {
   return state === 'pending' ? 'Importing…' : state === 'error' ? 'Try again' : 'Import roster';
 }
 
+/** El alta de UNA persona no tiene un estado `success` propio: el diálogo se cierra solo. */
+export type AddPersonState = 'ready' | 'pending' | 'error';
+
+export function addPersonButtonText(state: AddPersonState): string {
+  return state === 'pending' ? 'Adding…' : state === 'error' ? 'Try again' : 'Add person';
+}
+
 /**
  * Cómo se lee la consola del roster: etiquetas, orden y búsqueda, sin marcado.
  *
- * La consola no edita personas fila por fila. Además de cómo se muestra y encuentra el
- * roster, este archivo nombra los estados del único write permitido: importar el CSV entero.
+ * La consola no corrige a una persona fila por fila. Además de cómo se muestra y encuentra
+ * el roster, este archivo nombra los estados de las dos escrituras que sí tiene: importar
+ * el CSV entero y agregar UNA persona (`add-person-to-roster-by-hand`).
  *
  * Aparte del componente por la misma razón que `scheduling-presentation.ts`: lo que
  * importa es la decisión y el nombre de cada cosa, y eso se prueba sin renderizar nada.
@@ -347,4 +355,113 @@ export function rosterCounts(people: readonly PersonWithAccount[]): {
       .length,
     invited: people.filter(canReissueInvitation).length,
   };
+}
+
+export type RosterActionKind = 'invite' | 'reissue' | 'remove' | 'seat';
+
+/** Un acto que una fila ofrece: cómo se dibuja el botón, sin decir cómo se ejecuta. */
+export interface RosterRowAction {
+  kind: RosterActionKind;
+  text: string;
+  label: string;
+  className: string;
+  seat?: 'grant' | 'withdraw';
+}
+
+/**
+ * Los actos que esta fila ofrece, en orden, y NADA cuando no ofrece ninguno.
+ *
+ * Cada fila ofrece SOLO el acto que su estado admite: sin acceso y activa → invitar; con
+ * cuenta que todavía no entra → reemitir el link y cancelar la invitación; con cuenta que
+ * ya entra → quitar del JHSC. Nada para quien no tiene acceso y está dado de baja —
+ * invitar a esa fila es exactamente lo que 4.5 no ofrece, y su celda queda vacía a
+ * propósito: la columna existe porque OTRAS filas tienen un acto.
+ *
+ * El asiento (`jhscSeatAction`) se resuelve una sola vez acá: la afordancia y la etiqueta
+ * del botón tienen que hablar de la misma dirección.
+ *
+ * `mayInvite` entra como parámetro y no se comprueba fila por fila en la pantalla: es la
+ * misma pregunta para las doscientas filas, y repetirla en cada botón era lo que hacía que
+ * la celda se leyera como cuatro condiciones distintas cuando es una sola tabla de estados.
+ */
+export function rowActions(person: PersonWithAccount, mayInvite: boolean): RosterRowAction[] {
+  if (!mayInvite) return [];
+
+  const actions: RosterRowAction[] = [];
+
+  if (canInvite(person)) {
+    actions.push({
+      kind: 'invite',
+      text: 'Invite to JHSC',
+      label: inviteButtonLabel(person),
+      className: 'button--outline roster__action',
+    });
+  }
+
+  if (canReissueInvitation(person)) {
+    actions.push({
+      kind: 'reissue',
+      text: 'New link',
+      label: reissueButtonLabel(person),
+      className: 'roster__action',
+    });
+  }
+
+  if (canRemoveJhscAccess(person)) {
+    actions.push({
+      kind: 'remove',
+      text: removeButtonText(person),
+      label: removeButtonLabel(person),
+      className: 'button--danger-quiet roster__action',
+    });
+  }
+
+  const seat = jhscSeatAction(person);
+
+  if (seat !== null) {
+    actions.push({
+      kind: 'seat',
+      text: jhscSeatButtonText(seat),
+      label: jhscSeatButtonLabel(person, seat),
+      // Sin la clase de peligro que lleva "Remove": levantarse del comité no quita ningún
+      // acceso, y por eso tampoco compite visualmente con ella.
+      className: 'button--outline roster__action',
+      seat,
+    });
+  }
+
+  return actions;
+}
+
+/**
+ * El modal que abre un acto, con lo que necesita YA COPIADO de la fila.
+ *
+ * **Por qué se congela acá y no se lee después de la fila**: cada una de estas mutaciones
+ * invalida el roster, y el refetch devuelve a esa persona con otro estado —invitar le da
+ * cuenta, quitar le saca el botón, sentar la levanta—. El modal vive fuera de la tabla
+ * justamente para sobrevivir a eso, así que `canSignIn` y la dirección del asiento viajan
+ * con el estado: si se releyeran de un roster ya invalidado, la pregunta del diálogo podría
+ * cambiar de texto debajo del cursor.
+ */
+export type RosterDialog =
+  | { kind: 'invite'; personId: string; label: string }
+  | { kind: 'reissue'; userId: string; label: string }
+  | { kind: 'remove'; userId: string; label: string; canSignIn: boolean }
+  | { kind: 'seat'; userId: string; label: string; action: 'grant' | 'withdraw' };
+
+/** Ver `RosterDialog`. Los tres últimos actos existen solo sobre una cuenta viva. */
+export function dialogFor(person: PersonWithAccount, action: RosterRowAction): RosterDialog {
+  const label = personLabel(person);
+
+  if (action.kind === 'invite') return { kind: 'invite', personId: person.id, label };
+
+  const userId = person.account!.id;
+
+  if (action.kind === 'reissue') return { kind: 'reissue', userId, label };
+
+  if (action.kind === 'remove') {
+    return { kind: 'remove', userId, label, canSignIn: person.account!.can_sign_in };
+  }
+
+  return { kind: 'seat', userId, label, action: action.seat! };
 }

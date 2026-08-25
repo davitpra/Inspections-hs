@@ -2,6 +2,7 @@ import { ROLES, type Role, type Session } from '@hs/contracts';
 import { describe, expect, it } from 'vitest';
 
 import {
+  canAddPersonToRoster,
   canAdministerRoster,
   canAdministerScheduling,
   canAuthorTemplates,
@@ -29,6 +30,7 @@ const permissions = [
   ['canAdministerScheduling', canAdministerScheduling],
   ['canInviteFromRoster', canInviteFromRoster],
   ['canImportRoster', canImportRoster],
+  ['canAddPersonToRoster', canAddPersonToRoster],
   ['canAuthorTemplates', canAuthorTemplates],
   ['canPublishTemplates', canPublishTemplates],
   ['canDeactivateTemplates', canDeactivateTemplates],
