@@ -1,10 +1,13 @@
-import type { InspectionSchedule, ScheduledInspection } from '@hs/contracts';
-
-import { InfoIcon } from '../../components/icons';
-import { YearNavigator } from '../../components/YearNavigator';
-import { earliestEligibleYear, legendStates, matrixRows, type YearEntry } from './presentation';
-import { ScheduleLegend } from './ScheduleLegend';
-import { ScheduleMatrix } from './ScheduleMatrix';
+import type { InspectionSchedule, ScheduledInspection } from "@hs/contracts";
+import { YearNavigator } from "../../components/YearNavigator";
+import {
+  earliestEligibleYear,
+  legendStates,
+  matrixRows,
+  type YearEntry,
+} from "./presentation";
+import { ScheduleLegend } from "./ScheduleLegend";
+import { ScheduleMatrix } from "./ScheduleMatrix";
 
 export function ScheduleSection({
   rules,
@@ -34,21 +37,27 @@ export function ScheduleSection({
         <div className="schedule-section__bar">
           <div className="schedule-section__title">
             <h2 id="schedule-heading">Annual schedule</h2>
-            <p className="note">Compliance matrix, month by month, for every active requirement of this site.</p>
+            <p className="note">
+              Compliance matrix, month by month, for every active requirement of
+              this site.
+            </p>
           </div>
-          <YearNavigator year={year} earliestYear={earliestYear} onYearChange={onYearChange} />
+          <YearNavigator
+            year={year}
+            earliestYear={earliestYear}
+            onYearChange={onYearChange}
+          />
         </div>
         <ScheduleLegend states={legendStates(rows)} />
       </div>
       {entries.length === 0 ? (
-        <div className="schedule-empty"><strong>No obligations in this year.</strong><span>No requirements owe a period for this site and year.</span></div>
+        <div className="schedule-empty">
+          <strong>No obligations in this year.</strong>
+          <span>No requirements owe a period for this site and year.</span>
+        </div>
       ) : (
         <ScheduleMatrix entries={entries} year={year} onSelect={onSelect} />
       )}
-      <p className="schedule-section__foot">
-        <InfoIcon size={18} />
-        <span>Opening a period freezes the published template version for that inspection.</span>
-      </p>
     </section>
   );
 }
