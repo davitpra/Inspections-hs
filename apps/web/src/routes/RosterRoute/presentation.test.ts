@@ -22,6 +22,9 @@ import {
   rosterCounts,
   showsAccountRole,
   sortRoster,
+  importButtonText,
+  importSummary,
+  sortRejections,
 } from './presentation';
 
 const SITE_A = '11111111-1111-4111-8111-111111111111';
@@ -66,6 +69,39 @@ function withAccount(
 describe('personName', () => {
   it('apellido primero, sin el número: en la tabla el número tiene su columna', () => {
     expect(personName(person())).toBe('Reid, Ada');
+  });
+});
+
+describe('la presentación del reporte de importación', () => {
+  const report = {
+    import_id: null,
+    source_filename: 'people.csv',
+    rows_read: 4,
+    rows_applied: 2,
+    rows_rejected: 2,
+    rejections: [
+      { row_number: 5, employee_number: '4', reason: 'Bad status' },
+      { row_number: 2, employee_number: null, reason: 'Missing employee number' },
+    ],
+  };
+
+  it('resume los tres conteos en una línea', () => {
+    expect(importSummary(report)).toBe('4 rows read, 2 applied, 2 rejected.');
+  });
+
+  it('ordena rechazos sin mutar el reporte', () => {
+    expect(sortRejections(report.rejections).map((row) => row.row_number)).toEqual([2, 5]);
+    expect(report.rejections.map((row) => row.row_number)).toEqual([5, 2]);
+  });
+
+  it.each([
+    ['empty', 'Import roster'],
+    ['ready', 'Import roster'],
+    ['pending', 'Importing…'],
+    ['success', 'Import roster'],
+    ['error', 'Try again'],
+  ] as const)('nombra el botón en %s', (state, label) => {
+    expect(importButtonText(state)).toBe(label);
   });
 });
 

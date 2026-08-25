@@ -1,10 +1,30 @@
-import { ROLE_LABELS, type Person, type PersonWithAccount } from '@hs/contracts';
+import {
+  ROLE_LABELS,
+  type Person,
+  type PersonWithAccount,
+  type RosterImportReport,
+  type RosterRejection,
+} from '@hs/contracts';
+
+export type ImportState = 'empty' | 'ready' | 'pending' | 'success' | 'error';
+
+export function importSummary(report: RosterImportReport): string {
+  return `${report.rows_read} rows read, ${report.rows_applied} applied, ${report.rows_rejected} rejected.`;
+}
+
+export function sortRejections(rejections: readonly RosterRejection[]): RosterRejection[] {
+  return [...rejections].sort((a, b) => a.row_number - b.row_number);
+}
+
+export function importButtonText(state: ImportState): string {
+  return state === 'pending' ? 'Importing…' : state === 'error' ? 'Try again' : 'Import roster';
+}
 
 /**
  * Cómo se lee la consola del roster: etiquetas, orden y búsqueda, sin marcado.
  *
- * La consola es de solo lectura, así que acá no hay nada sobre qué se puede cambiar: solo
- * cómo se muestra y cómo se encuentra.
+ * La consola no edita personas fila por fila. Además de cómo se muestra y encuentra el
+ * roster, este archivo nombra los estados del único write permitido: importar el CSV entero.
  *
  * Aparte del componente por la misma razón que `scheduling-presentation.ts`: lo que
  * importa es la decisión y el nombre de cada cosa, y eso se prueba sin renderizar nada.

@@ -242,19 +242,8 @@ async function classify(
   const client = deps.client ?? sessionClient;
 
   if (code === 'session_ended' || code === 'token_expired') {
-    /**
-     * Antes de pedir login, se comprueba que la sesión esté REALMENTE caída.
-     *
-     * `readError` de `session-client.ts` devuelve `session_ended` ante cualquier
-     * respuesta sin código tipado —un `404` de una ruta que no existe, un `502` de un
-     * proxy, una página de error en HTML—, y ese default protege lo que tiene que
-     * proteger: la cola no se descarta. Pero si se creyera al pie de la letra, esos
-     * errores no contarían como intento ni programarían retroceso, y cada disparador
-     * reintentaría al instante. Es exactamente el martilleo que D8 existe para evitar.
-     *
-     * Si la sesión sigue viva, entonces el `session_ended` era una etiqueta prestada y
-     * lo que hubo fue un error de servidor: reintenta con retroceso.
-     */
+    // La comprobación protege contra un código incorrecto del servidor y contra una
+    // sesión renovada entre la respuesta y la clasificación de la cola.
     if (await client.ensureFreshSession()) {
       return retryLater(clientSubmissionId, message, deps);
     }
@@ -322,7 +311,7 @@ const NON_RETRYABLE = new Set([
   'invalid_submission',
   // El cuerpo no tiene la forma del contrato: lo emite `ZodExceptionFilter` de la API.
   // Un payload que ni siquiera parsea no lo arregla ningún reintento, y sin este código
-  // acá el `400` cae al default de `readError` —`session_ended`— y vuelve al retroceso.
+  // Sin este código acá el rechazo volvería al retroceso.
   'invalid_request',
   'forbidden',
   'inspection_not_found',

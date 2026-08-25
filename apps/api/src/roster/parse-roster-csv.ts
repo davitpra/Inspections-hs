@@ -1,4 +1,4 @@
-import { parse } from 'csv-parse/sync';
+import { CsvError, parse } from 'csv-parse/sync';
 
 import {
   ROSTER_CSV_COLUMNS,
@@ -64,12 +64,21 @@ function stripBom(text: string): string {
 export function parseRosterCsv(text: string): ParsedRoster {
   // `csv-parse` y no `split(',')`: los apellidos con coma entre comillas y los
   // `\r\n` de un export de Excel son el caso normal, no el borde.
-  const records = parse(stripBom(text), {
-    columns: (header: string[]) => header.map((name) => name.trim().toLowerCase()),
-    skip_empty_lines: true,
-    trim: true,
-    relax_column_count: true,
-  }) as Record<string, string>[];
+  let records: Record<string, string>[];
+
+  try {
+    records = parse(stripBom(text), {
+      columns: (header: string[]) => header.map((name) => name.trim().toLowerCase()),
+      skip_empty_lines: true,
+      trim: true,
+      relax_column_count: true,
+    }) as Record<string, string>[];
+  } catch (error) {
+    if (error instanceof CsvError) {
+      throw new RosterFileError(`the file contains invalid CSV: ${error.message}`, { cause: error });
+    }
+    throw error;
+  }
 
   const rows: ParsedRosterRow[] = [];
   const rejections: RosterRejection[] = [];

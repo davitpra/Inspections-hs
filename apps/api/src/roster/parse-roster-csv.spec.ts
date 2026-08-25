@@ -117,6 +117,15 @@ describe('parseRosterCsv', () => {
     expect(() => parseRosterCsv('')).toThrow(RosterFileError);
   });
 
+  it('normaliza comillas sin cerrar como un error del archivo', () => {
+    expect(() => parseRosterCsv(file('10472,Ada,"Reid,st-thomas,active'))).toThrowError(
+      expect.objectContaining({
+        name: 'Error',
+        message: expect.stringMatching(/invalid CSV/i),
+      }),
+    );
+  });
+
   it('cuenta cada fila de datos leída, rechazadas incluidas', () => {
     const result = parseRosterCsv(
       file('10472,Ada,Reid,st-thomas,active', ',Bo,Chen,glencoe,active', '10474,Cy,Diaz,x,nope'),

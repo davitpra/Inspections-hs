@@ -1,8 +1,5 @@
 import {
-  isRenewable,
   type AcceptInvitationRequest,
-  type AuthError,
-  type AuthErrorCode,
   type RefreshResponse,
   type Session,
   type SignInRequest,
@@ -30,7 +27,12 @@ export interface TokenStore {
 /** El resultado de una llamada autenticada, sin excepciones de por medio. */
 export type AuthedResult<T> =
   | { ok: true; value: T }
-  | { ok: false; code: AuthErrorCode; message: string };
+  | { ok: false; code: string; message: string };
+
+interface DomainError {
+  code: string;
+  message: string;
+}
 
 export interface SessionClientOptions {
   baseUrl: string;
@@ -166,7 +168,7 @@ export class SessionClient {
 
       // El único caso renovable. Se refresca UNA vez y se reintenta: si el reintento
       // vuelve a fallar, no es un token viejo y seguir insistiendo no arregla nada.
-      if (isRenewable(error.code) && (await this.refresh())) {
+      if (error.code === 'token_expired' && (await this.refresh())) {
         response = await attempt();
       } else {
         if (sessionReallyEnded(response, error)) this.options.onSessionEnded?.();
@@ -244,39 +246,35 @@ export function refreshOnReconnect(client: SessionClient): () => void {
 /**
  * Si esto es de verdad el fin de la sesión, o solo un error que no supimos leer.
  *
- * `readError` cae en `session_ended` ante CUALQUIER respuesta sin código tipado, y para
- * lo que esa función protege —no descartar nada de la cola— es el default correcto. Pero
- * "no descartes" y "echá al usuario a la pantalla de login" no son la misma decisión, y
- * tratarlas igual tiene una consecuencia concreta: un `404` de una ruta que todavía no
- * existe, un `502` de un proxy o una página de error en HTML sacarían al inspector de su
- * recorrido en medio de la planta.
+ * Un error de dominio puede traer cualquier código del módulo que atendió el request; no
+ * se puede castear como un código de auth. Aun cuando diga `session_ended`, solo termina la
+ * sesión si el status también es 401. Un `404`, un `502` o una página HTML se reportan como
+ * `request_failed` y no sacan al inspector de su recorrido.
  *
- * Ese error se vio de verdad: con `POST /inspection-submissions` sin implementar, el
- * `404` sin código deslogueaba al inspector al reconectar. No se perdía trabajo —el
- * borrador y la cola sobreviven— pero la sesión se caía sin motivo.
- *
- * Así que se pide la evidencia mínima antes de dar la sesión por terminada: que el
- * servidor haya contestado `401`. Cualquier otra cosa sigue devolviendo `session_ended`
- * a quien llamó —la cola sigue sin descartar nada— pero no desloguea.
+ * Ese error se vio de verdad con `POST /inspection-submissions` sin implementar. Por eso
+ * se pide la evidencia mínima antes de dar la sesión por terminada: código y status.
  */
-function sessionReallyEnded(response: Response, error: AuthError): boolean {
+function sessionReallyEnded(response: Response, error: DomainError): boolean {
   return error.code === 'session_ended' && response.status === 401;
 }
 
-async function readError(response: Response): Promise<AuthError> {
+async function readError(response: Response): Promise<DomainError> {
   try {
-    const body = (await response.clone().json()) as Partial<AuthError>;
+    const body = (await response.clone().json()) as Partial<DomainError>;
 
-    if (body.code) return { code: body.code, message: body.message ?? 'Request failed' };
+    if (typeof body.code === 'string') {
+      return {
+        code: body.code,
+        message: typeof body.message === 'string' ? body.message : 'Request failed',
+      };
+    }
   } catch {
     // Cuerpo no-JSON: se cae al default de abajo.
   }
 
-  // Sin código tipado no se puede afirmar que sea renovable, y ante la duda la
-  // respuesta segura es la que NO descarta nada.
-  return { code: 'session_ended', message: `Request failed with ${response.status}` };
+  return { code: 'request_failed', message: `Request failed with ${response.status}` };
 }
 
-function failure(error: AuthError): { ok: false; code: AuthErrorCode; message: string } {
+function failure(error: DomainError): { ok: false; code: string; message: string } {
   return { ok: false, code: error.code, message: error.message };
 }

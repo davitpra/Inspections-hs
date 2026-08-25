@@ -41,6 +41,11 @@ export function canAdministerRoster(account: Session | null): account is Session
   return account?.role === 'hs_coordinator';
 }
 
+/** Quién puede aplicar un archivo completo al roster. */
+export function canImportRoster(account: Session | null): account is Session {
+  return account?.role === 'hs_coordinator';
+}
+
 /**
  * Quién ve el botón de invitar en la fila del roster (proposal — "el rol de la
  * invitación desde el roster es `jhsc_member` y solo ese"). Hoy coincide con

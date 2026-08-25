@@ -85,14 +85,12 @@ describe('el cliente de sesión', () => {
   });
 
   /**
-   * REGRESIÓN. Un `404` de una ruta que todavía no existe no lleva código tipado, así
-   * que `readError` cae en `session_ended` — y eso está bien para la cola, que no
-   * descarta nada. Lo que NO puede pasar es que desloguee al inspector: se vio de
-   * verdad, con `POST /inspection-submissions` sin implementar, sacando al usuario de su
-   * recorrido al reconectar.
+   * REGRESIÓN. Un `404` de una ruta que todavía no existe no lleva código de dominio. No
+   * puede hacerse pasar por el fin de la sesión ni desloguear al inspector: se vio de
+   * verdad con `POST /inspection-submissions` sin implementar.
    */
   it('un error sin código tipado NO termina la sesión', async () => {
-    for (const status of [404, 500, 502]) {
+    for (const status of [401, 404, 500, 502]) {
       const fetchImpl = vi.fn(async () => json(status, { message: 'Cannot POST' }));
       const onSessionEnded = vi.fn();
 
@@ -127,7 +125,24 @@ describe('el cliente de sesión', () => {
     expect(fetchImpl).toHaveBeenCalledOnce();
   });
 
-  it('un error sin código tipado se trata como NO renovable, que es el lado seguro', async () => {
+  it('conserva códigos de dominio autenticados que no pertenecen a auth', async () => {
+    const fetchImpl = vi.fn(async () =>
+      json(413, { code: 'roster_file_too_large', message: 'The file is too large' }),
+    );
+    const client = new SessionClient({
+      baseUrl: 'https://api.test',
+      store: memoryStore(),
+      fetch: fetchImpl as unknown as typeof globalThis.fetch,
+    });
+
+    await expect(client.request('/people/import', { method: 'POST' })).resolves.toEqual({
+      ok: false,
+      code: 'roster_file_too_large',
+      message: 'The file is too large',
+    });
+  });
+
+  it('un error no JSON no se hace pasar por una sesión terminada', async () => {
     const fetchImpl = vi.fn(async () => new Response('<html>502</html>', { status: 502 }));
 
     const client = new SessionClient({
@@ -138,7 +153,11 @@ describe('el cliente de sesión', () => {
 
     const result = await client.request('/inspections');
 
-    expect(result.ok).toBe(false);
+    expect(result).toEqual({
+      ok: false,
+      code: 'request_failed',
+      message: 'Request failed with 502',
+    });
     expect(fetchImpl).toHaveBeenCalledOnce();
   });
 

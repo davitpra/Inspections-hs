@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { RosterController } from './roster.controller';
 import { RosterService } from './roster.service';
+import { RosterUploadExceptionFilter } from './roster-upload.filter';
 
 /**
  * El roster: su importación desde el CSV de ADP y su administración desde la consola.
@@ -17,6 +18,6 @@ import { RosterService } from './roster.service';
  */
 @Module({
   controllers: [RosterController],
-  providers: [RosterService],
+  providers: [RosterService, RosterUploadExceptionFilter],
 })
 export class RosterModule {}

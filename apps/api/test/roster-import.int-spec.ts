@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { applyRoster } from '../src/roster/apply-roster';
+import { applyRoster, applyRosterRows } from '../src/roster/apply-roster';
+import { DbService } from '../src/db/db.service';
 import { parseRosterCsv } from '../src/roster/parse-roster-csv';
 import { registerSite } from './helpers/catalog';
 import { createAccount, personById, selectablePeople } from './helpers/identity';
@@ -31,6 +32,28 @@ const HEADER = 'employee_number,first_name,last_name,site_code,status';
 /** Un archivo con el encabezado canónico y las filas dadas. */
 function file(...rows: string[]): string {
   return [HEADER, ...rows].join('\n');
+}
+
+/** Fuerza un fallo al insertar el segundo rechazo, después del desglose y su auditoría. */
+function parsedWithLateFailure(employeeNumber: string) {
+  const parsed = parseRosterCsv(file(`${employeeNumber},Nueva,Persona,roster-a,active`));
+  const rejection = {
+    row_number: 3,
+    employee_number: `${employeeNumber}-REJECTED`,
+    reason: 'forced duplicate rejection',
+  };
+
+  parsed.rowsRead = 3;
+  parsed.rawByRow.set(3, {
+    employee_number: rejection.employee_number,
+    first_name: 'Rechazada',
+    last_name: 'Duplicada',
+    site_code: 'roster-a',
+    status: 'active',
+  });
+  parsed.rejections.push(rejection, { ...rejection });
+
+  return parsed;
 }
 
 /** Importa un texto CSV con el alcance de las dos plantas del spec. */
@@ -139,6 +162,21 @@ describe('una importación limpia', () => {
     );
 
     expect(one(count).count).toBe('1');
+  });
+
+  it('rechaza un número oculto por RLS sin abortar las demás filas', async () => {
+    await importFile(file('HIDDEN-1,Fuera,Alcance,roster-c,active'), { siteIds: [SITE_C] });
+
+    const report = await importFile(
+      file('HIDDEN-1,No,DebeCambiar,roster-a,active', 'VISIBLE-1,Sí,Seaplica,roster-a,active'),
+      { siteIds: [SITE_A] },
+    );
+
+    expect(report).toMatchObject({ rows_read: 2, rows_applied: 1, rows_rejected: 1 });
+    expect(report.rejections[0]).toMatchObject({ row_number: 2, employee_number: 'HIDDEN-1' });
+    expect(report.rejections[0]?.reason).not.toMatch(/roster-c/i);
+    expect((await byEmployeeNumber('HIDDEN-1'))?.last_name).toBe('Alcance');
+    expect(await byEmployeeNumber('VISIBLE-1')).not.toBeNull();
   });
 
   it('una transferencia por archivo mueve a la persona de planta', async () => {
@@ -310,16 +348,20 @@ describe('la importación es una sola transacción', () => {
       [],
       'SELECT count(*)::text AS count FROM roster_import',
     );
+    const auditBefore = await inScope<{ count: string }>(
+      db.migrator,
+      [SITE_A],
+      'SELECT count(*)::text AS count FROM audit_log',
+    );
 
-    // La fila de `roster_import` se escribe DESPUÉS de aplicar las personas, así
-    // que un `started_at` inválido revienta con las dos primeras filas ya
-    // insertadas: es exactamente el fallo a mitad de camino que hay que probar.
+    // El rechazo duplicado falla al final, después de persona, lote, desglose,
+    // auditoría y primer rechazo: el rollback tiene que llevarse todos juntos.
     await expect(
       applyRoster(
         db.app,
-        parseRosterCsv(file('F-2,Nueva,Persona,roster-a,active', 'F-3,Otra,Persona,roster-a,active')),
+        parsedWithLateFailure('F-2'),
         { siteIds: [SITE_A], userId: coordinator },
-        { sourceFilename: 'boom.csv', startedAt: new Date('not a date') },
+        { sourceFilename: 'boom.csv' },
       ),
     ).rejects.toBeTruthy();
 
@@ -331,10 +373,47 @@ describe('la importación es una sola transacción', () => {
 
     expect(one(batchesAfter).count).toBe(one(batchesBefore).count);
     expect(await byEmployeeNumber('F-2')).toBeNull();
-    expect(await byEmployeeNumber('F-3')).toBeNull();
+    const auditAfter = await inScope<{ count: string }>(
+      db.migrator,
+      [SITE_A],
+      'SELECT count(*)::text AS count FROM audit_log',
+    );
+    expect(one(auditAfter).count).toBe(one(auditBefore).count);
     // Y la persona que ya estaba sigue estando: el rollback no se llevó puesto lo
     // que había antes de esta importación.
     expect(await byEmployeeNumber('F-1')).not.toBeNull();
+  });
+
+  it('el wrapper de sesión también revierte personas y reporte ante un fallo tardío', async () => {
+    const previous = process.env.DATABASE_URL;
+    process.env.DATABASE_URL = db.appUrl;
+    const service = new DbService();
+    process.env.DATABASE_URL = previous;
+
+    try {
+      await expect(
+        service.withSessionClient(
+          { userId: coordinator, role: 'hs_coordinator', siteIds: [SITE_A] },
+          (client) =>
+            applyRosterRows(
+              client,
+              parsedWithLateFailure('F-SESSION'),
+              { siteIds: [SITE_A], userId: coordinator },
+              { sourceFilename: 'boom-session.csv' },
+            ),
+        ),
+      ).rejects.toBeTruthy();
+
+      expect(await byEmployeeNumber('F-SESSION')).toBeNull();
+      const imports = await inScope<{ count: string }>(
+        db.migrator,
+        [],
+        "SELECT count(*)::text AS count FROM roster_import WHERE source_filename = 'boom-session.csv'",
+      );
+      expect(one(imports).count).toBe('0');
+    } finally {
+      await service.onModuleDestroy();
+    }
   });
 });
 

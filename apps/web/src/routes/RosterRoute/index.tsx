@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 
 import { listSites } from '../../api/inspections';
 import { queryKeys } from '../../api/query-keys';
@@ -10,11 +10,15 @@ import {
   ClockIcon,
   InfoIcon,
   PersonIcon,
-  PinIcon,
   SearchIcon,
 } from '../../components/icons';
 import { SitePicker } from '../../components/SitePicker';
-import { canAdministerRoster, canInviteFromRoster } from '../../permissions/session';
+import {
+  canAdministerRoster,
+  canImportRoster,
+  canInviteFromRoster,
+} from '../../permissions/session';
+import { ImportDialog } from './ImportDialog';
 import { resolveSiteId } from '../../presentation/sites';
 import { InviteDialog } from './InviteDialog';
 import { JhscSeatDialog } from './JhscSeatDialog';
@@ -50,9 +54,8 @@ import {
  * columnas colgadas de una inspección. Para saber si alguien estaba cargado, en qué planta,
  * o si seguía activo, había que abrir `psql`.
  *
- * **SOLO LECTURA, Y ES TODO EL ALCANCE.** No se corrige un nombre, no se transfiere de
- * planta y no se da de baja: el roster lo mantiene la importación del CSV de ADP, que es su
- * fuente de verdad. Esta pantalla lo muestra.
+ * No se corrige una persona fila por fila: nombres, planta y estado se aplican juntos desde
+ * el CSV. Esta pantalla muestra el roster y ofrece esa importación completa al coordinador.
  *
  * **ESTO NO ES EL SELECTOR DE SUJETO, Y LA DISTINCIÓN ES LA QUE SOSTIENE LA PANTALLA.** §4
  * dice que el supervisor elige a una persona *sin poder ver su perfil*, y eso ata al
@@ -85,20 +88,30 @@ export function RosterRoute(): React.JSX.Element {
     );
   }
 
-  return <RosterConsole siteScope={account.siteScope} canInviteFromRoster={canInviteFromRoster(account)} />;
+  return (
+    <RosterConsole
+      siteScope={account.siteScope}
+      canInviteFromRoster={canInviteFromRoster(account)}
+      canImportRoster={canImportRoster(account)}
+    />
+  );
 }
 
 function RosterConsole({
   siteScope,
   canInviteFromRoster: mayInvite,
+  canImportRoster: mayImport,
 }: {
   siteScope: readonly string[];
   canInviteFromRoster: boolean;
+  canImportRoster: boolean;
 }): React.JSX.Element {
   const searchId = useId();
+  const importTriggerRef = useRef<HTMLButtonElement>(null);
 
   const [chosenSite, setChosenSite] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [importing, setImporting] = useState(false);
 
   /**
    * La persona que está siendo invitada, ACÁ y no en la fila que lo originó: invitar
@@ -190,20 +203,15 @@ function RosterConsole({
 
         {/*
           Sin ninguna planta activa no hay roster que pedir —la consulta ya está apagada por
-          `enabled`—, y el selector degradado diría «Site:» y nada más.
+          `enabled`—, y el selector degradado diría «Site» y nada más.
         */}
         {noActiveSite ? null : (
-          <div className="site-card">
-            <span className="site-card__icon">
-              <PinIcon />
-            </span>
-            <SitePicker
-              sites={sites.data ?? []}
-              value={siteId}
-              onChange={setChosenSite}
-              siteName={siteName}
-            />
-          </div>
+          <SitePicker
+            sites={sites.data ?? []}
+            value={siteId}
+            onChange={setChosenSite}
+            siteName={siteName}
+          />
         )}
       </header>
 
@@ -219,8 +227,8 @@ function RosterConsole({
             <InfoIcon size={20} />
           </span>
           <p className="notice-card__text">
-            The roster is maintained by CSV import. Names, sites and active status all come from
-            the file.
+            Use Import roster to apply names, sites and active status from one CSV across any site
+            you administer.
           </p>
         </div>
       </div>
@@ -300,6 +308,17 @@ function RosterConsole({
               onChange={(event) => setSearch(event.target.value)}
             />
           </label>
+
+          {mayImport ? (
+            <button
+              ref={importTriggerRef}
+              type="button"
+              className="button--outline roster__import"
+              onClick={() => setImporting(true)}
+            >
+              Import roster
+            </button>
+          ) : null}
 
           {/*
             Cuánto de todo se está viendo. Solo con el roster cargado: "0 of 0 people"
@@ -515,6 +534,10 @@ function RosterConsole({
           siteId={siteId}
           onClose={() => setSeating(null)}
         />
+      ) : null}
+
+      {importing ? (
+        <ImportDialog onClose={() => setImporting(false)} returnFocusTo={importTriggerRef} />
       ) : null}
 
     </>

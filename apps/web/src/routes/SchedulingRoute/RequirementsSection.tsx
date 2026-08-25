@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { InspectionSchedule } from '@hs/contracts';
 
+import { PlusIcon } from '../../components/icons';
 import { currentRules } from './presentation';
 import { RequirementConfirmDialog } from './RequirementConfirmDialog';
 import { RequirementDialog } from './RequirementDialog';
@@ -61,7 +62,7 @@ export function RequirementsSection({
               className="button--primary requirements-section__add"
               onClick={() => setAdding(true)}
             >
-              Add requirement
+              <PlusIcon /> Add requirement
             </button>
           </div>
         ) : null}

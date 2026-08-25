@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { listScheduled, listSchedules, listSites } from '../../api/inspections';
 import { queryKeys } from '../../api/query-keys';
 import { useAppSession } from '../../app/session-context';
-import { CalendarIcon, InfoIcon, PinIcon } from '../../components/icons';
+import { CalendarIcon, InfoIcon } from '../../components/icons';
 import { SitePicker } from '../../components/SitePicker';
 import { canAdministerScheduling } from '../../permissions/session';
 import { currentCivilYear } from '../../presentation/dates';
@@ -51,7 +51,7 @@ export function SchedulingRoute(): React.JSX.Element {
           <div className="scheduling__title"><span className="scheduling__icon"><CalendarIcon size={22} /></span><h1>Scheduling</h1></div>
           <p className="scheduling__subtitle">Plan and assign each inspection period this site owes throughout the year.</p>
         </div>
-        {sites.isSuccess && !noActiveSite ? <div className="site-card"><span className="site-card__icon"><PinIcon /></span><SitePicker sites={sites.data ?? []} value={siteId} onChange={setChosenSite} siteName={siteName} /></div> : null}
+        {sites.isSuccess && !noActiveSite ? <SitePicker sites={sites.data ?? []} value={siteId} onChange={setChosenSite} siteName={siteName} /> : null}
       </header>
 
       {sites.isLoading || schedules.isLoading || scheduled.isLoading ? <p className="status-card"><CalendarIcon size={20} /> Loading scheduling data…</p> : null}

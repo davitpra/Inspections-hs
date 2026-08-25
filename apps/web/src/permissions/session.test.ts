@@ -8,6 +8,7 @@ import {
   canDeactivateTemplates,
   canPublishTemplates,
   canInviteFromRoster,
+  canImportRoster,
 } from './session';
 
 const SITE = '11111111-1111-4111-8111-111111111111';
@@ -27,6 +28,7 @@ const permissions = [
   ['canAdministerRoster', canAdministerRoster],
   ['canAdministerScheduling', canAdministerScheduling],
   ['canInviteFromRoster', canInviteFromRoster],
+  ['canImportRoster', canImportRoster],
   ['canAuthorTemplates', canAuthorTemplates],
   ['canPublishTemplates', canPublishTemplates],
   ['canDeactivateTemplates', canDeactivateTemplates],

@@ -44,60 +44,78 @@ export async function applyRoster(
   scope: ImportScope,
   options: ApplyRosterOptions,
 ): Promise<RosterImportReport> {
+  return withSiteScope(pool, scope, (client) => applyRosterRows(client, parsed, scope, options));
+}
+
+/** Aplica un roster dentro de una transacción y un alcance ya abiertos por el llamador. */
+export async function applyRosterRows(
+  client: PoolClient,
+  parsed: ParsedRoster,
+  scope: ImportScope,
+  options: ApplyRosterOptions,
+): Promise<RosterImportReport> {
   const startedAt = options.startedAt ?? new Date();
 
-  return withSiteScope(pool, scope, async (client) => {
-    // UNA lectura del catálogo, al principio. La alternativa —intentar el INSERT y
-    // atrapar el error de FK— no sirve: en Postgres una sentencia fallida aborta la
-    // transacción entera salvo con savepoints, y un savepoint por fila para 200
-    // filas es caro y frágil.
-    const sites = await siteCodes(client, scope.siteIds);
+  // UNA lectura del catálogo, al principio. La alternativa —intentar el INSERT y
+  // atrapar el error de FK— no sirve: en Postgres una sentencia fallida aborta la
+  // transacción entera salvo con savepoints, y un savepoint por fila para 200
+  // filas es caro y frágil.
+  const sites = await siteCodes(client, scope.siteIds);
 
-    const rejections: RosterRejection[] = [...parsed.rejections];
-    const appliedBySite = new Map<string, number>();
+  const rejections: RosterRejection[] = [...parsed.rejections];
+  const appliedBySite = new Map<string, number>();
+  let rowsApplied = 0;
 
-    for (const row of parsed.rows) {
-      const siteId = sites.get(row.site_code);
+  for (const row of parsed.rows) {
+    const siteId = sites.get(row.site_code);
 
-      if (siteId === undefined) {
-        rejections.push({
-          row_number: row.rowNumber,
-          employee_number: row.employee_number,
-          // El mismo motivo para "no existe" y para "no lo administrás": desde el
-          // lado de quien importa son la misma situación, y decir cuál de las dos
-          // es filtraría la existencia de una planta que no administra.
-          reason: `unknown or out-of-scope site_code "${row.site_code}"`,
-        });
-        continue;
-      }
-
-      await upsertPerson(client, row, siteId);
-      appliedBySite.set(siteId, (appliedBySite.get(siteId) ?? 0) + 1);
+    if (siteId === undefined) {
+      rejections.push({
+        row_number: row.rowNumber,
+        employee_number: row.employee_number,
+        // El mismo motivo para "no existe" y para "no lo administrás": desde el
+        // lado de quien importa son la misma situación, y decir cuál de las dos
+        // es filtraría la existencia de una planta que no administra.
+        reason: `unknown or out-of-scope site_code "${row.site_code}"`,
+      });
+      continue;
     }
 
-    const rowsApplied = parsed.rows.length - (rejections.length - parsed.rejections.length);
+    const applied = await upsertPerson(client, row, siteId);
 
-    const importId = await recordImport(client, {
-      importedBy: scope.userId ?? null,
-      sourceFilename: options.sourceFilename,
-      rowsRead: parsed.rowsRead,
-      rowsApplied,
-      rowsRejected: rejections.length,
-      startedAt,
-    });
+    if (!applied) {
+      rejections.push({
+        row_number: row.rowNumber,
+        employee_number: row.employee_number,
+        reason: `employee_number "${row.employee_number}" cannot be applied in this import`,
+      });
+      continue;
+    }
 
-    await recordSiteBreakdown(client, importId, appliedBySite, rejections, parsed, sites);
-    await recordRejections(client, importId, rejections, parsed);
+    rowsApplied += 1;
+    appliedBySite.set(siteId, (appliedBySite.get(siteId) ?? 0) + 1);
+  }
 
-    return {
-      import_id: importId,
-      source_filename: options.sourceFilename,
-      rows_read: parsed.rowsRead,
-      rows_applied: rowsApplied,
-      rows_rejected: rejections.length,
-      rejections,
-    };
+  const importId = await recordImport(client, {
+    importedBy: scope.userId ?? null,
+    sourceFilename: options.sourceFilename,
+    rowsRead: parsed.rowsRead,
+    rowsApplied,
+    rowsRejected: rejections.length,
+    startedAt,
   });
+
+  await recordSiteBreakdown(client, importId, appliedBySite, rejections, parsed, sites);
+  await recordRejections(client, importId, rejections, parsed);
+
+  return {
+    import_id: importId,
+    source_filename: options.sourceFilename,
+    rows_read: parsed.rowsRead,
+    rows_applied: rowsApplied,
+    rows_rejected: rejections.length,
+    rejections,
+  };
 }
 
 /** El catálogo de sitios visible bajo el alcance, por `code`. */
@@ -134,23 +152,32 @@ async function upsertPerson(
   client: PoolClient,
   row: ParsedRosterRow,
   siteId: string,
-): Promise<void> {
-  await client.query(
+): Promise<boolean> {
+  const deactivatedAt = row.status === 'inactive' ? new Date() : null;
+  const inserted = await client.query<{ id: string }>(
     `INSERT INTO person (employee_number, first_name, last_name, site_id, deactivated_at)
      VALUES ($1, $2, $3, $4, $5)
-     ON CONFLICT (employee_number) DO UPDATE
-        SET first_name = EXCLUDED.first_name,
-            last_name = EXCLUDED.last_name,
-            site_id = EXCLUDED.site_id,
-            deactivated_at = EXCLUDED.deactivated_at`,
-    [
-      row.employee_number,
-      row.first_name,
-      row.last_name,
-      siteId,
-      row.status === 'inactive' ? new Date() : null,
-    ],
+     ON CONFLICT (employee_number) DO NOTHING
+     RETURNING id`,
+    [row.employee_number, row.first_name, row.last_name, siteId, deactivatedAt],
   );
+
+  if (inserted.rowCount === 1) return true;
+
+  // La unicidad es global, pero RLS puede ocultar la fila que causó el conflicto.
+  // En ese caso el UPDATE devuelve cero filas y el lote rechaza solo esta entrada.
+  const updated = await client.query<{ id: string }>(
+    `UPDATE person
+        SET first_name = $2,
+            last_name = $3,
+            site_id = $4,
+            deactivated_at = $5
+      WHERE employee_number = $1
+      RETURNING id`,
+    [row.employee_number, row.first_name, row.last_name, siteId, deactivatedAt],
+  );
+
+  return updated.rowCount === 1;
 }
 
 async function recordImport(

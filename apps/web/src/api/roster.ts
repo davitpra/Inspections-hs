@@ -2,9 +2,11 @@ import {
   accountDetailSchema,
   createAccountResponseSchema,
   personWithAccountSchema,
+  rosterImportReportSchema,
   type AccountDetail,
   type CreateAccountResponse,
   type PersonWithAccount,
+  type RosterImportReport,
 } from '@hs/contracts';
 import { z } from 'zod';
 
@@ -21,10 +23,8 @@ import { get, post, send } from './request';
  * desde caché mostraría un roster viejo sin decir que lo es. El offline existe para que no
  * se pierda el trabajo de campo (ADR-001), y esto no es trabajo de campo.
  *
- * **Solo lectura sobre `person`.** Sigue sin haber `updatePerson` ni nada que la escriba:
- * el roster lo mantiene `pnpm roster:import`. Lo único que se agrega es dar de alta la
- * CUENTA de alguien que ya está en el roster (proposal — `POST /accounts`), que es otra
- * tabla y otra regla.
+ * No hay escrituras por persona: nombres, planta y estado se aplican juntos mediante una
+ * importación CSV. Las demás escrituras de este cliente administran la cuenta asociada.
  */
 
 /**
@@ -42,6 +42,14 @@ export async function listPeople(siteId: string): Promise<PersonWithAccount[]> {
   return get(`/people?${query.toString()}`, (value) =>
     z.array(personWithAccountSchema).parse(value),
   );
+}
+
+/** Importa el archivo completo; el navegador agrega el boundary multipart. */
+export async function importRoster(input: { file: File }): Promise<RosterImportReport> {
+  const body = new FormData();
+  body.append('file', input.file);
+
+  return post('/people/import', body, (value) => rosterImportReportSchema.parse(value));
 }
 
 /**
@@ -73,10 +81,9 @@ export async function inviteAsJhscMember(input: {
 }
 
 /**
- * El detalle administrable de UNA cuenta —con su email, que el roster nunca devuelve
- * (`personAccountSchema`, design D2)— para precargar el diálogo de reemisión
+ * El detalle administrable de UNA cuenta para precargar el diálogo de reemisión
  * (`reissue-invitation-link-from-roster`, design D6). No es una segunda forma de leer el
- * roster: una cuenta a la vez, y solo la usa quien va a corregirla.
+ * roster: agrega el detalle necesario para corregir una cuenta, una por vez.
  */
 export async function getAccount(userId: string): Promise<AccountDetail> {
   return get(`/accounts/${userId}`, (value) => accountDetailSchema.parse(value));

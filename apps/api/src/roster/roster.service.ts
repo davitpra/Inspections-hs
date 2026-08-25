@@ -1,18 +1,18 @@
 import { Injectable } from '@nestjs/common';
-import type { PersonWithAccount, RosterQuery } from '@hs/contracts';
+import type { PersonWithAccount, RosterImportReport, RosterQuery } from '@hs/contracts';
 
 import { DbService } from '../db/db.service';
 import type { SessionScope } from '../db/site-scope';
-import { rosterForbidden } from './roster.errors';
+import { applyRosterRows } from './apply-roster';
+import { parseRosterCsv, RosterFileError } from './parse-roster-csv';
+import { rosterFileUnusable, rosterForbidden, rosterImportForbidden } from './roster.errors';
 import { findRoster } from './roster.repository';
 
 /**
  * La consola del roster: poder ver quién trabaja en cada planta sin abrir `psql`.
  *
- * **SOLO LECTURA, Y ES TODO EL ALCANCE.** No hay ninguna ruta que escriba `person` desde
- * acá: ni alta, ni baja, ni corrección de nombre, ni transferencia entre plantas. El
- * roster lo mantiene la importación del CSV de ADP —`parse-roster-csv.ts` y
- * `apply-roster.ts`, en este mismo directorio—, que es su fuente de verdad y la única.
+ * La única escritura es la importación completa del CSV. No hay alta, baja, corrección
+ * de nombre ni transferencia de una persona individual desde esta superficie.
  *
  * Que el motor conceda `UPDATE (first_name, last_name, site_id, deactivated_at)` a
  * `hs_app` no es una invitación a usarlo desde un endpoint: esos privilegios existen para
@@ -39,12 +39,34 @@ export class RosterService {
    * no alcanza — que es justo lo contrario de lo que garantiza ADR-004.
    */
   async list(session: SessionScope, query: RosterQuery): Promise<PersonWithAccount[]> {
-    this.requireCoordinator(session);
+    this.requireCoordinator(session, rosterForbidden);
 
     return this.db.withSessionClient(session, (client) => findRoster(client, query));
   }
 
-  private requireCoordinator(session: { role: string }): void {
-    if (session.role !== 'hs_coordinator') throw rosterForbidden();
+  async import(
+    session: SessionScope,
+    file: { text: string; sourceFilename: string },
+  ): Promise<RosterImportReport> {
+    this.requireCoordinator(session, rosterImportForbidden);
+
+    let parsed;
+    try {
+      parsed = parseRosterCsv(file.text);
+    } catch (error) {
+      if (error instanceof RosterFileError) throw rosterFileUnusable(error.message);
+      throw error;
+    }
+
+    return this.db.withSessionClient(session, (client) =>
+      applyRosterRows(client, parsed, session, { sourceFilename: file.sourceFilename }),
+    );
+  }
+
+  private requireCoordinator(
+    session: { role: string },
+    failure: () => Error,
+  ): void {
+    if (session.role !== 'hs_coordinator') throw failure();
   }
 }

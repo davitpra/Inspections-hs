@@ -226,10 +226,9 @@ describe('sendEntry', () => {
   });
 
   /**
-   * REGRESIÓN. `readError` devuelve `session_ended` ante cualquier respuesta sin código
-   * tipado — un `404` de una ruta que no existe, un `502` de un proxy. Creerle al pie de
-   * la letra hacía que el envío no contara como intento ni programara retroceso, y cada
-   * disparador reintentara al instante: el martilleo que D8 existe para evitar.
+   * REGRESIÓN. Si el servidor etiqueta mal una respuesta como `session_ended`, creerle al
+   * pie de la letra haría que el envío no contara como intento ni programara retroceso, y
+   * cada disparador reintentara al instante: el martilleo que D8 existe para evitar.
    *
    * Se vio de verdad, con `POST /inspection-submissions` sin implementar.
    */
@@ -237,7 +236,7 @@ describe('sendEntry', () => {
     database = freshDatabase();
     const id = await readyDraft(database);
 
-    // La sesión SIGUE VIVA: el `session_ended` es una etiqueta prestada de un 404.
+    // La sesión SIGUE VIVA: el servidor prestó una etiqueta incorrecta al 404.
     const client = fakeSessionClient({
       freshSession: true,
       respond: (path) =>
@@ -298,9 +297,8 @@ describe('sendEntry', () => {
    * El cuerpo que no es del contrato tampoco se reintenta.
    *
    * `ZodExceptionFilter` de la API lo devuelve como `400 invalid_request`. Antes de ese
-   * filtro salía como `500` sin código tipado, `readError` caía en `session_ended`, y la
-   * entrada quedaba reintentando con retroceso un payload que el servidor nunca iba a
-   * aceptar. Este test es esa regresión.
+   * filtro salía como `500` sin código tipado y la entrada quedaba reintentando con
+   * retroceso un payload que el servidor nunca iba a aceptar. Este test es esa regresión.
    */
   it('un cuerpo que no cumple el contrato detiene la entrada, no la reintenta', async () => {
     database = freshDatabase();

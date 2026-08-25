@@ -1,8 +1,7 @@
 import { HttpException, HttpStatus } from '@nestjs/common';
 
 /**
- * Los errores propios de la consola del roster. Uno solo, porque la consola es de solo
- * lectura y lo único que puede salir mal es quién pregunta.
+ * Los errores propios de la consola y la importación del roster.
  *
  * Mismo criterio que `inspections.errors.ts` y `auth.errors.ts`: el código va en el
  * CUERPO y no solo en el status, para que el cliente pueda decidir sin parsear un mensaje
@@ -12,7 +11,10 @@ import { HttpException, HttpStatus } from '@nestjs/common';
  * de una persona. Pedir el roster de una planta fuera del alcance devuelve una lista
  * vacía, que es lo que ya hace la política RLS por su cuenta.
  */
-export type RosterErrorCode = 'roster_forbidden';
+export type RosterErrorCode =
+  | 'roster_forbidden'
+  | 'roster_file_unusable'
+  | 'roster_file_too_large';
 
 export class RosterException extends HttpException {
   constructor(
@@ -38,4 +40,21 @@ export const rosterForbidden = (): RosterException =>
     'roster_forbidden',
     'Only the HS coordinator can read the roster',
     HttpStatus.FORBIDDEN,
+  );
+
+export const rosterImportForbidden = (): RosterException =>
+  new RosterException(
+    'roster_forbidden',
+    'Only the HS coordinator can import the roster',
+    HttpStatus.FORBIDDEN,
+  );
+
+export const rosterFileUnusable = (reason: string): RosterException =>
+  new RosterException('roster_file_unusable', `The roster file is unusable: ${reason}`, HttpStatus.BAD_REQUEST);
+
+export const rosterFileTooLarge = (): RosterException =>
+  new RosterException(
+    'roster_file_too_large',
+    'The roster file must not exceed 2 MiB',
+    HttpStatus.PAYLOAD_TOO_LARGE,
   );

@@ -21,6 +21,7 @@ const getAccount = vi.hoisted(() => vi.fn());
 const reissueInvitation = vi.hoisted(() => vi.fn());
 const removeJhscAccess = vi.hoisted(() => vi.fn());
 const setJhscSeat = vi.hoisted(() => vi.fn());
+const importRoster = vi.hoisted(() => vi.fn());
 const useAppSession = vi.hoisted(() => vi.fn());
 
 vi.mock('../../api/inspections', () => ({ listSites }));
@@ -31,6 +32,7 @@ vi.mock('../../api/roster', () => ({
   reissueInvitation,
   removeJhscAccess,
   setJhscSeat,
+  importRoster,
 }));
 vi.mock('../../app/session-context', () => ({ useAppSession }));
 
@@ -83,14 +85,16 @@ function person(overrides: Partial<PersonWithAccount> = {}): PersonWithAccount {
   };
 }
 
-function renderRoute() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+function renderRoute(client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
 
-  return render(
+  return {
+    ...render(
     <QueryClientProvider client={client}>
       <RosterRoute />
     </QueryClientProvider>,
-  );
+    ),
+    client,
+  };
 }
 
 beforeEach(() => {
@@ -101,6 +105,7 @@ beforeEach(() => {
   reissueInvitation.mockReset();
   removeJhscAccess.mockReset();
   setJhscSeat.mockReset();
+  importRoster.mockReset();
   useAppSession.mockReset().mockReturnValue(session('hs_coordinator'));
 });
 
@@ -123,6 +128,7 @@ describe('quién puede entrar', () => {
     // va a negar igual.
     expect(listPeople).not.toHaveBeenCalled();
     expect(listSites).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Import roster' })).toBeNull();
   });
 
   it('el coordinador ve el roster de su planta', async () => {
@@ -130,6 +136,129 @@ describe('quién puede entrar', () => {
 
     expect(await screen.findByRole('rowheader', { name: 'Reid, Ada' })).toBeTruthy();
     expect(screen.getByText('10472')).toBeTruthy();
+  });
+});
+
+describe('importar el roster', () => {
+  const successfulReport = {
+    import_id: '88888888-8888-4888-8888-888888888888',
+    source_filename: 'people.csv',
+    rows_read: 4,
+    rows_applied: 2,
+    rows_rejected: 2,
+    rejections: [
+      { row_number: 5, employee_number: '4', reason: 'Unknown site code' },
+      { row_number: 2, employee_number: null, reason: 'Missing employee number' },
+    ],
+  };
+
+  async function openImport(): Promise<HTMLInputElement> {
+    renderRoute();
+    fireEvent.click(await screen.findByRole('button', { name: 'Import roster' }));
+    return screen.getByLabelText('Roster CSV file') as HTMLInputElement;
+  }
+
+  it('no permite enviar sin archivo', async () => {
+    await openImport();
+
+    expect((screen.getAllByRole('button', { name: 'Import roster' })[1] as HTMLButtonElement).disabled)
+      .toBe(true);
+  });
+
+  it('pending impide el segundo envío y el cierre', async () => {
+    let resolveImport!: (value: typeof successfulReport) => void;
+    importRoster.mockReturnValue(new Promise((resolve) => { resolveImport = resolve; }));
+    const input = await openImport();
+    fireEvent.change(input, { target: { files: [new File(['csv'], 'people.csv')] } });
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Import roster' })[1]!);
+
+    const pending = await screen.findByRole('button', { name: 'Importing…' });
+    expect((pending as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Close' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole('status').textContent).toContain('Importing roster');
+    const cancel = new Event('cancel', { cancelable: true });
+    screen.getByRole('dialog', { name: 'Import roster' }).dispatchEvent(cancel);
+    expect(cancel.defaultPrevented).toBe(true);
+    fireEvent.click(pending);
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(importRoster).toHaveBeenCalledOnce();
+    expect(screen.getByRole('dialog')).toBeTruthy();
+
+    resolveImport(successfulReport);
+    await screen.findByText('4 rows read, 2 applied, 2 rejected.');
+  });
+
+  it('el éxito invalida todo el prefijo y deja los conteos visibles', async () => {
+    importRoster.mockResolvedValue(successfulReport);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+    renderRoute(client);
+    fireEvent.click(await screen.findByRole('button', { name: 'Import roster' }));
+    fireEvent.change(screen.getByLabelText('Roster CSV file'), {
+      target: { files: [new File(['csv'], 'people.csv')] },
+    });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Import roster' })[1]!);
+
+    expect(await screen.findByText('4 rows read, 2 applied, 2 rejected.')).toBeTruthy();
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['roster'] });
+    expect(screen.getByRole('dialog')).toBeTruthy();
+  });
+
+  it.each([
+    ['parcial', successfulReport],
+    ['total', { ...successfulReport, rows_applied: 0, rows_rejected: 4 }],
+  ])('lista en orden los rechazos de un resultado %s', async (_kind, report) => {
+    importRoster.mockResolvedValue(report);
+    const input = await openImport();
+    fireEvent.change(input, { target: { files: [new File(['csv'], 'people.csv')] } });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Import roster' })[1]!);
+
+    const rejected = await screen.findByRole('region', { name: 'Rejected rows' });
+    expect(rejected.textContent).toMatch(/Row 2:.*Row 5:/);
+  });
+
+  it.each([
+    ['400', 'roster_file_unusable', 'The file is not a usable roster CSV'],
+    ['413', 'roster_file_too_large', 'The file is larger than 2 MiB'],
+  ])('retiene el diálogo ante un error %s', async (_status, code, message) => {
+    importRoster.mockRejectedValue(Object.assign(new Error(message), { code }));
+    const input = await openImport();
+    fireEvent.change(input, { target: { files: [new File(['csv'], 'people.csv')] } });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Import roster' })[1]!);
+
+    expect((await screen.findByRole('alert')).textContent).toContain(message);
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+  });
+
+  it('cambiar el archivo limpia un resultado anterior', async () => {
+    importRoster.mockResolvedValue(successfulReport);
+    const input = await openImport();
+    fireEvent.change(input, { target: { files: [new File(['a'], 'first.csv')] } });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Import roster' })[1]!);
+    await screen.findByText('4 rows read, 2 applied, 2 rejected.');
+
+    fireEvent.change(input, { target: { files: [new File(['b'], 'second.csv')] } });
+
+    expect(screen.queryByText('4 rows read, 2 applied, 2 rejected.')).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Rejected rows' })).toBeNull();
+  });
+
+  it('cerrar y reabrir empieza limpio y devuelve el foco a la acción', async () => {
+    importRoster.mockResolvedValue(successfulReport);
+    const input = await openImport();
+    const trigger = screen.getAllByRole('button', { name: 'Import roster' })[0]!;
+    fireEvent.change(input, { target: { files: [new File(['a'], 'people.csv')] } });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Import roster' })[1]!);
+    await screen.findByText('4 rows read, 2 applied, 2 rejected.');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+    fireEvent.click(trigger);
+
+    expect((screen.getByLabelText('Roster CSV file') as HTMLInputElement).files).toHaveLength(0);
+    expect(screen.queryByText('4 rows read, 2 applied, 2 rejected.')).toBeNull();
   });
 });
 
@@ -169,7 +298,7 @@ describe('la lista', () => {
 
     await waitFor(() => expect(listPeople).toHaveBeenCalledWith(SITE_B));
     expect(listPeople).not.toHaveBeenCalledWith(SITE);
-    expect(await screen.findByText('Site: Glencoe')).toBeTruthy();
+    expect(await screen.findByText('Glencoe')).toBeTruthy();
   });
 
   it('sin ninguna planta activa lo dice y no pide roster', async () => {
@@ -245,7 +374,7 @@ describe('la lista', () => {
   it('dice dónde se corrige lo que muestra', async () => {
     renderRoute();
 
-    expect(await screen.findByText(/maintained by CSV import/i)).toBeTruthy();
+    expect(await screen.findByText(/Use Import roster/i)).toBeTruthy();
   });
 
   it('no ofrece ningún control de escritura — la consola es de solo lectura', async () => {

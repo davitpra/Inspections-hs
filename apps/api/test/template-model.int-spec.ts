@@ -199,13 +199,19 @@ describe('la versión publicada es inmutable', () => {
       inScope(db.app, [], 'DELETE FROM template_version WHERE id = $1', [version.id]),
     ).rejects.toSatisfy((error) => sqlstate(error) === INSUFFICIENT_PRIVILEGE);
 
-    // La plantilla y el concepto tampoco: se retiran con `deactivated_at`, y ese UPDATE
-    // sigue siendo de `hs_migrator` (`0003` §9).
-    await expect(
-      inScope(db.app, [], 'UPDATE template SET deactivated_at = now() WHERE id = $1', [
-        published.id,
-      ]),
-    ).rejects.toSatisfy((error) => sqlstate(error) === INSUFFICIENT_PRIVILEGE);
+    // La plantilla publicada conserva su contenido, pero desde 0033 se puede retirar
+    // fijando `deactivated_at`. Lo que sigue prohibido es borrarla.
+    await inScope(db.app, [], 'UPDATE template SET deactivated_at = now() WHERE id = $1', [
+      published.id,
+    ]);
+
+    const retired = await inScope<{ deactivated_at: Date | null }>(
+      db.migrator,
+      [],
+      'SELECT deactivated_at FROM template WHERE id = $1',
+      [published.id],
+    );
+    expect(retired[0]?.deactivated_at).not.toBeNull();
 
     await expect(
       inScope(db.app, [], 'DELETE FROM template WHERE id = $1', [published.id]),

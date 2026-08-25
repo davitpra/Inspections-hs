@@ -18,8 +18,8 @@ el producto: la importación existe, pero solo la puede correr el desarrollador.
 ## What Changes
 
 - Exponer la importación del roster como `POST /people/import`: un CSV subido como
-  multipart, reservado al rol `hs_coordinator`, que reutiliza el importador existente sin
-  cambiarle el comportamiento.
+  multipart en el campo `file`, reservado al rol `hs_coordinator`, que reutiliza el
+  importador existente sin duplicar su comportamiento.
 - Derivar el alcance de la importación de la **sesión** —los sitios de `user_site_scope`
   en ese request y la cuenta que actúa—, no de un alcance declarado por el llamador. El
   comando de servidor sigue funcionando igual.
@@ -50,15 +50,17 @@ Ninguna.
 
 ## Impact
 
-- **Sin migración.** `person`, `roster_import`, `roster_import_site` y
-  `roster_import_rejection` ya existen con sus grants, sus políticas RLS y su trigger de
-  auditoría. Ninguna tabla inmutable cambia de forma.
+- **Sin migración.** `person` ya existe con sus grants y RLS; `roster_import`,
+  `roster_import_site` y `roster_import_rejection` ya existen como tablas globales,
+  append-only y deliberadamente sin RLS, con el trigger de auditoría sobre el desglose por
+  sitio. Ninguna tabla inmutable cambia de forma ni se concede un privilegio nuevo.
 - `apps/api/src/roster/` — un endpoint nuevo en el controlador, un método en el servicio y
   la separación de `apply-roster.ts` en «la transacción» y «lo que corre dentro de ella»,
-  para que el camino HTTP entre por `withSession` y el CLI siga entrando por
+  para que el camino HTTP entre por `withSessionClient` y el CLI siga entrando por
   `withSiteScope` (ADR-011).
 - `apps/api/scripts/roster-import.mjs` — sigue siendo el mismo comando; solo cambia por
   dónde entra.
 - `packages/contracts` — nada nuevo: `rosterImportReportSchema` ya describe la respuesta.
+  Los códigos HTTP propios del módulo siguen definidos en la API, como los actuales.
 - `apps/web` — `api/roster.ts` gana la subida (la primera del cliente que manda
   `FormData`), y `routes/RosterRoute/` gana el diálogo y su lógica pura de reporte.

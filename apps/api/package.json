@@ -49,6 +49,7 @@
     "@swc/core": "^1.13.5",
     "@testcontainers/postgresql": "^12.1.0",
     "@types/express": "^5.0.0",
+    "@types/multer": "^2.2.0",
     "@types/node": "^24.13.3",
     "@types/pg": "^8.20.4",
     "drizzle-kit": "^0.31.10",

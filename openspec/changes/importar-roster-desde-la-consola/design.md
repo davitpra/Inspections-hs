@@ -22,10 +22,12 @@ Restricciones vigentes: ADR-002 (el aislamiento lo pone RLS; nunca DELETE, la ba
 y la declarada— y un endpoint no puede construir la segunda), ADR-008 (capas
 `controller → service → repository` y dependencias en una sola dirección).
 
-**Este change no toca ninguna tabla inmutable ni ninguna migración.** `person`,
-`roster_import`, `roster_import_site` y `roster_import_rejection` ya existen con sus
-grants, sus políticas y el trigger `roster_import_site_audit`. El endpoint usa los
-privilegios que `hs_app` ya tiene, sin conceder ninguno nuevo.
+**Este change escribe filas nuevas en tablas inmutables, pero no cambia su esquema ni
+modifica filas existentes en ellas.** `person` ya tiene grants y RLS;
+`roster_import`, `roster_import_site` y `roster_import_rejection` son globales,
+append-only y deliberadamente no llevan RLS, porque un lote puede abarcar más de una
+planta. El trigger `roster_import_site_audit` audita el desglose por sitio. El endpoint usa
+los privilegios que `hs_app` ya tiene, sin conceder ninguno nuevo.
 
 ## Goals / Non-Goals
 
@@ -66,9 +68,10 @@ llame a estos está fabricando un alcance que no le corresponde, y por eso son m
 distintos». Si el servicio llamara a `applyRoster` tal cual, el endpoint construiría un
 `SiteScope` a mano y esa separación —que es una garantía, no un estilo— dejaría de
 significar algo. Al invertir quién abre la transacción, el endpoint no puede declarar
-nada: `withSessionClient` resuelve `siteIds` desde `user_site_scope` en ese request y
-`userId` desde la sesión, y `roster_import.imported_by` queda en la cuenta que realmente
-subió el archivo.
+nada: el guard ya resolvió `siteIds` desde `user_site_scope` para ese request y construyó
+la sesión; `withSessionClient` declara esos valores y el `userId` de la sesión dentro de
+la transacción. Así `roster_import.imported_by` queda en la cuenta que realmente subió el
+archivo. Las pruebas HTTP pasan por el guard real y no fabrican un `SessionScope`.
 
 Consecuencia buscada: **la transaccionalidad no cambia**. Aplicar las filas y escribir el
 reporte sigue confirmando junto, porque ambas envolturas abren una sola transacción
@@ -80,12 +83,13 @@ exactamente el lugar donde no se puede auditar de un vistazo.
 
 ### D2 · El archivo viaja como multipart, con un tope explícito
 
-**Decisión.** `POST /people/import`, `multipart/form-data`, **un** campo de archivo. Tope
-de **2 MB**, declarado en el interceptor de subida y no en un chequeo escrito a mano; el
-archivo se lee entero en memoria y se pasa como texto UTF-8 al parseador. `source_filename`
-sale del nombre del archivo subido, como hoy sale de `basename()` en el CLI.
+**Decisión.** `POST /people/import`, `multipart/form-data`, exactamente **un** campo de
+archivo llamado `file`. Tope de **2 MiB**, declarado en el interceptor de subida y no en
+un chequeo escrito a mano; el archivo se lee entero en memoria y se pasa como texto UTF-8
+al parseador. `source_filename` sale del basename del nombre subido, se rechaza si queda
+vacío, y coincide con el criterio que usa hoy el CLI.
 
-**Por qué el tope y por qué ese número.** Un roster de 200 personas son decenas de KB; 2 MB
+**Por qué el tope y por qué ese número.** Un roster de 200 personas son decenas de KB; 2 MiB
 son del orden de cuarenta mil filas. Es holgado para el caso real y chico para que leerlo
 entero en memoria sea trivial. Sin tope, el endpoint es una forma de subir un archivo
 arbitrario a la memoria del proceso.
@@ -104,12 +108,21 @@ que la necesite.
 ### D3 · Rol y errores, sobre lo que ya existe
 
 **Decisión.** El mismo `requireCoordinator()` privado que ya usa `RosterService.list`, y el
-mismo código de error `roster_forbidden` de `roster.errors.ts` con su propio mensaje para
+mismo código de error `roster_forbidden` de `roster.errors.ts` con un mensaje propio para
 la importación. Se agregan dos códigos nuevos al mismo tipo:
 
-- `roster_file_unusable` → **400**, cuando `parseRosterCsv` lanza `RosterFileError`
-  (no es CSV, o al encabezado le falta una columna);
-- `roster_file_too_large` → **413**, cuando el archivo pasa el tope de D2.
+- `roster_file_unusable` → **400**, cuando falta el campo `file`, aparece más de una vez,
+  el multipart usa otro campo, el nombre no es utilizable, `csv-parse` no puede leer el
+  contenido o al encabezado le falta una columna;
+- `roster_file_too_large` → **413**, cuando Multer informa que el archivo pasó el tope de
+  D2.
+
+El controlador traduce los errores esperados de Multer a esas factories; no deja que la
+excepción genérica del interceptor defina el cuerpo. `parseRosterCsv` normaliza los errores
+sintácticos de `csv-parse` como `RosterFileError`, sin capturar errores inesperados ajenos
+al formato. En el cliente, el helper de requests conserva `code` y `message` en la
+excepción que entrega a TanStack Query; el camino de `FormData` pasa el body sin serializar
+y no fija `content-type`, para que el navegador agregue el boundary.
 
 **Por qué.** `RosterErrorCode` es hoy un solo código porque «la consola es de solo lectura y
 lo único que puede salir mal es quién pregunta». Con la importación pueden salir mal dos
@@ -139,12 +152,28 @@ mutación, y **el reporte en el mismo diálogo**: los tres números y, si hay re
 lista con número de fila y motivo. El diálogo no se cierra solo al terminar — el reporte es
 lo que el coordinador vino a leer.
 
-La subida invalida `queryKeys.roster(siteId)`. La lógica pura del reporte (el resumen en una
-línea, el orden de los rechazos, el texto del botón) vive en `presentation.ts` con su test,
-como el resto de la ruta.
+El import puede afectar cualquier planta del alcance, no solo la que está seleccionada en
+la tabla; el diálogo lo dice y la subida invalida el prefijo `queryKeys.roster()`, que
+alcanza todas las consultas de roster cacheadas. La decisión de interfaz vive en
+`canImportRoster`, separada de `canAdministerRoster` aunque hoy ambas concedan solo al
+coordinador.
 
-Y se reescribe la `.notice-card` de `index.tsx`, que hoy dice «The roster is maintained by
-CSV import» sin ofrecer forma de importar: pasa a nombrar el botón que ahora está al lado.
+El diálogo tiene cinco estados explícitos: `empty` (sin archivo, envío deshabilitado),
+`ready`, `pending` (sin doble envío ni cierre), `success` (reporte visible) y `error`
+(mensaje visible y reintento posible). Elegir otro archivo limpia el resultado anterior;
+cerrar y volver a abrir empieza limpio. Los rechazos se presentan ordenados de menor a
+mayor `row_number`, sin mutar el reporte. La lógica pura del resumen, el orden y el texto
+del botón vive en `presentation.ts` con su test, como el resto de la ruta.
+
+El `<dialog>` tiene nombre accesible, el input tiene `<label>`, el error se anuncia como
+alerta, el resultado asíncrono como estado y el foco vuelve a la acción que lo abrió. La
+lista de rechazos tiene su propia región desplazable para que un archivo con muchas filas
+malas no haga inutilizable el diálogo.
+
+La acción `Import roster` vive en la barra de herramientas, fuera de la tabla y visible
+solo para quien pasa `canImportRoster`. Se reescribe la `.notice-card` de `index.tsx`, que
+hoy dice «The roster is maintained by CSV import» sin ofrecer forma de importar: pasa a
+remitir a esa acción y a aclarar que el archivo puede abarcar cualquier planta administrada.
 
 **Por qué el reporte queda a la vista.** Es la única parte de esta pantalla donde el
 resultado no se ve en la tabla: una fila rechazada es, por definición, una fila que la
@@ -154,22 +183,40 @@ que hay que volver a importar para averiguar.
 **Alternativa descartada:** subir desde un `<input>` suelto en la barra de herramientas, sin
 diálogo. Deja el reporte sin lugar donde vivir.
 
+### D6 · Un conflicto invisible se rechaza sin abortar el lote
+
+**Decisión.** El upsert no intenta directamente un `ON CONFLICT DO UPDATE` que pueda chocar
+con una persona oculta por RLS. Primero intenta insertar con `ON CONFLICT DO NOTHING`; si
+el número ya existe, actualiza la persona visible por `employee_number`. Una actualización
+que no devuelve fila significa que el número existe fuera del alcance y esa fila se
+rechaza con un motivo que no revela dónde existe. No se usa un error SQL como control de
+flujo y la transacción del resto del archivo sigue viva.
+
+**Por qué.** La unicidad de `employee_number` es global. Postgres puede detectar el
+conflicto aunque RLS no permita actualizar la fila que lo causó; el upsert actual abortaría
+el lote entero. Separar inserción y actualización conserva la garantía de RLS, evita un
+cliente privilegiado y convierte el borde en el mismo resultado parcial que los demás
+datos fuera de alcance.
+
 ## Risks / Trade-offs
 
-- **Un endpoint que escribe 200 filas de `person` en una transacción, expuesto a la red** →
-  El tope de 2 MB de D2 acota el trabajo por request; el rol lo limita al coordinador (D3);
-  y el alcance de la sesión (D1) impide escribir una planta que la cuenta no administra —
-  con la política RLS de `person` debajo, no en vez de.
+- **Un endpoint que escribe muchas filas de `person` en una transacción, expuesto a la
+  red** → El tope de 2 MiB de D2 acota memoria y tamaño de entrada, pero no convierte el
+  import en trabajo constante. El rol lo limita al coordinador (D3), el alcance de la
+  sesión (D1) impide escribir una planta que la cuenta no administra y la integración mide
+  un archivo representativo. Si el volumen real deja de ser el roster de unas 200 personas,
+  el importador necesitará una estrategia por lotes en otro change.
 - **El endpoint y el comando pueden divergir** → Por eso D1 los deja llamando a la MISMA
   función y no a dos copias, y por eso el delta de la spec exige que ambos produzcan el
   mismo reporte para el mismo archivo. Si mañana uno de los dos necesita algo distinto, se
   va a ver como una rama dentro de una función compartida, no como dos archivos que se
   parecían.
-- **Subir un archivo equivocado ahora es fácil** → Un CSV de la planta que no era ya se
-  rechaza fila por fila si está fuera del alcance, y el upsert es idempotente: reimportar
-  el archivo correcto arregla el error. Lo que NO se puede deshacer es una baja aplicada
-  por un `status: inactive` equivocado; se corrige con otro import, y `roster_import` deja
-  las dos importaciones registradas.
+- **Subir un archivo equivocado ahora es fácil** → Un CSV de una planta fuera del alcance
+  se rechaza fila por fila. Reimportar converge a los mismos nombres, plantas y estados,
+  pero cada lote deja un nuevo registro y una fila `inactive` vuelve a fijar
+  `deactivated_at`, como hace hoy el comando: este change no redefine esa semántica. Una
+  baja equivocada se corrige con otro import activo, y `roster_import` deja ambos actos
+  registrados.
 - **`multer` entra al árbol de dependencias de la API** → Viene con
   `@nestjs/platform-express`, que ya está instalado; lo que se agrega es su tipado en
   `devDependencies`. No toca `packages/forms` ni el service worker, así que no roza ADR-007.

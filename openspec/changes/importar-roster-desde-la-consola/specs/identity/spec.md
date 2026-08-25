@@ -3,9 +3,10 @@
 ### Requirement: The H&S coordinator can import the roster over HTTP
 
 The system SHALL let an account whose `role` is `hs_coordinator` import a roster CSV over HTTP by
-submitting the file itself, and SHALL apply it exactly as the server command does: the same header
-columns, the same per-row validation, the same upsert by `employee_number`, and the same single
-transaction that writes the import record together with the rows it applied.
+submitting exactly one file in the multipart field `file`, and SHALL apply it through the same
+importer as the server command: the same header columns, the same per-row validation, the same
+upsert by `employee_number`, and the same single transaction that writes the import record together
+with the rows it applied.
 
 The sites the import may write SHALL come from the session's scope resolved at that request, and
 the account recorded as having run the import SHALL be the session's account. The request SHALL
@@ -16,8 +17,9 @@ does not disclose the existence of a site the account does not administer.
 Any other `role` SHALL be refused, and the refusal SHALL leave no `person` row and no import record
 behind.
 
-The system SHALL reject a submission that carries no file, more than one file, or a file larger
-than the accepted maximum, and SHALL apply nothing in those cases.
+The system SHALL reject with `roster_file_unusable` a submission that carries no `file`, more than
+one `file`, an unexpected multipart field or an unusable file name. The system SHALL reject with
+`roster_file_too_large` a file larger than 2 MiB, and SHALL apply nothing in those cases.
 
 #### Scenario: The coordinator imports a file from the console
 
@@ -53,14 +55,28 @@ than the accepted maximum, and SHALL apply nothing in those cases.
 #### Scenario: A submission without a file is refused
 
 - **WHEN** a coordinator submits a request that carries no file
-- **THEN** the request is refused as malformed
+- **THEN** the request is refused with `roster_file_unusable`
 - **AND** no import record is written
+
+#### Scenario: A submission with more than one file is refused
+
+- **WHEN** a coordinator submits more than one `file` or submits a file in another multipart field
+- **THEN** the request is refused with `roster_file_unusable`
+- **AND** no `person` row is created or changed and no import record is written
 
 #### Scenario: A file above the accepted maximum is refused
 
 - **WHEN** a coordinator submits a file larger than the accepted maximum size
-- **THEN** the request is refused and the response says the file was too large
+- **THEN** the request is refused with `roster_file_too_large`
 - **AND** no row of it is applied
+
+#### Scenario: An employee number outside the scope does not abort the file
+
+- **WHEN** a coordinator whose scope is `st-thomas` submits a row for `st-thomas` whose
+  `employee_number` already belongs to a person of `glencoe`
+- **THEN** that row is rejected without disclosing the site of the existing person
+- **AND** the other valid rows are applied in the same import
+- **AND** the person of `glencoe` is not changed
 
 ### Requirement: Rejected rows are a result, not a failed request
 
@@ -69,9 +85,9 @@ rows it rejected: rejected rows are the expected outcome of a real payroll expor
 turn the response into an error. The report SHALL carry the number of rows read, applied and
 rejected, and one entry per rejected row with its 1-based row number in the file and its reason.
 
-The system SHALL answer with an error, applying nothing, only when the submission cannot be read as
-a roster file at all: it is not parseable as CSV, or its header omits a required column. In that
-case the response SHALL name what made the file unusable.
+The system SHALL answer with `roster_file_unusable`, applying nothing, when the submission cannot
+be read as a roster file at all: its CSV syntax is invalid or its header omits a required column.
+The response SHALL name what made the file unusable.
 
 #### Scenario: A file with some bad rows is a success
 
@@ -90,7 +106,7 @@ case the response SHALL name what made the file unusable.
 
 - **WHEN** a coordinator submits a file whose header omits `employee_number`, or a file that is not
   CSV at all
-- **THEN** the response is an error naming what made the file unusable
+- **THEN** the response is an error with `roster_file_unusable` naming what made the file unusable
 - **AND** no `person` row is created or changed and no import record is written
 
 #### Scenario: The report is the same report the server command produces
@@ -111,10 +127,10 @@ SHALL be limited to the sites of the session's scope by the row-level security p
 
 Each row SHALL also carry the account that references that person, or `null` when no
 `app_user` row does. The account SHALL be reduced to what tells the coordinator whether this
-person can reach the system and as what: its `id`, its `role`, whether it is active, and
-whether it can already sign in. It SHALL NOT carry the account's email, its scope, its
-credential or any invitation token; reading the roster SHALL NOT become a way to read the
-account table.
+person can reach the system, as what and through which work address: its `id`, its `role`,
+whether it is active, whether it can already sign in and its `email`. It SHALL NOT carry the
+account's scope, credential or any invitation token; reading the roster SHALL NOT become a
+way to read the account table.
 
 The listing SHALL be available only to an account whose `role` is `hs_coordinator`, and SHALL
 be able to include people whose `deactivated_at` is non-null, which is what distinguishes it
@@ -177,11 +193,11 @@ available, as a separate act that names no person and applies the whole file at 
 - **THEN** that row carries a null account
 - **AND** no error is raised
 
-#### Scenario: The roster does not disclose the account's email or scope
+#### Scenario: The roster carries the work email but not account security data
 
 - **WHEN** the roster of a site is read
-- **THEN** no account in the result carries an `email`, a site scope, a credential or an
-  invitation token
+- **THEN** an account in the result carries its `email`
+- **AND** no account carries a site scope, a credential or an invitation token
 
 #### Scenario: An account that cannot yet sign in is distinguishable from one that can
 

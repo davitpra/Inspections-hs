@@ -39,7 +39,8 @@ import { UploadsModule } from './uploads/uploads.module';
     // raíz, así que no hay riesgo de orden como el de `findings/recurrence`.
     CatalogModule,
     TemplatesModule,
-    // La consola del roster. Declara `people` y `people/:id` en la raíz; ningún otro
+    // La consola del roster. Declara la lectura y la importación completa de `people`;
+    // no expone escritura de una persona individual. Ningún otro
     // controller declara un `:param` a ese nivel, así que tampoco hay riesgo de orden.
     RosterModule,
   ],

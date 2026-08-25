@@ -438,7 +438,7 @@ describe('el listado de plantillas', () => {
     const created = await stack.inspections.schedule(asCoordinator(), {
       site_id: SITE_A,
       template_id: templateId,
-      period_start: '2026-06-01',
+      period_start: '2030-06-01',
     });
 
     expect(created.template_version_id).toBe(offered?.latest_version_id);
@@ -516,7 +516,7 @@ describe('los nombres en el listado', () => {
 
     const scheduledId = await scheduleInspection(db.app, {
       siteId: SITE_A,
-      periodStart: '2026-07-01',
+      periodStart: '2030-07-01',
       templateId,
       templateVersionId: templateV2,
       scheduledBy: coordinator.accountId,
@@ -543,7 +543,7 @@ describe('los nombres en el listado', () => {
   it('deja el nombre en nulo cuando no hay asignado', async () => {
     const scheduledId = await scheduleInspection(db.app, {
       siteId: SITE_A,
-      periodStart: '2026-08-01',
+      periodStart: '2030-08-01',
       templateId,
       templateVersionId: templateV2,
       scheduledBy: coordinator.accountId,

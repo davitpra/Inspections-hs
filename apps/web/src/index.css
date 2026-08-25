@@ -1300,44 +1300,81 @@ select:disabled {
   margin: var(--space-4) 0 var(--space-6);
 }
 
+/*
+ * El selector de planta: UNA FILA, no un campo. Alfiler y "Site" contra el borde
+ * izquierdo, la planta elegida contra el derecho. El `<select>` pierde su marco porque
+ * el marco ya lo pone la tarjeta — dos rectángulos anidados para un solo control era
+ * ruido, y en un teléfono la etiqueta arriba del control gastaba un renglón entero en
+ * repetir algo que la fila ya dice.
+ *
+ * La silueta la dibuja `SitePicker`, no la ruta: las dos consolas que lo usan tenían
+ * este envoltorio copiado y podían separarse sin que nadie lo notara.
+ */
 .site-card {
+  position: relative;
   display: flex;
-  align-items: start;
+  align-items: center;
   gap: var(--space-3);
-  flex: 0 1 18rem;
+  flex: 0 1 22rem;
+  min-height: 56px;
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   padding: var(--space-2) var(--space-4);
+  margin: 0;
 }
 
 .site-card__icon {
   flex: none;
+  display: inline-flex;
   color: var(--brand);
 }
 
+.site-card__label {
+  flex: none;
+  font-weight: var(--weight-normal);
+}
+
 /*
- * `SitePicker` es compartido y sigue dibujando su `.filters` en fila; acá se apila para
- * que la etiqueta quede arriba del control, como el resto de los campos de la consola.
- * El envoltorio es de esta ruta y el componente no se entera — por eso se estila desde
- * afuera y no con una variante nueva en `SitePicker`.
+ * El valor se va al final y es el que cede ancho: con un nombre largo en un teléfono, lo
+ * que se recorta es la planta y no la etiqueta que explica qué es ese texto.
  */
-.site-card .filters {
-  flex-direction: column;
-  align-items: stretch;
-  gap: var(--space-0-5);
-  margin: 0;
+.site-card__value {
+  margin-left: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * Sin marco, sin fondo y sin la flecha del navegador: el marco lo pone la tarjeta y la
+ * flecha la dibujamos nosotros. Ocupa el resto de la fila —no sólo el ancho del nombre—
+ * para que el área de toque sea la fila entera, y reserva a la derecha el lugar del
+ * chevron para que el nombre no se le meta debajo.
+ */
+.site-card__select {
   flex: 1;
   min-width: 0;
+  min-height: 40px;
+  padding: 0 calc(var(--space-5) + var(--space-4)) 0 0;
+  border: none;
+  background: none;
+  appearance: none;
+  text-align: right;
 }
 
-.site-card .filters label {
-  font-weight: var(--weight-normal);
-  font-size: var(--text-sm);
-  color: var(--muted);
+.site-card__select:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 4px;
+  border-radius: var(--radius);
 }
 
-.site-card .note {
-  margin: 0;
+/* Decorativo y encima del `<select>`, así que no puede robarle el toque. */
+.site-card__chevron {
+  position: absolute;
+  right: var(--space-4);
+  display: inline-flex;
+  pointer-events: none;
 }
 
 .card {
@@ -1502,32 +1539,76 @@ select:disabled {
   font-size: var(--text-sm);
 }
 
+/*
+ * El grupo de año: dos flechas y tres cajas —el anterior, el actual y el siguiente—. Los
+ * cinco miden lo mismo y van juntos, porque se leen como un solo control y no como cinco
+ * botones sueltos. 40px y no los 48px de la hoja por la misma razón que la casilla de la
+ * matriz: cinco controles del piso completo dejan de caber al lado del título en un
+ * teléfono, y el grupo entero es un destino grande aunque cada caja no lo sea.
+ */
 .year-nav {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  flex: none;
   margin: 0;
+}
+
+/* Alto FIJO y no un piso: con `min-height` los años quedan 42px —24px de renglón más el
+   relleno y el borde— y las flechas 40px, y el grupo se lee como dos alturas en vez de una.
+   El relleno de los años pasa a ser sólo horizontal por lo mismo. */
+.year-nav__arrow,
+.year-nav__year {
+  min-width: 0;
+  min-height: 0; /* el piso de 48px de la hoja gana sobre `height` si no se apaga acá */
+  height: 40px;
 }
 
 .year-nav__arrow {
-  min-width: 48px;
-  padding: var(--space-2) var(--space-3);
-}
-
-.year-nav__current {
   display: flex;
   align-items: center;
-  gap: var(--space-1-5);
-  min-height: 48px;
-  padding: var(--space-2) var(--space-4);
-  border: 1px solid var(--line-control);
-  border-radius: var(--radius);
+  justify-content: center;
+  min-width: 40px;
+  padding: var(--space-2);
   color: var(--brand);
 }
 
-.year-nav__current h3 {
-  font-size: var(--text-lg);
-  margin: 0;
+/* Un solo chevron para las dos flechas, girado —la misma economía que en `ChevronIcon`. */
+.year-nav__arrow svg {
+  display: block;
+}
+
+.year-nav__arrow--prev svg {
+  transform: rotate(-90deg);
+}
+
+.year-nav__arrow--next svg {
+  transform: rotate(90deg);
+}
+
+.year-nav__year {
+  padding: 0 var(--space-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* El año a la vista se pinta lleno: es el único de los tres que no es un salto. */
+.year-nav__year.is-current {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: var(--paper);
+  font-weight: var(--weight-strong);
+}
+
+/*
+ * Un año fuera de alcance se apaga, no se rellena: los cinco controles son la misma caja
+ * y lo único que cambia es la tinta. Un fondo gris acá leía como «seleccionado» al lado
+ * del verde lleno, que es justo lo contrario de lo que dice.
+ */
+.year-nav__arrow:disabled,
+.year-nav__year:disabled {
+  border-color: var(--line);
+  background: var(--paper);
+  color: var(--disabled-ink);
 }
 
 /* Envuelve como GRUPO, y cada botón entero: hay segmentados cuya etiqueta sale de los datos
@@ -1805,8 +1886,7 @@ select:disabled {
   padding: var(--space-4);
 }
 
-.requirements-section__head,
-.schedule-section__head {
+.requirements-section__head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -1814,22 +1894,46 @@ select:disabled {
   gap: var(--space-3);
 }
 
-.requirements-section__head h2,
-.requirements-section__head h1,
-.schedule-section__head h2 {
-  margin: 0;
+/* Tres renglones y no una fila de tres bloques: título y año arriba, la descripción
+   debajo y la leyenda al final. Lo que cambia —el año— queda en la primera línea, a la
+   altura del título, y no lo empuja fuera de pantalla un subtítulo de dos renglones. */
+.schedule-section__head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
 }
 
-/* El título manda sobre la leyenda: cuando no entran los tres bloques en una línea, la
-   leyenda y el navegador de año bajan juntos y el título se queda arriba. */
+.schedule-section__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+/* La descripción pertenece al título y envuelve con él: si cuelga de la cabecera entera
+   se estira por debajo del navegador de año y deja de leerse como su subtítulo. */
 .schedule-section__title {
-  flex: 1 1 18rem;
+  flex: 1 1 12rem;
+}
+
+/* Cuando el año no entra al lado del título baja solo, pero sigue contra el borde
+   derecho: `space-between` no alcanza para una línea con un solo elemento. */
+.schedule-section__bar .year-nav {
+  margin-left: auto;
+}
+
+.requirements-section__head h2,
+.requirements-section__head h1,
+.schedule-section__bar h2 {
+  margin: 0;
 }
 
 .schedule-legend {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-1) var(--space-4);
+  justify-content: center;
+  gap: var(--space-2) var(--space-12);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1860,9 +1964,14 @@ select:disabled {
 .schedule-legend__item--missed { color: var(--state-danger); }
 .schedule-legend__item--cancelled { color: var(--state-neutral); }
 
-.requirements-section__head .note,
+.requirements-section__head .note {
+  margin: var(--space-1) 0 0;
+}
+
+/* Pegada al título, no separada de él: son una sola unidad dentro de la columna. */
 .schedule-section__head .note {
   margin: var(--space-1) 0 0;
+  max-width: 34rem;
 }
 
 .requirements-section__add {
@@ -1902,6 +2011,12 @@ select:disabled {
 .requirement-row__cadence {
   color: var(--muted);
   font-size: var(--text-sm);
+}
+
+/* El ícono es de la tarjeta de teléfono: en la tabla la columna ya lleva encabezado y
+   repetir el mismo dibujo en cada fila no distingue una regla de la otra. */
+.requirement-row__icon {
+  display: none;
 }
 
 .requirements-table tbody tr:last-child th,
@@ -1954,14 +2069,50 @@ select:disabled {
   overflow: hidden;
 }
 
-.schedule-section__head,
-.schedule-section__foot {
+.schedule-section__head {
   padding: var(--space-4);
+}
+
+/*
+ * El marco no se desplaza; el que se desplaza es el hijo. La pista de scroll se ancla
+ * acá porque un `position: absolute` DENTRO del contenedor con `overflow-x` se iría con
+ * los meses en cuanto alguien arrastre.
+ */
+.schedule-matrix-frame {
+  position: relative;
 }
 
 .schedule-matrix-wrap {
   width: 100%;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-control) var(--tint-bg);
+}
+
+/*
+ * «Hay más meses a la derecha». La barra de desplazamiento sola no lo dice —en móvil
+ * aparece recién al arrastrar—, así que el chevron lo dice mientras quede algo por ver.
+ * Es decorativo y no recibe toque: la región ya se anuncia y el teclado la recorre igual.
+ */
+.schedule-matrix__more {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding-right: var(--space-1);
+  background: linear-gradient(to right, transparent, var(--paper) 55%);
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.schedule-matrix__more svg {
+  transform: rotate(90deg);
 }
 
 .schedule-matrix {
@@ -1973,7 +2124,7 @@ select:disabled {
 .schedule-matrix th,
 .schedule-matrix td {
   min-width: 4.25rem;
-  padding: var(--space-2);
+  padding: var(--space-1-5);
   border-bottom: 1px solid var(--line);
   border-right: 1px solid var(--line);
   text-align: center;
@@ -1985,22 +2136,66 @@ select:disabled {
   font-weight: var(--weight-strong);
 }
 
+/*
+ * La columna del requisito se queda quieta mientras los meses se desplazan, y el encabezado
+ * tiene que quedarse con ella: si solo se fija el cuerpo, los meses se corren respecto a sus
+ * celdas y los iconos quedan cortados debajo de la columna pegada.
+ */
+.schedule-matrix thead th:first-child,
 .schedule-matrix tbody th {
   position: sticky;
   left: 0;
   z-index: 1;
-  min-width: 15rem;
-  max-width: 18rem;
+  min-width: 20rem;
+  max-width: 25rem;
   background: var(--paper);
   text-align: left;
 }
 
+/*
+ * La columna del requisito se lee igual acá que en la tabla de requisitos: mismas medidas
+ * de celda que `.table` y con el nombre en `.requirement-name`
+ * —el peso y el verde los pone esa clase, no la celda—. Son la misma etiqueta de fila en
+ * dos pantallas y no hay razón para que se vean distinto. La sangría izquierda es la misma
+ * que la de la cabecera de la sección: la matriz sangra a lo ancho de la tarjeta, así que
+ * sin ella el nombre queda contra el borde. El aire de la derecha separa el nombre de la
+ * primera casilla: como no hay línea vertical entre las dos, el canal tiene que verse.
+ */
+.schedule-matrix tbody th {
+  padding: var(--space-3) var(--space-6) var(--space-3) var(--space-4);
+  border-right: 0;
+  font-weight: var(--weight-normal);
+}
+
+.schedule-matrix thead th:first-child {
+  z-index: 2;
+}
+
+/*
+ * Sin línea vertical entre el requisito y los meses: la columna se separa por el aire y las
+ * divisorias de fila, como en la tabla de requisitos. Lo que sí queda es el fondo opaco de
+ * la columna pegada, que es lo que impide que los iconos se lean por debajo del nombre al
+ * desplazar los meses.
+ */
+.schedule-matrix thead th:first-child {
+  padding: var(--space-3) var(--space-6) var(--space-3) var(--space-4);
+  border-right: 0;
+}
+
+/*
+ * La única casilla de la hoja por debajo de los 48px de toque, y a propósito: son doce por
+ * fila y el piso convertía la matriz en tres pantallas de alto: había que desplazarse en
+ * los dos ejes para leer un año. 40px sigue siendo un objetivo cómodo, la fila entera es
+ * el destino real del dedo y el mismo período se abre —con su nombre escrito— desde el
+ * plan anual del requisito.
+ */
 .schedule-cell {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 100%;
-  min-height: 48px;
+  min-width: 0;
+  min-height: 40px;
   padding: var(--space-1);
   border: 1px solid transparent;
   border-radius: var(--radius);
@@ -2070,11 +2265,26 @@ button.schedule-cell:focus-visible {
   color: var(--ink);
 }
 
+/*
+ * La nota al pie es una caja y no un renglón bajo una línea: pegada al borde inferior se
+ * leía como el pie de la tarjeta y no como lo que es —una advertencia sobre lo que pasa
+ * al tocar una casilla—.
+ */
 .schedule-section__foot {
-  margin: 0;
-  border-top: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
   color: var(--muted);
   font-size: var(--text-sm);
+}
+
+.schedule-section__foot svg {
+  flex: none;
+  color: var(--brand);
 }
 
 .modal__form {
@@ -2381,6 +2591,14 @@ button.schedule-cell:focus-visible {
     white-space: normal;
   }
 
+  /*
+   * El requisito en teléfono no es una lista de etiqueta/valor: es una tarjeta. Ícono a
+   * la izquierda, el nombre arriba y su línea de datos abajo, y a la derecha el estado y
+   * el menú. «Status» y «Actions» pierden la etiqueta a propósito —la píldora dice el
+   * estado con todas las letras y los tres puntos no necesitan que se los presente—; las
+   * otras dos la conservan porque «Monthly» y un nombre propio, sueltos y uno al lado del
+   * otro, no dicen cuál es cuál.
+   */
   .requirements-table thead {
     position: absolute;
     width: 1px;
@@ -2390,63 +2608,190 @@ button.schedule-cell:focus-visible {
     white-space: nowrap;
   }
 
+  /* Solo la mesa y su cuerpo se aplanan: las celdas NO llevan `width: 100%`, porque acá
+     son elementos de una grilla y ese ancho reventaría el tamaño de sus columnas. */
   .requirements-table,
-  .requirements-table tbody,
-  .requirements-table tr,
-  .requirements-table th,
-  .requirements-table td {
+  .requirements-table tbody {
     display: block;
     width: 100%;
     box-sizing: border-box;
   }
 
   .requirements-table tr {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      'icon name    name      status menu'
+      'icon cadence inspector status menu';
+    align-items: center;
+    column-gap: var(--space-2);
+    row-gap: var(--space-1);
     padding: var(--space-3) 0;
     border-top: 1px solid var(--line);
   }
 
-  .requirements-table th,
-  .requirements-table td,
-  .requirements-table th:first-child,
-  .requirements-table td:first-child,
-  .requirements-table th:last-child,
-  .requirements-table td:last-child {
-    display: grid;
-    grid-template-columns: minmax(7rem, 0.42fr) minmax(0, 1fr);
-    gap: var(--space-2);
-    padding: var(--space-1) 0;
+  /* La celda del nombre no dibuja nada: se disuelve para que el ícono y el enlace caigan
+     en la grilla de la fila, cada uno en su área. */
+  .requirements-table th {
+    display: contents;
+  }
+
+  .requirements-table .requirement-row__icon {
+    grid-area: icon;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: var(--radius-pill);
+    background: var(--tint-bg);
+    color: var(--brand);
+  }
+
+  .requirements-table .requirement-name {
+    grid-area: name;
+    min-width: 0;
+    font-size: var(--text-base);
+  }
+
+  .requirements-table .requirement-row__cadence,
+  .requirements-table .requirement-row__inspector {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    color: var(--ink);
+    font-size: var(--text-sm);
+  }
+
+  .requirements-table .requirement-row__cadence { grid-area: cadence; }
+  .requirements-table .requirement-row__inspector { grid-area: inspector; }
+
+  .requirements-table .requirement-row__cadence::before,
+  .requirements-table .requirement-row__inspector::before {
+    content: attr(data-label);
+    color: var(--muted);
+  }
+
+  /* El punto separa los dos datos de la línea; es del mismo tono que las etiquetas. */
+  .requirements-table .requirement-row__cadence::after {
+    content: '·';
+    color: var(--muted);
+  }
+
+  .requirements-table .requirement-row__status {
+    grid-area: status;
+    justify-self: end;
+    width: auto;
+    padding: 0;
     border: 0;
   }
 
-  .requirements-table th::before,
-  .requirements-table td::before {
-    content: attr(data-label);
-    color: var(--muted);
-    font-size: var(--text-sm);
-    font-weight: var(--weight-strong);
-  }
-
-  .requirements-table__actions-cell {
+  /* El «⋮» se ancla en absoluto (ver `.row-menu`), así que la celda tiene que reservarle
+     el hueco a mano: sin medida propia colapsaría a cero y el botón se montaría encima de
+     la píldora de estado. */
+  .requirements-table .requirements-table__actions-cell {
+    grid-area: menu;
+    width: 2.25rem;
+    min-height: 2rem;
+    padding: 0;
+    border: 0;
     white-space: normal;
   }
 
-  .requirements-table__actions-cell .table__actions {
-    justify-content: flex-start;
+  /* El aviso de error no entra en esa columna: cuelga del menú hacia la izquierda, encima
+     de lo que sigue. Es el mismo criterio que la lista del menú abierto —aparecer no
+     reacomoda la tarjeta. */
+  .requirements-table .requirements-table__actions-cell .notice {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    z-index: 1;
+    width: max-content;
+    max-width: 70vw;
+    margin: var(--space-1) 0 0;
+    font-size: var(--text-sm);
   }
 
-  .schedule-section__head .year-nav {
+  /* La matriz es lo que tiene que entrar: la columna del requisito se acorta y envuelve
+     en dos renglones, y los meses se aprietan hasta el ancho del ícono, que es todo lo
+     que llevan. El alto de la casilla no baja de los 48px de siempre. */
+  .schedule-matrix {
+    min-width: 0;
+  }
+
+  .schedule-matrix th,
+  .schedule-matrix td {
+    min-width: 3.5rem;
+    padding: var(--space-1-5) var(--space-1);
+  }
+
+  .schedule-matrix thead th:first-child,
+  .schedule-matrix tbody th {
+    min-width: 13.25rem;
+    max-width: 14.75rem;
+    padding: var(--space-2) var(--space-4) var(--space-2) var(--space-3);
+    font-size: var(--text-sm);
+  }
+
+  .schedule-section__head {
+    padding: var(--space-4) var(--space-3);
+  }
+
+  /* Los cinco nombres siguen en un renglón, pero el aire entre ellos es lo primero que
+     cede: con el paso grande de escritorio la leyenda se parte en dos filas. */
+  .schedule-legend {
+    gap: var(--space-2) var(--space-6);
+  }
+
+  /* El grupo de año se comprime antes que la descripción: es lo que permite que las dos
+     sigan compartiendo renglón en un teléfono, que es de donde salió este diseño. */
+  .year-nav {
+    gap: var(--space-1);
+  }
+
+  .year-nav__arrow {
+    min-width: 36px;
+  }
+
+  .year-nav__year {
+    padding: 0 var(--space-1-5);
+    font-size: var(--text-sm);
+  }
+
+  .schedule-section__bar {
+    gap: var(--space-2);
+  }
+
+  /* Los controles no se estiran: se apilan contra el borde derecho, al lado del título.
+     El ancho completo llega recién en `26rem` (ver más abajo), donde ya no conviven. */
+  .requirements-section__controls {
+    flex-direction: column;
+    align-items: flex-end;
+  }
+
+  .published-card__controls {
     width: 100%;
-    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+}
+
+/*
+ * En un teléfono angosto el título ya ocupa la línea entera y el botón deja de tener
+ * dónde ponerse al lado: recién ahí vuelve a ocupar el ancho, que es lo que hacen las
+ * acciones primarias del resto de las pantallas.
+ */
+@media (max-width: 26rem) {
+  .requirements-section__controls {
+    width: 100%;
+    align-items: stretch;
   }
 
   .requirements-section__add {
     width: 100%;
-  }
-
-  .requirements-section__controls,
-  .published-card__controls {
-    width: 100%;
-    flex-wrap: wrap;
   }
 }
 
@@ -4919,6 +5264,49 @@ button.schedule-cell:focus-visible {
   gap: var(--space-2) var(--space-3);
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--line);
+}
+
+.roster__import {
+  flex: 0 0 auto;
+  width: auto;
+}
+
+.import-dialog__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.import-dialog__form > label {
+  font-weight: var(--weight-strong);
+}
+
+.import-dialog__report {
+  margin-top: var(--space-5);
+  border-top: 1px solid var(--line);
+  padding-top: var(--space-4);
+}
+
+.import-dialog__report h3,
+.import-dialog__report p {
+  margin: 0 0 var(--space-3);
+}
+
+.import-dialog__rejections {
+  max-height: 14rem;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--space-2) var(--space-4);
+}
+
+.import-dialog__rejections ol {
+  margin: 0;
+  padding-left: var(--space-5);
+}
+
+.import-dialog__rejections li {
+  padding: var(--space-2) 0;
 }
 
 /* Un `<label>` con el ícono adentro: el borde lo pone el envoltorio y no el input, así el

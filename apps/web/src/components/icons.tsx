@@ -258,6 +258,21 @@ export function DocumentIcon({ size = 20 }: { size?: number }): React.JSX.Elemen
 }
 
 /**
+ * El requisito de inspección: una planilla sujeta a una tabla. No es `DocumentIcon` —la
+ * hoja suelta es el borrador que se está escribiendo, y esto es la obligación ya fijada
+ * que el sitio repite cada período.
+ */
+export function ClipboardIcon({ size = 18 }: { size?: number }): React.JSX.Element {
+  return (
+    <svg {...svgProps(size)}>
+      <path d="M9 4H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2" />
+      <rect x="9" y="2" width="6" height="4" rx="1" />
+      <path d="m9.5 13.5 2 2 3.5-4" />
+    </svg>
+  );
+}
+
+/**
  * Una planta. Va donde se habla de St. Thomas o Glencoe —el alcance de la plantilla, la
  * ubicación que resuelve en cada una— y NO donde se habla de un lugar dentro de la planta:
  * eso es `PinIcon`, y confundirlos haría que el alcance y la ubicación se lean iguales.
