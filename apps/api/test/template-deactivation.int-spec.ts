@@ -27,6 +27,7 @@ import { inScope, sqlstate, startTestDatabase, type TestDatabase } from './helpe
 
 const INSUFFICIENT_PRIVILEGE = '42501';
 const HS_GUARD = 'HS001';
+const CHECK_VIOLATION = '23514';
 
 const SITE = 'd8000000-0000-4000-8000-000000000001';
 const MISSING = 'd8000000-0000-4000-8000-0000000000ff';
@@ -182,11 +183,81 @@ describe('quién puede', () => {
     await expect(templates.reactivate(asSupervisor(), templateId)).rejects.toMatchObject({
       response: { code: 'template_draft_forbidden' },
     });
+    await expect(templates.archive(asSupervisor(), templateId)).rejects.toMatchObject({
+      response: { code: 'template_draft_forbidden' },
+    });
+    await expect(templates.restore(asSupervisor(), templateId)).rejects.toMatchObject({
+      response: { code: 'template_draft_forbidden' },
+    });
   });
 
   /** El otro listado sigue abierto: lo consume `/scheduling` para todos los roles. */
   it('el listado de lo programable no se gateó', async () => {
     await expect(templates.list(asSupervisor())).resolves.toBeInstanceOf(Array);
+  });
+});
+
+describe('archivar plantillas retiradas', () => {
+  it('archiva una retirada sin cambiar lo programable', async () => {
+    const { templateId } = await publishedTemplate();
+    const before = await templates.list(asCoordinator());
+
+    await templates.deactivate(asCoordinator(), templateId);
+    const afterDeactivation = await templates.list(asCoordinator());
+    await templates.archive(asCoordinator(), templateId);
+
+    const catalog = await templates.listPublished(asCoordinator());
+    const row = catalog.find((item) => item.id === templateId);
+
+    expect(row?.archived_at).not.toBeNull();
+    expect(row?.deactivated_at).not.toBeNull();
+    expect(await templates.list(asCoordinator())).toEqual(afterDeactivation);
+    expect(afterDeactivation).not.toEqual(before);
+  });
+
+  it('rechaza archivar una activa y archivar dos veces', async () => {
+    const active = await publishedTemplate();
+
+    await expect(templates.archive(asCoordinator(), active.templateId)).rejects.toMatchObject({
+      response: { code: 'template_not_deactivated' },
+    });
+
+    await templates.deactivate(asCoordinator(), active.templateId);
+    await templates.archive(asCoordinator(), active.templateId);
+
+    await expect(templates.archive(asCoordinator(), active.templateId)).rejects.toMatchObject({
+      response: { code: 'template_already_archived' },
+    });
+  });
+
+  it('restaura sin reactivar y obliga a restaurar antes de reactivar', async () => {
+    const { templateId } = await publishedTemplate();
+
+    await templates.deactivate(asCoordinator(), templateId);
+    await templates.archive(asCoordinator(), templateId);
+
+    await expect(templates.reactivate(asCoordinator(), templateId)).rejects.toMatchObject({
+      response: { code: 'template_archived' },
+    });
+
+    await templates.restore(asCoordinator(), templateId);
+    const restored = (await templates.listPublished(asCoordinator())).find(
+      (item) => item.id === templateId,
+    );
+
+    expect(restored?.archived_at).toBeNull();
+    expect(restored?.deactivated_at).not.toBeNull();
+    await expect(templates.restore(asCoordinator(), templateId)).rejects.toMatchObject({
+      response: { code: 'template_not_archived' },
+    });
+  });
+
+  it('el CHECK del motor no permite archivar una plantilla activa', async () => {
+    const { templateId } = await publishedTemplate();
+
+    await expect(
+      db.migrator.query('UPDATE template SET archived_at = now() WHERE id = $1', [templateId]),
+    ).rejects.toSatisfy((error) => sqlstate(error) === CHECK_VIOLATION);
   });
 });
 

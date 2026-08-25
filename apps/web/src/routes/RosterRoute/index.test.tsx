@@ -20,6 +20,7 @@ const inviteAsJhscMember = vi.hoisted(() => vi.fn());
 const getAccount = vi.hoisted(() => vi.fn());
 const reissueInvitation = vi.hoisted(() => vi.fn());
 const removeJhscAccess = vi.hoisted(() => vi.fn());
+const setJhscSeat = vi.hoisted(() => vi.fn());
 const useAppSession = vi.hoisted(() => vi.fn());
 
 vi.mock('../../api/inspections', () => ({ listSites }));
@@ -29,6 +30,7 @@ vi.mock('../../api/roster', () => ({
   getAccount,
   reissueInvitation,
   removeJhscAccess,
+  setJhscSeat,
 }));
 vi.mock('../../app/session-context', () => ({ useAppSession }));
 
@@ -47,6 +49,25 @@ function session(role: Session['role'], siteScope: string[] = [SITE]): { account
 
 function site(id = SITE, name = 'St. Thomas'): Site {
   return { id, code: name.toLowerCase(), name, deactivated_at: null };
+}
+
+/**
+ * Una cuenta del roster. Los defaults son los de la fila que más aparece —un miembro del
+ * JHSC que ya entra— y cada caso deforma lo que su prueba mira. `jhsc_seat` vive acá y no
+ * en cada literal: solo importa en el describe del asiento.
+ */
+function account(
+  overrides: Partial<NonNullable<PersonWithAccount['account']>> = {},
+): NonNullable<PersonWithAccount['account']> {
+  return {
+    id: ACCOUNT,
+    role: 'jhsc_member',
+    active: true,
+    can_sign_in: true,
+    email: EMAIL,
+    jhsc_seat: false,
+    ...overrides,
+  };
 }
 
 function person(overrides: Partial<PersonWithAccount> = {}): PersonWithAccount {
@@ -79,6 +100,7 @@ beforeEach(() => {
   getAccount.mockReset();
   reissueInvitation.mockReset();
   removeJhscAccess.mockReset();
+  setJhscSeat.mockReset();
   useAppSession.mockReset().mockReturnValue(session('hs_coordinator'));
 });
 
@@ -249,9 +271,7 @@ describe('la pantalla no filtra identificadores', () => {
 
 describe('las columnas Role y Actions (proposal)', () => {
   it('el rol se muestra con su etiqueta de dominio, nunca el identificador crudo', async () => {
-    listPeople.mockResolvedValue([
-      person({ account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: true, email: EMAIL } }),
-    ]);
+    listPeople.mockResolvedValue([person({ account: account() })]);
 
     renderRoute();
 
@@ -280,7 +300,7 @@ describe('las columnas Role y Actions (proposal)', () => {
     listPeople.mockResolvedValue([
       person({
         id: ADA,
-        account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: true, email: EMAIL },
+        account: account(),
       }),
       person({
         id: BRUNO,
@@ -304,7 +324,7 @@ describe('las columnas Role y Actions (proposal)', () => {
   it('la cuenta inactiva no muestra correo', async () => {
     listPeople.mockResolvedValue([
       person({
-        account: { id: ACCOUNT, role: 'jhsc_member', active: false, can_sign_in: false, email: EMAIL },
+        account: account({ active: false, can_sign_in: false }),
       }),
     ]);
 
@@ -322,7 +342,7 @@ describe('las columnas Role y Actions (proposal)', () => {
         first_name: 'Bruno',
         last_name: 'Alvarez',
         employee_number: '10473',
-        account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: true, email: EMAIL },
+        account: account(),
       }),
     ]);
 
@@ -334,7 +354,7 @@ describe('las columnas Role y Actions (proposal)', () => {
 
   it('invitar vuelve a pedir el roster', async () => {
     inviteAsJhscMember.mockResolvedValue({
-      account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: false, email: EMAIL },
+      account: account({ can_sign_in: false }),
       invitation: { token: 'a-one-time-token', expiresAt: '2026-08-17T12:00:00Z' },
     });
 
@@ -372,14 +392,14 @@ describe('las columnas Role y Actions (proposal)', () => {
    */
   it('el link sobrevive a que la fila pase a mostrar el rol', async () => {
     inviteAsJhscMember.mockResolvedValue({
-      account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: false, email: EMAIL },
+      account: account({ can_sign_in: false }),
       invitation: { token: 'a-one-time-token', expiresAt: '2026-08-17T12:00:00Z' },
     });
     listPeople
       .mockResolvedValueOnce([person()])
       .mockResolvedValue([
         person({
-          account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: false, email: EMAIL },
+          account: account({ can_sign_in: false }),
         }),
       ]);
 
@@ -401,14 +421,14 @@ describe('las columnas Role y Actions (proposal)', () => {
 
   it('el token se muestra una vez y no queda en la caché', async () => {
     inviteAsJhscMember.mockResolvedValue({
-      account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: false, email: EMAIL },
+      account: account({ can_sign_in: false }),
       invitation: { token: 'a-one-time-token', expiresAt: '2026-08-17T12:00:00Z' },
     });
     listPeople
       .mockResolvedValueOnce([person()])
       .mockResolvedValue([
         person({
-          account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: false, email: EMAIL },
+          account: account({ can_sign_in: false }),
         }),
       ]);
     Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
@@ -462,14 +482,14 @@ describe('reemitir el link (reissue-invitation-link-from-roster)', () => {
     listPeople.mockResolvedValue([
       person({
         id: ADA,
-        account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: false, email: EMAIL },
+        account: account({ can_sign_in: false }),
       }),
       person({
         id: BRUNO,
         first_name: 'Bruno',
         last_name: 'Alvarez',
         employee_number: '10473',
-        account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: true, email: EMAIL },
+        account: account(),
       }),
     ]);
 
@@ -493,7 +513,7 @@ describe('reemitir el link (reissue-invitation-link-from-roster)', () => {
   it('precarga el email registrado y no deja emitir mientras carga', async () => {
     listPeople.mockResolvedValue([
       person({
-        account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: false, email: EMAIL },
+        account: account({ can_sign_in: false }),
       }),
     ]);
     getAccount.mockResolvedValue({
@@ -528,7 +548,7 @@ describe('reemitir el link (reissue-invitation-link-from-roster)', () => {
   it('reemitir sin tocar el correo lo manda sin cambios; el banner de copiar es el mismo de siempre', async () => {
     listPeople.mockResolvedValue([
       person({
-        account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: false, email: EMAIL },
+        account: account({ can_sign_in: false }),
       }),
     ]);
     getAccount.mockResolvedValue({
@@ -539,7 +559,7 @@ describe('reemitir el link (reissue-invitation-link-from-roster)', () => {
       email: 'ada.reid@example.com',
     });
     reissueInvitation.mockResolvedValue({
-      account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: false, email: EMAIL },
+      account: account({ can_sign_in: false }),
       invitation: { token: 'a-fresh-token', expiresAt: '2026-08-17T12:00:00Z' },
     });
 
@@ -568,7 +588,7 @@ describe('reemitir el link (reissue-invitation-link-from-roster)', () => {
   it('corregir el correo antes de emitir lo manda con el request', async () => {
     listPeople.mockResolvedValue([
       person({
-        account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: false, email: EMAIL },
+        account: account({ can_sign_in: false }),
       }),
     ]);
     getAccount.mockResolvedValue({
@@ -579,7 +599,7 @@ describe('reemitir el link (reissue-invitation-link-from-roster)', () => {
       email: 'ada.reidd@example.com',
     });
     reissueInvitation.mockResolvedValue({
-      account: { id: ACCOUNT, role: 'jhsc_member', active: true, can_sign_in: false, email: EMAIL },
+      account: account({ can_sign_in: false }),
       invitation: { token: 'a-fresh-token', expiresAt: '2026-08-17T12:00:00Z' },
     });
 
@@ -610,10 +630,9 @@ describe('reemitir el link (reissue-invitation-link-from-roster)', () => {
 });
 
 describe('quitar el acceso (remove-jhsc-access-from-roster)', () => {
-  const base = { id: ACCOUNT, role: 'jhsc_member' as const, email: EMAIL };
-  const invited = { ...base, active: true, can_sign_in: false };
-  const member = { ...base, active: true, can_sign_in: true };
-  const removed = { ...base, active: false, can_sign_in: false };
+  const invited = account({ can_sign_in: false });
+  const member = account();
+  const removed = account({ active: false, can_sign_in: false });
 
   it('la invitación pendiente ofrece cancelar; el miembro que ya entra ofrece quitar', async () => {
     listPeople.mockResolvedValue([
@@ -765,5 +784,79 @@ describe('quitar el acceso (remove-jhsc-access-from-roster)', () => {
     await screen.findByRole('rowheader', { name: 'Reid, Ada' });
 
     expect(screen.queryByRole('button', { name: /Invite Reid, Ada/i })).toBeNull();
+  });
+});
+
+describe('el asiento en el JHSC (coordinator-jhsc-seat)', () => {
+  const coordinator = (jhsc_seat: boolean) => account({ role: 'hs_coordinator', jhsc_seat });
+
+  it('la fila de la coordinadora ofrece sentarse, y la del miembro no ofrece nada', async () => {
+    listPeople.mockResolvedValue([
+      person({ id: ADA, account: coordinator(false) }),
+      person({
+        id: BRUNO,
+        first_name: 'Bruno',
+        last_name: 'Alvarez',
+        employee_number: '10473',
+        account: account(),
+      }),
+    ]);
+
+    renderRoute();
+    await screen.findByRole('rowheader', { name: 'Reid, Ada' });
+
+    expect(screen.getByRole('button', { name: /Seat Reid, Ada \(10472\) on the JHSC/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Seat Alvarez, Bruno/i })).toBeNull();
+  });
+
+  it('la celda Role dice el asiento de quien lo tiene', async () => {
+    listPeople.mockResolvedValue([person({ id: ADA, account: coordinator(true) })]);
+
+    renderRoute();
+
+    expect(await screen.findByText('H&S coordinator · JHSC seat')).toBeTruthy();
+  });
+
+  it('sentarse pide confirmación y recién ahí escribe', async () => {
+    listPeople.mockResolvedValue([person({ id: ADA, account: coordinator(false) })]);
+    setJhscSeat.mockResolvedValue({ account: { ...coordinator(true) } });
+
+    renderRoute();
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: /Seat Reid, Ada \(10472\) on the JHSC/i }),
+    );
+
+    // El diálogo está abierto y todavía no se escribió nada.
+    expect(screen.getByRole('heading', { name: /Seat Reid, Ada \(10472\) on the JHSC\?/i })).toBeTruthy();
+    expect(setJhscSeat).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Seat on the JHSC$/i }));
+
+    await waitFor(() => expect(setJhscSeat).toHaveBeenCalledWith({ userId: ACCOUNT, granted: true }));
+  });
+
+  /**
+   * Lo que el coordinador podría creer que este botón resuelve, y no: las inspecciones ya
+   * asignadas siguen siendo suyas. Si esa frase desaparece, alguien va a levantar a alguien
+   * del comité esperando que se reasignen solas.
+   */
+  it('levantarse avisa que lo ya asignado sigue asignado', async () => {
+    listPeople.mockResolvedValue([person({ id: ADA, account: coordinator(true) })]);
+    setJhscSeat.mockResolvedValue({ account: { ...coordinator(false) } });
+
+    renderRoute();
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: /Remove Reid, Ada \(10472\) from the JHSC seat/i }),
+    );
+
+    expect(screen.getByText(/Inspections already assigned to them stay assigned/i)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Remove from the seat$/i }));
+
+    await waitFor(() =>
+      expect(setJhscSeat).toHaveBeenCalledWith({ userId: ACCOUNT, granted: false }),
+    );
   });
 });

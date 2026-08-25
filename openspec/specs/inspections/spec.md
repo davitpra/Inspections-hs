@@ -675,9 +675,20 @@ the row cannot be corrected afterwards.
 
 The system SHALL restrict creating and deactivating schedule rules, scheduling an inspection
 outside the automatic calendar, reassigning `inspector_id` and cancelling a scheduled inspection to
-accounts whose role is `hs_coordinator`. `inspector_id` SHALL reference an account whose role is
-`jhsc_member` and whose active site scope includes the inspection's `site_id`. Every one of these
-operations SHALL be recorded in the audit log with the acting account.
+accounts whose role is `hs_coordinator`. `inspector_id` SHALL reference an account that sits on the
+JHSC — one whose role is `jhsc_member`, or one whose role is `hs_coordinator` and whose
+`jhsc_seat_granted_at` is non-null — and whose active site scope includes the inspection's
+`site_id`. Every one of these operations SHALL be recorded in the audit log with the acting
+account.
+
+An `hs_coordinator` who holds no JHSC seat SHALL be refused as `inspector_id`, and the refusal
+SHALL say that the account holds no seat rather than name the role, because the role is not what is
+missing.
+
+Withdrawing an account's JHSC seat SHALL NOT change the `inspector_id` of any scheduled inspection
+already assigned to it, and SHALL NOT remove those inspections from what that account still owes:
+the seat governs what is offered and what is accepted from that moment on, not what was already
+decided.
 
 #### Scenario: A JHSC member cannot reassign an inspection
 
@@ -702,6 +713,27 @@ operations SHALL be recorded in the audit log with the acting account.
 - **WHEN** the coordinator assigns as `inspector_id` an account whose role is `management`
 - **THEN** the request is rejected and names the role
 
+#### Scenario: A coordinator who holds a seat can be assigned an inspection
+
+- **WHEN** the coordinator assigns as `inspector_id` an `hs_coordinator` account whose
+  `jhsc_seat_granted_at` is non-null and whose active site scope includes the inspection's
+  `site_id`
+- **THEN** the assignment is accepted
+- **AND** the inspection appears among what that account still owes
+
+#### Scenario: A coordinator who holds no seat is rejected as inspector
+
+- **WHEN** the coordinator assigns as `inspector_id` an `hs_coordinator` account whose
+  `jhsc_seat_granted_at` is null
+- **THEN** the request is rejected and says the account holds no JHSC seat
+
+#### Scenario: Leaving the committee does not reassign what was already assigned
+
+- **GIVEN** a scheduled inspection assigned to an `hs_coordinator` account that holds a seat
+- **WHEN** that account's seat is withdrawn
+- **THEN** the inspection's `inspector_id` is unchanged
+- **AND** the inspection is still among what that account still owes
+
 #### Scenario: A reassignment is audited
 
 - **WHEN** the coordinator changes `inspector_id` on a scheduled inspection
@@ -711,8 +743,9 @@ operations SHALL be recorded in the audit log with the acting account.
 ### Requirement: The accounts eligible to be assigned an inspection at a site can be listed
 
 The system SHALL expose, for a site, the accounts eligible to be named as `inspector_id` of a
-scheduled inspection at that site: accounts that are not deactivated, whose role is `jhsc_member`,
-and whose `user_site_scope` for that `site_id` has not been revoked.
+scheduled inspection at that site: accounts that are not deactivated, that sit on the JHSC — role
+`jhsc_member`, or role `hs_coordinator` with a non-null `jhsc_seat_granted_at` — and whose
+`user_site_scope` for that `site_id` has not been revoked.
 
 The system SHALL determine that list with **the same predicate** it uses to validate an
 assignment, so that every account the list offers is an account a reassignment accepts, and an
@@ -740,10 +773,19 @@ row is outside the reader's scope SHALL still be listed, without its name, rathe
 #### Scenario: An account refused as inspector is never offered
 
 - **GIVEN** an account whose role is `management`, and one whose role is `jhsc_member` but whose
-  scope for the site has been revoked, and one that has been deactivated
+  scope for the site has been revoked, and one that has been deactivated, and an `hs_coordinator`
+  account that holds no JHSC seat
 - **WHEN** the eligible accounts for that site are listed
-- **THEN** none of the three appears
+- **THEN** none of the four appears
 - **AND** assigning any of them is refused with the code `inspector_invalid`
+
+#### Scenario: A coordinator with a seat is offered
+
+- **GIVEN** an `hs_coordinator` account with active scope for the site and a non-null
+  `jhsc_seat_granted_at`
+- **WHEN** the eligible accounts for that site are listed
+- **THEN** the account appears
+- **AND** it stops appearing once its seat is withdrawn
 
 #### Scenario: An eligible account whose person row is out of scope is still offered
 
@@ -1719,3 +1761,72 @@ answers or its findings. The record is immutable and reading it is a read.
 - **WHEN** a submitted inspection is read
 - **THEN** no row of `inspection`, `inspection_answer` or `finding` is created, changed or
   removed
+
+### Requirement: Deactivated inspection requirements can be archived without changing obligations
+
+The system SHALL allow an `hs_coordinator` to archive an inspection requirement only when its
+`deactivated_at` is non-null. Archiving SHALL set `archived_at`, SHALL NOT delete the
+`inspection_schedule` row, and SHALL NOT change the periods the rule produced or the months it
+historically owed. An attempt to archive an active requirement SHALL be refused with a stated
+reason.
+
+#### Scenario: A deactivated requirement is archived
+
+- **GIVEN** an inspection requirement whose `deactivated_at` is non-null and whose `archived_at`
+  is null
+- **WHEN** an `hs_coordinator` archives the requirement
+- **THEN** its `archived_at` is set
+- **AND** its `deactivated_at` and existing scheduled inspections are unchanged
+
+#### Scenario: An active requirement cannot be archived
+
+- **GIVEN** an inspection requirement whose `deactivated_at` is null
+- **WHEN** an `hs_coordinator` attempts to archive it
+- **THEN** the request is refused with a stated reason
+- **AND** its `archived_at` remains null
+
+#### Scenario: Archiving does not rewrite the annual schedule
+
+- **GIVEN** a deactivated requirement that historically owed periods in the selected year
+- **WHEN** the requirement is archived
+- **THEN** those periods remain in the annual schedule projection
+- **AND** existing scheduled inspections remain visible
+
+### Requirement: Archived inspection requirements are hidden by default and can be restored
+
+The scheduling surface SHALL omit requirements whose `archived_at` is non-null from the default
+requirements table. It SHALL offer an `hs_coordinator` a control to show archived requirements,
+identify them as `Archived`, and restore one when no other non-archived requirement exists for the
+same `site_id` and `template_id`. Restoration SHALL clear `archived_at` while leaving
+`deactivated_at` non-null. Accounts without scheduling administration permission SHALL NOT receive
+archive or restore controls.
+
+#### Scenario: Archived requirements are hidden by default
+
+- **GIVEN** the selected site has one current requirement and one requirement whose `archived_at`
+  is non-null
+- **WHEN** the scheduling surface opens
+- **THEN** the current requirement is shown
+- **AND** the archived requirement is omitted
+
+#### Scenario: A coordinator shows and restores an archived requirement
+
+- **GIVEN** an archived requirement with no other non-archived requirement for the same `site_id`
+  and `template_id`
+- **WHEN** an `hs_coordinator` shows archived requirements and restores it
+- **THEN** its `archived_at` is cleared
+- **AND** its `deactivated_at` remains non-null
+- **AND** it returns to the default table as `Deactivated`
+
+#### Scenario: A superseded archived requirement cannot be restored
+
+- **GIVEN** an archived requirement and another non-archived requirement with the same `site_id`
+  and `template_id`
+- **WHEN** an `hs_coordinator` attempts to restore the archived requirement
+- **THEN** the request is refused with a stated reason
+- **AND** its `archived_at` remains set
+
+#### Scenario: A reader cannot archive or restore requirements
+
+- **WHEN** an account without scheduling administration permission shows the requirements table
+- **THEN** the table does not offer archive or restore controls

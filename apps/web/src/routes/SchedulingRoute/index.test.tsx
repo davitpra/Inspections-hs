@@ -5,6 +5,12 @@ import type { InspectionSchedule, InspectorOption, ScheduledInspection, Session,
 
 import { SchedulingRoute } from './index';
 
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({ children, params }: { children: React.ReactNode; params?: { scheduleId?: string } }) => (
+    <a href={params?.scheduleId ? `/scheduling/${params.scheduleId}` : '/scheduling'}>{children}</a>
+  ),
+}));
+
 const SITE = '11111111-1111-4111-8111-111111111111';
 const USER = '22222222-2222-4222-8222-222222222222';
 const PERSON = '33333333-3333-4333-8333-333333333333';
@@ -24,12 +30,9 @@ const listSchedules = vi.hoisted(() => vi.fn());
 const createSchedule = vi.hoisted(() => vi.fn());
 const updateSchedule = vi.hoisted(() => vi.fn());
 const listScheduled = vi.hoisted(() => vi.fn());
-const createScheduledInspection = vi.hoisted(() => vi.fn());
-const assignInspector = vi.hoisted(() => vi.fn());
-const cancelScheduledInspection = vi.hoisted(() => vi.fn());
 const useAppSession = vi.hoisted(() => vi.fn());
 
-vi.mock('../../api/inspections', () => ({ listSites, listTemplates, listInspectorCandidates, listSchedules, createSchedule, updateSchedule, listScheduled, createScheduledInspection, assignInspector, cancelScheduledInspection }));
+vi.mock('../../api/inspections', () => ({ listSites, listTemplates, listInspectorCandidates, listSchedules, createSchedule, updateSchedule, listScheduled }));
 vi.mock('../../app/session-context', () => ({ useAppSession }));
 
 function session(role: Session['role'], siteScope: readonly string[] = [SITE]): { account: Session } {
@@ -64,16 +67,12 @@ beforeEach(() => {
   createSchedule.mockReset().mockResolvedValue(rule());
   updateSchedule.mockReset().mockResolvedValue(rule({ deactivated_at: '2026-08-05T00:00:00.000Z' }));
   listScheduled.mockReset().mockResolvedValue([inspection()]);
-  createScheduledInspection.mockReset().mockResolvedValue(inspection({ period_start: '2027-12-01', period_end: '2027-12-31', inspector_id: CANDIDATE }));
-  assignInspector.mockReset().mockResolvedValue(inspection({ inspector_id: CANDIDATE, inspector_name: 'Dana Okafor' }));
-  cancelScheduledInspection.mockReset().mockResolvedValue(inspection({ status: 'cancelled', cancelled_at: '2026-08-05T00:00:00.000Z', cancellation_reason: 'Plant shutdown' }));
   useAppSession.mockReset().mockReturnValue(session('hs_coordinator'));
 });
 
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
-  window.innerWidth = 1024;
 });
 
 describe('la superficie anual', () => {
@@ -82,30 +81,23 @@ describe('la superficie anual', () => {
 
     expect(await screen.findByRole('heading', { name: 'Annual schedule' }, { timeout: 5000 })).toBeTruthy();
     expect(screen.getByRole('heading', { name: /Inspection requirements/ })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Matrix/ }).getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByRole('button', { name: /August/ })).toBeTruthy();
     expect(container.textContent).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
   });
 
-  it('inicializa la lista en viewport pequeño y conserva la entrada al cambiar de vista', async () => {
-    window.innerWidth = 375;
+  // La casilla dibuja un ícono y nada más: sin la leyenda, el color no dice qué significa.
+  it('explica en la leyenda cada estado que la matriz dibuja', async () => {
     renderRoute();
 
-    expect((await screen.findByRole('button', { name: /List/ })).getAttribute('aria-pressed')).toBe('true');
-    fireEvent.click(screen.getByRole('button', { name: /Matrix/ }));
-    expect(screen.getByRole('button', { name: /August/ })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /List/ }));
-    expect(screen.getByRole('button', { name: /August.*Monthly/ })).toBeTruthy();
-  });
+    await screen.findByRole('heading', { name: 'Annual schedule' }, { timeout: 5000 });
+    const legend = screen.getByRole('list', { name: 'Status legend' });
 
-  it('filtra desde el resumen y lo limpia sin cambiar sus conteos anuales', async () => {
-    renderRoute();
-    const unassigned = await screen.findByRole('button', { name: /Unassigned \(1\)/ });
-    fireEvent.click(unassigned);
-    expect(screen.getByRole('button', { name: /August/ })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /January/ })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
-    expect(screen.getByRole('button', { name: /January/ })).toBeTruthy();
+    expect(within(legend).getByText('Not due')).toBeTruthy();
+    expect(within(legend).getByText('Not opened')).toBeTruthy();
+    expect(within(legend).getByText('Open')).toBeTruthy();
+    expect(within(legend).getByText('Completed')).toBeTruthy();
+    expect(within(legend).getByText('Missed')).toBeTruthy();
+    expect(within(legend).queryByText('Cancelled')).toBeNull();
   });
 
   it('muestra un año futuro completamente no abierto', async () => {
@@ -116,40 +108,26 @@ describe('la superficie anual', () => {
   });
 });
 
-describe('detalle y operaciones de periodo', () => {
-  it('no asigna hasta confirmar explícitamente', async () => {
-    renderRoute();
-    fireEvent.click(await screen.findByRole('button', { name: /August/ }));
-    const dialog = await screen.findByRole('dialog');
-    const select = within(dialog).getByLabelText('Inspector');
-    await within(select).findByRole('option', { name: 'Dana Okafor (E-4471)' });
-    fireEvent.change(select, { target: { value: CANDIDATE } });
-    expect(assignInspector).not.toHaveBeenCalled();
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm assignment' }));
-    await waitFor(() => expect(assignInspector).toHaveBeenCalledWith(SCHEDULED, CANDIDATE));
-  });
-
-  it('abre un periodo futuro y congela la versión publicada mostrada', async () => {
-    renderRoute();
-    fireEvent.click(await screen.findByRole('button', { name: `${new Date().getFullYear() + 1} →` }));
-    fireEvent.click((await screen.findAllByRole('button', { name: /December/ }))[0]!);
-    const dialog = await screen.findByRole('dialog');
-    expect(await within(dialog).findByText(/Version 2 will be frozen/)).toBeTruthy();
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Open this period' }));
-    await waitFor(() => expect(createScheduledInspection).toHaveBeenCalledWith({ site_id: SITE, template_id: TEMPLATE, period_start: `${new Date().getFullYear() + 1}-12-01`, inspector_id: null }));
-  });
-
-  it('cancela desde el detalle con motivo y conserva la lectura de missed', async () => {
+describe('detalle de periodo', () => {
+  it('el detalle de un periodo abierto solo informa', async () => {
     listScheduled.mockResolvedValue([inspection({ status: 'missed', inspector_id: CANDIDATE, inspector_name: 'Dana Okafor' })]);
     renderRoute();
     fireEvent.click(await screen.findByRole('button', { name: /August/ }));
     const detail = await screen.findByRole('dialog');
+    expect(within(detail).getByText('Missed')).toBeTruthy();
+    expect(within(detail).getByText('Dana Okafor')).toBeTruthy();
     expect(within(detail).getByText(/can still be submitted/)).toBeTruthy();
-    fireEvent.click(within(detail).getByRole('button', { name: 'Cancel period' }));
-    const cancel = await screen.findByRole('dialog', { name: 'Cancel period' });
-    fireEvent.change(within(cancel).getByLabelText('Cancel with a reason'), { target: { value: 'Plant shutdown' } });
-    fireEvent.click(within(cancel).getByRole('button', { name: 'Confirm cancellation' }));
-    await waitFor(() => expect(cancelScheduledInspection).toHaveBeenCalledWith(SCHEDULED, 'Plant shutdown'));
+    expect(within(detail).queryByLabelText('Inspector')).toBeNull();
+    expect(within(detail).getAllByRole('button').map((button) => button.textContent)).toEqual(['Close']);
+  });
+
+  it('el detalle de un periodo no abierto nombra la version publicada sin poder abrirlo', async () => {
+    renderRoute();
+    fireEvent.click(await screen.findByRole('button', { name: `${new Date().getFullYear() + 1} →` }));
+    fireEvent.click((await screen.findAllByRole('button', { name: /December/ }))[0]!);
+    const detail = await screen.findByRole('dialog');
+    expect(await within(detail).findByText(/Version 2 would be frozen/)).toBeTruthy();
+    expect(within(detail).getAllByRole('button').map((button) => button.textContent)).toEqual(['Close']);
   });
 });
 
@@ -176,14 +154,14 @@ describe('requirements y permisos', () => {
     renderRoute();
     const requirements = await screen.findByRole('table', { name: 'Inspection requirements' });
     expect(within(requirements).getByRole('columnheader', { name: 'Default inspector' })).toBeTruthy();
-    expect(within(requirements).getByRole('cell', { name: 'None' })).toBeTruthy();
+    expect(within(requirements).getAllByRole('cell', { name: 'None' })).toHaveLength(2);
     expect(screen.queryByRole('button', { name: 'Add requirement' })).toBeNull();
     expect(screen.queryByRole('button', { name: /More actions/ })).toBeNull();
     expect(screen.queryByLabelText('Show archived')).toBeNull();
-    expect(screen.queryByText('Archived workplace inspection')).toBeNull();
+    expect(screen.getByText('Archived workplace inspection')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Archived workplace inspection' }).getAttribute('href')).toBe(`/scheduling/${ARCHIVED_RULE}`);
     fireEvent.click(screen.getByRole('button', { name: /August/ }));
     expect(await screen.findByRole('dialog')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /Cancel period|Confirm assignment|Open this period/ })).toBeNull();
   });
 
   it('muestra solo el menú de acciones en cada requisito', async () => {

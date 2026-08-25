@@ -21,7 +21,8 @@ export type AccountErrorCode =
   | 'account_not_found'
   | 'account_already_active'
   | 'account_role_not_removable'
-  | 'account_already_inactive';
+  | 'account_already_inactive'
+  | 'account_role_without_jhsc_seat';
 
 export class AccountException extends HttpException {
   constructor(
@@ -118,5 +119,23 @@ export const accountAlreadyInactive = (): AccountException =>
   new AccountException(
     'account_already_inactive',
     'This account is already inactive',
+    HttpStatus.CONFLICT,
+  );
+
+/**
+ * `PATCH /accounts/:id` con `jhsc_seat` sobre un rol que no puede ocupar un asiento
+ * (`coordinator-jhsc-seat`): el `CHECK` de 0035 ya frena la escritura, y esto es lo que la
+ * traduce a algo que el coordinador pueda leer — un 23514 crudo no dice qué se pidió mal.
+ *
+ * Los cuatro roles caen acá por motivos distintos y la respuesta es la misma a propósito:
+ * un `jhsc_member` no necesita asiento porque su rol YA es el asiento, y un `supervisor`,
+ * `management` o `external_auditor` no puede tener uno porque §4 no lo pone en el comité.
+ */
+export const accountRoleWithoutJhscSeat = (role: string): AccountException =>
+  new AccountException(
+    'account_role_without_jhsc_seat',
+    role === 'jhsc_member'
+      ? 'A JHSC member already sits on the committee by role'
+      : `Role ${role} cannot hold a seat on the JHSC`,
     HttpStatus.CONFLICT,
   );

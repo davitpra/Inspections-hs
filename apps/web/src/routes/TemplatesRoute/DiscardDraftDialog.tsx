@@ -18,7 +18,7 @@ import { TrashIcon } from '../../components/icons';
  *
  * **Vive fuera de la fila que lo abre.** Al descartar con éxito, la invalidación redibuja el
  * listado sin esa fila; el diálogo tiene que colgar de un nodo que sobreviva a la mutación,
- * y ese nodo es la ruta. Es el mismo motivo que documenta `CancelPeriodDialog`.
+ * y ese nodo es la ruta. Es el mismo motivo que documenta `RequirementConfirmDialog`.
  *
  * EL ÍCONO Y EL COLOR DE PELIGRO ESTÁN EN EL TÍTULO, no en el botón solo: de qué clase es
  * la decisión se ve antes de leer la pregunta, que es cuando todavía sirve. El botón que

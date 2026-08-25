@@ -1,11 +1,32 @@
 import type { InspectionSchedule } from '@hs/contracts';
 
-import { calendarLabel, entryStatus, matrixRows, STATUS_LABELS, type YearEntry } from './presentation';
+import {
+  AlertCircleIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  CrossCircleIcon,
+  MinusCircleIcon,
+} from '../../components/icons';
+import { calendarLabel, CELL_LABELS, cellState, matrixRows, type CellState, type YearEntry } from './presentation';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
+
+/**
+ * La marca de cada estado. El mapa de NOMBRES vive en `presentation.ts` y se prueba sin
+ * renderizar; este es marcado y no puede vivir ahí, pero recorre el mismo `CellState`, así
+ * que agregar un estado sin su icono no compila.
+ */
+const MARKS: Readonly<Record<CellState, (props: { size?: number }) => React.JSX.Element>> = {
+  'not-due': MinusCircleIcon,
+  unopened: ClockIcon,
+  open: ClockIcon,
+  completed: CheckCircleIcon,
+  missed: AlertCircleIcon,
+  cancelled: CrossCircleIcon,
+};
 
 export function ScheduleMatrix({
   entries,
@@ -33,26 +54,32 @@ export function ScheduleMatrix({
             <tr key={row.templateId}>
               <th scope="row">{row.templateName}</th>
               {row.cells.map((entry, index) => {
+                const state = cellState(entry);
+                const Mark = MARKS[state];
+
                 if (!entry) {
-                  return <td key={MONTHS[index]} className="schedule-matrix__not-due" aria-label={`${MONTHS[index]}: not due`}>Not due</td>;
+                  return (
+                    <td key={MONTHS[index]} className="schedule-matrix__not-due">
+                      <span className="schedule-cell schedule-cell--not-due" aria-label={`${MONTHS[index]}: not due`} role="img">
+                        <Mark size={20} />
+                      </span>
+                    </td>
+                  );
                 }
 
-                const label = entry.kind === 'opened'
-                  ? `${row.templateName}, ${calendarLabel(entry.inspection.period_start, entry.inspection.period_months, year)}, ${STATUS_LABELS[entry.inspection.status]}`
-                  : `${row.templateName}, ${calendarLabel(entry.period.period_start, entry.period.period_months, year)}, Not opened`;
-                const state = entryStatus(entry);
+                const period = entry.kind === 'opened'
+                  ? calendarLabel(entry.inspection.period_start, entry.inspection.period_months, year)
+                  : calendarLabel(entry.period.period_start, entry.period.period_months, year);
 
                 return (
                   <td key={MONTHS[index]}>
                     <button
                       type="button"
                       className={`schedule-cell schedule-cell--${state}`}
-                      aria-label={label}
+                      aria-label={`${row.templateName}, ${period}, ${CELL_LABELS[state]}`}
                       onClick={() => onSelect(entry)}
                     >
-                      <span className="schedule-cell__status">
-                        {entry.kind === 'opened' ? STATUS_LABELS[entry.inspection.status] : 'Not opened'}
-                      </span>
+                      <Mark size={20} />
                     </button>
                   </td>
                 );

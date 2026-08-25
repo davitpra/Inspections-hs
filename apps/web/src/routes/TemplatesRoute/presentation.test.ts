@@ -4,16 +4,22 @@ import { describe, expect, it } from 'vitest';
 import {
   draftKindLabel,
   isTemplateActive,
+  isTemplateArchived,
   publishedCountLabel,
   publishedVersionLabel,
   sortPublishedTemplates,
+  splitPublishedTemplates,
   templateStatusClass,
   templateStatusLabel,
 } from './presentation';
 
 const VERSION_ID = '22222222-2222-4222-8222-222222222222';
 
-function template(name: string, deactivatedAt: string | null = null): PublishedTemplateSummary {
+function template(
+  name: string,
+  deactivatedAt: string | null = null,
+  archivedAt: string | null = null,
+): PublishedTemplateSummary {
   return {
     id: name === 'Alpha' ? '11111111-1111-4111-8111-111111111111' : '33333333-3333-4333-8333-333333333333',
     key: name.toLowerCase(),
@@ -22,6 +28,7 @@ function template(name: string, deactivatedAt: string | null = null): PublishedT
     latest_version_id: VERSION_ID,
     latest_published_at: '2026-08-22 10:00:00+00',
     deactivated_at: deactivatedAt,
+    archived_at: archivedAt,
   };
 }
 
@@ -60,9 +67,21 @@ describe('plantillas publicadas', () => {
     expect(isTemplateActive(template('Alpha', '2026-08-23T10:00:00.000Z'))).toBe(false);
   });
 
+  it('separa las archivadas y las identifica', () => {
+    const result = splitPublishedTemplates([
+      template('Archived', '2026-08-23T10:00:00.000Z', '2026-08-24T10:00:00.000Z'),
+      template('Visible'),
+    ]);
+
+    expect(result.visible.map((item) => item.name)).toEqual(['Visible']);
+    expect(result.archived.map((item) => item.name)).toEqual(['Archived']);
+    expect(isTemplateArchived(result.archived[0]!)).toBe(true);
+  });
+
   it('dice el estado en palabras', () => {
     expect(templateStatusLabel(template('Alpha'))).toBe('Active');
     expect(templateStatusLabel(template('Alpha', '2026-08-23T10:00:00.000Z'))).toBe('Deactivated');
+    expect(templateStatusLabel(template('Alpha', '2026-08-23T10:00:00.000Z', '2026-08-24T10:00:00.000Z'))).toBe('Archived');
   });
 
   /** Las mismas clases que la tabla de requisitos: el mismo hecho no se pinta de dos formas. */

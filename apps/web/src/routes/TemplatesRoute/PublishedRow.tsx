@@ -3,11 +3,12 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 
 import { RowMenu, type RowAction } from '../../components/RowMenu';
-import { reactivateTemplate, reviseTemplate } from '../../api/templates';
+import { archiveTemplate, reactivateTemplate, restoreTemplate, reviseTemplate } from '../../api/templates';
 import { queryKeys } from '../../api/query-keys';
 import { formatDay } from '../../presentation/dates';
 import {
   isTemplateActive,
+  isTemplateArchived,
   publishedVersionLabel,
   templateStatusClass,
   templateStatusLabel,
@@ -31,15 +32,19 @@ export function PublishedRow({
   template,
   canManage,
   onDeactivate,
+  onArchive,
 }: {
   template: PublishedTemplateSummary;
   canManage: boolean;
   /** Retirar se confirma fuera de la fila: al aplicarse, la fila se redibuja (ver `DeactivateTemplateDialog`). */
   onDeactivate: () => void;
+  /** Archivar también se confirma fuera de la fila. */
+  onArchive: () => void;
 }): React.JSX.Element {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const active = isTemplateActive(template);
+  const archived = isTemplateArchived(template);
 
   const revise = useMutation({
     mutationFn: () => reviseTemplate(template.id),
@@ -64,7 +69,35 @@ export function PublishedRow({
     },
   });
 
-  const actions: RowAction[] = active
+  const archive = useMutation({
+    mutationFn: () => archiveTemplate(template.id),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.publishedTemplates() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.templates() }),
+      ]);
+    },
+  });
+
+  const restore = useMutation({
+    mutationFn: () => restoreTemplate(template.id),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.publishedTemplates() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.templates() }),
+      ]);
+    },
+  });
+
+  const actions: RowAction[] = archived
+    ? [
+        {
+          label: restore.isPending ? 'Restoring…' : 'Restore',
+          disabled: restore.isPending,
+          onSelect: () => restore.mutate(),
+        },
+      ]
+    : active
     ? [
         {
           label: revise.isPending ? 'Opening…' : 'Edit template',
@@ -74,7 +107,7 @@ export function PublishedRow({
       ]
     : [];
 
-  if (canManage) {
+  if (canManage && !archived) {
     actions.push(
       active
         ? {
@@ -88,7 +121,17 @@ export function PublishedRow({
             onSelect: () => reactivate.mutate(),
           },
     );
+
+    if (!active) {
+      actions.push({
+        label: archive.isPending ? 'Archiving…' : 'Archive template',
+        disabled: archive.isPending,
+        onSelect: onArchive,
+      });
+    }
   }
+
+  const manageableActions = canManage ? actions : [];
 
   return (
     <tr className="published-row">
@@ -103,19 +146,26 @@ export function PublishedRow({
         <span className={templateStatusClass(template)}>{templateStatusLabel(template)}</span>
       </td>
       <td data-label="Actions" className="published-card__actions-cell">
-        <div className="table__actions">
-          <RowMenu label={`More actions for ${template.name}`} actions={actions} />
-        </div>
+         {canManage ? (
+           <div className="table__actions">
+             <RowMenu label={`More actions for ${template.name}`} actions={manageableActions} />
+           </div>
+         ) : null}
         {revise.isError ? (
           <p className="notice notice--warn" role="alert">
             Could not open revision.
           </p>
         ) : null}
-        {reactivate.isError ? (
+         {reactivate.isError ? (
           <p className="notice notice--warn" role="alert">
             {reactivate.error.message}
           </p>
-        ) : null}
+         ) : null}
+         {restore.isError || archive.isError ? (
+           <p className="notice notice--warn" role="alert">
+             {(restore.error ?? archive.error)?.message}
+           </p>
+         ) : null}
       </td>
     </tr>
   );

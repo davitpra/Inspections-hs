@@ -143,7 +143,6 @@ describe('PublishedTemplateRoute', () => {
     expect(screen.getByText('Corrective action: Stop the machine and investigate the temperature.')).toBeTruthy();
     expect(screen.getByText('Fails above 80')).toBeTruthy();
     expect(screen.getByText('Shown when Is the guard in place? is false')).toBeTruthy();
-    expect(screen.getByText(/This version is frozen/)).toBeTruthy();
     expect(screen.queryByRole('button')).toBeNull();
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(screen.queryByRole('combobox')).toBeNull();
@@ -165,7 +164,8 @@ describe('PublishedTemplateRoute', () => {
 
     await screen.findByRole('heading', { name: 'Machine guarding' });
 
-    expect(screen.queryByRole('button', { name: /Revise this template/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Edit template/ })).toBeNull();
+    expect(screen.queryByText(/editing starts a new version/)).toBeNull();
   });
 
   it('el coordinador empieza la revisión y llega al borrador sembrado', async () => {
@@ -173,7 +173,8 @@ describe('PublishedTemplateRoute', () => {
 
     renderRoute();
 
-    const revise = await screen.findByRole('button', { name: /Revise this template/ });
+    const revise = await screen.findByRole('button', { name: /Edit template/ });
+    expect(screen.getByText(/Read-only · editing starts a new version/)).toBeTruthy();
     fireEvent.click(revise);
 
     await waitFor(() =>
@@ -192,7 +193,7 @@ describe('PublishedTemplateRoute', () => {
 
     renderRoute();
 
-    await screen.findByRole('button', { name: /Revise this template/ });
+    await screen.findByRole('button', { name: /Edit template/ });
 
     // El único control de la pantalla sigue siendo el que abre el borrador.
     expect(screen.getAllByRole('button')).toHaveLength(1);
@@ -206,7 +207,7 @@ describe('PublishedTemplateRoute', () => {
 
     renderRoute();
 
-    fireEvent.click(await screen.findByRole('button', { name: /Revise this template/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Edit template/ }));
 
     expect(
       await screen.findByText(/This template could not be opened for revision/),

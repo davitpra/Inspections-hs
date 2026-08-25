@@ -226,6 +226,33 @@ describe('la cuenta que viaja junto a cada persona (design D1/D2)', () => {
     }
   });
 
+  /**
+   * `coordinator-jhsc-seat` — la fila dice quién se sienta en el comité HOY, y como un
+   * hecho: el momento en que se sentó vive en la cadena de auditoría, no en una lectura de
+   * doscientas filas.
+   */
+  it('reporta el asiento de la coordinadora, y ningún otro rol lo lleva', async () => {
+    const seated = await createAccount(db.app, {
+      role: 'hs_coordinator',
+      siteIds: [SITE_A],
+      lastName: 'Sentada',
+      jhscSeat: true,
+    });
+    const member = await createAccount(db.app, {
+      role: 'jhsc_member',
+      siteIds: [SITE_A],
+      lastName: 'Miembro',
+    });
+
+    const rows = await roster.list(asCoordinator(), { site_id: SITE_A, status: 'active' });
+
+    expect(rows.find((row) => row.id === seated.personId)?.account?.jhsc_seat).toBe(true);
+    expect(rows.find((row) => row.id === member.personId)?.account?.jhsc_seat).toBe(false);
+    expect(rows.find((row) => row.id === seated.personId)?.account).not.toHaveProperty(
+      'jhsc_seat_granted_at',
+    );
+  });
+
   it('una cuenta invitada y no aceptada vuelve con can_sign_in en falso, y en verdadero después de aceptar', async () => {
     const invited = await createAccount(db.app, {
       role: 'jhsc_member',

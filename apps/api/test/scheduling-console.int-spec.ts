@@ -254,6 +254,98 @@ describe('los candidatos a inspector', () => {
     expect(updated.inspector_id).toBe(transferred.accountId);
   });
 
+  /**
+   * `coordinator-jhsc-seat` — el comité no es un rol. La coordinadora sentada se ofrece y
+   * se asigna como cualquier miembro; la que no se sentó no aparece y su asignación se
+   * rechaza con un mensaje que habla del ASIENTO y no del rol, porque el rol no es lo que
+   * le falta.
+   */
+  it('ofrece a la coordinadora con asiento, y asignarla se acepta', async () => {
+    const seated = await createAccount(db.app, {
+      siteIds: [SITE_A],
+      role: 'hs_coordinator',
+      jhscSeat: true,
+      firstName: 'Nadia',
+      lastName: 'Ortiz',
+    });
+
+    const rows = await stack.inspections.listInspectorCandidates(asCoordinator(), SITE_A);
+    expect(rows.map((row) => row.id)).toContain(seated.accountId);
+
+    const scheduledId = await scheduleInspection(db.app, {
+      siteId: SITE_A,
+      periodStart: '2026-06-01',
+      templateId,
+      templateVersionId: templateV2,
+      scheduledBy: coordinator.accountId,
+    });
+
+    const updated = await stack.inspections.assignInspector(
+      asCoordinator(),
+      scheduledId,
+      seated.accountId,
+    );
+
+    expect(updated.inspector_id).toBe(seated.accountId);
+  });
+
+  it('no ofrece a la coordinadora sin asiento, y asignarla dice que le falta el asiento', async () => {
+    const unseated = await createAccount(db.app, { siteIds: [SITE_A], role: 'hs_coordinator' });
+
+    const rows = await stack.inspections.listInspectorCandidates(asCoordinator(), SITE_A);
+    expect(rows.map((row) => row.id)).not.toContain(unseated.accountId);
+
+    const scheduledId = await scheduleInspection(db.app, {
+      siteId: SITE_A,
+      periodStart: '2026-07-01',
+      templateId,
+      templateVersionId: templateV2,
+      scheduledBy: coordinator.accountId,
+    });
+
+    await expect(
+      stack.inspections.assignInspector(asCoordinator(), scheduledId, unseated.accountId),
+    ).rejects.toMatchObject({ code: 'inspector_invalid', message: /seat on the JHSC/i });
+  });
+
+  /**
+   * Levantarse del comité no reasigna nada: el asiento gobierna lo que se OFRECE de acá en
+   * más, no lo que ya se decidió. Si algún día el asiento arrastrara las asignaciones, un
+   * período quedaría sin dueño en silencio.
+   */
+  it('quitar el asiento no toca la inspección ya asignada', async () => {
+    const leaving = await createAccount(db.app, {
+      siteIds: [SITE_A],
+      role: 'hs_coordinator',
+      jhscSeat: true,
+    });
+
+    const scheduledId = await scheduleInspection(db.app, {
+      siteId: SITE_A,
+      periodStart: '2026-08-01',
+      templateId,
+      templateVersionId: templateV2,
+      scheduledBy: coordinator.accountId,
+    });
+
+    await stack.inspections.assignInspector(asCoordinator(), scheduledId, leaving.accountId);
+
+    await inScope(
+      db.app,
+      [SITE_A],
+      'UPDATE app_user SET jhsc_seat_granted_at = NULL WHERE id = $1',
+      [leaving.accountId],
+    );
+
+    const candidates = await stack.inspections.listInspectorCandidates(asCoordinator(), SITE_A);
+    expect(candidates.map((row) => row.id)).not.toContain(leaving.accountId);
+
+    const pending = await stack.inspections.pendingFor(
+      session(leaving, 'hs_coordinator', [SITE_A]),
+    );
+    expect(pending.map((row) => row.id)).toContain(scheduledId);
+  });
+
   it('no se la puede pedir un jhsc_member', async () => {
     await expect(
       stack.inspections.listInspectorCandidates(

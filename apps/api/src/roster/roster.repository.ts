@@ -10,6 +10,9 @@ import type { PersonWithAccount, RosterQuery } from '@hs/contracts';
  * `roster.service.ts` antes de este archivo. `app_user` no lleva política, pero una
  * cuenta sin una `person` visible no aparece porque no hay fila de la que colgarla.
  *
+ * `jhsc_seat` es el asiento en el comité (0035) reducido a un booleano: la consola pregunta
+ * quién está en el JHSC hoy, no desde cuándo.
+ *
  * `hs_account_is_active` es la misma función que ya usa el motor (0005 §"activa o no"),
  * envuelta en `CASE` porque llamarla sobre una fila `NULL` de un LEFT JOIN sin cuenta
  * devuelve `NULL IS NULL = true` — activa por accidente para quien no tiene cuenta.
@@ -24,7 +27,8 @@ export async function findRoster(
             CASE WHEN u.id IS NULL THEN NULL ELSE hs_account_is_active(u) END AS account_active,
             EXISTS (
               SELECT 1 FROM app_credential c WHERE c.user_id = u.id AND c.revoked_at IS NULL
-            ) AS can_sign_in
+            ) AS can_sign_in,
+            u.jhsc_seat_granted_at IS NOT NULL AS jhsc_seat
        FROM person p
        LEFT JOIN app_user u ON u.person_id = p.id
       WHERE p.site_id = $1
@@ -50,6 +54,7 @@ interface RosterRow extends Record<string, unknown> {
   account_email: string | null;
   account_active: boolean | null;
   can_sign_in: boolean;
+  jhsc_seat: boolean;
 }
 
 function toPersonWithAccount(row: RosterRow): PersonWithAccount {
@@ -71,6 +76,9 @@ function toPersonWithAccount(row: RosterRow): PersonWithAccount {
             // `app_user.email` es NOT NULL (0005): si hay `account_id`, hay email. El
             // `?? ''` es para el tipo del LEFT JOIN, no un caso real.
             email: row.account_email ?? '',
+            // `IS NOT NULL` sobre la columna de una fila ausente ya devuelve `false`, así
+            // que acá no hace falta el `CASE` que sí necesita `hs_account_is_active`.
+            jhsc_seat: row.jhsc_seat,
           },
   };
 }

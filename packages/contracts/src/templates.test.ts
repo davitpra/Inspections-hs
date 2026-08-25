@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { publishedTemplateSchema, publishedTemplateVersionSchema } from './templates.js';
+import {
+  publishedTemplateSchema,
+  publishedTemplateSummarySchema,
+  publishedTemplateVersionSchema,
+} from './templates.js';
 
 const document = {
   sections: [
@@ -80,5 +84,22 @@ describe('publishedTemplateVersionSchema', () => {
     });
 
     expect(result.success).toBe(false);
+  });
+});
+
+describe('publishedTemplateSummarySchema', () => {
+  it('acepta las marcas de retiro y archivo', () => {
+    expect(
+      publishedTemplateSummarySchema.parse({
+        id: '11111111-1111-4111-8111-111111111111',
+        key: 'machine-guarding',
+        name: 'Machine guarding',
+        latest_version: 1,
+        latest_version_id: '22222222-2222-4222-8222-222222222222',
+        latest_published_at: '2026-08-22 10:00:00+00',
+        deactivated_at: '2026-08-23T10:00:00.000Z',
+        archived_at: '2026-08-24T10:00:00.000Z',
+      }),
+    ).toMatchObject({ archived_at: '2026-08-24T10:00:00.000Z' });
   });
 });

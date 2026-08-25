@@ -1,11 +1,13 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Put } from '@nestjs/common';
 import {
   createTemplateDraftSchema,
+  archiveTemplateSchema,
   deactivateTemplateSchema,
   type PublishedTemplate,
   type PublishedTemplateSummary,
   type PublishedTemplateVersion,
   reactivateTemplateSchema,
+  restoreTemplateSchema,
   saveTemplateDraftSchema,
   type TemplateDraft,
   type TemplateDraftSummary,
@@ -128,6 +130,30 @@ export class TemplatesController {
     reactivateTemplateSchema.parse(body ?? {});
 
     return this.templates.reactivate(session, z.uuid().parse(templateId));
+  }
+
+  @Post(':templateId/archive')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async archive(
+    @CurrentSession() session: SessionContext,
+    @Param('templateId') templateId: string,
+    @Body() body: unknown,
+  ): Promise<void> {
+    archiveTemplateSchema.parse(body ?? {});
+
+    return this.templates.archive(session, z.uuid().parse(templateId));
+  }
+
+  @Post(':templateId/restore')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async restore(
+    @CurrentSession() session: SessionContext,
+    @Param('templateId') templateId: string,
+    @Body() body: unknown,
+  ): Promise<void> {
+    restoreTemplateSchema.parse(body ?? {});
+
+    return this.templates.restore(session, z.uuid().parse(templateId));
   }
 
   @Get('drafts')

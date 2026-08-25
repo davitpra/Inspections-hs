@@ -1,9 +1,16 @@
 /**
  * Qué hace que una cuenta pueda recibir una inspección en una planta, escrito UNA vez.
  *
- * §4, nota de vocabulario: los 7 miembros del JHSC son los únicos que ejecutan
- * inspecciones, y «inspector» y «miembro del JHSC» son la misma cosa. Un gerente con las
- * mejores intenciones no puede recibir una.
+ * §4, nota de vocabulario: los miembros del JHSC son los únicos que ejecutan inspecciones,
+ * y «inspector» y «miembro del JHSC» son la misma cosa. Un gerente con las mejores
+ * intenciones no puede recibir una.
+ *
+ * PERO EL COMITÉ NO ES UN ROL, y esa es la corrección que trae `coordinator-jhsc-seat`.
+ * Que estar en el JHSC y tener el rol `jhsc_member` coincidan es cierto para los siete
+ * miembros, no una regla: la coordinadora también se sienta en el comité, y como
+ * `app_user.person_id` es UNIQUE no existe una segunda cuenta que dárselo. Por eso la
+ * pregunta que se hace acá pasó de ser sobre el ROL a ser sobre el ASIENTO, con sus dos
+ * casos — y el `CHECK` de 0035 garantiza que el segundo solo alcanza a `hs_coordinator`.
  *
  * POR QUÉ ESTO ES UN MÓDULO Y NO DOS CONSULTAS PARECIDAS. Desde que existe una pantalla
  * de asignación hay dos lugares que preguntan lo mismo: el listado, que ofrece
@@ -23,8 +30,23 @@
 /** La cuenta existe y no está desactivada. */
 export const ACCOUNT_IS_ACTIVE = 'u.deactivated_at IS NULL';
 
-/** El rol que ejecuta inspecciones, y el único. */
+/** El rol cuya sola existencia ya pone a la cuenta en el comité. */
 export const ACCOUNT_IS_JHSC_MEMBER = `u.role = 'jhsc_member'`;
+
+/**
+ * El asiento otorgado a una cuenta de coordinador (0035). No hace falta comprobar el rol
+ * acá: el `CHECK` del motor no deja que esta columna sea no-nula para ningún otro.
+ */
+export const ACCOUNT_HOLDS_JHSC_SEAT = 'u.jhsc_seat_granted_at IS NOT NULL';
+
+/**
+ * Se sienta en el JHSC — por el rol, o por el asiento.
+ *
+ * **Los paréntesis no son cosméticos**: esto se mezcla con `AND` en `isEligibleInspector`,
+ * y sin ellos la disyunción se comería el resto de las condiciones y cualquier cuenta con
+ * asiento quedaría elegible en toda planta, con alcance o sin él.
+ */
+export const ACCOUNT_SITS_ON_JHSC = `(${ACCOUNT_IS_JHSC_MEMBER} OR ${ACCOUNT_HOLDS_JHSC_SEAT})`;
 
 /**
  * Tiene alcance VIGENTE sobre la planta. `revoked_at IS NULL` y no una fecha de
@@ -53,6 +75,6 @@ export function siteScopeIsActive(siteParam: string): string {
  */
 export function isEligibleInspector(siteParam: string): string {
   return `${ACCOUNT_IS_ACTIVE}
-      AND ${ACCOUNT_IS_JHSC_MEMBER}
+      AND ${ACCOUNT_SITS_ON_JHSC}
       AND ${siteScopeIsActive(siteParam)}`;
 }

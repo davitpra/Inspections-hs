@@ -90,9 +90,18 @@ export function sortRoster<T extends Person>(people: readonly T[]): T[] {
  * **No contempla la cuenta inactiva, y no es un olvido**: una cuenta a la que se le quitó
  * el acceso no llega hasta acá. Para el roster esa persona no tiene cuenta, y su fila se
  * dibuja igual que la de quien nunca tuvo una (`remove-jhsc-access-from-roster`).
+ *
+ * `· JHSC seat` cuando la cuenta se sienta en el comité (`coordinator-jhsc-seat`). Va
+ * PEGADO al rol y no en una columna nueva porque no es otra pregunta: la columna Role
+ * existe para leer hacia abajo quién está en el comité, y la coordinadora sentada lo está
+ * tanto como los siete miembros. Solo aparece sobre `hs_coordinator` —es el único rol al
+ * que el motor le deja el asiento—, así que la celda de un `jhsc_member` no gana un sufijo
+ * que repetiría lo que su rol ya dice.
  */
 export function accountRoleLabel(account: NonNullable<PersonWithAccount['account']>): string {
-  const label = ROLE_LABELS[account.role];
+  const label = account.jhsc_seat
+    ? `${ROLE_LABELS[account.role]} · JHSC seat`
+    : ROLE_LABELS[account.role];
 
   return account.can_sign_in ? label : `${label} (invited)`;
 }
@@ -174,6 +183,53 @@ export function removeButtonLabel(person: PersonWithAccount): string {
 /** El texto corto del botón de quitar, por la misma razón que `removeButtonLabel`. */
 export function removeButtonText(person: PersonWithAccount): string {
   return person.account?.can_sign_in ? 'Remove' : 'Cancel invitation';
+}
+
+/**
+ * Si esta fila puede ofrecer sentarse en el JHSC, o levantarse
+ * (`coordinator-jhsc-seat`).
+ *
+ * **Un solo predicado con la dirección adentro**, y no dos funciones: la fila ofrece
+ * siempre exactamente un acto —el que su estado admite— y preguntarlo dos veces obligaría
+ * a la pantalla a comprobar que las dos no dieran `true` a la vez.
+ *
+ * `role === 'hs_coordinator'` porque es el único rol al que el `CHECK` de 0035 le deja
+ * ocupar un asiento: un `jhsc_member` ya está en el comité por su rol, y a los otros tres
+ * §4 no los pone ahí. Es la misma regla que el servidor aplica, y acá está para no ofrecer
+ * un botón que el servidor va a negar.
+ *
+ * La cuenta tiene que estar activa: sentar a alguien a quien se le quitó el acceso sería
+ * darle un lugar en el comité sin poder entrar a hacerlo.
+ *
+ * **NO pregunta por `can_sign_in`**, al revés que `canReissueInvitation`: una coordinadora
+ * invitada que todavía no puso su contraseña puede quedar sentada en el comité desde ya, y
+ * la inspección la va a esperar en su pantalla el día que entre.
+ */
+export function jhscSeatAction(person: PersonWithAccount): 'grant' | 'withdraw' | null {
+  const account = person.account;
+
+  if (account === null || !account.active || account.role !== 'hs_coordinator') return null;
+
+  return account.jhsc_seat ? 'withdraw' : 'grant';
+}
+
+/** El texto corto del botón del asiento. Ver `jhscSeatAction`. */
+export function jhscSeatButtonText(action: 'grant' | 'withdraw'): string {
+  return action === 'grant' ? 'Join JHSC' : 'Leave JHSC';
+}
+
+/**
+ * El nombre accesible del botón del asiento — la persona nombrada, por la misma razón que
+ * `inviteButtonLabel`: un botón que solo dice "Join JHSC" se anuncia igual en las
+ * doscientas filas.
+ */
+export function jhscSeatButtonLabel(
+  person: PersonWithAccount,
+  action: 'grant' | 'withdraw',
+): string {
+  return action === 'grant'
+    ? `Seat ${personLabel(person)} on the JHSC`
+    : `Remove ${personLabel(person)} from the JHSC seat`;
 }
 
 /**

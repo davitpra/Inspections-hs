@@ -17,6 +17,7 @@ import { SitePicker } from '../../components/SitePicker';
 import { canAdministerRoster, canInviteFromRoster } from '../../permissions/session';
 import { resolveSiteId } from '../../presentation/sites';
 import { InviteDialog } from './InviteDialog';
+import { JhscSeatDialog } from './JhscSeatDialog';
 import { ReissueDialog } from './ReissueDialog';
 import { RemoveAccessDialog } from './RemoveAccessDialog';
 import {
@@ -24,6 +25,9 @@ import {
   canReissueInvitation,
   canRemoveJhscAccess,
   inviteButtonLabel,
+  jhscSeatAction,
+  jhscSeatButtonLabel,
+  jhscSeatButtonText,
   emailCellLabel,
   matchesSearch,
   personLabel,
@@ -124,6 +128,22 @@ function RosterConsole({
     userId: string;
     label: string;
     canSignIn: boolean;
+  } | null>(null);
+
+  /**
+   * La cuenta que se está sentando en el JHSC o levantando de él
+   * (`coordinator-jhsc-seat`): mismo criterio que las tres de arriba, y por la misma razón
+   * — la mutación invalida el roster y la fila vuelve con el OTRO botón, así que el modal
+   * tiene que vivir fuera de la tabla.
+   *
+   * La dirección viaja con el estado, como `canSignIn` en `removing`: es lo que decide qué
+   * pregunta hace el diálogo, y releerla de una fila ya invalidada podría cambiar el texto
+   * debajo del cursor.
+   */
+  const [seating, setSeating] = useState<{
+    userId: string;
+    label: string;
+    action: 'grant' | 'withdraw';
   } | null>(null);
 
   const sites = useQuery({ queryKey: queryKeys.sites(), queryFn: listSites, retry: false });
@@ -327,98 +347,127 @@ function RosterConsole({
                   </tr>
                 </thead>
                 <tbody>
-                  {visible.map((person) => (
-                    <tr key={person.id}>
-                      <th scope="row">{personName(person)}</th>
-                      <td className="roster__number">{person.employee_number}</td>
-                      {/*
-                        "Worker" cuando no hay cuenta: la ausencia de acceso se nombra, no se
-                        deja en blanco. No es un rol de `ROLES` — ver `roleCellLabel`. La
-                        píldora la ubica en la escala de las otras consolas —verde entra,
-                        ámbar espera, gris no tiene— sin reemplazar la palabra.
-                      */}
-                      <td>
-                        <span className={roleCellClass(person)}>{roleCellLabel(person)}</span>
-                      </td>
-                      {/*
-                        El correo al que se invitó a esta persona, y solo el de quien tiene
-                        cuenta: el roster del CSV no trae correos. Va pegado a Role porque las dos
-                        columnas responden a la misma pregunta —qué acceso tiene esta fila— y
-                        antes de Actions porque es dato, no acto.
+                  {visible.map((person) => {
+                    // El asiento se resuelve UNA vez por fila: la afordancia y la etiqueta
+                    // del botón tienen que hablar de la misma dirección.
+                    const seatAction = jhscSeatAction(person);
 
-                        El guión y no el vacío: en una tabla donde la mayoría de las filas no tiene
-                        cuenta, la columna en blanco se lee como una columna rota. Acá no hace falta
-                        nombrar la ausencia como sí lo hace `roleCellLabel` con "Worker" —la celda
-                        Role de esa misma fila ya lo dijo—, solo mostrar que el lugar existe y está
-                        vacío a propósito.
-                      */}
-                      <td className="roster__email">{emailCellLabel(person) || '—'}</td>
-                      <td>
+                    return (
+                      <tr key={person.id}>
+                        <th scope="row">{personName(person)}</th>
+                        <td className="roster__number">{person.employee_number}</td>
                         {/*
-                          La acción tiene columna propia, separada del rol: el rol es un dato que
-                          se compara hacia abajo —quién tiene acceso hoy— y el botón es un acto.
-                          Mezclados en una celda, la columna cambiaba de ancho fila por fila y el
-                          ojo perdía la lectura vertical del rol, que es para lo que la tabla
-                          existe.
-
-                          Cada fila ofrece SOLO el acto que su estado admite:
-
-                          - sin acceso y activa → invitar. Cuenta acá tanto quien nunca tuvo
-                            cuenta como aquel a quien se le quitó: las dos filas se dibujan
-                            igual, porque son la misma pregunta;
-                          - con cuenta que todavía no puede entrar → reemitir el link, y
-                            cancelar la invitación;
-                          - con cuenta que ya entra → quitar del JHSC.
-
-                          Nada para quien no tiene acceso y está dado de baja — invitar a esa
-                          fila es exactamente lo que 4.5 no ofrece. Esa celda queda vacía, y
-                          vacía está bien: la columna existe porque OTRAS filas tienen un acto.
+                          "Worker" cuando no hay cuenta: la ausencia de acceso se nombra, no se
+                          deja en blanco. No es un rol de `ROLES` — ver `roleCellLabel`. La
+                          píldora la ubica en la escala de las otras consolas —verde entra,
+                          ámbar espera, gris no tiene— sin reemplazar la palabra.
                         */}
-                        <div className="table__actions">
-                          {mayInvite && canInvite(person) ? (
-                            <button
-                              type="button"
-                              className="button--outline roster__action"
-                              aria-label={inviteButtonLabel(person)}
-                              onClick={() =>
-                                setInviting({ id: person.id, label: personLabel(person) })
-                              }
-                            >
-                              Invite to JHSC
-                            </button>
-                          ) : null}
-                          {mayInvite && canReissueInvitation(person) ? (
-                            <button
-                              type="button"
-                              className="roster__action"
-                              aria-label={reissueButtonLabel(person)}
-                              onClick={() =>
-                                setReissuing({ userId: person.account!.id, label: personLabel(person) })
-                              }
-                            >
-                              New link
-                            </button>
-                          ) : null}
-                          {mayInvite && canRemoveJhscAccess(person) ? (
-                            <button
-                              type="button"
-                              className="button--danger-quiet roster__action"
-                              aria-label={removeButtonLabel(person)}
-                              onClick={() =>
-                                setRemoving({
-                                  userId: person.account!.id,
-                                  label: personLabel(person),
-                                  canSignIn: person.account!.can_sign_in,
-                                })
-                              }
-                            >
-                              {removeButtonText(person)}
-                            </button>
-                          ) : null}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                        <td>
+                          <span className={roleCellClass(person)}>{roleCellLabel(person)}</span>
+                        </td>
+                        {/*
+                          El correo al que se invitó a esta persona, y solo el de quien tiene
+                          cuenta: el roster del CSV no trae correos. Va pegado a Role porque las dos
+                          columnas responden a la misma pregunta —qué acceso tiene esta fila— y
+                          antes de Actions porque es dato, no acto.
+
+                          El guión y no el vacío: en una tabla donde la mayoría de las filas no tiene
+                          cuenta, la columna en blanco se lee como una columna rota. Acá no hace falta
+                          nombrar la ausencia como sí lo hace `roleCellLabel` con "Worker" —la celda
+                          Role de esa misma fila ya lo dijo—, solo mostrar que el lugar existe y está
+                          vacío a propósito.
+                        */}
+                        <td className="roster__email">{emailCellLabel(person) || '—'}</td>
+                        <td>
+                          {/*
+                            La acción tiene columna propia, separada del rol: el rol es un dato que
+                            se compara hacia abajo —quién tiene acceso hoy— y el botón es un acto.
+                            Mezclados en una celda, la columna cambiaba de ancho fila por fila y el
+                            ojo perdía la lectura vertical del rol, que es para lo que la tabla
+                            existe.
+
+                            Cada fila ofrece SOLO el acto que su estado admite:
+
+                            - sin acceso y activa → invitar. Cuenta acá tanto quien nunca tuvo
+                              cuenta como aquel a quien se le quitó: las dos filas se dibujan
+                              igual, porque son la misma pregunta;
+                            - con cuenta que todavía no puede entrar → reemitir el link, y
+                              cancelar la invitación;
+                            - con cuenta que ya entra → quitar del JHSC.
+
+                            Nada para quien no tiene acceso y está dado de baja — invitar a esa
+                            fila es exactamente lo que 4.5 no ofrece. Esa celda queda vacía, y
+                            vacía está bien: la columna existe porque OTRAS filas tienen un acto.
+                          */}
+                          <div className="table__actions">
+                            {mayInvite && canInvite(person) ? (
+                              <button
+                                type="button"
+                                className="button--outline roster__action"
+                                aria-label={inviteButtonLabel(person)}
+                                onClick={() =>
+                                  setInviting({ id: person.id, label: personLabel(person) })
+                                }
+                              >
+                                Invite to JHSC
+                              </button>
+                            ) : null}
+                            {mayInvite && canReissueInvitation(person) ? (
+                              <button
+                                type="button"
+                                className="roster__action"
+                                aria-label={reissueButtonLabel(person)}
+                                onClick={() =>
+                                  setReissuing({ userId: person.account!.id, label: personLabel(person) })
+                                }
+                              >
+                                New link
+                              </button>
+                            ) : null}
+                            {mayInvite && canRemoveJhscAccess(person) ? (
+                              <button
+                                type="button"
+                                className="button--danger-quiet roster__action"
+                                aria-label={removeButtonLabel(person)}
+                                onClick={() =>
+                                  setRemoving({
+                                    userId: person.account!.id,
+                                    label: personLabel(person),
+                                    canSignIn: person.account!.can_sign_in,
+                                  })
+                                }
+                              >
+                                {removeButtonText(person)}
+                              </button>
+                            ) : null}
+                            {/*
+                              El asiento en el JHSC, y solo sobre una cuenta de coordinador:
+                              para todas las demás filas `jhscSeatAction` devuelve `null` y
+                              la celda queda como estaba. No lleva la clase de peligro que
+                              lleva "Remove" —levantarse del comité no quita ningún acceso—
+                              y por eso tampoco compite visualmente con ella.
+                            */}
+                            {mayInvite && seatAction !== null ? (
+                              <button
+                                type="button"
+                                className="button--outline roster__action"
+                                aria-label={jhscSeatButtonLabel(person, seatAction)}
+                                onClick={() =>
+                                  setSeating({
+                                    userId: person.account!.id,
+                                    label: personLabel(person),
+                                    action: seatAction,
+                                  })
+                                }
+                              >
+                                {jhscSeatButtonText(seatAction)}
+                              </button>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -455,6 +504,16 @@ function RosterConsole({
           canSignIn={removing.canSignIn}
           siteId={siteId}
           onClose={() => setRemoving(null)}
+        />
+      ) : null}
+
+      {seating ? (
+        <JhscSeatDialog
+          userId={seating.userId}
+          personLabel={seating.label}
+          action={seating.action}
+          siteId={siteId}
+          onClose={() => setSeating(null)}
         />
       ) : null}
 

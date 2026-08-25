@@ -13,12 +13,9 @@ import { PeriodDialog } from './PeriodDialog';
 import { RequirementsSection } from './RequirementsSection';
 import { ScheduleSection } from './ScheduleSection';
 import {
-  filterEntries,
   isUnassigned,
   projectYear,
   unassignedNotice,
-  yearStats,
-  type ScheduleFilters,
   type YearEntry,
 } from './presentation';
 
@@ -29,11 +26,7 @@ export function SchedulingRoute(): React.JSX.Element {
   const scheduled = useQuery({ queryKey: queryKeys.scheduledInspections(), queryFn: listScheduled, retry: false });
   const [chosenSite, setChosenSite] = useState<string | null>(null);
   const [year, setYear] = useState(() => currentCivilYear());
-  const [filters, setFilters] = useState<ScheduleFilters>({ templateId: 'all', state: 'all' });
   const [selectedEntry, setSelectedEntry] = useState<YearEntry | null>(null);
-  const [view, setView] = useState<'matrix' | 'list'>(() =>
-    typeof window !== 'undefined' && window.innerWidth < 768 ? 'list' : 'matrix',
-  );
 
   const siteId = resolveSiteId(sites.data ?? [], account?.siteScope ?? [], chosenSite);
   const canAdminister = canAdministerScheduling(account);
@@ -43,8 +36,6 @@ export function SchedulingRoute(): React.JSX.Element {
   const rules = (schedules.data ?? []).filter((rule) => rule.site_id === siteId);
   const periods = (scheduled.data ?? []).filter((entry) => entry.site_id === siteId);
   const entries = ready ? projectYear(rules, periods, year) : [];
-  const visibleEntries = filterEntries(entries, filters);
-  const stats = yearStats(entries);
   const yearUnassigned = entries.filter((entry): entry is Extract<YearEntry, { kind: 'opened' }> => entry.kind === 'opened' && isUnassigned(entry.inspection));
   const notice = unassignedNotice(yearUnassigned.map((entry) => entry.inspection));
 
@@ -70,7 +61,6 @@ export function SchedulingRoute(): React.JSX.Element {
       {ready && notice ? (
         <div className="notice-card">
           <div className="notice-card__body"><span className="notice-card__icon"><InfoIcon size={22} /></span><p className="notice-card__text">{notice} This notice is limited to {year}.</p></div>
-          <button type="button" className="notice-card__cta" onClick={() => setFilters((current) => ({ ...current, state: 'unassigned' }))}>View unassigned ({stats.unassigned})</button>
         </div>
       ) : null}
 
@@ -80,19 +70,13 @@ export function SchedulingRoute(): React.JSX.Element {
           rules={rules}
           periods={periods}
           entries={entries}
-          visibleEntries={visibleEntries}
           year={year}
           onYearChange={setYearAndResetSelection}
-          filters={filters}
-          onFiltersChange={setFilters}
-          stats={stats}
-          view={view}
-          onViewChange={setView}
           onSelect={setSelectedEntry}
         />
       </> : null}
 
-      {selectedEntry && ready ? <PeriodDialog key={entryKey(selectedEntry)} entry={selectedEntry} year={year} siteId={siteId} canAdminister={canAdminister} onClose={() => setSelectedEntry(null)} /> : null}
+      {selectedEntry && ready ? <PeriodDialog key={entryKey(selectedEntry)} entry={selectedEntry} year={year} onClose={() => setSelectedEntry(null)} /> : null}
     </>
   );
 }

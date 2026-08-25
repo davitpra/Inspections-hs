@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { CheckIcon, GridIcon, InfoIcon } from '../../components/icons';
 import { DeactivateTemplateDialog } from './DeactivateTemplateDialog';
 import { NewDraftForm } from './NewDraftForm';
-import { sortPublishedTemplates } from './presentation';
+import { splitPublishedTemplates } from './presentation';
 import { PublishedRow } from './PublishedRow';
 
 /** Las publicadas son registros congelados: la fila abre su documento, no un editor. */
@@ -21,24 +21,39 @@ export function PublishedTemplates({
 }): React.JSX.Element {
   const [adding, setAdding] = useState(false);
   const [deactivating, setDeactivating] = useState<PublishedTemplateSummary | null>(null);
-  const visible = sortPublishedTemplates(templates);
+  const [showArchived, setShowArchived] = useState(false);
+  const [archiving, setArchiving] = useState<PublishedTemplateSummary | null>(null);
+  const { visible, archived } = splitPublishedTemplates(templates);
+  const rows = showArchived ? [...visible, ...archived] : visible;
 
   return (
     <section className="published-card" aria-labelledby="published-templates-heading">
       <div className="published-card__head">
         <div>
           <h2 id="published-templates-heading">
-            Published templates <span className="note" aria-hidden="true">({visible.length})</span>
+             Published templates <span className="note" aria-hidden="true">({visible.length})</span>
           </h2>
           <p className="note">Published templates are ready to use when scheduling inspections.</p>
         </div>
-        <button
-          type="button"
-          className="button--primary published-card__add"
-          onClick={() => setAdding(true)}
-        >
-          Add Template
-        </button>
+         <div className="published-card__controls">
+           {canManage && archived.length > 0 ? (
+             <label className="archive-toggle">
+               <input
+                 type="checkbox"
+                 checked={showArchived}
+                 onChange={(event) => setShowArchived(event.target.checked)}
+               />{' '}
+               Show archived
+             </label>
+           ) : null}
+           <button
+             type="button"
+             className="button--primary published-card__add"
+             onClick={() => setAdding(true)}
+           >
+             Add Template
+           </button>
+         </div>
       </div>
 
       {isError ? (
@@ -52,17 +67,17 @@ export function PublishedTemplates({
         </p>
       ) : null}
 
-      {!isLoading && !isError && visible.length === 0 ? (
+       {!isLoading && !isError && rows.length === 0 ? (
         <div className="published-empty">
           <span className="published-empty__icon">
             <CheckIcon size={22} />
           </span>
-          <p className="published-empty__title">No published templates yet</p>
-          <p className="note">Publish a completed draft to fill this list.</p>
+           <p className="published-empty__title">{archived.length > 0 ? 'No visible published templates' : 'No published templates yet'}</p>
+           <p className="note">{archived.length > 0 ? 'Show archived templates to see the full list.' : 'Publish a completed draft to fill this list.'}</p>
         </div>
       ) : null}
 
-      {!isLoading && !isError && visible.length > 0 ? (
+       {!isLoading && !isError && rows.length > 0 ? (
         <table className="table published-card__table" aria-label="Published templates">
           <thead>
             <tr>
@@ -74,12 +89,13 @@ export function PublishedTemplates({
             </tr>
           </thead>
           <tbody>
-            {visible.map((template) => (
+             {rows.map((template) => (
               <PublishedRow
                 key={template.id}
                 template={template}
                 canManage={canManage}
-                onDeactivate={() => setDeactivating(template)}
+                 onDeactivate={() => setDeactivating(template)}
+                 onArchive={() => setArchiving(template)}
               />
             ))}
           </tbody>
@@ -89,6 +105,13 @@ export function PublishedTemplates({
       {adding ? <NewDraftForm onClose={() => setAdding(false)} /> : null}
       {deactivating ? (
         <DeactivateTemplateDialog template={deactivating} onClose={() => setDeactivating(null)} />
+      ) : null}
+      {archiving ? (
+        <DeactivateTemplateDialog
+          template={archiving}
+          kind="archive"
+          onClose={() => setArchiving(null)}
+        />
       ) : null}
     </section>
   );

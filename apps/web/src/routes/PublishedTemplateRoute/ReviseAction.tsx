@@ -7,10 +7,12 @@ import { DocumentIcon } from '../../components/icons';
 /**
  * La única cosa que se puede hacer sobre una versión congelada: corregirla.
  *
- * El encabezado dice desde siempre que para corregir una plantilla hay que publicar una
- * versión nueva, y hasta ahora no había ningún botón que lo hiciera. Este es ese botón, y no
- * contradice el resto de la pantalla: no vuelve editable la versión —lo que se muestra sigue
- * congelado—, abre un BORRADOR sembrado con este documento.
+ * El botón dice "Edit template" porque es lo que el coordinador viene a hacer, pero lo que se
+ * muestra en pantalla no se vuelve editable: la nota de abajo lo dice en una línea —la versión es
+ * de lectura, y editar arranca una VERSIÓN NUEVA, no una corrección de esta—. Lo que abre de
+ * inmediato es un borrador sembrado con este documento; la nota nombra el destino y no el paso
+ * intermedio. Y vive aquí y no en el encabezado a propósito: es la consecuencia de pulsar, no una
+ * propiedad de la pantalla.
  *
  * **No pregunta antes.** Sembrar un borrador no es un punto de no retorno: se descarta como
  * cualquier otro, y no escribe una sola fila en el modelo publicado. El diálogo de confirmación
@@ -36,8 +38,10 @@ export function ReviseAction({ templateId }: { templateId: string }): React.JSX.
         onClick={() => revise.mutate()}
         disabled={revise.isPending}
       >
-        <DocumentIcon size={16} /> {revise.isPending ? 'Opening…' : 'Revise this template'}
+        <DocumentIcon size={16} /> {revise.isPending ? 'Opening…' : 'Edit template'}
       </button>
+
+      <p className="published-template__revise-note">Read-only · editing starts a new version</p>
 
       {revise.isError ? (
         <p className="notice">

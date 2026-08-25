@@ -32,7 +32,9 @@
   --grey-600: #63706a;
   --grey-500: #5d6b64;
   --red-700: #a32020;
+  --red-100: #fbe9e9;
   --blue-800: #15558f;
+  --blue-100: #e4eefa;
   --amber-800: #7a4b06;
   --amber-100: #fdf1dd;
   --white: #ffffff;
@@ -74,6 +76,20 @@
   --state-danger: var(--red-700); /* 7.54:1 */
   --state-neutral: var(--grey-600); /* 5.18:1 */
   --state-info: var(--blue-800); /* 7.70:1 */
+
+  /*
+   * El fondo tenue del mismo estado, para la casilla de la matriz anual: doce meses por
+   * fila no dejan lugar a la palabra, así que la casilla es un ícono sobre su tinte. NO
+   * llevan texto encima —el nombre del estado está en la leyenda y en el `aria-label`— y
+   * por eso no tienen piso de contraste propio; lo que sí tienen que hacer es distinguirse
+   * de `--paper`, que es el mes que la regla no reclama.
+   *
+   * `--warn-bg` hace de tinte del quinto estado (un mes debido y todavía sin abrir), que
+   * es justo para lo que ya existía.
+   */
+  --ok-bg: var(--green-50);
+  --info-bg: var(--blue-100);
+  --danger-bg: var(--red-100);
 
   /*
    * Un control inerte. 1.4.3 exime del contraste a lo deshabilitado, así que acá lo que
@@ -171,7 +187,7 @@ button,
   color: inherit;
   /*
    * Como `input` y `select`. Sin esto, un botón a lo ancho de su contenedor
-   * (`.button--primary`, `.period__action`) mide 100% MÁS 2rem de relleno y 2px de
+   * (`.button--primary`, `.list__action`) mide 100% MÁS 2rem de relleno y 2px de
    * borde, y se sale de la tarjeta por la derecha: 34px que en una grilla de tarjetas
    * angostas se ven de inmediato.
    */
@@ -1220,65 +1236,8 @@ select:disabled {
   color: var(--warn-ink);
 }
 
-/* ---------------------------------------------------------------------------
-   Períodos operativos y recurrencia (etapa 7).
-
-   La grilla de períodos es de doce celdas y no una tabla: lo que se lee de un vistazo
-    es cuáles están en rojo, no una fila por mes con cinco columnas. */
-
-.period {
-  border: 1px solid var(--line);
-  border-left-width: 4px;
-  border-top-width: 3px;
-  border-radius: var(--radius);
-  padding: var(--space-2);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-0-5);
-}
-
-.period--completed {
-  border-left-color: var(--state-ok);
-  border-top-color: var(--state-ok);
-}
-.period--missed {
-  border-left-color: var(--state-danger);
-  border-top-color: var(--state-danger);
-}
-.period--cancelled {
-  border-left-color: var(--state-neutral);
-  border-top-color: var(--state-neutral);
-}
-.period--open {
-  border-left-color: var(--state-info);
-  border-top-color: var(--state-info);
-}
-
-/* El hueco entre "abierto" y "omitido": la inspección está viva y a tiempo, pero su
-   paquete de campo todavía no está en el dispositivo. No es un fallo —se arregla con un
-   botón— y por eso lleva el ámbar del aviso y no el rojo de lo vencido. */
-.period--not-ready {
-  border-left-color: var(--warn-ink);
-  border-top-color: var(--warn-ink);
-}
-
-/* Sin `border-top-width` propia: no hay estado que remarcar, solo un hueco por llenar. */
-.period--unopened {
-  border-style: dashed;
-  border-left-color: var(--line);
-  border-top-color: var(--line);
-}
-
-/* El mes es lo primero que se lee, como el encabezado de una hoja de calendario. */
-.period__month {
-  font-size: var(--text-lg);
-  font-weight: var(--weight-strong);
-}
-.period__status {
-  font-size: var(--text-sm);
-  color: var(--muted);
-}
-
+/* La nota de una asignación en la pantalla del inspector: qué falta para poder salir a
+   hacerla, no un dato más de la tarjeta. */
 .period__note {
   font-size: var(--text-xs);
   color: var(--muted);
@@ -1543,15 +1502,6 @@ select:disabled {
   font-size: var(--text-sm);
 }
 
-.calendar-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  margin: 0 0 var(--space-4);
-}
-
 .year-nav {
   display: flex;
   align-items: center;
@@ -1625,63 +1575,6 @@ select:disabled {
   list-style: none;
   margin: 0 0 var(--space-4);
   padding: 0;
-}
-
-.period {
-  gap: var(--space-2);
-  /* El menú se ancla a la tarjeta, no al renglón del encabezado (ver `.row-menu`). */
-  position: relative;
-}
-
-/* Un solo renglón: el ícono, el mes con su plantilla debajo, y contra el borde derecho el
-   estado y el menú. La plantilla va pegada al mes —no suelta bajo la tarjeta— porque las
-   doce filas del año se distinguen justamente por ese par. */
-/* Con `wrap` porque una tarjeta puede llevar DOS píldoras ("Overdue" y el estado del
-   paquete, en la lista del inspector). Sin esto las píldoras se quedaban en el renglón a
-   toda costa y el nombre de la plantilla se partía en cuatro líneas de una palabra. */
-.period__head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-/* La base de 8rem es lo que decide quién cede: por debajo de eso el título deja de
-   encogerse y son las píldoras las que bajan al renglón siguiente. */
-.period__title {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-0-5);
-  min-width: 0;
-  flex: 1 1 8rem;
-}
-
-/* Cuadrado teñido y no un ícono suelto: le da al mes un ancla del tamaño del bloque de
-   texto, que es lo que hace que la tarjeta se lea como una unidad y no como tres líneas. */
-.period__icon {
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: var(--radius);
-  background: var(--tint-bg);
-  color: var(--brand);
-}
-
-.period__badges {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: var(--space-1-5);
-  flex: none;
-}
-
-/* El hueco que el encabezado le reserva al menú, solo donde hay uno: sin esto la píldora
-   de estado se mete debajo del botón en la tarjeta angosta. */
-.period__head--menu {
-  padding-right: var(--space-12);
 }
 
 /*
@@ -1802,21 +1695,6 @@ select:disabled {
   min-width: 0;
   border: 0;
   padding: var(--space-2) 0;
-}
-
-/* La acción al pie de la tarjeta, sea `button` o link (`.list__action`): a lo ancho y
-   centrada, para que las doce tarjetas de un año ofrezcan el mismo objetivo de toque en
-   el mismo lugar. */
-.period__action {
-  width: 100%;
-  justify-content: center;
-}
-
-/* Dos acciones apiladas (abrir y descartar, en la lista del inspector): el `gap` de
-   0.15rem de `.period` separa datos, no objetivos de toque. La primera trae su propio
-   margen desde `.list__action`; la segunda lo necesita acá. */
-.period__action + .period__action {
-  margin-top: var(--space-2);
 }
 
 .stats-bar {
@@ -1941,6 +1819,46 @@ select:disabled {
   margin: 0;
 }
 
+/* El título manda sobre la leyenda: cuando no entran los tres bloques en una línea, la
+   leyenda y el navegador de año bajan juntos y el título se queda arriba. */
+.schedule-section__title {
+  flex: 1 1 18rem;
+}
+
+.schedule-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.schedule-legend__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* El punto repite el color de la casilla, no su ícono: acá el nombre está escrito al lado
+   y lo que hace falta es reconocer el tinte de un vistazo. */
+.schedule-legend__dot {
+  width: 0.625rem;
+  height: 0.625rem;
+  border: 1px solid currentColor;
+  border-radius: var(--radius-pill);
+  background: currentColor;
+}
+
+.schedule-legend__item--not-due { color: var(--state-neutral); }
+.schedule-legend__item--unopened { color: var(--warn-ink); }
+.schedule-legend__item--open { color: var(--state-info); }
+.schedule-legend__item--completed { color: var(--state-ok); }
+.schedule-legend__item--missed { color: var(--state-danger); }
+.schedule-legend__item--cancelled { color: var(--state-neutral); }
+
 .requirements-section__head .note,
 .schedule-section__head .note {
   margin: var(--space-1) 0 0;
@@ -1952,21 +1870,18 @@ select:disabled {
 }
 
 .requirements-section__controls,
-.requirements-section__archive-toggle {
+.published-card__controls,
+.archive-toggle {
   display: flex;
   align-items: center;
   gap: var(--space-3);
 }
 
-.requirements-section__archive-toggle {
+/* El mismo interruptor en las dos tablas que archivan: una casilla dice que la lista se
+   amplía, un botón sugeriría que algo pasa. Por eso la clase no lleva prefijo de ruta. */
+.archive-toggle {
   gap: var(--space-2);
   white-space: nowrap;
-}
-
-.schedule-list {
-  list-style: none;
-  margin: var(--space-4) 0 0;
-  padding: 0;
 }
 
 .requirements-table {
@@ -1988,6 +1903,11 @@ select:disabled {
   font-size: var(--text-sm);
 }
 
+.requirements-table tbody tr:last-child th,
+.requirements-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
 .requirements-table__actions-cell {
   position: relative;
   width: 1%;
@@ -1996,6 +1916,7 @@ select:disabled {
 
 .requirements-table__actions-cell .table__actions {
   flex-wrap: nowrap;
+  justify-content: flex-end;
 }
 
 .schedule-section {
@@ -2005,55 +1926,6 @@ select:disabled {
 .schedule-section__head,
 .schedule-section__foot {
   padding: var(--space-4);
-}
-
-.schedule-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-  background: var(--tint-bg);
-}
-
-.schedule-toolbar__controls {
-  display: flex;
-  flex: 1 1 28rem;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.schedule-toolbar__controls label {
-  color: var(--muted);
-  font-size: var(--text-sm);
-}
-
-.schedule-toolbar__states {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-}
-
-.schedule-filter,
-.schedule-toolbar__clear {
-  min-height: 48px;
-  padding: var(--space-2) var(--space-3);
-  background: var(--paper);
-}
-
-.schedule-filter[aria-pressed="true"] {
-  border-color: var(--brand);
-  color: var(--brand);
-  background: var(--paper);
-}
-
-.schedule-toolbar__clear {
-  border-color: transparent;
-  color: var(--brand);
-  text-decoration: underline;
 }
 
 .schedule-matrix-wrap {
@@ -2099,75 +1971,58 @@ select:disabled {
   width: 100%;
   min-height: 48px;
   padding: var(--space-1);
-  border: 1px solid var(--line);
+  border: 1px solid transparent;
   border-radius: var(--radius);
   background: var(--paper);
-  color: var(--ink);
+  color: var(--state-neutral);
 }
 
-.schedule-cell__status {
-  font-size: var(--text-xs);
-  line-height: 1.15;
+/*
+ * La casilla sin fila no es un botón: no hay período que abrir en un mes que la regla no
+ * reclama. Se dibuja igual que las demás para que la grilla no se deforme, y el guion gris
+ * es lo que dice que ahí no hay nada.
+ */
+.schedule-matrix__not-due .schedule-cell {
+  color: var(--line-control);
 }
 
-.schedule-cell--completed,
-.schedule-cell--open {
-  border-color: var(--state-info);
-}
-
-.schedule-cell--missed,
-.schedule-cell--unassigned {
-  border-color: var(--state-danger);
-  background: var(--warn-bg);
-}
-
-.schedule-cell--cancelled,
 .schedule-cell--unopened {
-  border-color: var(--muted);
+  border-color: var(--warn-bg);
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+}
+
+.schedule-cell--open {
+  border-color: var(--info-bg);
+  background: var(--info-bg);
+  color: var(--state-info);
+}
+
+.schedule-cell--completed {
+  border-color: var(--ok-bg);
+  background: var(--ok-bg);
+  color: var(--state-ok);
+}
+
+.schedule-cell--missed {
+  border-color: var(--danger-bg);
+  background: var(--danger-bg);
+  color: var(--state-danger);
+}
+
+.schedule-cell--cancelled {
+  border-color: var(--disabled-bg);
   background: var(--disabled-bg);
+  color: var(--state-neutral);
+}
+
+button.schedule-cell:hover,
+button.schedule-cell:focus-visible {
+  border-color: currentColor;
 }
 
 .schedule-matrix__not-due {
-  color: var(--muted);
-  background: var(--disabled-bg);
-}
-
-.schedule-list {
-  margin: 0;
-}
-
-.schedule-list li + li {
-  border-top: 1px solid var(--line);
-}
-
-.schedule-list__row {
-  display: grid;
-  grid-template-columns: 9rem minmax(12rem, 1.5fr) 7rem minmax(10rem, 1fr);
-  align-items: center;
-  gap: var(--space-3);
-  width: 100%;
-  min-height: 64px;
-  padding: var(--space-2) var(--space-4);
-  border: 0;
-  border-radius: 0;
   background: var(--paper);
-  color: var(--ink);
-  text-align: left;
-}
-
-.schedule-list__row:hover,
-.schedule-list__row:focus-visible {
-  background: var(--tint-bg);
-}
-
-.schedule-list__period,
-.schedule-list__requirement {
-  font-weight: var(--weight-strong);
-}
-
-.schedule-list__inspector {
-  color: var(--muted);
-  font-size: var(--text-sm);
 }
 
 .schedule-empty {
@@ -2191,17 +2046,13 @@ select:disabled {
   font-size: var(--text-sm);
 }
 
-.modal__form,
-.period-dialog__details,
-.period-dialog__assign {
+.modal__form {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
 }
 
-.modal__form label,
-.period-dialog__details .field-label,
-.period-dialog__assign label {
+.modal__form label {
   margin-top: var(--space-2);
   color: var(--muted);
   font-size: var(--text-sm);
@@ -2215,17 +2066,242 @@ select:disabled {
   background: var(--tint-bg);
 }
 
+/*
+ * El detalle de una casilla es una ficha, no un formulario: etiqueta a la izquierda en una
+ * columna fija y el dato a la derecha, todos empezando en la misma vertical. Con las dos
+ * cosas en la misma línea de texto —como estaba— cada valor arrancaba donde terminaba su
+ * etiqueta, y dos filas de dos palabras no se leían como una tabla de nada.
+ */
+.period-dialog__details {
+  margin: 0 0 var(--space-5);
+}
+
 .period-dialog__details > div {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-  padding-bottom: var(--space-2);
+  display: grid;
+  grid-template-columns: 8rem minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--line);
+}
+
+.period-dialog__details > div:last-child {
   border-bottom: 1px solid var(--line);
 }
 
-.period-dialog__assign {
-  padding-top: var(--space-2);
+.period-dialog__details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* La fila del estado lleva un pill, que no comparte línea base con el texto de al lado. */
+.period-dialog__details dd .status-pill {
+  vertical-align: middle;
+}
+
+/* El aviso de un período perdido cuelga de la ficha, y necesita aire antes del botón. */
+.period-dialog .period-dialog__details + .notice {
+  margin: 0 0 var(--space-5);
+}
+
+/*
+ * Cerrar no es una decisión: no ocupa el ancho del diálogo como sí lo hacen las dos salidas
+ * de un modal que pregunta algo. Va al final del renglón, del tamaño de su palabra.
+ */
+.period-dialog__actions {
+  justify-content: flex-end;
+}
+
+.period-dialog__actions button {
+  flex: 0 0 auto;
+}
+
+/* Debajo de ~26rem la columna de etiquetas se come el dato: cada fila pasa a dos renglones. */
+@media (max-width: 26rem) {
+  .period-dialog__details > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-1);
+  }
+}
+
+.annual-plan__header {
+  margin: 0 0 var(--space-5);
+}
+
+.annual-plan__header h1 {
+  margin: var(--space-3) 0 var(--space-1);
+}
+
+.annual-plan__meta {
+  margin: 0;
+  color: var(--muted);
+}
+
+.annual-plan__cadence-note {
+  margin: var(--space-4) 0 0;
+}
+
+.annual-plan {
+  margin: 0 0 var(--space-6);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+}
+
+.annual-plan__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.annual-plan__head h2 {
+  margin: 0;
+}
+
+.annual-plan__head .note {
+  margin: var(--space-1) 0 0;
+}
+
+.annual-plan__table-wrap {
+  overflow-x: auto;
+}
+
+.annual-plan__table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.annual-plan__table th,
+.annual-plan__table td {
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.annual-plan__table thead th {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
+}
+
+.annual-plan__table tbody th {
+  width: 24%;
+  font-weight: var(--weight-normal);
+}
+
+.annual-plan__table th:nth-child(2) {
+  width: 18%;
+}
+
+.annual-plan__table th:last-child,
+.annual-plan-row__action-cell {
+  width: 14rem;
+}
+
+.annual-plan-row__period,
+.annual-plan-row__note {
+  display: block;
+}
+
+.annual-plan-row__period {
+  font-weight: var(--weight-strong);
+}
+
+.annual-plan-row__status {
+  display: inline-block;
+  width: fit-content;
+}
+
+.annual-plan-row__note {
+  margin-top: var(--space-2);
+  color: var(--warn-ink);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-normal);
+}
+
+.annual-plan__inspector-control,
+.annual-plan__action {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.annual-plan__inspector-control,
+.annual-plan__inspector-control .field-select,
+.annual-plan__action,
+.annual-plan__action button {
+  width: 100%;
+}
+
+.annual-plan__action .note {
+  margin: 0;
+}
+
+.annual-plan__foot {
+  margin: 0;
+  padding: var(--space-4);
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+@media (max-width: 48rem) {
+  .annual-plan__table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .annual-plan__table,
+  .annual-plan__table tbody,
+  .annual-plan__table tr,
+  .annual-plan__table th,
+  .annual-plan__table td {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .annual-plan__table tr {
+    padding: var(--space-3) 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .annual-plan__table tbody th,
+  .annual-plan__table td {
+    display: grid;
+    grid-template-columns: minmax(6rem, 0.35fr) minmax(0, 1fr);
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-4);
+    border-top: 0;
+  }
+
+  .annual-plan__table th::before,
+  .annual-plan__table td::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-strong);
+  }
+
+  .annual-plan__table tbody th {
+    width: 100%;
+  }
+
+  .annual-plan__table th:nth-child(2),
+  .annual-plan__table th:last-child,
+  .annual-plan-row__action-cell {
+    width: 100%;
+  }
 }
 
 @media (max-width: 48rem) {
@@ -2282,58 +2358,17 @@ select:disabled {
     justify-content: flex-start;
   }
 
-  .schedule-toolbar .year-nav {
+  .schedule-section__head .year-nav {
     width: 100%;
     justify-content: space-between;
-  }
-
-  .schedule-toolbar__controls {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .schedule-toolbar__controls select,
-  .schedule-toolbar__states {
-    width: 100%;
-  }
-
-  .schedule-toolbar__states {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .schedule-filter,
-  .schedule-toolbar__clear {
-    width: 100%;
-  }
-
-  .schedule-section > .view-toggle {
-    padding: 0 var(--space-4) var(--space-3);
-  }
-
-  .schedule-list__row {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: var(--space-1) var(--space-3);
-    padding: var(--space-3) var(--space-4);
-    text-align: left;
-  }
-
-  .schedule-list__period,
-  .schedule-list__requirement,
-  .schedule-list__inspector {
-    grid-column: 1;
-  }
-
-  .schedule-list__row .status-pill {
-    grid-column: 2;
-    grid-row: 1 / span 2;
   }
 
   .requirements-section__add {
     width: 100%;
   }
 
-  .requirements-section__controls {
+  .requirements-section__controls,
+  .published-card__controls {
     width: 100%;
     flex-wrap: wrap;
   }
@@ -2341,7 +2376,7 @@ select:disabled {
 
 /* ---------------------------------------------------------------------------
    La asignación destacada (etapa 8) — la obligación del mes, antes que el resto del
-   año. Reutiliza `.card`, `.status-card`, `.notice-card`, `.status-pill*` y `.period*`;
+   año. Reutiliza `.card`, `.status-card`, `.notice-card`, `.status-pill*` y `.period__note*`;
    lo que sigue es lo que esas piezas no cubrían: el encabezado con su acción, la tira de
    datos, el anillo de progreso y la fila de una sección.
    --------------------------------------------------------------------------- */
@@ -3540,7 +3575,7 @@ select:disabled {
 
 /* La sección ------------------------------------------------------------- */
 
-/* `relative` para el `.row-menu` de la sección, igual que `.period`. */
+/* `relative` para el `.row-menu` de la sección (ver `.row-menu`). */
 .builder__section {
   position: relative;
 }
@@ -3573,7 +3608,7 @@ select:disabled {
   grid-template-columns: auto auto minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-2);
-  /* El hueco que el encabezado le reserva al menú, como `.period__head--menu`. */
+  /* El hueco que el encabezado le reserva al menú «⋮» (ver `.row-menu`). */
   padding-right: var(--space-12);
   margin: 0 0 var(--space-3);
 }
@@ -4450,7 +4485,10 @@ select:disabled {
    Todo color pasa por los tokens semánticos, también en los avisos de condición y hallazgo.
    --------------------------------------------------------------------------- */
 
-.published-name {
+/* El nombre de un requisito abre su ficha igual que el de una plantilla publicada: el
+   mismo enlace, sin subrayado permanente, para que las dos tablas se lean como una. */
+.published-name,
+.requirement-name {
   display: inline-block;
   max-width: 100%;
   color: var(--brand);
@@ -4462,18 +4500,36 @@ select:disabled {
 }
 
 .published-name:hover,
-.published-name:focus-visible {
+.published-name:focus-visible,
+.requirement-name:hover,
+.requirement-name:focus-visible {
   text-decoration: underline;
 }
 
-.published-name:focus-visible {
+.published-name:focus-visible,
+.requirement-name:focus-visible {
   outline: 2px solid currentColor;
   outline-offset: 2px;
   border-radius: var(--radius);
 }
 
+/*
+ * La identidad y su única acción en los extremos de la misma línea, como en
+ * `.scheduling__top`. El `wrap` es lo que ordena el teléfono: la acción baja entera debajo
+ * del título, que es el único orden que queda cuando no caben las dos.
+ */
+.published-template__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin: var(--space-4) 0 var(--space-6);
+}
+
 .published-template__header {
-  margin: var(--space-4) 0;
+  margin: 0;
+  min-width: 0;
 }
 
 .published-template__eyebrow,
@@ -4496,8 +4552,17 @@ select:disabled {
   color: var(--muted);
 }
 
-.published-template__frozen {
-  margin-bottom: var(--space-6);
+.published-template__revise {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-1-5);
+}
+
+.published-template__revise-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
 }
 
 .published-template__document {
@@ -4625,6 +4690,10 @@ select:disabled {
   .published-template__item-head .status-pill {
     display: inline-block;
     margin-top: var(--space-2);
+  }
+
+  .published-template__revise {
+    align-items: flex-start;
   }
 }
 

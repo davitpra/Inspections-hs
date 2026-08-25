@@ -30,9 +30,9 @@ import {
  */
 
 /**
- * La cabecera. Lo único mutable es `deactivated_at` —la baja lógica del catálogo, que
- * `0033` concedió a hs_app columna por columna—; `id`, `key` y `created_at` los rechaza el
- * trigger `template_guard`, y `name` solo lo puede tocar hs_migrator.
+ * La cabecera. Lo único mutable para hs_app son `deactivated_at` y `archived_at` —las
+ * marcas de catálogo que `0034` concedió columna por columna—; `id`, `key` y `created_at`
+ * los rechaza el trigger `template_guard`, y `name` solo lo puede tocar hs_migrator.
  */
 export const template = pgTable('template', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -40,6 +40,7 @@ export const template = pgTable('template', {
   name: text('name').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   deactivatedAt: timestamp('deactivated_at', { withTimezone: true }),
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
 });
 
 /**

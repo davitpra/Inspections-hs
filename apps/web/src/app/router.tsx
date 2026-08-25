@@ -25,6 +25,7 @@ import { ReportIncidentRoute } from '../routes/ReportIncidentRoute';
 import { ReviewRoute } from '../routes/ReviewRoute';
 import { RosterRoute } from '../routes/RosterRoute';
 import { SchedulingRoute } from '../routes/SchedulingRoute';
+import { ScheduleRequirementRoute } from '../routes/ScheduleRequirementRoute';
 import { SignInRoute } from '../routes/SignInRoute';
 import { TemplateDraftRoute } from '../routes/TemplateDraftRoute';
 import { TemplatesRoute } from '../routes/TemplatesRoute';
@@ -267,6 +268,12 @@ const schedulingRoute = createRoute({
   component: SchedulingRoute,
 });
 
+const scheduleRequirementRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/scheduling/$scheduleId',
+  component: ScheduleRequirementRoute,
+});
+
 /**
  * La consola del roster (§6 — "el coordinador administra plantillas y roster"). ONLINE y
  * fuera del precacheo, por las dos razones de siempre y una propia: **una baja en cola es
@@ -358,6 +365,7 @@ const routeTree = rootRoute.addChildren([
   reviewRoute,
   outboxRoute,
   schedulingRoute,
+  scheduleRequirementRoute,
   rosterRoute,
   templatesRoute,
   templateDraftRoute,

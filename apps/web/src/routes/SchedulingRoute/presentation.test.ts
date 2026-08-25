@@ -5,9 +5,9 @@ import {
   candidateLabel,
   currentPeriod,
   currentRules,
+  cellState,
   earliestEligibleYear,
-  filterEntries,
-  listEntries,
+  legendStates,
   matrixRows,
   inspectorLabel,
   isUnassigned,
@@ -21,6 +21,7 @@ import {
   STATUS_LABELS,
   unassignedNotice,
   yearStats,
+  type CellState,
   type YearEntry,
 } from './presentation';
 
@@ -532,7 +533,7 @@ describe('la presentacion anual', () => {
     expect(yearStats(entries)).toEqual({ total: 4, completed: 1, missed: 2, unassigned: 1, unopened: 0 });
   });
 
-  it('mantiene las mismas entradas al agrupar la matrix y ordenar la lista', () => {
+  it('no pierde ni inventa entradas al agrupar la matrix', () => {
     const entries = projectYear([
       rule({ template_id: TEMPLATE_A, template_name: 'Monthly general workplace inspection' }),
       rule({ template_id: TEMPLATE_B, template_name: 'Quarterly electrical inspection', frequency_months: 3, anchor_month: 2 }),
@@ -540,17 +541,63 @@ describe('la presentacion anual', () => {
     const matrixEntries = matrixRows(entries).flatMap((row) => row.cells.filter(Boolean));
 
     expect(matrixEntries).toHaveLength(entries.length);
-    expect(listEntries(entries)).toEqual(entries);
   });
 
-  it('distingue una posición no debida de una no abierta y filtra por estado/requisito', () => {
+  it('distingue una posición no debida de una no abierta', () => {
     const entries = projectYear([
       rule({ template_id: TEMPLATE_B, template_name: 'Quarterly electrical inspection', frequency_months: 3, anchor_month: 1 }),
     ], [], '2026');
+    const cells = matrixRows(entries)[0]?.cells ?? [];
 
-    expect(matrixRows(entries)[0]?.cells.filter((entry) => entry === null)).toHaveLength(8);
-    expect(filterEntries(entries, { templateId: TEMPLATE_B, state: 'unopened' })).toHaveLength(4);
-    expect(filterEntries(entries, { templateId: 'all', state: 'completed' })).toHaveLength(0);
+    expect(cells.filter((entry) => entry === null)).toHaveLength(8);
+    expect(cells.map((cell) => cellState(cell)).filter((state) => state === 'unopened')).toHaveLength(4);
+  });
+});
+
+describe('lo que dice una casilla del calendario', () => {
+  it('nombra los seis estados posibles', () => {
+    const unopened: YearEntry = { kind: 'unopened', period: {
+      site_id: SITE,
+      template_id: TEMPLATE_A,
+      template_name: 'Monthly general workplace inspection',
+      period_start: '2026-01-01',
+      period_months: 1,
+    } };
+
+    expect(cellState(null)).toBe('not-due');
+    expect(cellState(unopened)).toBe('unopened');
+    expect(cellState({ kind: 'opened', inspection: inspection({ status: 'open' }) })).toBe('open');
+    expect(cellState({ kind: 'opened', inspection: inspection({ status: 'completed' }) })).toBe('completed');
+    expect(cellState({ kind: 'opened', inspection: inspection({ status: 'missed' }) })).toBe('missed');
+  });
+
+  it('la cancelada le gana al estado derivado de la fecha', () => {
+    const cancelled = inspection({ status: 'missed', cancelled_at: '2026-08-05T00:00:00.000Z', cancellation_reason: 'Plant shutdown' });
+
+    expect(cellState({ kind: 'opened', inspection: cancelled })).toBe('cancelled');
+  });
+});
+
+describe('la leyenda de la matriz', () => {
+  const ORDER: CellState[] = ['not-due', 'unopened', 'open', 'completed', 'missed'];
+
+  it('presenta los estados en orden fijo y omite la cancelada cuando no hay ninguna', () => {
+    const entries = projectYear([rule({ template_id: TEMPLATE_A })], [], '2026');
+
+    expect(legendStates(matrixRows(entries))).toEqual(ORDER);
+  });
+
+  it('agrega la cancelada solo si alguna casilla lo está', () => {
+    const cancelled = inspection({
+      template_id: TEMPLATE_A,
+      period_start: '2026-01-01',
+      status: 'cancelled',
+      cancelled_at: '2026-01-05T00:00:00.000Z',
+      cancellation_reason: 'Plant shutdown',
+    });
+    const entries = projectYear([rule({ template_id: TEMPLATE_A })], [cancelled], '2026');
+
+    expect(legendStates(matrixRows(entries))).toEqual([...ORDER, 'cancelled']);
   });
 });
 

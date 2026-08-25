@@ -8,6 +8,7 @@ import { canAuthorTemplates, canDeactivateTemplates } from "../../permissions/se
 import { PublishedTemplates } from "./PublishedTemplates";
 import { TemplateCounts } from "./TemplateCounts";
 import { TemplateDrafts } from "./TemplateDrafts";
+import { splitPublishedTemplates } from "./presentation";
 
 /**
  * §7 etapa 8 — Las plantillas publicadas como referencia y las que se están escribiendo.
@@ -98,7 +99,7 @@ export function TemplatesRoute(): React.JSX.Element {
         {canAuthor ? (
           <TemplateCounts
             drafts={drafts.data?.length}
-            published={published.data?.length}
+            published={published.data ? splitPublishedTemplates(published.data).visible.length : undefined}
           />
         ) : null}
       </header>

@@ -35,6 +35,8 @@ export interface AccountSpec {
   expiresAt?: Date | null;
   recordsFrom?: string | null;
   recordsTo?: string | null;
+  /** El asiento en el JHSC (0035). Solo válido para `hs_coordinator`. */
+  jhscSeat?: boolean;
 }
 
 export interface SeededAccount {
@@ -81,8 +83,10 @@ export async function createAccount(pool: Pool, spec: AccountSpec): Promise<Seed
     const personId = one(person.rows).id;
 
     const account = await client.query<{ id: string }>(
-      `INSERT INTO app_user (id, person_id, email, role, expires_at, records_from, records_to)
-       VALUES (coalesce($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7)
+      `INSERT INTO app_user (id, person_id, email, role, expires_at, records_from, records_to,
+                             jhsc_seat_granted_at)
+       VALUES (coalesce($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7,
+               CASE WHEN $8 THEN now() ELSE NULL END)
        RETURNING id`,
       [
         spec.id ?? null,
@@ -92,6 +96,7 @@ export async function createAccount(pool: Pool, spec: AccountSpec): Promise<Seed
         spec.expiresAt ?? null,
         spec.recordsFrom ?? null,
         spec.recordsTo ?? null,
+        spec.jhscSeat ?? false,
       ],
     );
 

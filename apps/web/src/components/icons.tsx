@@ -117,6 +117,49 @@ export function CheckIcon({ size = 18 }: { size?: number }): React.JSX.Element {
   );
 }
 
+/*
+ * Las cuatro marcas de estado de la matriz de cumplimiento, más `ClockIcon` que ya estaba.
+ *
+ * Todas dibujan el MISMO círculo de radio 9 y cambian solo lo de adentro: en la matriz la
+ * casilla no lleva texto, así que la forma interior es lo que distingue un estado de otro
+ * —el color solo lo acompaña— y para eso el marco tiene que ser idéntico en las cinco.
+ */
+export function CheckCircleIcon({ size = 18 }: { size?: number }): React.JSX.Element {
+  return (
+    <svg {...svgProps(size)}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m8 12 2.75 2.75L16 9.5" />
+    </svg>
+  );
+}
+
+export function MinusCircleIcon({ size = 18 }: { size?: number }): React.JSX.Element {
+  return (
+    <svg {...svgProps(size)}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M8.5 12h7" />
+    </svg>
+  );
+}
+
+export function AlertCircleIcon({ size = 18 }: { size?: number }): React.JSX.Element {
+  return (
+    <svg {...svgProps(size)}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7.5v5.25M12 16.25h.01" />
+    </svg>
+  );
+}
+
+export function CrossCircleIcon({ size = 18 }: { size?: number }): React.JSX.Element {
+  return (
+    <svg {...svgProps(size)}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m9.25 9.25 5.5 5.5M14.75 9.25l-5.5 5.5" />
+    </svg>
+  );
+}
+
 /** La bandeja que recibe trabajo desde el servidor. */
 export function InboxIcon({ size = 18 }: { size?: number }): React.JSX.Element {
   return (

@@ -419,19 +419,42 @@ export function yearStats(entries: readonly YearEntry[]): YearStats {
   return { total: entries.length, completed, missed, unassigned, unopened };
 }
 
-export type ScheduleFilter =
-  | 'all'
-  | 'completed'
-  | 'missed'
-  | 'unassigned'
+/**
+ * Lo que puede decir una casilla del calendario, que no es lo mismo que el estado de un
+ * período: `not-due` no es un estado de nada —es el mes que la regla NO reclama— y
+ * `unopened` es un mes reclamado sin fila todavía. Los otros cuatro sí salen del dato.
+ */
+export type CellState =
+  | 'not-due'
   | 'unopened'
   | 'open'
+  | 'completed'
+  | 'missed'
   | 'cancelled';
 
-export interface ScheduleFilters {
-  templateId: string;
-  state: ScheduleFilter;
-}
+/**
+ * El nombre de cada casilla. La matriz dibuja iconos, así que este texto es lo que leen
+ * la leyenda y el lector de pantalla — y es la única forma de saber qué significa el
+ * icono, por eso vive acá y no dentro del componente.
+ */
+export const CELL_LABELS: Readonly<Record<CellState, string>> = {
+  'not-due': 'Not due',
+  unopened: 'Not opened',
+  open: 'Open',
+  completed: 'Completed',
+  missed: 'Missed',
+  cancelled: 'Cancelled',
+};
+
+/** El orden en que la leyenda presenta los estados: de menos a más urgente. */
+const LEGEND_ORDER: readonly CellState[] = [
+  'not-due',
+  'unopened',
+  'open',
+  'completed',
+  'missed',
+  'cancelled',
+];
 
 export function entryTemplateId(entry: YearEntry): string {
   return entry.kind === 'opened' ? entry.inspection.template_id : entry.period.template_id;
@@ -445,23 +468,29 @@ export function entryPeriodStart(entry: YearEntry): string {
   return entry.kind === 'opened' ? entry.inspection.period_start : entry.period.period_start;
 }
 
-export function entryStatus(entry: YearEntry): ScheduleFilter {
+/**
+ * Lo que dice la casilla, con la cancelada ganándole al estado: `status` se deriva de la
+ * fecha y sigue diciendo `open` o `missed` en una fila cancelada, y ahí lo que corresponde
+ * leer es que ese mes se canceló, no que venció.
+ */
+export function cellState(entry: YearEntry | null): CellState {
+  if (entry === null) return 'not-due';
   if (entry.kind === 'unopened') return 'unopened';
   if (entry.inspection.cancelled_at !== null) return 'cancelled';
+
   return entry.inspection.status;
 }
 
-export function filterEntries(
-  entries: readonly YearEntry[],
-  filters: ScheduleFilters,
-): YearEntry[] {
-  return entries.filter((entry) => {
-    const matchesTemplate = filters.templateId === 'all' || entryTemplateId(entry) === filters.templateId;
-    const matchesState = filters.state === 'all' || entryStatus(entry) === filters.state ||
-      (filters.state === 'unassigned' && entry.kind === 'opened' && isUnassigned(entry.inspection));
+/**
+ * Los estados que la leyenda tiene que explicar: los que están en pantalla, en orden fijo.
+ *
+ * `cancelled` es raro —hace falta cancelar un período abierto— y una leyenda que enseña un
+ * caso que no aparece en ninguna casilla hace buscar algo que no está.
+ */
+export function legendStates(rows: readonly MatrixRow[]): CellState[] {
+  const present = new Set(rows.flatMap((row) => row.cells.map((cell) => cellState(cell))));
 
-    return matchesTemplate && matchesState;
-  });
+  return LEGEND_ORDER.filter((state) => state !== 'cancelled' || present.has('cancelled'));
 }
 
 export interface MatrixRow {
@@ -488,13 +517,6 @@ export function matrixRows(entries: readonly YearEntry[]): MatrixRow[] {
   return [...groups.entries()]
     .map(([templateId, group]) => ({ templateId, ...group }))
     .sort((left, right) => left.templateName.localeCompare(right.templateName));
-}
-
-export function listEntries(entries: readonly YearEntry[]): YearEntry[] {
-  return [...entries].sort((left, right) => {
-    return entryPeriodStart(left).localeCompare(entryPeriodStart(right)) ||
-      entryTemplateName(left).localeCompare(entryTemplateName(right));
-  });
 }
 
 /**

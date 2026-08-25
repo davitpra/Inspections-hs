@@ -545,6 +545,67 @@ describe('la baja de una cuenta', () => {
 });
 
 // ---------------------------------------------------------------------------
+describe('el asiento en el JHSC (coordinator-jhsc-seat)', () => {
+  /**
+   * El `CHECK` es la garantía de que el asiento no se vuelve una segunda puerta —más
+   * silenciosa que el rol— para volver inspeccionable a quien §4 no pone en el comité. La
+   * guarda del servicio da el mensaje legible; esta es la que no se saltea con un UPDATE a
+   * mano.
+   */
+  it('ningún rol que no sea hs_coordinator puede llevarlo', async () => {
+    for (const role of ['jhsc_member', 'supervisor', 'management'] as const) {
+      await expect(
+        createAccount(db.migrator, { siteIds: [SITE_A], role, jhscSeat: true }),
+      ).rejects.toMatchObject({ code: CHECK_VIOLATION });
+    }
+  });
+
+  it('cambiarle el rol a una cuenta sentada se rechaza, en vez de dejarla sentada', async () => {
+    const seated = await createAccount(db.migrator, {
+      siteIds: [SITE_A],
+      role: 'hs_coordinator',
+      jhscSeat: true,
+    });
+
+    await expect(
+      inScope(db.migrator, [SITE_A], 'UPDATE app_user SET role = $1 WHERE id = $2', [
+        'supervisor',
+        seated.accountId,
+      ]),
+    ).rejects.toMatchObject({ code: CHECK_VIOLATION });
+  });
+
+  /**
+   * La columna es mutable a propósito y en los dos sentidos: el asiento se toma y se deja.
+   * `hs_app` tiene su `GRANT UPDATE` por columna — sin él, la ruta del roster fallaría con
+   * 42501 y solo el dueño podría sentar a nadie.
+   */
+  it('hs_app la escribe en los dos sentidos', async () => {
+    const seated = await createAccount(db.migrator, {
+      siteIds: [SITE_A],
+      role: 'hs_coordinator',
+    });
+
+    await inScope(db.app, [SITE_A], 'UPDATE app_user SET jhsc_seat_granted_at = now() WHERE id = $1', [
+      seated.accountId,
+    ]);
+
+    await inScope(db.app, [SITE_A], 'UPDATE app_user SET jhsc_seat_granted_at = NULL WHERE id = $1', [
+      seated.accountId,
+    ]);
+
+    const rows = await inScope<{ jhsc_seat_granted_at: Date | null }>(
+      db.migrator,
+      [SITE_A],
+      'SELECT jhsc_seat_granted_at FROM app_user WHERE id = $1',
+      [seated.accountId],
+    );
+
+    expect(rows[0]?.jhsc_seat_granted_at).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
 describe('la cuenta no guarda ninguna credencial', () => {
   it('el esquema no declara contraseña, hash, token, sesión ni secreto TOTP', async () => {
     const columns = await inScope<{ column_name: string }>(

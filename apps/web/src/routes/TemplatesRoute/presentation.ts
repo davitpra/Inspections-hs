@@ -69,6 +69,21 @@ export function sortPublishedTemplates(
   return [...templates].sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/** Un archivo no cambia el catálogo programable: toda archivada ya está retirada. */
+export function isTemplateArchived(template: PublishedTemplateSummary): boolean {
+  return template.archived_at !== null;
+}
+
+/** Separa lo que se muestra por defecto de lo que solo aparece tras pedirlo. */
+export function splitPublishedTemplates(
+  templates: readonly PublishedTemplateSummary[],
+): { visible: PublishedTemplateSummary[]; archived: PublishedTemplateSummary[] } {
+  return {
+    visible: sortPublishedTemplates(templates.filter((template) => !isTemplateArchived(template))),
+    archived: sortPublishedTemplates(templates.filter(isTemplateArchived)),
+  };
+}
+
 /**
  * Si la plantilla sigue en circulación.
  *
@@ -82,7 +97,7 @@ export function isTemplateActive(template: PublishedTemplateSummary): boolean {
 
 /** El estado en palabras, que es como se lee una tabla. */
 export function templateStatusLabel(template: PublishedTemplateSummary): string {
-  return isTemplateActive(template) ? 'Active' : 'Deactivated';
+  return isTemplateArchived(template) ? 'Archived' : isTemplateActive(template) ? 'Active' : 'Deactivated';
 }
 
 /**
@@ -93,7 +108,7 @@ export function templateStatusLabel(template: PublishedTemplateSummary): string 
  * distintas de pintar el mismo hecho se leen como dos hechos distintos.
  */
 export function templateStatusClass(template: PublishedTemplateSummary): string {
-  return isTemplateActive(template)
+  return !isTemplateArchived(template) && isTemplateActive(template)
     ? 'status-pill status-pill--open'
     : 'status-pill status-pill--cancelled';
 }

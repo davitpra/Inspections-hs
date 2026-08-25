@@ -51,8 +51,8 @@ export async function listTemplates(): Promise<TemplateOption[]> {
  * A quién se le puede asignar una inspección en esa planta.
  *
  * Es la MISMA regla que valida la asignación, resuelta en el servidor: lo que esta lista
- * devuelve, `assignInspector` lo acepta. Por eso el selector puede ofrecer estas opciones
- * sin comprobar nada por su cuenta.
+ * devuelve, el endpoint de asignación lo acepta. Por eso el selector puede ofrecer estas
+ * opciones sin comprobar nada por su cuenta.
  */
 export async function listInspectorCandidates(siteId: string): Promise<InspectorOption[]> {
   return get(`/inspector-candidates?site_id=${encodeURIComponent(siteId)}`, (value) =>
@@ -99,12 +99,7 @@ export async function listScheduled(): Promise<ScheduledInspection[]> {
   );
 }
 
-/**
- * Programa fuera del calendario: la vía por la que el coordinador abre a mano un mes
- * que el trabajo automático todavía no alcanzó. La versión no viaja — la congela el
- * servidor a la más alta publicada en este instante, y esa es la elección que la casilla
- * de la consola le nombra antes de llamar a esto.
- */
+/** Abre un período y deja la asignación para una operación explícita posterior. */
 export async function createScheduledInspection(
   body: CreateScheduledInspection,
 ): Promise<ScheduledInspection> {
@@ -113,6 +108,7 @@ export async function createScheduledInspection(
   );
 }
 
+/** Reasigna un período ya abierto; la respuesta conserva el inspector persistido. */
 export async function assignInspector(
   id: string,
   inspectorId: string,
@@ -122,16 +118,6 @@ export async function assignInspector(
     `/scheduled-inspections/${id}/inspector`,
     { inspector_id: inspectorId },
     (value) => scheduledInspectionSchema.parse(value),
-  );
-}
-
-/** Cancelar exige motivo y no se deshace: un período no se des-cancela, se reprograma. */
-export async function cancelScheduledInspection(
-  id: string,
-  reason: string,
-): Promise<ScheduledInspection> {
-  return send('POST', `/scheduled-inspections/${id}/cancel`, { reason }, (value) =>
-    scheduledInspectionSchema.parse(value),
   );
 }
 

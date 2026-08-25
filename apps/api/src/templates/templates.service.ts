@@ -33,7 +33,11 @@ import {
   templateItemKeyTaken,
   templateKeyTaken,
   templateAlreadyDeactivated,
+  templateAlreadyArchived,
+  templateArchived,
   templateNotDeactivated,
+  templateNotDeactivatedForArchive,
+  templateNotArchived,
   templateNotFound,
   templateVersionNotFound,
 } from './templates.errors';
@@ -136,9 +140,10 @@ export class TemplatesService {
                  t.key,
                  t.name,
                  latest.version    AS latest_version,
-                 latest.version_id AS latest_version_id,
-                 latest.published_at AS latest_published_at,
-                 t.deactivated_at
+                  latest.version_id AS latest_version_id,
+                  latest.published_at AS latest_published_at,
+                  t.deactivated_at,
+                  t.archived_at
            FROM template t
            JOIN latest ON latest.template_id = t.id
           ORDER BY t.name`,
@@ -189,15 +194,65 @@ export class TemplatesService {
     await this.db.withSessionClient(session, async (client) => {
       const { rowCount } = await client.query(
         `UPDATE template
-            SET deactivated_at = NULL
-          WHERE id = $1 AND deactivated_at IS NOT NULL
+           SET deactivated_at = NULL
+          WHERE id = $1 AND deactivated_at IS NOT NULL AND archived_at IS NULL
+          RETURNING id`,
+        [templateId],
+      );
+
+      if (rowCount === 0) {
+        const state = await templateState(client, templateId);
+
+        if (!state) throw templateNotFound();
+        if (state.archived_at !== null) throw templateArchived();
+
+        throw templateNotDeactivated();
+      }
+    });
+  }
+
+  /** Archivar solo cambia la visibilidad de una plantilla ya retirada. */
+  async archive(session: SessionScope, templateId: string): Promise<void> {
+    requireCoordinator(session);
+
+    await this.db.withSessionClient(session, async (client) => {
+      const { rowCount } = await client.query(
+        `UPDATE template
+            SET archived_at = now()
+          WHERE id = $1
+            AND deactivated_at IS NOT NULL
+            AND archived_at IS NULL
+          RETURNING id`,
+        [templateId],
+      );
+
+      if (rowCount === 0) {
+        const state = await templateState(client, templateId);
+
+        if (!state) throw templateNotFound();
+        if (state.archived_at !== null) throw templateAlreadyArchived();
+
+        throw templateNotDeactivatedForArchive();
+      }
+    });
+  }
+
+  /** Restaurar devuelve la fila a la tabla, pero no la vuelve programable. */
+  async restore(session: SessionScope, templateId: string): Promise<void> {
+    requireCoordinator(session);
+
+    await this.db.withSessionClient(session, async (client) => {
+      const { rowCount } = await client.query(
+        `UPDATE template
+            SET archived_at = NULL
+          WHERE id = $1 AND archived_at IS NOT NULL
           RETURNING id`,
         [templateId],
       );
 
       if (rowCount === 0) {
         throw (await templateExists(client, templateId))
-          ? templateNotDeactivated()
+          ? templateNotArchived()
           : templateNotFound();
       }
     });
@@ -527,6 +582,18 @@ async function templateExists(client: PoolClient, templateId: string): Promise<b
   const { rowCount } = await client.query('SELECT 1 FROM template WHERE id = $1', [templateId]);
 
   return rowCount === 1;
+}
+
+async function templateState(
+  client: PoolClient,
+  templateId: string,
+): Promise<{ deactivated_at: Date | null; archived_at: Date | null } | null> {
+  const { rows } = await client.query<{
+    deactivated_at: Date | null;
+    archived_at: Date | null;
+  }>('SELECT deactivated_at, archived_at FROM template WHERE id = $1', [templateId]);
+
+  return rows[0] ?? null;
 }
 
 /**

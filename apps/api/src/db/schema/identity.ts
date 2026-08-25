@@ -103,12 +103,20 @@ export const appUser = pgTable(
     recordsFrom: date('records_from'),
     recordsTo: date('records_to'),
 
+    // El asiento en el JHSC (0035): el momento en que esta cuenta se sentó en el
+    // comité, o nulo. Es una POSICIÓN que la cuenta ocupa, no un rol que lleva — el
+    // `CHECK` de abajo la reserva para `hs_coordinator`, porque un `jhsc_member` ya
+    // está en el comité por su rol y ninguno de los otros tres puede estarlo.
+    jhscSeatGrantedAt: timestamp('jhsc_seat_granted_at', { withTimezone: true }),
+
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 
     deactivatedAt: timestamp('deactivated_at', { withTimezone: true }),
   },
   (table) => [
     check('app_user_role_check', sql`${table.role} IN ('hs_coordinator', 'jhsc_member', 'supervisor', 'management', 'external_auditor')`),
+
+    check('app_user_jhsc_seat_check', sql`${table.jhscSeatGrantedAt} IS NULL OR ${table.role} = 'hs_coordinator'`),
   ],
 );
 

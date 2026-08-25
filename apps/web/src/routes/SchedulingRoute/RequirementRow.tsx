@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import { useState } from 'react';
 import {
   PERIOD_MONTHS_LABELS,
@@ -45,7 +46,11 @@ export function RequirementRow({
 
   return (
     <tr className="requirement-row">
-      <th scope="row" data-label="Requirement"><strong>{rule.template_name}</strong></th>
+      <th scope="row" data-label="Requirement">
+        <Link className="requirement-name" to="/scheduling/$scheduleId" params={{ scheduleId: rule.id }}>
+          {rule.template_name}
+        </Link>
+      </th>
       <td data-label="Frequency" className="requirement-row__cadence">{PERIOD_MONTHS_LABELS[rule.frequency_months]}</td>
       <td data-label="Default inspector">{rule.default_inspector_name ?? 'None'}</td>
       <td data-label="Status"><span className={!archived && active ? 'status-pill status-pill--open' : 'status-pill status-pill--cancelled'}>{status}</span></td>

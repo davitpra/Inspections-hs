@@ -21,6 +21,7 @@ import {
   accountNotFound,
   accountPersonNotFound,
   accountRoleNotRemovable,
+  accountRoleWithoutJhscSeat,
 } from './account.errors';
 import { revokeCredentials } from './credential.service';
 import { InvitationService, revokePending } from './invitation.service';
@@ -103,6 +104,10 @@ export class AccountService {
         active: true,
         can_sign_in: false,
         email: request.email,
+        // Un alta nunca sienta a nadie en el comité, y una cuenta que revive vuelve sin
+        // asiento: `revive()` no lo restituye porque quitar el acceso lo dejó donde estaba
+        // y el rol que revive es `jhsc_member`, que no puede llevarlo.
+        jhsc_seat: false,
       };
 
       if (!request.invite) return { account };
@@ -142,13 +147,19 @@ export class AccountService {
       active: row.active,
       can_sign_in: row.can_sign_in,
       email: row.email,
+      jhsc_seat: row.jhsc_seat,
     };
   }
 
   /**
    * `PATCH /accounts/:id` — administrar el ACCESO de una cuenta que ya tiene su rol.
    * Tres actos que comparten transacción y guardas: reemitir el link corrigiendo el correo
-   * (design D5) y quitar el acceso (`remove-jhsc-access-from-roster`).
+   * (design D5), quitar el acceso (`remove-jhsc-access-from-roster`) y sentar a una cuenta
+   * de coordinador en el JHSC o levantarla (`coordinator-jhsc-seat`).
+   *
+   * **El asiento va PRIMERO junto con la baja, antes de la guarda de `can_sign_in`**: los
+   * dos actúan sobre cuentas que entran todos los días, que es justo lo que aquella guarda
+   * niega para el correo y el link.
    *
    * **Por acá NO se devuelve el acceso.** Volver a darle acceso a alguien es invitarlo, y
    * eso es `POST /accounts`, que revive la cuenta que la persona ya tenía. Un
@@ -178,6 +189,8 @@ export class AccountService {
 
       if (request.deactivated) return withdraw(client, existing);
 
+      if (request.jhsc_seat !== undefined) return seat(client, existing, request.jhsc_seat);
+
       if (request.email !== undefined || request.invite) {
         if (existing.can_sign_in) throw accountAlreadyActive();
       }
@@ -195,6 +208,7 @@ export class AccountService {
         role: existing.role as CreateAccountResponse['account']['role'],
         active: existing.active,
         can_sign_in: existing.can_sign_in,
+        jhsc_seat: existing.jhsc_seat,
         // El email que la cuenta tiene DESPUÉS de este PATCH: `existing` se leyó antes
         // del UPDATE de arriba, así que devolverlo tal cual reportaría el viejo.
         email: request.email ?? existing.email,
@@ -273,9 +287,72 @@ async function withdraw(
         active: false,
         can_sign_in: false,
         email: existing.email,
+        // Literal y no `existing.jhsc_seat`: acá el rol es `jhsc_member` —lo acaba de
+        // comprobar la guarda de arriba— y el `CHECK` de 0035 le prohíbe llevar asiento.
+        jhsc_seat: false,
       },
     },
     withdrawn: true,
+  };
+}
+
+/**
+ * Sentar a una cuenta de coordinador en el JHSC, o levantarla
+ * (`coordinator-jhsc-seat`, design D4/D5).
+ *
+ * **UN acto reversible sobre UNA columna, en los dos sentidos**, y por eso es una sola
+ * función con un booleano y no dos como `withdraw`/`revive`. La asimetría de aquellas es
+ * real —devolver el acceso es invitar de nuevo, con su alcance y su link—, y acá no la
+ * hay: la coordinadora se sienta y se levanta del mismo comité.
+ *
+ * **NO revoca sesiones ni credenciales**, al revés que `withdraw`, y esa diferencia es el
+ * punto entero del asiento: no da ni quita acceso. Revocar la sesión al sentarse echaría a
+ * la coordinadora de la pantalla desde la que apretó el botón.
+ *
+ * **NO reasigna nada al levantarse.** Las inspecciones ya asignadas conservan su
+ * `inspector_id` y siguen en los pendientes de esa cuenta: el asiento gobierna lo que se
+ * ofrece y lo que se acepta de acá en más, no lo que ya se decidió (design D7).
+ *
+ * `CASE WHEN ... THEN now() ELSE NULL END` en una sola escritura: el UPDATE no corre si el
+ * asiento ya está como se pide, y así `jhsc_seat_granted_at` conserva el momento en que la
+ * cuenta se sentó de verdad, en vez de correrse con cada clic repetido.
+ */
+async function seat(
+  client: PoolClient,
+  existing: {
+    id: string;
+    role: string;
+    active: boolean;
+    can_sign_in: boolean;
+    email: string;
+    jhsc_seat: boolean;
+  },
+  granted: boolean,
+): Promise<{ response: CreateAccountResponse; withdrawn: boolean }> {
+  if (existing.role !== 'hs_coordinator') throw accountRoleWithoutJhscSeat(existing.role);
+  if (!existing.active) throw accountAlreadyInactive();
+
+  if (existing.jhsc_seat !== granted) {
+    await client.query(
+      `UPDATE app_user
+          SET jhsc_seat_granted_at = CASE WHEN $2 THEN now() ELSE NULL END
+        WHERE id = $1`,
+      [existing.id, granted],
+    );
+  }
+
+  return {
+    response: {
+      account: {
+        id: existing.id,
+        role: existing.role as CreateAccountResponse['account']['role'],
+        active: existing.active,
+        can_sign_in: existing.can_sign_in,
+        email: existing.email,
+        jhsc_seat: granted,
+      },
+    },
+    withdrawn: false,
   };
 }
 

@@ -153,6 +153,7 @@ describe('accountSchema', () => {
       records_to: null,
       deactivated_at: null,
       active: true,
+      jhsc_seat: false,
       scope: [{ site_id: SITE_ID, granted_at: '2026-08-07T12:00:00Z', revoked_at: null }],
     });
 
@@ -252,6 +253,7 @@ describe('personWithAccountSchema', () => {
         role: 'jhsc_member',
         active: true,
         can_sign_in: false,
+        jhsc_seat: false,
         email: 'ada.reid@example.com',
       },
     });
@@ -265,6 +267,7 @@ describe('personWithAccountSchema', () => {
       role: 'jhsc_member',
       active: true,
       can_sign_in: false,
+      jhsc_seat: false,
     });
 
     expect(result.success).toBe(false);
@@ -276,6 +279,7 @@ describe('personWithAccountSchema', () => {
       role: 'jhsc_member',
       active: true,
       can_sign_in: false,
+      jhsc_seat: false,
       email: 'ada.reid@example.com',
       scope: [],
     });
@@ -325,6 +329,7 @@ describe('createAccountResponseSchema', () => {
         role: 'jhsc_member',
         active: true,
         can_sign_in: false,
+        jhsc_seat: false,
         email: 'ada.reid@example.com',
       },
     });
@@ -339,6 +344,7 @@ describe('createAccountResponseSchema', () => {
         role: 'jhsc_member',
         active: true,
         can_sign_in: false,
+        jhsc_seat: false,
         email: 'ada.reid@example.com',
       },
       invitation: { token: 'a-one-time-token', expiresAt: '2026-08-17T12:00:00Z' },
@@ -424,6 +430,7 @@ describe('accountDetailSchema — la lectura de una cuenta (reissue-invitation-l
       role: 'jhsc_member',
       active: true,
       can_sign_in: false,
+      jhsc_seat: false,
       email: 'ada.reid@example.com',
     });
 
@@ -436,6 +443,7 @@ describe('accountDetailSchema — la lectura de una cuenta (reissue-invitation-l
       role: 'jhsc_member',
       active: true,
       can_sign_in: false,
+      jhsc_seat: false,
       email: 'ada.reid@example.com',
       scope: [],
     });
@@ -501,5 +509,30 @@ describe('updateAccountRequestSchema — el pedido de PATCH /accounts/:id (desig
     });
 
     expect(result.success).toBe(false);
+  });
+
+  /**
+   * El asiento en el JHSC va en los DOS sentidos, y ahí está la diferencia con
+   * `deactivated`: sentarse y levantarse son el mismo acto reversible sobre la misma
+   * columna, no dos intenciones con rutas distintas.
+   */
+  it('acepta sentarse en el JHSC, solo', () => {
+    expect(updateAccountRequestSchema.safeParse({ jhsc_seat: true }).success).toBe(true);
+  });
+
+  it('acepta levantarse del JHSC, solo', () => {
+    expect(updateAccountRequestSchema.safeParse({ jhsc_seat: false }).success).toBe(true);
+  });
+
+  it('rechaza el asiento combinado con la baja, el correo o el link', () => {
+    for (const other of [
+      { deactivated: true as const },
+      { email: 'ada.reid@example.com' },
+      { invite: true },
+    ]) {
+      const result = updateAccountRequestSchema.safeParse({ jhsc_seat: true, ...other });
+
+      expect(result.success).toBe(false);
+    }
   });
 });

@@ -114,6 +114,14 @@ export async function reactivateTemplate(templateId: string): Promise<void> {
   await send('POST', `/templates/${templateId}/reactivate`, {}, () => undefined);
 }
 
+export async function archiveTemplate(templateId: string): Promise<void> {
+  await send('POST', `/templates/${templateId}/archive`, {}, () => undefined);
+}
+
+export async function restoreTemplate(templateId: string): Promise<void> {
+  await send('POST', `/templates/${templateId}/restore`, {}, () => undefined);
+}
+
 /** La lectura de plantillas publicadas también es online, como el resto de este archivo. */
 export async function getPublishedTemplateVersion(id: string): Promise<PublishedTemplateVersion> {
   return get(`/templates/versions/${id}`, (value) => publishedTemplateVersionSchema.parse(value));

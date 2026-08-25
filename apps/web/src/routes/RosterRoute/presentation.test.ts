@@ -8,6 +8,9 @@ import {
   canRemoveJhscAccess,
   emailCellLabel,
   inviteButtonLabel,
+  jhscSeatAction,
+  jhscSeatButtonLabel,
+  jhscSeatButtonText,
   matchesSearch,
   personLabel,
   personName,
@@ -41,14 +44,22 @@ function person(overrides: Partial<Person> = {}): Person {
  * El email lo pone el helper y no cada caso: de las reglas de esta pantalla, la única que
  * mira esa columna es `emailCellLabel`. Repetirlo en las treinta filas de abajo escondería
  * los pocos casos donde el correo es el asunto.
+ *
+ * `jhsc_seat` va por el mismo camino, con default en `false`: es el estado de todas las
+ * cuentas menos las de los casos que hablan del asiento, y ponerlo en cada fila diría que
+ * importa donde no importa.
  */
 function withAccount(
   overrides: Partial<Person> = {},
-  account: Omit<NonNullable<PersonWithAccount['account']>, 'email'> | null = null,
+  account: Omit<NonNullable<PersonWithAccount['account']>, 'email' | 'jhsc_seat'> &
+    { jhsc_seat?: boolean } | null = null,
 ): PersonWithAccount {
   return {
     ...person(overrides),
-    account: account === null ? null : { ...account, email: EMAIL },
+    account:
+      account === null
+        ? null
+        : { ...account, email: EMAIL, jhsc_seat: account.jhsc_seat ?? false },
   };
 }
 
@@ -113,6 +124,7 @@ describe('accountRoleLabel', () => {
       active: true,
       can_sign_in: true,
       email: EMAIL,
+      jhsc_seat: false,
     });
 
     expect(label).toBe('JHSC member');
@@ -126,6 +138,7 @@ describe('accountRoleLabel', () => {
       active: true,
       can_sign_in: false,
       email: EMAIL,
+      jhsc_seat: false,
     });
 
     expect(label).toBe('JHSC member (invited)');
@@ -475,5 +488,105 @@ describe('rosterCounts', () => {
 
   it('un roster vacío cuenta cero y no rompe', () => {
     expect(rosterCounts([])).toEqual({ total: 0, withAccess: 0, invited: 0 });
+  });
+});
+
+describe('jhscSeatAction — el asiento en el comité (coordinator-jhsc-seat)', () => {
+  const coordinator = (jhsc_seat: boolean, active = true) =>
+    withAccount({}, { id: ACCOUNT_ID, role: 'hs_coordinator', active, can_sign_in: true, jhsc_seat });
+
+  it('ofrece sentarse a la coordinadora que no está en el comité', () => {
+    expect(jhscSeatAction(coordinator(false))).toBe('grant');
+  });
+
+  it('ofrece levantarse a la coordinadora que sí está', () => {
+    expect(jhscSeatAction(coordinator(true))).toBe('withdraw');
+  });
+
+  /**
+   * Es el único rol al que el motor le deja el asiento: un `jhsc_member` ya está en el
+   * comité por su rol, y a los otros tres §4 no los pone ahí. Ofrecer el botón sería
+   * ofrecer algo que el servidor niega.
+   */
+  it('no ofrece nada sobre ningún otro rol', () => {
+    for (const role of ['jhsc_member', 'supervisor', 'management', 'external_auditor'] as const) {
+      const row = withAccount({}, { id: ACCOUNT_ID, role, active: true, can_sign_in: true });
+
+      expect(jhscSeatAction(row)).toBeNull();
+    }
+  });
+
+  it('no ofrece nada sobre una cuenta a la que se le quitó el acceso', () => {
+    expect(jhscSeatAction(coordinator(false, false))).toBeNull();
+  });
+
+  it('no ofrece nada sobre una persona sin cuenta', () => {
+    expect(jhscSeatAction(withAccount())).toBeNull();
+  });
+
+  /**
+   * A diferencia de reemitir el link, el asiento NO pregunta por `can_sign_in`: una
+   * coordinadora invitada que todavía no puso su contraseña puede quedar sentada desde ya.
+   */
+  it('ofrece el asiento aunque la cuenta todavía no pueda entrar', () => {
+    const row = withAccount(
+      {},
+      { id: ACCOUNT_ID, role: 'hs_coordinator', active: true, can_sign_in: false, jhsc_seat: false },
+    );
+
+    expect(jhscSeatAction(row)).toBe('grant');
+  });
+});
+
+describe('jhscSeatButtonText / jhscSeatButtonLabel', () => {
+  it('el texto corto dice la dirección', () => {
+    expect(jhscSeatButtonText('grant')).toBe('Join JHSC');
+    expect(jhscSeatButtonText('withdraw')).toBe('Leave JHSC');
+  });
+
+  it('el nombre accesible identifica a la persona, como el de invitar', () => {
+    const row = withAccount();
+
+    expect(jhscSeatButtonLabel(row, 'grant')).toBe('Seat Reid, Ada (10472) on the JHSC');
+    expect(jhscSeatButtonLabel(row, 'withdraw')).toBe(
+      'Remove Reid, Ada (10472) from the JHSC seat',
+    );
+  });
+});
+
+describe('accountRoleLabel — el asiento en la celda Role', () => {
+  const coordinator = (jhsc_seat: boolean, can_sign_in = true) => ({
+    id: ACCOUNT_ID,
+    role: 'hs_coordinator' as const,
+    active: true,
+    can_sign_in,
+    email: EMAIL,
+    jhsc_seat,
+  });
+
+  it('nombra el asiento pegado al rol: la columna se lee hacia abajo', () => {
+    expect(accountRoleLabel(coordinator(true))).toBe('H&S coordinator · JHSC seat');
+  });
+
+  it('la coordinadora sin asiento se lee como siempre', () => {
+    expect(accountRoleLabel(coordinator(false))).toBe('H&S coordinator');
+  });
+
+  it('el asiento no se come el "(invited)"', () => {
+    expect(accountRoleLabel(coordinator(true, false))).toBe('H&S coordinator · JHSC seat (invited)');
+  });
+
+  // `jhsc_member` ya dice que está en el comité; un sufijo repetiría lo mismo.
+  it('no le agrega nada a un JHSC member', () => {
+    const label = accountRoleLabel({
+      id: ACCOUNT_ID,
+      role: 'jhsc_member',
+      active: true,
+      can_sign_in: true,
+      email: EMAIL,
+      jhsc_seat: false,
+    });
+
+    expect(label).toBe(ROLE_LABELS.jhsc_member);
   });
 });

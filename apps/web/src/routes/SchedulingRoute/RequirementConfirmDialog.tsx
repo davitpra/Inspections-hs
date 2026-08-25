@@ -16,9 +16,9 @@ import { CrossIcon } from '../../components/icons';
  *
  * **Modal, y colgado de la sección y no de la fila.** Antes esto era un panel posicionado en
  * absoluto dentro del `<td>` de acciones: en una tabla ancha la confirmación se cortaba contra el
- * borde. Un `<dialog>` con `showModal()` lo centra sobre el scrim, y vive fuera de la tabla por lo
- * mismo que `CancelPeriodDialog` vive fuera de `PeriodControls`: al aplicar el cambio la
- * invalidación redibuja la fila, y el diálogo tiene que colgar de un nodo que sobreviva.
+ * borde. Un `<dialog>` con `showModal()` lo centra sobre el scrim, y vive fuera de la tabla: al
+ * aplicar el cambio la invalidación redibuja la fila, y el diálogo tiene que colgar de un nodo
+ * que sobreviva a la mutación.
  *
  * SIN ACTUALIZACIÓN OPTIMISTA: si el servidor rechaza, el requisito sigue viéndose como está y el
  * error se lee acá adentro.

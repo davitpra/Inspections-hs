@@ -18,6 +18,8 @@ const discardTemplateDraft = vi.hoisted(() => vi.fn());
 const reviseTemplate = vi.hoisted(() => vi.fn());
 const deactivateTemplate = vi.hoisted(() => vi.fn());
 const reactivateTemplate = vi.hoisted(() => vi.fn());
+const archiveTemplate = vi.hoisted(() => vi.fn());
+const restoreTemplate = vi.hoisted(() => vi.fn());
 const useAppSession = vi.hoisted(() => vi.fn());
 const navigate = vi.hoisted(() => vi.fn());
 
@@ -29,6 +31,8 @@ vi.mock('../../api/templates', () => ({
   reviseTemplate,
   deactivateTemplate,
   reactivateTemplate,
+  archiveTemplate,
+  restoreTemplate,
 }));
 
 vi.mock('../../app/session-context', () => ({ useAppSession }));
@@ -101,6 +105,7 @@ function published(
     latest_version_id: '77777777-7777-4777-8777-777777777777',
     latest_published_at: '2026-08-22 10:00:00+00',
     deactivated_at: null,
+    archived_at: null,
     ...overrides,
   };
 }
@@ -134,6 +139,8 @@ beforeEach(() => {
   });
   deactivateTemplate.mockReset().mockResolvedValue(undefined);
   reactivateTemplate.mockReset().mockResolvedValue(undefined);
+  archiveTemplate.mockReset().mockResolvedValue(undefined);
+  restoreTemplate.mockReset().mockResolvedValue(undefined);
   navigate.mockReset();
 });
 
@@ -252,6 +259,26 @@ describe('las plantillas publicadas', () => {
     expect(within(publishedBlock!).queryByText('Monthly electrical inspection')).toBeNull();
   });
 
+  it('oculta una archivada hasta pedir verlas', async () => {
+    const archived = published({
+      id: '88888888-8888-4888-8888-888888888888',
+      name: 'Archived electrical inspection',
+      deactivated_at: '2026-08-23T10:00:00.000Z',
+      archived_at: '2026-08-24T10:00:00.000Z',
+    });
+    listPublishedTemplates.mockResolvedValue([published(), archived]);
+
+    renderRoute();
+
+    await screen.findByText('Published electrical inspection');
+    expect(screen.queryByText('Archived electrical inspection')).toBeNull();
+
+    fireEvent.click(await screen.findByLabelText('Show archived'));
+
+    expect(await screen.findByText('Archived electrical inspection')).toBeTruthy();
+    expect(screen.getByText('Archived')).toBeTruthy();
+  });
+
   it('abre una revisión editable sin modificar la versión publicada', async () => {
     listPublishedTemplates.mockResolvedValue([published()]);
     renderRoute();
@@ -295,6 +322,27 @@ describe('las plantillas publicadas', () => {
     await waitFor(() => expect(deactivateTemplate).toHaveBeenCalledWith(published().id));
   });
 
+  it('archiva una retirada después de confirmar', async () => {
+    const retired = published({ deactivated_at: '2026-08-23T10:00:00.000Z' });
+    listPublishedTemplates.mockResolvedValue([retired]);
+    renderRoute();
+
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'More actions for Published electrical inspection',
+      }),
+    );
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Archive template' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Archive template' });
+    expect(within(dialog).getByText(/published versions, requirements and inspections/)).toBeTruthy();
+    expect(archiveTemplate).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Archive template' }));
+
+    await waitFor(() => expect(archiveTemplate).toHaveBeenCalledWith(retired.id));
+  });
+
   it('deja salir del diálogo sin retirar nada', async () => {
     listPublishedTemplates.mockResolvedValue([published()]);
     renderRoute();
@@ -336,6 +384,29 @@ describe('las plantillas publicadas', () => {
 
     await waitFor(() => expect(reactivateTemplate).toHaveBeenCalledWith(published().id));
     expect(screen.queryByRole('dialog', { name: 'Deactivate template' })).toBeNull();
+  });
+
+  it('restaura una archivada como única acción', async () => {
+    listPublishedTemplates.mockResolvedValue([
+      published({
+        deactivated_at: '2026-08-23T10:00:00.000Z',
+        archived_at: '2026-08-24T10:00:00.000Z',
+      }),
+    ]);
+    renderRoute();
+
+    fireEvent.click(await screen.findByLabelText('Show archived'));
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'More actions for Published electrical inspection',
+      }),
+    );
+
+    expect(screen.getByRole('menuitem', { name: 'Restore' })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: 'Reactivate template' })).toBeNull();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Restore' }));
+
+    await waitFor(() => expect(restoreTemplate).toHaveBeenCalledWith(published().id));
   });
 
   it('enlaza la publicada a la versión que la fila nombra', async () => {
@@ -405,6 +476,25 @@ describe('los conteos del encabezado', () => {
 
     expect(count('Drafts')).toBe('2');
     expect(count('Published')).toBe('1');
+  });
+
+  it('no cuenta las archivadas entre las publicadas visibles', async () => {
+    listPublishedTemplates.mockResolvedValue([
+      published(),
+      published({
+        id: '88888888-8888-4888-8888-888888888888',
+        name: 'Archived inspection',
+        deactivated_at: '2026-08-23T10:00:00.000Z',
+        archived_at: '2026-08-24T10:00:00.000Z',
+      }),
+    ]);
+
+    renderRoute();
+
+    await screen.findByText('Published electrical inspection');
+
+    expect(count('Published')).toBe('1');
+    expect(screen.getByRole('heading', { name: 'Published templates' }).textContent).toContain('(1)');
   });
 
   /** "0 drafts" mientras la consulta falla es una afirmación falsa sobre el trabajo de alguien. */

@@ -44,7 +44,10 @@ export type TemplateVersionErrorCode =
   | 'template_version_not_found'
   | 'template_not_found'
   | 'template_already_deactivated'
-  | 'template_not_deactivated';
+  | 'template_not_deactivated'
+  | 'template_already_archived'
+  | 'template_not_archived'
+  | 'template_archived';
 
 export class TemplateVersionException extends HttpException {
   constructor(readonly code: TemplateVersionErrorCode, message: string, status: HttpStatus) {
@@ -94,6 +97,36 @@ export const templateNotDeactivated = (): TemplateVersionException =>
   new TemplateVersionException(
     'template_not_deactivated',
     'That template is already active',
+    HttpStatus.CONFLICT,
+  );
+
+/** La plantilla activa no puede archivarse: primero hay que retirarla. */
+export const templateNotDeactivatedForArchive = (): TemplateVersionException =>
+  new TemplateVersionException(
+    'template_not_deactivated',
+    'That template must be deactivated before it can be archived',
+    HttpStatus.CONFLICT,
+  );
+
+export const templateAlreadyArchived = (): TemplateVersionException =>
+  new TemplateVersionException(
+    'template_already_archived',
+    'That template is already archived',
+    HttpStatus.CONFLICT,
+  );
+
+export const templateNotArchived = (): TemplateVersionException =>
+  new TemplateVersionException(
+    'template_not_archived',
+    'That template is not archived',
+    HttpStatus.CONFLICT,
+  );
+
+/** Reactivar exige restaurar antes una plantilla archivada. */
+export const templateArchived = (): TemplateVersionException =>
+  new TemplateVersionException(
+    'template_archived',
+    'Restore the template before reactivating it',
     HttpStatus.CONFLICT,
   );
 

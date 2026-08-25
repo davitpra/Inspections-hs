@@ -2,7 +2,7 @@ import type { PublishedTemplateSummary } from '@hs/contracts';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 
-import { deactivateTemplate } from '../../api/templates';
+import { archiveTemplate, deactivateTemplate } from '../../api/templates';
 import { queryKeys } from '../../api/query-keys';
 import { CrossIcon } from '../../components/icons';
 
@@ -23,9 +23,11 @@ import { CrossIcon } from '../../components/icons';
 export function DeactivateTemplateDialog({
   template,
   onClose,
+  kind = 'deactivate',
 }: {
   template: PublishedTemplateSummary;
   onClose: () => void;
+  kind?: 'deactivate' | 'archive';
 }): React.JSX.Element {
   const queryClient = useQueryClient();
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -37,7 +39,7 @@ export function DeactivateTemplateDialog({
   }, []);
 
   const deactivate = useMutation({
-    mutationFn: () => deactivateTemplate(template.id),
+    mutationFn: () => kind === 'deactivate' ? deactivateTemplate(template.id) : archiveTemplate(template.id),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.publishedTemplates() }),
@@ -52,17 +54,18 @@ export function DeactivateTemplateDialog({
     <dialog
       ref={dialogRef}
       className="modal"
-      aria-label="Deactivate template"
+      aria-label={kind === 'deactivate' ? 'Deactivate template' : 'Archive template'}
       onClose={() => { onClose(); returnFocusRef.current?.focus(); }}
     >
       <div className="modal__head">
         <span className="modal__icon"><CrossIcon size={20} /></span>
-        <h2>Deactivate {template.name}?</h2>
+         <h2>{kind === 'deactivate' ? 'Deactivate' : 'Archive'} {template.name}?</h2>
       </div>
 
       <p className="modal__text">
-        It stops being offered when scheduling inspections. Requirements and inspections
-        already created with it stay exactly as they are.
+         {kind === 'deactivate'
+           ? 'It stops being offered when scheduling inspections. Requirements and inspections already created with it stay exactly as they are.'
+           : 'It is hidden from this administration table. Its published versions, requirements and inspections already created with it stay exactly as they are.'}
       </p>
 
       {deactivate.isError ? (
@@ -76,9 +79,13 @@ export function DeactivateTemplateDialog({
           disabled={deactivate.isPending}
           onClick={() => deactivate.mutate()}
         >
-          {deactivate.isPending ? 'Deactivating…' : 'Deactivate template'}
+           {deactivate.isPending
+             ? kind === 'deactivate' ? 'Deactivating…' : 'Archiving…'
+             : kind === 'deactivate' ? 'Deactivate template' : 'Archive template'}
         </button>
-        <button type="button" onClick={() => dialogRef.current?.close()}>Keep active</button>
+         <button type="button" onClick={() => dialogRef.current?.close()}>
+           {kind === 'deactivate' ? 'Keep active' : 'Keep template'}
+         </button>
       </div>
     </dialog>
   );

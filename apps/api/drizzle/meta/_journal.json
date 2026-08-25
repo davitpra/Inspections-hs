@@ -232,6 +232,20 @@
       "when": 1754524800032,
       "tag": "0033_deactivate_template",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1754524800033,
+      "tag": "0034_archive_deactivated_templates",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1754524800034,
+      "tag": "0035_coordinator_jhsc_seat",
+      "breakpoints": true
     }
   ]
 }

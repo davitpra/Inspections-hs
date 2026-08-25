@@ -73,6 +73,7 @@ export type TemplateOption = z.infer<typeof templateOptionSchema>;
  */
 export const publishedTemplateSummarySchema = templateOptionSchema.extend({
   deactivated_at: z.iso.datetime({ offset: true }).nullable(),
+  archived_at: z.iso.datetime({ offset: true }).nullable(),
 });
 
 export type PublishedTemplateSummary = z.infer<typeof publishedTemplateSummarySchema>;
@@ -86,6 +87,13 @@ export type DeactivateTemplate = z.infer<typeof deactivateTemplateSchema>;
 export const reactivateTemplateSchema = z.strictObject({});
 
 export type ReactivateTemplate = z.infer<typeof reactivateTemplateSchema>;
+
+/** Archivar y restaurar tampoco aceptan fechas fabricadas por el cliente. */
+export const archiveTemplateSchema = z.strictObject({});
+export type ArchiveTemplate = z.infer<typeof archiveTemplateSchema>;
+
+export const restoreTemplateSchema = z.strictObject({});
+export type RestoreTemplate = z.infer<typeof restoreTemplateSchema>;
 
 /** Identidad de la versión creada al publicar un borrador. */
 export const publishedTemplateSchema = z.strictObject({

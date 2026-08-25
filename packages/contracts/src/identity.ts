@@ -154,6 +154,21 @@ export const personAccountSchema = z.strictObject({
   active: z.boolean(),
   can_sign_in: z.boolean(),
   email: emailSchema,
+
+  /**
+   * Si esta cuenta se sienta en el JHSC (`coordinator-jhsc-seat`, design D6).
+   *
+   * **Booleano derivado, no la fecha en que se sentó.** La columna del motor es
+   * `app_user.jhsc_seat_granted_at`, pero la consola pregunta «¿está en el comité?», no
+   * «¿desde cuándo?»: el momento se lee en la cadena de auditoría, que es donde vive un
+   * registro que se defiende ante un regulador. De paso, doscientas filas no cargan una
+   * fecha que ninguna pantalla muestra.
+   *
+   * Solo `hs_coordinator` puede tenerlo en `true` —el `CHECK` de 0035 lo fuerza—, y para
+   * `jhsc_member` es SIEMPRE `false`: ese rol ya ES el comité, y un segundo dato diciendo
+   * lo mismo obligaría a cada lectura a decidir cuál de los dos gana.
+   */
+  jhsc_seat: z.boolean(),
 });
 
 export type PersonAccount = z.infer<typeof personAccountSchema>;
@@ -193,6 +208,7 @@ export const accountSchema = z.strictObject({
   records_to: z.iso.date().nullable(),
   deactivated_at: z.iso.datetime({ offset: true }).nullable(),
   active: z.boolean(),
+  jhsc_seat: z.boolean(),
   scope: z.array(siteScopeSchema),
 });
 
@@ -320,11 +336,13 @@ export type AccountDetail = z.infer<typeof accountDetailSchema>;
  * exponer `role`: por acá no se cambia de rol, se administra el ACCESO de una cuenta que
  * ya tiene el suyo.
  *
- * Dos actos, y el contrato dice que no se piden juntos:
+ * Tres actos, y el contrato dice que no se piden juntos:
  *
  * - corregir el `email` y reemitir el link (`invite`), que van juntos o sueltos;
  * - `deactivated: true` — quitar el acceso, que es lo que cancela una invitación pendiente
  *   y lo que saca del JHSC a quien ya entra: la misma escritura para los dos.
+ * - `jhsc_seat` — sentar a una cuenta de coordinador en el comité, o levantarla
+ *   (`coordinator-jhsc-seat`). No es acceso: la cuenta entra igual antes y después.
  *
  * **`z.literal(true)` y no un booleano**, y eso es lo que el tipo dice de más: por esta ruta
  * una cuenta solo se da de baja. Devolverle el acceso a alguien no es un `deactivated:
@@ -341,6 +359,23 @@ export const updateAccountRequestSchema = z
     email: emailSchema.optional(),
     invite: z.boolean().optional(),
     deactivated: z.literal(true).optional(),
+
+    /**
+     * Sentarse en el JHSC, o levantarse (`coordinator-jhsc-seat`, design D4).
+     *
+     * **Booleano en los dos sentidos, al revés que `deactivated`, y la asimetría entre los
+     * dos es la decisión.** Aquel es `z.literal(true)` porque devolver el acceso NO es su
+     * inverso: es invitar de nuevo, y eso es `POST /accounts`, que revive la cuenta que la
+     * persona ya tenía. Un `false` habría abierto un segundo camino a una intención que ya
+     * tenía el suyo. Acá no hay tal cosa — otorgar y quitar el asiento son el mismo acto
+     * reversible sobre la misma columna, y partirlos inventaría una asimetría que el
+     * dominio no tiene.
+     *
+     * El servidor lo acepta solo sobre una cuenta ACTIVA de `hs_coordinator`: para
+     * `jhsc_member` el asiento es el rol, y ningún otro rol puede ocuparlo. Eso no se
+     * valida acá porque depende de la fila — es el `CHECK` de 0035, y un 409 legible antes.
+     */
+    jhsc_seat: z.boolean().optional(),
   })
   .refine(
     (value) => Object.values(value).some((entry) => entry !== undefined),
@@ -349,6 +384,12 @@ export const updateAccountRequestSchema = z
   .refine(
     (value) => !(value.deactivated === true && (value.email !== undefined || value.invite)),
     'dar de baja una cuenta no se combina con corregir su correo ni con emitir un link',
+  )
+  .refine(
+    (value) =>
+      value.jhsc_seat === undefined ||
+      (value.deactivated === undefined && value.email === undefined && !value.invite),
+    'el asiento en el JHSC es un acto solo: no se combina con la baja, el correo ni el link',
   );
 
 export type UpdateAccountRequest = z.infer<typeof updateAccountRequestSchema>;

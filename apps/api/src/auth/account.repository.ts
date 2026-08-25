@@ -53,6 +53,7 @@ export interface AccountDetailRow {
   active: boolean;
   can_sign_in: boolean;
   email: string;
+  jhsc_seat: boolean;
 }
 
 /**
@@ -70,7 +71,8 @@ export async function findAccountDetail(
     `SELECT u.id, u.role, u.email, hs_account_is_active(u) AS active,
             EXISTS (
               SELECT 1 FROM app_credential c WHERE c.user_id = u.id AND c.revoked_at IS NULL
-            ) AS can_sign_in
+            ) AS can_sign_in,
+            u.jhsc_seat_granted_at IS NOT NULL AS jhsc_seat
        FROM app_user u
        JOIN person p ON p.id = u.person_id
       WHERE u.id = $1`,
