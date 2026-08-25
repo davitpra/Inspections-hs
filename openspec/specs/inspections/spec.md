@@ -497,6 +497,142 @@ period that exists.
 - **THEN** the May entry carries the cancelled inspection and its cancellation reason
 - **AND** May is not identified as not opened
 
+### Requirement: An inspection requirement exposes a focused annual plan
+
+The system SHALL let a reader open one inspection requirement on a surface of its own,
+addressed by the `inspection_schedule` identifier, and SHALL present there one row per
+period that requirement owes in a chosen calendar year, ordered by `period_start`. A month
+in which the rule does not begin a period SHALL NOT produce a row.
+
+Each row SHALL name its period and its operational status in the first column and SHALL
+present the inspector of that period in the second. The surface SHALL name the requirement,
+its site and the cadence produced by its `frequency_months` and `anchor_month`, and SHALL
+state that the cadence cannot be changed there.
+
+The projection SHALL be the same one the annual schedule uses: a period the rule does not
+owe SHALL NOT be shown, and a scheduled inspection of that requirement that falls in the
+chosen year SHALL be shown even when no active rule owes it. The reader SHALL be able to
+move to another calendar year in both directions, with the same lower bound the annual
+schedule applies. An identifier that matches no requirement visible to the account SHALL be
+reported as not found and SHALL lead back to the scheduling surface.
+
+#### Scenario: A quarterly requirement owes four rows and no others
+
+- **GIVEN** an active requirement with `frequency_months` `3` and `anchor_month` `1`
+- **WHEN** the coordinator opens its annual plan for `2026`
+- **THEN** four rows are shown, for the periods beginning in January, April, July and October
+- **AND** no row is shown for February, March, May, June, August, September, November or December
+
+#### Scenario: An annual requirement owes one row and a monthly one owes twelve
+
+- **GIVEN** an active requirement with `frequency_months` `12` and `anchor_month` `1`
+- **WHEN** the coordinator opens its annual plan for `2026`
+- **THEN** one row is shown, labelled for the whole year
+- **AND** the annual plan of a requirement with `frequency_months` `1` shows twelve rows for the same year
+
+#### Scenario: The plan states the cadence it cannot change
+
+- **GIVEN** a requirement with `frequency_months` `3` and `anchor_month` `2`
+- **WHEN** the coordinator opens its annual plan
+- **THEN** the surface describes periods beginning in February, May, August and November
+- **AND** it states that `frequency_months` and `anchor_month` cannot be changed there
+
+#### Scenario: A period before the requirement existed is not planned
+
+- **GIVEN** a monthly requirement whose `created_at` is in `2026-03`
+- **WHEN** the coordinator opens its annual plan for `2026`
+- **THEN** no row is shown for January or February
+- **AND** a row is shown for March
+
+#### Scenario: A period the requirement no longer owes is still shown
+
+- **GIVEN** a scheduled inspection of that requirement for `2026-10-01` whose rule was deactivated in `2026-09`
+- **WHEN** the coordinator opens its annual plan for `2026`
+- **THEN** the October period is shown with its scheduled inspection
+
+#### Scenario: Moving to another year keeps the requirement
+
+- **GIVEN** the annual plan of a quarterly requirement for `2026`
+- **WHEN** the coordinator moves to `2027`
+- **THEN** the rows are the periods that same requirement owes in `2027`
+- **AND** the requirement, its site and its cadence remain named
+
+#### Scenario: An unknown requirement is reported as not found
+
+- **WHEN** an account opens an `inspection_schedule` identifier that is not visible to it
+- **THEN** the surface states that the requirement was not found
+- **AND** it offers a way back to the scheduling surface
+
+### Requirement: Each owed period of a requirement is planned on its own row
+
+The system SHALL offer an `hs_coordinator`, on each row of the annual plan, the operation
+valid for that period and no other.
+
+A period that has not been opened SHALL offer one action to open it, SHALL identify the
+published `template_version` that the action will freeze, and SHALL NOT offer an inspector
+until the period exists. An opened period whose status is `open` or `missed` SHALL offer the
+eligible inspectors of the site and SHALL NOT send an assignment until the coordinator
+confirms it. A completed period and a cancelled period SHALL be readable, carrying the
+inspector and the `cancellation_reason` they hold, and SHALL offer no assignment.
+
+Each row SHALL carry its own outcome. An operation SHALL be sent for one period at a time,
+its pending state SHALL be shown on that row, and a failure SHALL retain the persisted
+inspector and display the server's reason on that row alone, leaving the other rows
+unchanged. The plan SHALL NOT hold unsaved rows behind a single confirmation of the whole
+table.
+
+Accounts without scheduling administration permission SHALL read every row, its status and
+its inspector, without any of those controls.
+
+#### Scenario: Opening a period does not assign anybody
+
+- **GIVEN** a row for a period that has not been opened
+- **WHEN** the coordinator opens it
+- **THEN** the row's action identifies the published `template_version` it freezes
+- **AND** the period is created with no `inspector_id`
+- **AND** the row then offers the eligible inspectors
+
+#### Scenario: Selecting an inspector does not immediately assign it
+
+- **GIVEN** a row for an opened period and two eligible inspectors
+- **WHEN** the coordinator selects a different `inspector_id` without confirming
+- **THEN** no assignment request is sent
+- **AND** a separate confirmation action remains available on that row
+
+#### Scenario: A missed period can still be assigned
+
+- **GIVEN** a row for a period whose `period_end` has passed with no inspection
+- **WHEN** the coordinator opens the annual plan
+- **THEN** the row offers the eligible inspectors
+- **AND** it states that the period closed without an inspection and can still be submitted
+
+#### Scenario: A completed period is read, not planned
+
+- **GIVEN** a row for a period that carries a submitted inspection
+- **WHEN** the coordinator opens the annual plan
+- **THEN** the row shows the inspector who holds it and the completed status
+- **AND** the row offers no inspector selection
+
+#### Scenario: A cancelled period is read with its reason
+
+- **GIVEN** a row whose only scheduled inspection has been cancelled
+- **WHEN** the coordinator opens the annual plan
+- **THEN** the row shows the cancelled status and the `cancellation_reason`
+- **AND** the row offers no inspector selection
+
+#### Scenario: A rejected assignment affects one row only
+
+- **GIVEN** an annual plan whose rows carry different inspectors
+- **WHEN** an assignment is rejected by the server for one period
+- **THEN** that row displays the server's reason and keeps the persisted inspector
+- **AND** the other rows keep their inspectors and offer their operations unchanged
+
+#### Scenario: A reader cannot plan
+
+- **WHEN** an account whose role is `jhsc_member` opens the annual plan of a requirement
+- **THEN** every owed period, its status and its inspector are readable
+- **AND** no control to open a period or to assign an inspector is offered
+
 ### Requirement: The annual schedule exposes year-scoped operational summaries and filters
 
 The system SHALL summarize only the projected periods of the selected site and year. It SHALL
@@ -542,6 +678,11 @@ The surface SHALL present one current requirement per template. It SHALL let the
 periods, and reactivate a deactivated requirement. Accounts without scheduling administration
 permission SHALL see the requirements without any of those controls.
 
+Every listed requirement SHALL lead to its own annual plan, addressed by its
+`inspection_schedule` identifier. The navigation SHALL be available to every reader,
+including accounts without scheduling administration permission, and SHALL be offered for
+deactivated and archived requirements as well as active ones.
+
 #### Scenario: A requirement is created with a default inspector
 
 - **GIVEN** a published template with no active rule for the selected site
@@ -569,15 +710,23 @@ permission SHALL see the requirements without any of those controls.
 - **WHEN** an account whose role is `jhsc_member` views the scheduling surface
 - **THEN** the current requirements and their default inspectors are readable
 - **AND** no control to create, update, deactivate or reactivate a requirement is offered
+- **AND** each requirement still leads to its annual plan
+
+#### Scenario: A listed requirement leads to its annual plan
+
+- **GIVEN** the scheduling surface listing a current requirement
+- **WHEN** the reader follows that requirement
+- **THEN** the annual plan of that `inspection_schedule` identifier is presented
 
 ### Requirement: Period operations are exposed on demand from an annual entry
 
-The system SHALL let a reader select an owed-period entry to inspect its period label, template,
-status and inspector without placing a form in every annual entry. For an `hs_coordinator`, the
-focused period view SHALL expose the operations valid for that entry: opening an unopened period,
-confirming an inspector assignment, cancelling an eligible scheduled inspection with a reason, or
-scheduling a cancelled period again. Other roles SHALL receive the same readable detail without
-administrative controls.
+The system SHALL let a reader select an owed-period entry of the annual schedule to inspect its
+period label, template, status and inspector without placing a form in every entry of that
+schedule, which spans every requirement of the site across twelve months. For an
+`hs_coordinator`, the focused period view SHALL expose the operations valid for that entry: opening
+an unopened period, confirming an inspector assignment, cancelling an eligible scheduled inspection
+with a reason, or scheduling a cancelled period again. Other roles SHALL receive the same readable
+detail without administrative controls.
 
 Opening a period SHALL identify the currently published `template_version` that the operation will
 freeze. Changing an inspector selection SHALL NOT send an assignment until the coordinator
@@ -604,6 +753,13 @@ server's reason.
 - **WHEN** the coordinator selects its annual entry
 - **THEN** the focused view shows the cancellation reason
 - **AND** it offers scheduling the period again rather than clearing the cancellation
+
+#### Scenario: The annual entry keeps its form on demand
+
+- **GIVEN** an annual schedule spanning several requirements and twelve months
+- **WHEN** the coordinator views it
+- **THEN** no entry of that schedule carries an inspector form of its own
+- **AND** the operations of an entry remain reachable by selecting it
 
 ### Requirement: Supporting-data failures are not presented as empty scheduling choices
 
@@ -1577,40 +1733,94 @@ that cannot say when each was closed is not evidence of anything.
 - **THEN** the entry's `status` is `cancelled`
 - **AND** its `completed_at` is null
 
-### Requirement: The inspector's home names the assignment that comes next
+### Requirement: The inspector home lists every inspection still assigned to them
 
-The system SHALL present, on the screen an inspector opens the application to, the earliest
-assignment that is neither overdue nor the month in progress, identified by its month, its
-site, the inspector it is assigned to, and when it becomes available to start.
+The system SHALL use the inspector home as the surface that presents one row for every
+scheduled inspection assigned to the requesting account that is not cancelled and has no
+submission. The rows SHALL preserve the `period_end` ascending order received from the
+pending-inspections reading and the surface SHALL state how many rows it holds.
 
-When no such assignment exists the system SHALL present nothing in its place rather than an
-empty frame: most months only the period in progress is open, because periods are opened one
-at a time, and a permanently empty card would read as something failing to load.
+Each row SHALL name its period from `period_start` and `period_months`, its
+`template_name`, site, remaining or elapsed days against `period_end`, and its derived
+device status. The requirement name SHALL remain present when two rows share a period.
 
-The screen SHALL NOT present a calendar of the remaining months of the year. The assignment
-that matters now is presented on its own, and the months behind it are reached as each is
-resolved.
+#### Scenario: Two requirements in one period are visible on entry
 
-#### Scenario: A month scheduled ahead is named before it opens
+- **GIVEN** an inspector assigned two scheduled inspections with the same `period_start`
+  and different `template_name`
+- **WHEN** the inspector opens the application home
+- **THEN** both rows are shown in the order returned by the pending reading
+- **AND** the home states that it holds two rows
 
-- **GIVEN** an inspector whose current month is assigned
-- **AND** a further assignment for the following month at the same site
-- **WHEN** the inspector opens the home screen
-- **THEN** the next assignment is presented with that month, that site, the inspector's own
-  name, and the day it opens
+#### Scenario: Nothing pending has an explicit empty state
 
-#### Scenario: Nothing is scheduled beyond the current month
+- **GIVEN** the pending reading contains no scheduled inspection
+- **WHEN** the inspector opens the application home
+- **THEN** the inspector is told that nothing is scheduled
 
-- **GIVEN** an inspector with an assignment for the month in progress and no later one
-- **WHEN** the inspector opens the home screen
-- **THEN** no next assignment is presented
+### Requirement: A pending inspection is selected before capture
 
-#### Scenario: An overdue month is not offered as what comes next
+The system SHALL make each pending inspection selectable from the home and SHALL open the
+selected inspection at `/inspections/$id`. The detail SHALL resolve the assignment by that
+`id` and SHALL present only that assignment's preparation, progress, instructions, site,
+status, and action. It SHALL NOT substitute an overdue, current, or next assignment for the
+one selected by the inspector.
 
-- **GIVEN** an inspector with an overdue assignment and one scheduled for a later month
-- **WHEN** the inspector opens the home screen
-- **THEN** the overdue assignment is the one presented as the current obligation
-- **AND** the later month is the one presented as what comes next
+The detail SHALL offer the action derived for that inspection to start, resume, or open its
+capture. It SHALL provide a way back to the complete pending list. If the selected `id` is
+not in the requesting account's pending reading, the detail SHALL state that the inspection
+is unavailable and SHALL NOT offer capture.
+
+#### Scenario: Selecting the second inspection opens the second inspection
+
+- **GIVEN** an inspector with two pending inspections and the first is overdue
+- **WHEN** the inspector selects the second inspection
+- **THEN** `/inspections/$id` presents the second inspection
+- **AND** the overdue inspection is not substituted for it
+
+#### Scenario: An unavailable assignment cannot be started
+
+- **GIVEN** an `id` that is absent from the requesting account's pending reading
+- **WHEN** the inspector opens `/inspections/$id`
+- **THEN** the inspector is told that the inspection is unavailable
+- **AND** no capture action is offered
+
+### Requirement: Field packages can be prepared from the pending list
+
+The system SHALL derive each row's status from the same device-readiness and draft decision
+used by its detail. A row with no complete field package SHALL offer the existing package
+download without requiring the inspector to open the detail. While device readiness is
+unknown, the row SHALL offer no operational action.
+
+After a successful download, the row SHALL identify the inspection as ready and SHALL make
+its detail available as the next action. A complete package SHALL NOT be offered a secondary
+refresh from the list.
+
+#### Scenario: A second assignment is prepared before leaving coverage
+
+- **GIVEN** a pending inspection without a complete field package
+- **WHEN** the inspector downloads its package from the home list
+- **THEN** that row becomes ready
+- **AND** selecting its action opens `/inspections/$id` rather than capture directly
+
+#### Scenario: Device state has not resolved
+
+- **GIVEN** a row whose stored field package has not resolved
+- **WHEN** the home list is presented
+- **THEN** that row offers no download or capture action
+
+### Requirement: Supporting inspection access remains on the home
+
+The system SHALL retain on the inspector home the acknowledgement of an accepted
+submission, access to past inspections, and drafts that still exist on the device. These
+supporting surfaces SHALL NOT be repeated in an individual inspection detail.
+
+#### Scenario: Returning from an accepted submission
+
+- **GIVEN** an inspector whose signed submission was accepted
+- **WHEN** capture returns the inspector to the home
+- **THEN** the home acknowledges the accepted submission
+- **AND** the submitted inspection is absent from the pending rows
 
 ### Requirement: An inspector can read back what they have completed
 

@@ -53,6 +53,7 @@ describe('sectionTitle', () => {
     expect(sectionTitle('/incidents/abc-123')).toBe('Incident');
     expect(sectionTitle('/incidents/abc-123/form7')).toBe('Form 7');
     expect(sectionTitle('/inspections/past')).toBe('Past inspections');
+    expect(sectionTitle('/inspections/abc-123')).toBe('Inspection');
   });
 
   it('nunca devuelve vacío: una URL desconocida cae al nombre de la aplicación', () => {

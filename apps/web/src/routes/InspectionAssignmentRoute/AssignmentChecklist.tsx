@@ -8,7 +8,7 @@ import { InfoIcon } from '../../components/icons';
 import type { DraftRow } from '../../offline/db';
 import { loadDraft } from '../../offline/drafts';
 import { missingForField, storedTemplateVersion } from '../../offline/prefetch';
-import { readiness } from './presentation';
+import { readiness } from '../../presentation/inspections';
 
 /**
  * El progreso de la asignación destacada, leído SOLO del dispositivo.

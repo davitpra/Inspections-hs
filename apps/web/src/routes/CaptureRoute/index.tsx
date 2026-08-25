@@ -256,7 +256,7 @@ function Walkthrough({ id }: { id: string }): React.JSX.Element {
           los vuelve a alinear y el trabajo ya hecho se sigue leyendo. Es lo único que
           puede recuperar el borrador sin perderlo.
         */}
-        <DownloadForField id={id} label="Refresh field package" className="button--outline" />
+        <DownloadForField id={id} label="Update offline data" className="button--outline" />
 
         <p>
           <Link className="back-link" to="/">

@@ -1,6 +1,7 @@
 import {
   inspectionScheduleSchema,
   inspectorOptionSchema,
+  pendingInspectionSchema,
   scheduledInspectionSchema,
   siteSchema,
   templateOptionSchema,
@@ -10,6 +11,7 @@ import {
   type CreateScheduledInspection,
   type InspectionSchedule,
   type InspectorOption,
+  type PendingInspection,
   type ScheduledInspection,
   type Site,
   type SubmittedInspection,
@@ -93,6 +95,13 @@ export async function updateSchedule(
 // ---------------------------------------------------------------------------
 // Las inspecciones programadas.
 
+/** Lo que la cuenta todavía debe, ya recortado por la sesión y ordenado por vencimiento. */
+export async function listPendingInspections(): Promise<PendingInspection[]> {
+  return get('/me/pending-inspections', (value) =>
+    z.array(pendingInspectionSchema).parse(value),
+  );
+}
+
 export async function listScheduled(): Promise<ScheduledInspection[]> {
   return get('/scheduled-inspections', (value) =>
     z.array(scheduledInspectionSchema).parse(value),
@@ -153,6 +162,7 @@ export async function getSubmittedInspection(id: string): Promise<SubmittedInspe
 export type {
   InspectionSchedule,
   InspectorOption,
+  PendingInspection,
   ScheduledInspection,
   Site,
   SubmittedInspection,

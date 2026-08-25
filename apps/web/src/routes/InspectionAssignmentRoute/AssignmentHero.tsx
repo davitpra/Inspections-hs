@@ -1,20 +1,31 @@
-import type { PendingInspection, Session, Site } from '@hs/contracts';
-import { useQuery } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
+import type { PendingInspection, Session, Site } from "@hs/contracts";
+import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 
-import { queryKeys } from '../../api/query-keys';
-import { DownloadForField } from '../../components/FieldPackage';
-import { CalendarIcon, ClockIcon, LockIcon, PersonIcon, PinIcon } from '../../components/icons';
-import type { DraftRow } from '../../offline/db';
+import { queryKeys } from "../../api/query-keys";
+import { DownloadForField } from "../../components/FieldPackage";
+import {
+  CalendarIcon,
+  ClockIcon,
+  LockIcon,
+  PersonIcon,
+  PinIcon,
+} from "../../components/icons";
+import type { DraftRow } from "../../offline/db";
 import {
   missingForField,
   packageDrift,
   prefetchedAt,
   storedTemplateVersion,
-} from '../../offline/prefetch';
-import { displayName } from '../../presentation/account';
-import { formatInstant, periodLabel } from '../../presentation/dates';
-import { assignmentState, driftMessage, dueIn, readiness } from './presentation';
+} from "../../offline/prefetch";
+import { displayName } from "../../presentation/account";
+import { formatInstant, periodLabel } from "../../presentation/dates";
+import {
+  assignmentState,
+  dueIn,
+  readiness,
+} from "../../presentation/inspections";
+import { driftMessage } from "./presentation";
 
 /**
  * La asignación que importa AHORA: título, la única acción que corresponde, y la tira de
@@ -41,7 +52,7 @@ export function AssignmentHero({
   inspection: PendingInspection;
   site: Site | undefined;
   account: Session;
-  draftStatus: DraftRow['status'] | null;
+  draftStatus: DraftRow["status"] | null;
   /** La versión que el borrador congeló, si hay borrador. Es la mitad de la deriva. */
   draftTemplateVersionId: string | null;
   today: string;
@@ -87,19 +98,38 @@ export function AssignmentHero({
     draftStatus,
   });
   const showsCapturePrimary =
-    decision.action === 'start' || decision.action === 'resume' || decision.action === 'open';
+    decision.action === "start" ||
+    decision.action === "resume" ||
+    decision.action === "open";
 
   return (
     <div className="assignment">
       <div className="assignment__head">
         <div>
-          <h2>{inspection.template_name}</h2>
+          <h1>{inspection.template_name}</h1>
           <p className="scheduling__subtitle">
-            Review your assigned inspection details and start completing your checklist.
+            Review your assigned inspection details and start completing your
+            checklist.
           </p>
         </div>
 
         <div className="assignment__actions">
+          {decision.action === "download" ? (
+            <DownloadForField
+              id={inspection.id}
+              advance={draftStatus === null}
+            />
+          ) : null}
+
+          {decision.showsRefresh ? (
+            <DownloadForField
+              id={inspection.id}
+              label="Update offline data"
+              className="assignment__action"
+              advance={draftStatus === null}
+            />
+          ) : null}
+
           {showsCapturePrimary ? (
             <Link
               to="/inspections/$id/capture"
@@ -109,30 +139,19 @@ export function AssignmentHero({
               {decision.actionLabel}
             </Link>
           ) : null}
-
-          {decision.action === 'download' ? (
-            <DownloadForField id={inspection.id} advance={draftStatus === null} />
-          ) : null}
-
-          {decision.showsRefresh ? (
-            <DownloadForField
-              id={inspection.id}
-              label="Refresh field package"
-              className="button--outline"
-              advance={draftStatus === null}
-            />
-          ) : null}
         </div>
       </div>
 
-      {driftNotice ? <p className="notice notice--warn">{driftNotice}</p> : null}
+      {driftNotice ? (
+        <p className="notice notice--warn">{driftNotice}</p>
+      ) : null}
 
       <dl className="facts">
         <div className="facts__item">
           <span className="facts__label">
             <PinIcon size={16} /> Site
           </span>
-          <span className="facts__value">{site?.name ?? '—'}</span>
+          <span className="facts__value">{site?.name ?? "—"}</span>
         </div>
 
         <div className="facts__item">
@@ -164,7 +183,9 @@ export function AssignmentHero({
           </span>
           <span className="facts__value">
             {inspection.period_end}
-            <span className="facts__hint">{dueIn(inspection.period_end, today)}</span>
+            <span className="facts__hint">
+              {dueIn(inspection.period_end, today)}
+            </span>
           </span>
         </div>
 
@@ -176,9 +197,12 @@ export function AssignmentHero({
             <span className="facts__value">
               Version {stored.data.version}
               <span className="facts__hint">
-                {fetchedAt.data ? `Downloaded ${formatInstant(fetchedAt.data)}` : 'Locked'}
+                {fetchedAt.data
+                  ? `Downloaded ${formatInstant(fetchedAt.data)}`
+                  : "Locked"}
               </span>
-              {inspection.latest_template_version > inspection.template_version ? (
+              {inspection.latest_template_version >
+              inspection.template_version ? (
                 <span className="facts__hint">
                   Version {inspection.latest_template_version} is published
                 </span>

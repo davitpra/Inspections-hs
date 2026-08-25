@@ -14,6 +14,7 @@ import { CaptureRoute } from '../routes/CaptureRoute';
 import { Form7Route } from '../routes/Form7Route';
 import { InboxRoute } from '../routes/InboxRoute';
 import { InspectionReportRoute } from '../routes/InspectionReportRoute';
+import { InspectionAssignmentRoute } from '../routes/InspectionAssignmentRoute';
 import { InspectorHomeRoute } from '../routes/InspectorHomeRoute';
 import { IncidentRoute } from '../routes/IncidentRoute';
 import { IncidentsRoute } from '../routes/IncidentsRoute';
@@ -193,6 +194,12 @@ const pastInspectionsRoute = createRoute({
   component: PastInspectionsRoute,
 });
 
+const inspectionAssignmentRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/inspections/$id',
+  component: InspectionAssignmentRoute,
+});
+
 const reviewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/inspections/$id/review',
@@ -361,6 +368,7 @@ const routeTree = rootRoute.addChildren([
   inspectorHomeRoute,
   captureRoute,
   pastInspectionsRoute,
+  inspectionAssignmentRoute,
   inspectionReportRoute,
   reviewRoute,
   outboxRoute,

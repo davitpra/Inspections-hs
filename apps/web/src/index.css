@@ -1815,6 +1815,7 @@ select:disabled {
 }
 
 .requirements-section__head h2,
+.requirements-section__head h1,
 .schedule-section__head h2 {
   margin: 0;
 }
@@ -1906,6 +1907,36 @@ select:disabled {
 .requirements-table tbody tr:last-child th,
 .requirements-table tbody tr:last-child td {
   border-bottom: 0;
+}
+
+.scheduled-inspections__table {
+  margin: var(--space-4) 0 0;
+}
+
+.scheduled-inspections__table tbody tr:last-child th,
+.scheduled-inspections__table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.scheduled-inspection-row__action {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.scheduled-inspection-row__action .notice {
+  min-width: 12rem;
+  margin: var(--space-2) 0 0;
+  white-space: normal;
+}
+
+.scheduled-inspection-row__link {
+  color: var(--brand);
+  font-weight: var(--weight-strong);
+  text-decoration: none;
+}
+
+.scheduled-inspection-row__link:hover {
+  text-decoration: underline;
 }
 
 .requirements-table__actions-cell {
@@ -2305,6 +2336,51 @@ button.schedule-cell:focus-visible {
 }
 
 @media (max-width: 48rem) {
+  .scheduled-inspections__table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .scheduled-inspections__table,
+  .scheduled-inspections__table tbody,
+  .scheduled-inspections__table tr,
+  .scheduled-inspections__table th,
+  .scheduled-inspections__table td {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .scheduled-inspections__table tr {
+    padding: var(--space-3) 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .scheduled-inspections__table th,
+  .scheduled-inspections__table td {
+    display: grid;
+    grid-template-columns: minmax(7rem, 0.42fr) minmax(0, 1fr);
+    gap: var(--space-2);
+    padding: var(--space-1) 0;
+    border: 0;
+  }
+
+  .scheduled-inspections__table th::before,
+  .scheduled-inspections__table td::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-strong);
+  }
+
+  .scheduled-inspection-row__action {
+    white-space: normal;
+  }
+
   .requirements-table thead {
     position: absolute;
     width: 1px;
@@ -2396,12 +2472,15 @@ button.schedule-cell:focus-visible {
   gap: var(--space-4);
 }
 
-.assignment__head h2 {
+.assignment__head h1 {
   margin: 0;
 }
 
 .assignment__actions {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
   flex: none;
 }
 
@@ -2421,7 +2500,24 @@ button.schedule-cell:focus-visible {
   border-radius: var(--radius);
   color: var(--paper);
   font-weight: var(--weight-strong);
+  white-space: nowrap;
   text-decoration: none;
+}
+
+/*
+ * La acción secundaria del MISMO encabezado. No reusa `button--outline` porque ese lleva
+ * `width: 100%` para la tarjeta del calendario: al lado del CTA se estiraba hasta empujar
+ * al primario a partirse en dos líneas, y quedaban dos botones de distinto alto y distinto
+ * ancho leyéndose como dos jerarquías. Acá los dos miden lo que dice su texto y comparten
+ * el piso de 48px (ADR-010); lo único que los distingue es el relleno macizo del primario.
+ */
+.assignment__action {
+  min-height: 48px;
+  padding: var(--space-2) var(--space-5);
+  border-color: var(--brand);
+  color: var(--brand);
+  font-weight: var(--weight-strong);
+  white-space: nowrap;
 }
 
 /* Una sola columna, al ancho completo de `.shell__main`: el progreso arriba y la
