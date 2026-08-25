@@ -5,19 +5,19 @@ import { listScheduled, listSchedules, listSites } from '../../api/inspections';
 import { queryKeys } from '../../api/query-keys';
 import { useAppSession } from '../../app/session-context';
 import { CalendarIcon, InfoIcon } from '../../components/icons';
+import { PeriodDialog } from '../../components/PeriodDialog';
+import { ScheduleSection } from '../../components/ScheduleSection';
 import { SitePicker } from '../../components/SitePicker';
 import { canAdministerScheduling } from '../../permissions/session';
 import { currentCivilYear } from '../../presentation/dates';
-import { resolveSiteId } from '../../presentation/sites';
-import { PeriodDialog } from './PeriodDialog';
-import { RequirementsSection } from './RequirementsSection';
-import { ScheduleSection } from './ScheduleSection';
 import {
   isUnassigned,
   projectYear,
   unassignedNotice,
   type YearEntry,
-} from './presentation';
+} from '../../presentation/scheduling';
+import { resolveSiteId } from '../../presentation/sites';
+import { RequirementsSection } from './RequirementsSection';
 
 export function SchedulingRoute(): React.JSX.Element {
   const { account } = useAppSession();

@@ -9,7 +9,7 @@ import { InfoIcon } from '../../components/icons';
 import { YearNavigator } from '../../components/YearNavigator';
 import { canAdministerScheduling } from '../../permissions/session';
 import { currentCivilYear } from '../../presentation/dates';
-import { earliestEligibleYear, frequencyNote } from '../SchedulingRoute/presentation';
+import { earliestEligibleYear, frequencyNote } from '../../presentation/scheduling';
 import { RequirementPeriodRow } from './RequirementPeriodRow';
 import { entryKey, requirementYear } from './presentation';
 

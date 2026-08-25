@@ -103,7 +103,7 @@ describe('la superficie anual', () => {
   it('muestra un año futuro completamente no abierto', async () => {
     renderRoute();
     const current = new Date().getFullYear();
-    fireEvent.click(await screen.findByRole('button', { name: `${current + 1} →` }));
+    fireEvent.click(await screen.findByRole('button', { name: `Go to ${current + 1}` }));
     expect(await within(screen.getByRole('region', { name: /schedule matrix/ })).findAllByRole('button', { name: /Not opened/ })).toHaveLength(12);
   });
 });
@@ -123,7 +123,7 @@ describe('detalle de periodo', () => {
 
   it('el detalle de un periodo no abierto nombra la version publicada sin poder abrirlo', async () => {
     renderRoute();
-    fireEvent.click(await screen.findByRole('button', { name: `${new Date().getFullYear() + 1} →` }));
+    fireEvent.click(await screen.findByRole('button', { name: `Go to ${new Date().getFullYear() + 1}` }));
     fireEvent.click((await screen.findAllByRole('button', { name: /December/ }))[0]!);
     const detail = await screen.findByRole('dialog');
     expect(await within(detail).findByText(/Version 2 would be frozen/)).toBeTruthy();

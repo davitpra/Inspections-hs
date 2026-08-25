@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { InspectionSchedule } from '@hs/contracts';
 
 import { PlusIcon } from '../../components/icons';
-import { currentRules } from './presentation';
+import { currentRules } from '../../presentation/scheduling';
 import { RequirementConfirmDialog } from './RequirementConfirmDialog';
 import { RequirementDialog } from './RequirementDialog';
 import { RequirementRow } from './RequirementRow';

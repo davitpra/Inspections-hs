@@ -6,7 +6,7 @@ import { createScheduledInspection } from '../../api/inspections';
 import { queryKeys } from '../../api/query-keys';
 import { PeriodAssignment } from './PeriodAssignment';
 import { entryKey, periodLabel, periodStatus, rowControl, rowInspector, rowNote } from './presentation';
-import type { YearEntry } from '../SchedulingRoute/presentation';
+import type { YearEntry } from '../../presentation/scheduling';
 
 export function RequirementPeriodRow({
   entry,

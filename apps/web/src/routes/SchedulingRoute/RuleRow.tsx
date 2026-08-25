@@ -5,7 +5,7 @@ import { PERIOD_MONTHS_LABELS, type InspectionSchedule } from "@hs/contracts";
 import { listInspectorCandidates, updateSchedule } from "../../api/inspections";
 import { queryKeys } from "../../api/query-keys";
 import { CalendarIcon, PersonIcon } from "../../components/icons";
-import { candidateLabel, frequencyNote } from "./presentation";
+import { candidateLabel, frequencyNote } from '../../presentation/scheduling';
 
 export function RuleRow({
   rule,

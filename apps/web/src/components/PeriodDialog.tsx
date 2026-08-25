@@ -1,9 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 
-import { listTemplates } from '../../api/inspections';
-import { queryKeys } from '../../api/query-keys';
-import { calendarLabel, inspectorLabel, missedNote, STATUS_LABELS, type YearEntry } from './presentation';
+import { listTemplates } from '../api/inspections';
+import { queryKeys } from '../api/query-keys';
+import {
+  calendarLabel,
+  inspectorLabel,
+  missedNote,
+  STATUS_LABELS,
+  type YearEntry,
+} from '../presentation/scheduling';
 
 /**
  * El detalle de una casilla del calendario: QUÉ dice el registro de ese mes, nada más.

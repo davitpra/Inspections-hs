@@ -1,7 +1,13 @@
 import type { InspectionSchedule, ScheduledInspection } from '@hs/contracts';
 
-import { calendarLabel, inspectorLabel, missedNote, STATUS_LABELS } from '../SchedulingRoute/presentation';
-import { projectYear, type YearEntry } from '../SchedulingRoute/presentation';
+import {
+  calendarLabel,
+  inspectorLabel,
+  missedNote,
+  projectYear,
+  STATUS_LABELS,
+  type YearEntry,
+} from '../../presentation/scheduling';
 
 export type RowControl = 'open' | 'assign' | 'read';
 

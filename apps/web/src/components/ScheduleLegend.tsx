@@ -1,4 +1,4 @@
-import { CELL_LABELS, type CellState } from './presentation';
+import { CELL_LABELS, type CellState } from '../presentation/scheduling';
 
 /**
  * Lo que la matriz no puede decir sola.

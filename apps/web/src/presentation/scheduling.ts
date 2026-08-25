@@ -6,7 +6,7 @@ import type {
   ScheduledInspection,
 } from '@hs/contracts';
 
-import { civilMonth, monthName, periodLabel } from '../../presentation/dates';
+import { civilMonth, monthName, periodLabel } from './dates';
 
 /**
  * Cómo se lee la consola de programación: etiquetas y clases, sin marcado.

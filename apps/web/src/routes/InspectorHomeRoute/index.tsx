@@ -9,12 +9,12 @@ import { useAppSession } from '../../app/session-context';
 import { CalendarIcon } from '../../components/icons';
 import type { DraftRow as DraftRowData } from '../../offline/db';
 import { listDrafts } from '../../offline/drafts';
-import { civilToday } from '../../presentation/dates';
 import { DeviceDrafts } from './DeviceDrafts';
 import { DiscardDraftDialog } from './DiscardDraftDialog';
+import { InspectorSchedule } from './InspectorSchedule';
 import { RecentInspections } from './RecentInspections';
-import { ScheduledInspectionRow } from './ScheduledInspectionRow';
-import { draftPeriodStart, pendingWork, scheduledInspectionRows } from './presentation';
+import { ScheduledInspections } from './ScheduledInspections';
+import { draftPeriodStart, pendingWork } from './presentation';
 
 /** La entrada del inspector: primero todo lo que debe; después, historia y trabajo local. */
 export function InspectorHomeRoute(): React.JSX.Element {
@@ -41,7 +41,6 @@ export function InspectorHomeRoute(): React.JSX.Element {
     queryFn: listScheduled,
     retry: false,
   });
-  const rows = scheduledInspectionRows(pending.data ?? [], civilToday());
   const loading = pending.isPending || sites.isPending || drafts.isPending;
   const siteName = (siteId: string): string =>
     sites.data?.find((site) => site.id === siteId)?.name ?? siteId;
@@ -73,57 +72,23 @@ export function InspectorHomeRoute(): React.JSX.Element {
         </p>
       ) : null}
 
-      <section className="requirements-section scheduled-inspections" aria-labelledby="scheduled-heading">
-        <div className="requirements-section__head">
-          <div>
-            <h2 id="scheduled-heading">
-              Scheduled inspections{' '}
-              {pending.data ? <span className="note">({rows.length})</span> : null}
-            </h2>
-            <p className="note">Every inspection assigned to you that still needs to be sent.</p>
-          </div>
-        </div>
+      <ScheduledInspections
+        inspections={pending.data}
+        drafts={drafts.data ?? []}
+        siteName={siteName}
+        loading={loading}
+        remoteError={pending.isError || sites.isError}
+        draftsError={drafts.isError}
+        ready={pending.isSuccess && sites.isSuccess && drafts.isSuccess}
+      />
 
-        {loading ? <p className="schedule-empty">Loading scheduled inspections…</p> : null}
-        {pending.isError || sites.isError ? (
-          <p className="notice notice--warn" role="alert">
-            Scheduled inspections need a connection. Try again when you are online.
-          </p>
-        ) : null}
-        {drafts.isError ? (
-          <p className="notice notice--warn" role="alert">
-            Drafts on this device could not be read.
-          </p>
-        ) : null}
-        {pending.isSuccess && sites.isSuccess && drafts.isSuccess && rows.length === 0 ? (
-          <p className="schedule-empty">Nothing is scheduled for you.</p>
-        ) : null}
-
-        {pending.isSuccess && sites.isSuccess && drafts.isSuccess && rows.length > 0 ? (
-          <table className="table scheduled-inspections__table" aria-label="Scheduled inspections">
-            <thead>
-              <tr>
-                <th scope="col">Period</th>
-                <th scope="col">Requirement</th>
-                <th scope="col">Site</th>
-                <th scope="col">Due</th>
-                <th scope="col">Status</th>
-                <th scope="col">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <ScheduledInspectionRow
-                  key={row.inspection.id}
-                  row={row}
-                  siteName={siteName(row.inspection.site_id)}
-                  drafts={drafts.data}
-                />
-              ))}
-            </tbody>
-          </table>
-        ) : null}
-      </section>
+      {account ? (
+        <InspectorSchedule
+          scheduled={scheduled.data ?? []}
+          accountId={account.userId}
+          status={scheduled.status}
+        />
+      ) : null}
 
       {account ? (
         <RecentInspections
@@ -134,9 +99,7 @@ export function InspectorHomeRoute(): React.JSX.Element {
       ) : null}
 
       <DeviceDrafts
-        title="Drafts on this device"
         drafts={working}
-        empty="No drafts in progress on this device."
         periodStart={(draft) => draftPeriodStart(draft, pending.data ?? [])}
         siteName={siteName}
         onDiscard={setDiscarding}

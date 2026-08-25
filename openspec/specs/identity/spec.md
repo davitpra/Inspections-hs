@@ -151,18 +151,19 @@ SHALL be limited to the sites of the session's scope by the row-level security p
 
 Each row SHALL also carry the account that references that person, or `null` when no
 `app_user` row does. The account SHALL be reduced to what tells the coordinator whether this
-person can reach the system and as what: its `id`, its `role`, whether it is active, and
-whether it can already sign in. It SHALL NOT carry the account's email, its scope, its
-credential or any invitation token; reading the roster SHALL NOT become a way to read the
-account table.
+person can reach the system, as what and through which work address: its `id`, its `role`,
+whether it is active, whether it can already sign in and its `email`. It SHALL NOT carry the
+account's scope, credential or any invitation token; reading the roster SHALL NOT become a
+way to read the account table.
 
 The listing SHALL be available only to an account whose `role` is `hs_coordinator`, and SHALL
 be able to include people whose `deactivated_at` is non-null, which is what distinguishes it
 from the subject selection list.
 
-The system SHALL NOT expose any way to create, modify or delete a `person` through this
-listing or any companion route: the roster is maintained by the CSV import, and reading it
-SHALL NOT become a way to write it.
+The system SHALL NOT expose any way to create, modify or delete a single `person` through
+this listing or any companion route: the roster is maintained by the CSV import, and reading
+it SHALL NOT become a way to edit it row by row. Loading the file itself SHALL remain
+available, as a separate act that names no person and applies the whole file at once.
 
 #### Scenario: The coordinator reads the roster of a site in scope
 
@@ -216,11 +217,11 @@ SHALL NOT become a way to write it.
 - **THEN** that row carries a null account
 - **AND** no error is raised
 
-#### Scenario: The roster does not disclose the account's email or scope
+#### Scenario: The roster carries the work email but not account security data
 
 - **WHEN** the roster of a site is read
-- **THEN** no account in the result carries an `email`, a site scope, a credential or an
-  invitation token
+- **THEN** an account in the result carries its `email`
+- **AND** no account carries a site scope, a credential or an invitation token
 
 #### Scenario: An account that cannot yet sign in is distinguishable from one that can
 
@@ -228,6 +229,13 @@ SHALL NOT become a way to write it.
   invitation has been accepted
 - **THEN** that account is reported as unable to sign in
 - **AND** once the invitation is accepted, the same account is reported as able to sign in
+
+#### Scenario: The listing offers no way to write a single person
+
+- **WHEN** the roster of a site is read
+- **THEN** no route accepts the `id` of one `person` to create, rename, move or deactivate
+  them
+- **AND** the only write available over the roster is the import of a whole CSV file
 
 ### Requirement: An `hs_coordinator` account can hold a seat on the JHSC
 
@@ -1134,8 +1142,9 @@ the company.
 
 The system SHALL provide a roster import that reads a UTF-8 CSV file with a mandatory header row
 and the columns `employee_number`, `first_name`, `last_name`, `site_code` and `status`. The import
-SHALL be operator-initiated. The system SHALL NOT connect to, poll or receive data from any
-payroll system.
+SHALL be operator-initiated: it SHALL run only when an operator submits a file, whether from a
+server command or from the console, and SHALL NOT run on a schedule. The system SHALL NOT connect
+to, poll or receive data from any payroll system.
 
 A row whose `employee_number` is not yet known SHALL create a person. A row whose
 `employee_number` is known SHALL update that person's `first_name`, `last_name`, `site_id` and
@@ -1170,6 +1179,127 @@ active status, and SHALL NOT create a second person.
 
 - **WHEN** the deployed system is inspected for outbound integrations
 - **THEN** no scheduled job, client or credential targets a payroll system
+
+#### Scenario: No import runs without a file somebody submitted
+
+- **WHEN** the deployed system is inspected for scheduled work
+- **THEN** no job imports the roster on its own
+- **AND** every import record corresponds to a file an operator submitted
+
+### Requirement: The H&S coordinator can import the roster over HTTP
+
+The system SHALL let an account whose `role` is `hs_coordinator` import a roster CSV over HTTP by
+submitting exactly one file in the multipart field `file`, and SHALL apply it through the same
+importer as the server command: the same header columns, the same per-row validation, the same
+upsert by `employee_number`, and the same single transaction that writes the import record together
+with the rows it applied.
+
+The sites the import may write SHALL come from the session's scope resolved at that request, and
+the account recorded as having run the import SHALL be the session's account. The request SHALL
+NOT be able to name the scope it runs under, and a row naming a `site_code` outside that scope
+SHALL be rejected with the same reason as a `site_code` that matches no site, so that the response
+does not disclose the existence of a site the account does not administer.
+
+Any other `role` SHALL be refused, and the refusal SHALL leave no `person` row and no import record
+behind.
+
+The system SHALL reject with `roster_file_unusable` a submission that carries no `file`, more than
+one `file`, an unexpected multipart field or an unusable file name. The system SHALL reject with
+`roster_file_too_large` a file larger than 2 MiB, and SHALL apply nothing in those cases.
+
+#### Scenario: The coordinator imports a file from the console
+
+- **WHEN** an account whose `role` is `hs_coordinator` and whose scope contains `st-thomas`
+  submits a CSV whose rows all name `site_code` `st-thomas`
+- **THEN** every row is applied to the roster of `st-thomas`
+- **AND** the response reports the counts of rows read, applied and rejected
+- **AND** an import record exists naming that account and the submitted file name
+
+#### Scenario: A row outside the session's scope is rejected, not applied
+
+- **WHEN** a coordinator whose scope is `st-thomas` only submits a file containing rows for
+  `st-thomas` and rows for `glencoe`
+- **THEN** the rows for `st-thomas` are applied
+- **AND** the rows for `glencoe` are rejected, each with its row number
+- **AND** the reason given does not distinguish a site outside the scope from a site that does not
+  exist
+
+#### Scenario: The request cannot widen its own scope
+
+- **WHEN** a coordinator whose scope is `st-thomas` only submits a file together with a site or a
+  scope named in the request
+- **THEN** the named scope is ignored
+- **AND** no `person` of `glencoe` is created or changed
+
+#### Scenario: Any other role is refused
+
+- **WHEN** an account whose `role` is `supervisor`, `jhsc_member`, `management` or
+  `external_auditor` submits a roster CSV
+- **THEN** the request is refused
+- **AND** no `person` row is created or changed and no import record is written
+
+#### Scenario: A submission without a file is refused
+
+- **WHEN** a coordinator submits a request that carries no file
+- **THEN** the request is refused with `roster_file_unusable`
+- **AND** no import record is written
+
+#### Scenario: A submission with more than one file is refused
+
+- **WHEN** a coordinator submits more than one `file` or submits a file in another multipart field
+- **THEN** the request is refused with `roster_file_unusable`
+- **AND** no `person` row is created or changed and no import record is written
+
+#### Scenario: A file above the accepted maximum is refused
+
+- **WHEN** a coordinator submits a file larger than the accepted maximum size
+- **THEN** the request is refused with `roster_file_too_large`
+- **AND** no row of it is applied
+
+#### Scenario: An employee number outside the scope does not abort the file
+
+- **WHEN** a coordinator whose scope is `st-thomas` submits a row for `st-thomas` whose
+  `employee_number` already belongs to a person of `glencoe`
+- **THEN** that row is rejected without disclosing the site of the existing person
+- **AND** the other valid rows are applied in the same import
+- **AND** the person of `glencoe` is not changed
+
+### Requirement: Rejected rows are a result, not a failed request
+
+The system SHALL answer an import that could be read as a success carrying the report, however many
+rows it rejected: rejected rows are the expected outcome of a real payroll export and SHALL NOT
+turn the response into an error. The report SHALL carry the number of rows read, applied and
+rejected, and one entry per rejected row with its 1-based row number in the file and its reason.
+
+The system SHALL answer with `roster_file_unusable`, applying nothing, when the submission cannot
+be read as a roster file at all: its CSV syntax is invalid or its header omits a required column.
+The response SHALL name what made the file unusable.
+
+#### Scenario: A file with some bad rows is a success
+
+- **WHEN** a coordinator submits a file of 200 rows of which 3 are rejected
+- **THEN** the response is a success
+- **AND** it reports 200 read, 197 applied and 3 rejected, with the row number and reason of each
+  rejected row
+
+#### Scenario: A file whose every row is rejected is still a success
+
+- **WHEN** a coordinator submits a readable file whose every row is rejected
+- **THEN** the response is a success reporting zero rows applied and one entry per rejected row
+- **AND** an import record exists carrying those counts
+
+#### Scenario: An unreadable file is an error and applies nothing
+
+- **WHEN** a coordinator submits a file whose header omits `employee_number`, or a file that is not
+  CSV at all
+- **THEN** the response is an error with `roster_file_unusable` naming what made the file unusable
+- **AND** no `person` row is created or changed and no import record is written
+
+#### Scenario: The report is the same report the server command produces
+
+- **WHEN** the same file is imported over HTTP and by the server command under the same scope
+- **THEN** both report the same counts of rows read, applied and rejected
+- **AND** both list the same rejected rows with the same row numbers and reasons
 
 ### Requirement: An import reports every rejected row with its reason
 

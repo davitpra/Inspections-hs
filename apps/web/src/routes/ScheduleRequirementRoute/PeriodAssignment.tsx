@@ -5,7 +5,7 @@ import type { ScheduledInspection } from '@hs/contracts';
 import { assignInspector, listInspectorCandidates } from '../../api/inspections';
 import { queryKeys } from '../../api/query-keys';
 import { PersonIcon } from '../../components/icons';
-import { candidateLabel, inspectorLabel } from '../SchedulingRoute/presentation';
+import { candidateLabel, inspectorLabel } from '../../presentation/scheduling';
 
 /** Control existente de asignación, con confirmación separada y sin actualización optimista. */
 export function PeriodAssignment({

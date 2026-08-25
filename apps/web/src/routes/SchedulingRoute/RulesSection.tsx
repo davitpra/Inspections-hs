@@ -1,7 +1,7 @@
 import type { InspectionSchedule } from "@hs/contracts";
 
 import { InfoIcon } from "../../components/icons";
-import { currentRules } from "./presentation";
+import { currentRules } from '../../presentation/scheduling';
 import { NewRuleForm } from "./NewRuleForm";
 import { RuleRow } from "./RuleRow";
 

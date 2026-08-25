@@ -4,7 +4,7 @@ import { PERIOD_MONTHS, PERIOD_MONTHS_LABELS, type InspectionSchedule, type Peri
 
 import { createSchedule, listInspectorCandidates, listTemplates } from '../../api/inspections';
 import { queryKeys } from '../../api/query-keys';
-import { candidateLabel, frequencyNote } from './presentation';
+import { candidateLabel, frequencyNote } from '../../presentation/scheduling';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
