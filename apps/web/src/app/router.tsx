@@ -306,8 +306,8 @@ const rosterRoute = createRoute({
  *
  * **El token va en el search y no en el path**: no es el identificador de un recurso, es un
  * secreto de un solo uso, y `validateSearch` deja que la pantalla lo reciba ya tipado en
- * vez de leer `location.search` a mano. Es opcional a propósito — sin él la pantalla pide
- * que se pegue.
+ * vez de leer `location.search` a mano. Es opcional en el parser para que una URL incompleta
+ * llegue a una explicación útil en vez de romper la navegación.
  */
 const acceptInvitationRoute = createRoute({
   getParentRoute: () => rootRoute,

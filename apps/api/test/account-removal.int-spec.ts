@@ -311,6 +311,29 @@ describe('el permiso de la baja', () => {
  * tiene que conservar, porque desde afuera no se ve la diferencia.
  */
 describe('volver a invitar revive la cuenta que la persona ya tenía', () => {
+  it('acepta el mismo correo que la cuenta tenía antes de la baja', async () => {
+    const member = await seedMember([SITE_A]);
+    const personId = await personOf(member);
+    const rows = await inScope<{ email: string }>(
+      db.app,
+      [SITE_A],
+      'SELECT email FROM app_user WHERE id = $1',
+      [member],
+    );
+    const originalEmail = one(rows).email;
+    await accounts.update(asCoordinator(), member, request({ deactivated: true }));
+
+    const result = await accounts.create(
+      asCoordinator(),
+      newAccount({ personId, email: originalEmail, siteIds: [SITE_A], invite: true }),
+    );
+
+    expect(result.account.id).toBe(member);
+    expect(result.account.email).toBe(originalEmail);
+    expect(result.invitation?.token).toBeTruthy();
+    expect((await accountRow(member)).deactivated_at).toBeNull();
+  });
+
   it('devuelve LA MISMA cuenta —person_id es único— con su alcance y un link nuevo', async () => {
     const member = await seedMember([SITE_A, SITE_B]);
     const personId = await personOf(member);

@@ -20,10 +20,10 @@ import { useAppSession } from '../../app/session-context';
  * limitado: sin `purpose` en el contrato, toda sesión que el servidor devuelve es
  * plena, y no hay ningún estado intermedio que esta pantalla tenga que explicar.
  *
- * La tarjeta centrada es la única de la aplicación: `.shell__main` mide 120rem y un
- * formulario de dos campos estirado a ese ancho no se lee como una puerta, se lee como
- * una pantalla a medio cargar. La marca la repite entera —el cuadrado y el nombre— y no
- * la hereda del sidebar, porque acá el sidebar todavía no existe.
+ * Comparte la tarjeta centrada con la aceptación de invitaciones: `.shell__main` mide
+ * 120rem y un formulario corto estirado a ese ancho no se lee como una puerta, se lee
+ * como una pantalla a medio cargar. La marca la repite entera —el cuadrado y el nombre—
+ * y no la hereda del sidebar, porque acá el sidebar todavía no existe.
  */
 export function SignInRoute(): React.JSX.Element {
   const navigate = useNavigate();

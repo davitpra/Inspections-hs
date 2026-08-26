@@ -1,5 +1,7 @@
 import { useState } from 'react';
 
+import { CheckCircleIcon, CheckIcon, LockIcon } from '../../components/icons';
+
 /**
  * El link de un solo uso, recién emitido.
  *
@@ -25,29 +27,67 @@ export function InvitationLink({
   token: string;
   onDismiss: () => void;
 }): React.JSX.Element {
-  const [copied, setCopied] = useState(false);
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle');
 
   const link = `${window.location.origin}/accept-invitation?token=${token}`;
 
   return (
-    <div className="notice">
-      <p>
-        Invited {personLabel}. Copy this one-time link and send it to them — it is shown
-        once and cannot be shown again.
+    <div className="invitation-link">
+      <div className="invitation-link__head">
+        <span className="invitation-link__success" aria-hidden="true">
+          <CheckCircleIcon size={28} />
+        </span>
+        <div>
+          <p className="invitation-link__eyebrow">Invitation created</p>
+          <h2>Ready to send</h2>
+        </div>
+      </div>
+
+      <p className="invitation-link__intro">
+        <strong>{personLabel}</strong> can join the JHSC using the invitation link below.
       </p>
+
+      <div className="invitation-link__warning">
+        <span className="invitation-link__lock" aria-hidden="true">
+          <LockIcon size={20} />
+        </span>
+        <div>
+          <p className="invitation-link__warning-title">Copy this link now</p>
+          <p className="invitation-link__warning-text">
+            For security, it is shown only once and cannot be recovered after you close this window.
+          </p>
+        </div>
+      </div>
 
       <button
         type="button"
-        onClick={() => {
-          void navigator.clipboard.writeText(link);
-          setCopied(true);
+        className="button--primary invitation-link__copy"
+        onClick={async () => {
+          try {
+            await navigator.clipboard.writeText(link);
+            setCopyStatus('copied');
+          } catch {
+            setCopyStatus('error');
+          }
         }}
       >
-        {copied ? 'Copied' : 'Copy invitation link'}
+        {copyStatus === 'copied' ? <CheckIcon size={18} /> : null}
+        {copyStatus === 'copied' ? 'Link copied' : 'Copy invitation link'}
       </button>
 
+      <p
+        className={copyStatus === 'error' ? 'invitation-link__status invitation-link__status--error' : 'invitation-link__status'}
+        aria-live="polite"
+      >
+        {copyStatus === 'copied'
+          ? 'Paste it into a secure message to the invitee.'
+          : copyStatus === 'error'
+            ? 'Could not copy the link. Check your browser permissions and try again.'
+            : 'The link stays hidden to protect the invitation.'}
+      </p>
+
       {/* Descartar es explícito: nadie pierde el link por navegar dentro de la consola. */}
-      <button type="button" onClick={onDismiss}>
+      <button type="button" className="invitation-link__done" onClick={onDismiss}>
         Done
       </button>
     </div>

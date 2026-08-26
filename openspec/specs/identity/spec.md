@@ -562,6 +562,13 @@ is outside the scope of the requesting coordinator.
   `email`
 - **THEN** the account's `email` is the supplied one
 
+#### Scenario: The inactive account can be restored with its existing email
+
+- **WHEN** an account is requested for a person whose inactive account already carries the
+  supplied `email`
+- **THEN** that same account is restored
+- **AND** the request is not refused as an email conflict
+
 #### Scenario: An inactive account of another role is not restored
 
 - **WHEN** a `jhsc_member` account is requested for a person whose existing inactive account
@@ -2001,3 +2008,23 @@ Revoking a credential SHALL be expressed by setting `revoked_at`, never by delet
 - **WHEN** a credential is revoked and a new invitation is issued
 - **THEN** the previous `app_credential` row is still present with a non-null `revoked_at`
 - **AND** accepting the new invitation creates a second row, active
+
+### Requirement: People administration uses clear user-facing terminology
+
+The system SHALL label the site people administration destination as “People” in navigation and “People & Access” in its page heading. User-facing actions, summaries, dialogs, empty states and account-management messages in that destination SHALL refer to people rather than a roster, while preserving the distinction between a person and an account.
+
+#### Scenario: Coordinator opens people administration
+
+- **WHEN** an H&S coordinator opens the site people administration destination
+- **THEN** the navigation item is labeled “People”
+- **AND** the page heading is “People & Access”
+
+#### Scenario: Coordinator manages the people list
+
+- **WHEN** an H&S coordinator imports, adds, searches or manages access for people at a site
+- **THEN** the visible action and status text refers to people and access without using “roster” as the name of the destination or list
+
+#### Scenario: Internal roster identifiers remain compatible
+
+- **WHEN** the people administration terminology is displayed
+- **THEN** the existing `/roster` route and roster API contracts remain unchanged

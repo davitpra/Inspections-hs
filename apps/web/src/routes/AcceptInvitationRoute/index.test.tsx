@@ -17,10 +17,6 @@ vi.mock('@tanstack/react-router', () => ({
 const TOKEN = 'r4nd0m-base64url-token';
 const GOOD_PASSWORD = 'correct horse battery';
 
-function tokenField(): HTMLInputElement {
-  return screen.getByLabelText('Invitation token') as HTMLInputElement;
-}
-
 /** Llenar las dos contraseñas, que es lo que hace falta en casi todos los casos. */
 function fillPasswords(password: string, confirmation = password): void {
   fireEvent.change(screen.getByLabelText('New password'), { target: { value: password } });
@@ -44,22 +40,20 @@ describe('AcceptInvitationRoute', () => {
     vi.clearAllMocks();
   });
 
-  it('precarga el token que viene en el link del coordinador', () => {
+  it('no expone el token del link en un campo editable', () => {
     render(<AcceptInvitationRoute />);
 
-    expect(tokenField().value).toBe(TOKEN);
+    expect(screen.queryByLabelText('Invitation token')).toBeNull();
   });
 
-  it('deja el campo vacío y editable cuando el link llegó sin token', () => {
+  it('no muestra el formulario cuando el link llegó sin token', () => {
     useSearch.mockReturnValue({});
 
     render(<AcceptInvitationRoute />);
 
-    expect(tokenField().value).toBe('');
-
-    fireEvent.change(tokenField(), { target: { value: 'pegado a mano' } });
-
-    expect(tokenField().value).toBe('pegado a mano');
+    expect(screen.getByRole('alert').textContent).toMatch(/new invitation link/);
+    expect(screen.queryByLabelText('New password')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Set password' })).toBeNull();
   });
 
   /**

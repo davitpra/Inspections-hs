@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 
 import { removeJhscAccess } from '../../api/roster';
 import { queryKeys } from '../../api/query-keys';
+import { CrossCircleIcon } from '../../components/icons';
 
 /**
  * `remove-jhsc-access-from-roster` — Quita el acceso al JHSC: cancela la invitación que
@@ -59,26 +60,60 @@ export function RemoveAccessDialog({
   });
 
   return (
-    <dialog ref={dialogRef} className="modal" onClose={onClose}>
-      <h2>
-        {canSignIn ? `Remove ${personLabel} from the JHSC?` : `Cancel the invitation of ${personLabel}?`}
-      </h2>
+    <dialog ref={dialogRef} className="modal remove-access-dialog" onClose={onClose}>
+      <div className="remove-access-dialog__head">
+        <span className="remove-access-dialog__icon" aria-hidden="true">
+          <CrossCircleIcon size={24} />
+        </span>
+        <div>
+          <p className="remove-access-dialog__eyebrow">JHSC access</p>
+          <h2>
+            {canSignIn
+              ? `Remove ${personLabel} from the JHSC?`
+              : `Cancel the invitation of ${personLabel}?`}
+          </h2>
+        </div>
+      </div>
 
-      <p>
+      <p className="remove-access-dialog__intro">
         {canSignIn
-          ? 'They lose access immediately and any session they have open ends. They remain listed at this site because losing access is not leaving the company.'
-          : 'The invitation link stops working. They remain listed at this site and can be invited again later.'}
+          ? 'They lose access immediately and any session they have open ends.'
+          : 'The invitation link stops working immediately.'}
       </p>
 
-      <button type="button" onClick={() => remove.mutate()} disabled={remove.isPending}>
-        {remove.isPending ? 'Removing…' : canSignIn ? 'Remove from JHSC' : 'Cancel the invitation'}
-      </button>
+      <div className="remove-access-dialog__note">
+        <p className="remove-access-dialog__note-title">Their roster record stays intact</p>
+        <p className="remove-access-dialog__note-text">
+          {canSignIn
+            ? 'They remain listed at this site because losing access is not leaving the company.'
+            : 'They remain listed at this site and can be invited again later.'}
+        </p>
+      </div>
 
-      {remove.isError ? <p className="notice">{(remove.error as Error).message}</p> : null}
+      {remove.isError ? (
+        <p className="notice" role="alert">{(remove.error as Error).message}</p>
+      ) : null}
 
-      <button type="button" onClick={() => dialogRef.current?.close()}>
-        Keep access
-      </button>
+      <div className="remove-access-dialog__actions">
+        <button
+          type="button"
+          className="button--danger"
+          onClick={() => remove.mutate()}
+          disabled={remove.isPending}
+        >
+          {remove.isPending
+            ? canSignIn
+              ? 'Removing…'
+              : 'Cancelling…'
+            : canSignIn
+              ? 'Remove from JHSC'
+              : 'Cancel the invitation'}
+        </button>
+
+        <button type="button" onClick={() => dialogRef.current?.close()}>
+          Keep access
+        </button>
+      </div>
     </dialog>
   );
 }

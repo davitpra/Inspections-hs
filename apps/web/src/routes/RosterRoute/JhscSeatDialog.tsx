@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 
 import { setJhscSeat } from '../../api/roster';
 import { queryKeys } from '../../api/query-keys';
+import { PersonIcon } from '../../components/icons';
 
 /**
  * `coordinator-jhsc-seat` — Sienta a una cuenta de coordinador en el JHSC, o la levanta.
@@ -59,28 +60,50 @@ export function JhscSeatDialog({
   });
 
   return (
-    <dialog ref={dialogRef} className="modal" onClose={onClose}>
-      <h2>
-        {granting
-          ? `Seat ${personLabel} on the JHSC?`
-          : `Remove ${personLabel} from the JHSC seat?`}
-      </h2>
+    <dialog ref={dialogRef} className="modal jhsc-seat-dialog" onClose={onClose}>
+      <div className="jhsc-seat-dialog__head">
+        <span className="jhsc-seat-dialog__icon" aria-hidden="true">
+          <PersonIcon size={24} />
+        </span>
+        <div>
+          <p className="jhsc-seat-dialog__eyebrow">JHSC inspector seat</p>
+          <h2>
+            {granting
+              ? `Seat ${personLabel} on the JHSC?`
+              : `Remove ${personLabel} from the JHSC seat?`}
+          </h2>
+        </div>
+      </div>
 
-      <p>
+      <p className="jhsc-seat-dialog__text">
         {granting
-          ? 'They can be assigned inspections at the sites they already have access to. Nothing else about their account changes.'
-          : 'They stop being offered for new inspections. Inspections already assigned to them stay assigned and still appear in what they owe.'}
+          ? 'They can be assigned inspections at the sites they already have access to.'
+          : 'They stop being offered for new inspections.'}
       </p>
 
-      <button type="button" onClick={() => seat.mutate()} disabled={seat.isPending}>
-        {seat.isPending ? 'Saving…' : granting ? 'Seat on the JHSC' : 'Remove from the seat'}
-      </button>
+      <p className="jhsc-seat-dialog__note">
+        <strong>Account access stays the same.</strong>{' '}
+        {granting
+          ? 'Their credential, session, and site access do not change.'
+          : 'Inspections already assigned to them stay assigned and still appear in what they owe.'}
+      </p>
 
-      {seat.isError ? <p className="notice">{(seat.error as Error).message}</p> : null}
+      {seat.isError ? <p className="notice" role="alert">{(seat.error as Error).message}</p> : null}
 
-      <button type="button" onClick={() => dialogRef.current?.close()}>
-        Cancel
-      </button>
+      <div className="modal__actions">
+        <button
+          type="button"
+          className="button--primary"
+          onClick={() => seat.mutate()}
+          disabled={seat.isPending}
+        >
+          {seat.isPending ? 'Saving…' : granting ? 'Seat on the JHSC' : 'Remove from the seat'}
+        </button>
+
+        <button type="button" onClick={() => dialogRef.current?.close()}>
+          Cancel
+        </button>
+      </div>
     </dialog>
   );
 }

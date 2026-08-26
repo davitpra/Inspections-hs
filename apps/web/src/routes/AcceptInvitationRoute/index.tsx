@@ -3,6 +3,7 @@ import { passwordSchema } from '@hs/contracts';
 import { useState } from 'react';
 
 import { sessionClient } from '../../api/client';
+import { CheckIcon, CrossIcon, LockIcon } from '../../components/icons';
 import { messageFor } from './presentation';
 
 /**
@@ -22,9 +23,7 @@ export function AcceptInvitationRoute(): React.JSX.Element {
   const navigate = useNavigate();
   const search = useSearch({ from: '/accept-invitation' });
 
-  // El token viene en el link que reparte el coordinador, y el campo queda editable: si
-  // el link se rompió al copiarse en un chat, pegarlo a mano es la salida.
-  const [token, setToken] = useState(search.token ?? '');
+  const token = search.token?.trim();
   const [password, setPassword] = useState('');
   const [confirmation, setConfirmation] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -64,7 +63,7 @@ export function AcceptInvitationRoute(): React.JSX.Element {
     // esto la promesa queda sin atrapar y el botón se queda en "Setting password…" para
     // siempre, que es la única forma de fallar que no le dice nada a nadie.
     const result = await sessionClient
-      .acceptInvitation({ token: token.trim(), password })
+      .acceptInvitation({ token: token ?? '', password })
       .catch(() => ({ ok: false, code: 'unreachable' }) as const);
 
     if (!result.ok) {
@@ -74,7 +73,6 @@ export function AcceptInvitationRoute(): React.JSX.Element {
     }
 
     // El token ya se gastó y la contraseña ya no hace falta en memoria.
-    setToken('');
     setPassword('');
     setConfirmation('');
     setBusy(false);
@@ -83,79 +81,114 @@ export function AcceptInvitationRoute(): React.JSX.Element {
 
   if (done) {
     return (
-      <>
-        <h1>Your password is set</h1>
+      <div className="auth">
+        <div className="auth__panel">
+          <div className="auth__brand">
+            <span className="auth__brand-mark">
+              <CrossIcon size={18} />
+            </span>
+            <span>Health &amp; Safety</span>
+          </div>
 
-        <p className="notice">
-          Sign in with your work email and the password you just chose. This invitation
-          link will not work again.
-        </p>
-
-        <button type="button" onClick={() => void navigate({ to: '/' })}>
-          Go to sign in
-        </button>
-      </>
+          <div className="auth__card auth__card--success">
+            <span className="auth__success-mark">
+              <CheckIcon size={22} />
+            </span>
+            <h1 className="auth__title">Your password is set</h1>
+            <p className="auth__lede">
+              Sign in with your work email and the password you just chose. This invitation
+              link will not work again.
+            </p>
+            <button
+              className="button--primary"
+              type="button"
+              onClick={() => void navigate({ to: '/' })}
+            >
+              Go to sign in
+            </button>
+          </div>
+        </div>
+      </div>
     );
   }
 
   return (
-    <>
-      <h1>Choose your password</h1>
+    <div className="auth">
+      <div className="auth__panel">
+        <div className="auth__brand">
+          <span className="auth__brand-mark">
+            <CrossIcon size={18} />
+          </span>
+          <span>Health &amp; Safety</span>
+        </div>
 
-      <form onSubmit={(event) => void submit(event)}>
-        <p className="item">
-          <label htmlFor="token">Invitation token</label>
-          <input
-            id="token"
-            type="text"
-            autoComplete="off"
-            required
-            value={token}
-            onChange={(event) => setToken(event.target.value)}
-          />
+        <div className="auth__card">
+          {token ? (
+            <>
+              <h1 className="auth__title">Choose your password</h1>
+              <p className="auth__lede">
+                Complete your account using the invitation issued by your coordinator.
+              </p>
+
+              <form className="auth__form" onSubmit={(event) => void submit(event)}>
+                <div className="auth__field">
+                  <label htmlFor="password">New password</label>
+                  <input
+                    id="password"
+                    type="password"
+                    autoComplete="new-password"
+                    required
+                    aria-invalid={invalidPassword}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                  />
+                </div>
+
+                <div className="auth__field">
+                  <label htmlFor="confirmation">Repeat the password</label>
+                  <input
+                    id="confirmation"
+                    type="password"
+                    autoComplete="new-password"
+                    required
+                    aria-invalid={invalidPassword}
+                    value={confirmation}
+                    onChange={(event) => setConfirmation(event.target.value)}
+                  />
+                </div>
+
+                {error ? (
+                  <p className="notice notice--warn" role="alert">
+                    {error}
+                  </p>
+                ) : null}
+
+                <button className="button--primary" type="submit" disabled={busy}>
+                  {busy ? 'Setting password…' : 'Set password'}
+                </button>
+              </form>
+            </>
+          ) : (
+            <>
+              <h1 className="auth__title">Invitation link is incomplete</h1>
+              <p className="auth__lede" role="alert">
+                Ask your coordinator for a new invitation link and open it without changing
+                the address.
+              </p>
+            </>
+          )}
+        </div>
+
+        <p className="auth__note">
+          <span className="auth__note-icon">
+            <LockIcon size={16} />
+          </span>
+          <span>
+            Use at least 12 characters. This secure link expires; if it no longer works,
+            ask your coordinator for a new one.
+          </span>
         </p>
-
-        <p className="item">
-          <label htmlFor="password">New password</label>
-          <input
-            id="password"
-            type="password"
-            autoComplete="new-password"
-            required
-            aria-invalid={invalidPassword}
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
-        </p>
-
-        <p className="item">
-          <label htmlFor="confirmation">Repeat the password</label>
-          <input
-            id="confirmation"
-            type="password"
-            autoComplete="new-password"
-            required
-            aria-invalid={invalidPassword}
-            value={confirmation}
-            onChange={(event) => setConfirmation(event.target.value)}
-          />
-        </p>
-
-        {error ? (
-          <p className="notice notice--warn" role="alert">
-            {error}
-          </p>
-        ) : null}
-
-        <button type="submit" disabled={busy}>
-          {busy ? 'Setting password…' : 'Set password'}
-        </button>
-      </form>
-
-      <p className="notice">
-        At least 12 characters. The HS coordinator issues this link and it expires; if it
-        no longer works, ask for a new one.
-      </p>
-    </>
+      </div>
+    </div>
   );
 }

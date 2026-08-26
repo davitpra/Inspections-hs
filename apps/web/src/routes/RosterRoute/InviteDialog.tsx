@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 
 import { inviteAsJhscMember } from '../../api/roster';
 import { queryKeys } from '../../api/query-keys';
+import { PersonIcon } from '../../components/icons';
 import { InvitationLink } from './InvitationLink';
 
 /**
@@ -64,32 +65,57 @@ export function InviteDialog({
           onDismiss={() => dialogRef.current?.close()}
         />
       ) : (
-        <>
-          <h2>Invite {personLabel} to JHSC</h2>
+        <form
+          className="invite-dialog"
+          onSubmit={(event) => {
+            event.preventDefault();
+            invite.mutate();
+          }}
+        >
+          <div className="invite-dialog__head">
+            <span className="invite-dialog__icon" aria-hidden="true">
+              <PersonIcon size={24} />
+            </span>
+            <div>
+              <p className="invite-dialog__eyebrow">JHSC access</p>
+              <h2>Invite {personLabel}</h2>
+            </div>
+          </div>
 
-          <div className="filters">
+          <p className="invite-dialog__intro">
+            Create a secure, one-time invitation link for this member.
+          </p>
+
+          <div className="invite-dialog__field">
             <label htmlFor={emailId}>Email for {personLabel}</label>
             <input
               id={emailId}
               type="email"
+              placeholder="name@company.com"
+              autoComplete="email"
+              autoFocus
               value={email}
               onChange={(event) => setEmail(event.target.value)}
             />
+          </div>
+
+          {invite.isError ? (
+            <p className="notice" role="alert">{(invite.error as Error).message}</p>
+          ) : null}
+
+          <div className="invite-dialog__actions">
+            <button type="button" onClick={() => dialogRef.current?.close()}>
+              Cancel
+            </button>
             <button
-              type="button"
-              onClick={() => invite.mutate()}
+              type="submit"
+              className="button--primary"
               disabled={email.trim() === '' || invite.isPending}
             >
               {invite.isPending ? 'Generating…' : 'Generate link'}
             </button>
-
-            {invite.isError ? <p className="notice">{(invite.error as Error).message}</p> : null}
           </div>
-
-          <button type="button" onClick={() => dialogRef.current?.close()}>
-            Cancel
-          </button>
-        </>
+        </form>
       )}
     </dialog>
   );
