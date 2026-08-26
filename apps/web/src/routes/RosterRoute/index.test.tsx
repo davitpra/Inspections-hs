@@ -383,7 +383,8 @@ describe('la lista', () => {
     renderRoute();
     await screen.findByRole('rowheader', { name: 'Reid, Ada' });
 
-    fireEvent.change(await screen.findByLabelText('Site'), { target: { value: SITE_B } });
+    fireEvent.click(await screen.findByLabelText('Site'));
+    fireEvent.click(screen.getByRole('option', { name: 'Glencoe' }));
 
     await waitFor(() => expect(listPeople).toHaveBeenCalledWith(SITE_B));
   });
@@ -456,7 +457,7 @@ describe('la lista', () => {
     renderRoute();
     await screen.findByRole('rowheader', { name: 'Reid, Ada' });
 
-    for (const name of ['Name', 'Employee #', 'Role', 'Email', 'Actions']) {
+    for (const name of ['Name', 'Employee #', 'Role', 'Email', 'Access / Status', 'Actions']) {
       expect(screen.getByRole('columnheader', { name })).toBeTruthy();
     }
 

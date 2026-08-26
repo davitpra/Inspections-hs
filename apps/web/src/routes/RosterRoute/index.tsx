@@ -1,25 +1,30 @@
-import { useQuery } from '@tanstack/react-query';
-import { useRef, useState } from 'react';
+import { useQuery } from "@tanstack/react-query";
+import { useRef, useState } from "react";
 
-import { listSites } from '../../api/inspections';
-import { queryKeys } from '../../api/query-keys';
-import { listPeople } from '../../api/roster';
-import { useAppSession } from '../../app/session-context';
-import { CheckIcon, ClockIcon, InfoIcon, PersonIcon } from '../../components/icons';
-import { SitePicker } from '../../components/SitePicker';
-import { StatsBar } from '../../components/StatsBar';
+import { listSites } from "../../api/inspections";
+import { queryKeys } from "../../api/query-keys";
+import { listPeople } from "../../api/roster";
+import { useAppSession } from "../../app/session-context";
+import {
+  CheckIcon,
+  ClockIcon,
+  InfoIcon,
+  PersonIcon,
+} from "../../components/icons";
+import { StatsBar } from "../../components/StatsBar";
 import {
   canAddPersonToRoster,
   canAdministerRoster,
   canImportRoster,
   canInviteFromRoster,
-} from '../../permissions/session';
-import { resolveSiteId } from '../../presentation/sites';
-import { AddPersonDialog } from './AddPersonDialog';
-import { ImportDialog } from './ImportDialog';
-import { rosterCounts, sortRoster, type RosterDialog } from './presentation';
-import { RosterDialogs } from './RosterDialogs';
-import { RosterTable } from './RosterTable';
+} from "../../permissions/session";
+import { resolveSiteId } from "../../presentation/sites";
+import { AddPersonDialog } from "./AddPersonDialog";
+import { ImportDialog } from "./ImportDialog";
+import { rosterCounts, sortRoster, type RosterDialog } from "./presentation";
+import { RosterDialogs } from "./RosterDialogs";
+import { RosterHeader } from "./RosterHeader";
+import { RosterTable } from "./RosterTable";
 
 /**
  * §6 — La consola del roster: quién trabaja en esta planta.
@@ -50,7 +55,9 @@ export function RosterRoute(): React.JSX.Element {
     return (
       <>
         <h1>Roster</h1>
-        <p className="notice">Only the H&amp;S coordinator can administer the roster.</p>
+        <p className="notice">
+          Only the H&amp;S coordinator can administer the roster.
+        </p>
       </>
     );
   }
@@ -88,17 +95,21 @@ function RosterConsole({
   const [adding, setAdding] = useState(false);
   const [dialog, setDialog] = useState<RosterDialog | null>(null);
 
-  const sites = useQuery({ queryKey: queryKeys.sites(), queryFn: listSites, retry: false });
+  const sites = useQuery({
+    queryKey: queryKeys.sites(),
+    queryFn: listSites,
+    retry: false,
+  });
 
   // La baja no saca la planta de `user_site_scope`, así que `siteScope[0]` puede ser una
   // planta cerrada; `resolveSiteId` abre en una activa, igual que la consola de programación.
   const siteId = resolveSiteId(sites.data ?? [], siteScope, chosenSite);
-  const noActiveSite = sites.isSuccess && siteId === '';
+  const noActiveSite = sites.isSuccess && siteId === "";
 
   const roster = useQuery({
     queryKey: queryKeys.roster(siteId),
     queryFn: () => listPeople(siteId),
-    enabled: siteId !== '',
+    enabled: siteId !== "",
     retry: false,
   });
 
@@ -110,54 +121,17 @@ function RosterConsole({
 
   return (
     <>
-      {/*
-        El título a la izquierda y la planta a la derecha: la planta no es un filtro más, es
-        de qué planta habla TODO lo que sigue. Es el mismo encabezado que la consola de
-        programación, y lo comparten a propósito — saltar entre ellas no mueve el título.
-      */}
-      <header className="scheduling__top">
-        <div className="scheduling__header">
-          <div className="scheduling__title">
-            <span className="scheduling__icon">
-              <PersonIcon size={22} />
-            </span>
-            <h1>Roster</h1>
-          </div>
-          <p className="scheduling__subtitle">
-            Everyone who works at this plant, and who of them can sign in to the JHSC console.
-          </p>
-        </div>
+      <RosterHeader
+        sites={sites.data ?? []}
+        siteId={siteId}
+        siteName={siteName}
+        noActiveSite={noActiveSite}
+        mayAddPerson={mayAddPerson}
+        addTriggerRef={addTriggerRef}
+        onSiteChange={setChosenSite}
+        onAddPerson={() => setAdding(true)}
+      />
 
-        {/*
-          Sin ninguna planta activa no hay roster que pedir, y el selector diría «Site» — ni
-          él ni el alta tienen un destino, así que los dos se ocultan juntos (design D6).
-        */}
-        {noActiveSite ? null : (
-          <div className="scheduling__header-actions">
-            <SitePicker
-              sites={sites.data ?? []}
-              value={siteId}
-              onChange={setChosenSite}
-              siteName={siteName}
-            />
-            {mayAddPerson ? (
-              <button
-                ref={addTriggerRef}
-                type="button"
-                className="button--outline"
-                onClick={() => setAdding(true)}
-              >
-                Add person
-              </button>
-            ) : null}
-          </div>
-        )}
-      </header>
-
-      {/*
-        Dónde se corrige lo que esta pantalla muestra: es lo primero que hay que leer cuando
-        algo de la tabla está mal, y un `.note` gris debajo del título no se leía nunca.
-      */}
       <div className="notice-card">
         <div className="notice-card__body">
           <span className="notice-card__icon">
@@ -192,9 +166,21 @@ function RosterConsole({
       {roster.isSuccess && all.length > 0 ? (
         <StatsBar
           items={[
-            { icon: <PersonIcon size={20} />, number: counts.total, label: 'On the roster' },
-            { icon: <CheckIcon size={20} />, number: counts.withAccess, label: 'Can sign in' },
-            { icon: <ClockIcon size={20} />, number: counts.invited, label: 'Invitation pending' },
+            {
+              icon: <PersonIcon size={20} />,
+              number: counts.total,
+              label: "On the roster",
+            },
+            {
+              icon: <CheckIcon size={20} />,
+              number: counts.withAccess,
+              label: "Can sign in",
+            },
+            {
+              icon: <ClockIcon size={20} />,
+              number: counts.invited,
+              label: "Invitation pending",
+            },
           ]}
         />
       ) : null}
@@ -211,11 +197,18 @@ function RosterConsole({
       />
 
       {dialog ? (
-        <RosterDialogs dialog={dialog} siteId={siteId} onClose={() => setDialog(null)} />
+        <RosterDialogs
+          dialog={dialog}
+          siteId={siteId}
+          onClose={() => setDialog(null)}
+        />
       ) : null}
 
       {importing ? (
-        <ImportDialog onClose={() => setImporting(false)} returnFocusTo={importTriggerRef} />
+        <ImportDialog
+          onClose={() => setImporting(false)}
+          returnFocusTo={importTriggerRef}
+        />
       ) : null}
 
       {adding ? (

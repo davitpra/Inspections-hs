@@ -1,11 +1,14 @@
 import { useId, useState } from 'react';
 import type { PersonWithAccount } from '@hs/contracts';
 
-import { SearchIcon } from '../../components/icons';
+import { SearchIcon, UploadIcon } from '../../components/icons';
 import {
+  accessCellClass,
+  accessCellLabel,
   dialogFor,
   emailCellLabel,
   matchesSearch,
+  personInitials,
   personName,
   roleCellClass,
   roleCellLabel,
@@ -53,7 +56,7 @@ export function RosterTable({
             id={searchId}
             type="search"
             value={search}
-            placeholder="Name or employee number"
+            placeholder="Search by name or employee number"
             onChange={(event) => setSearch(event.target.value)}
           />
         </label>
@@ -65,7 +68,7 @@ export function RosterTable({
             className="button--outline roster__import"
             onClick={onImport}
           >
-            Import roster
+            <UploadIcon /> Import roster
           </button>
         ) : null}
 
@@ -108,13 +111,21 @@ export function RosterTable({
                   <th scope="col">Employee #</th>
                   <th scope="col">Role</th>
                   <th scope="col">Email</th>
+                  <th scope="col">Access / Status</th>
                   <th scope="col">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {visible.map((person) => (
                   <tr key={person.id}>
-                    <th scope="row">{personName(person)}</th>
+                    <th scope="row" aria-label={personName(person)}>
+                      <span className="roster__person">
+                        <span className="roster__avatar" aria-hidden="true">
+                          {personInitials(person)}
+                        </span>
+                        <span>{personName(person)}</span>
+                      </span>
+                    </th>
                     <td className="roster__number">{person.employee_number}</td>
                     {/* La píldora ubica el rol en la escala del resto de la app sin
                         reemplazar la palabra — ver `roleCellLabel`, "Worker" incluido. */}
@@ -124,6 +135,12 @@ export function RosterTable({
                     {/* El guión y no el vacío: en una tabla donde la mayoría de las filas no
                         tiene cuenta, la columna en blanco se lee como una columna rota. */}
                     <td className="roster__email">{emailCellLabel(person) || '—'}</td>
+                    <td>
+                      <span className={accessCellClass(person)}>
+                        <span className="roster__access-dot" aria-hidden="true" />
+                        {accessCellLabel(person)}
+                      </span>
+                    </td>
                     {/* El acto tiene columna propia: el rol se compara hacia abajo, el botón
                         es un acto, y mezclados el ancho cambiaba fila por fila. Qué ofrece
                         cada una lo decide `rowActions`. */}

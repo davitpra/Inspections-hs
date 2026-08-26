@@ -51,6 +51,11 @@ export function personName(person: Person): string {
   return `${person.last_name}, ${person.first_name}`;
 }
 
+/** Iniciales para identificar visualmente una fila sin convertirlas en parte del nombre. */
+export function personInitials(person: Person): string {
+  return `${person.first_name.charAt(0)}${person.last_name.charAt(0)}`.toUpperCase();
+}
+
 /**
  * La persona identificada en una sola línea, para donde no hay columnas: el nombre
  * accesible de un control que actúa sobre una fila. Un botón que solo dice "Invite" se
@@ -310,6 +315,19 @@ export function roleCellLabel(person: PersonWithAccount): string {
  */
 export function emailCellLabel(person: PersonWithAccount): string {
   return showsAccountRole(person) ? person.account!.email : '';
+}
+
+/** Estado de acceso que acompaña al rol sin obligar a inferirlo por el color de la píldora. */
+export function accessCellLabel(person: PersonWithAccount): string {
+  if (!showsAccountRole(person)) return 'No access';
+  return person.account!.can_sign_in ? 'Can sign in' : 'Invitation pending';
+}
+
+export function accessCellClass(person: PersonWithAccount): string {
+  if (!showsAccountRole(person)) return 'roster__access roster__access--none';
+  return person.account!.can_sign_in
+    ? 'roster__access roster__access--active'
+    : 'roster__access roster__access--pending';
 }
 
 /**

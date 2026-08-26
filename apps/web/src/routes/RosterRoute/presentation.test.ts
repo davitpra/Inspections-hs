@@ -2,6 +2,8 @@ import { ROLE_LABELS, type Person, type PersonWithAccount } from '@hs/contracts'
 import { describe, expect, it } from 'vitest';
 
 import {
+  accessCellClass,
+  accessCellLabel,
   accountRoleLabel,
   canInvite,
   dialogFor,
@@ -15,6 +17,7 @@ import {
   jhscSeatButtonText,
   matchesSearch,
   personLabel,
+  personInitials,
   personName,
   reissueButtonLabel,
   removeButtonLabel,
@@ -72,6 +75,12 @@ function withAccount(
 describe('personName', () => {
   it('apellido primero, sin el número: en la tabla el número tiene su columna', () => {
     expect(personName(person())).toBe('Reid, Ada');
+  });
+});
+
+describe('personInitials', () => {
+  it('usa nombre y apellido en el orden visual del avatar', () => {
+    expect(personInitials(person())).toBe('AR');
   });
 });
 
@@ -215,6 +224,29 @@ describe('showsAccountRole', () => {
 
   it('no muestra ningún rol para quien no tiene cuenta', () => {
     expect(showsAccountRole(withAccount())).toBe(false);
+  });
+});
+
+describe('estado de acceso de la fila', () => {
+  it('distingue acceso activo, invitación pendiente y ausencia de acceso con texto y clase', () => {
+    const active = withAccount(
+      {},
+      { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true },
+    );
+    const pending = withAccount(
+      {},
+      { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: false },
+    );
+    const none = withAccount();
+
+    expect([accessCellLabel(active), accessCellLabel(pending), accessCellLabel(none)]).toEqual([
+      'Can sign in',
+      'Invitation pending',
+      'No access',
+    ]);
+    expect(accessCellClass(active)).toContain('--active');
+    expect(accessCellClass(pending)).toContain('--pending');
+    expect(accessCellClass(none)).toContain('--none');
   });
 });
 

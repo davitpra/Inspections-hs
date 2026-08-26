@@ -238,6 +238,15 @@ export function SearchIcon({ size = 16 }: { size?: number }): React.JSX.Element 
   );
 }
 
+export function UploadIcon({ size = 18 }: { size?: number }): React.JSX.Element {
+  return (
+    <svg {...svgProps(size)}>
+      <path d="M7 18H5.5a3.5 3.5 0 0 1-.6-6.95A6.5 6.5 0 0 1 17.5 9.5h.5a3 3 0 0 1 .5 5.96" />
+      <path d="M12 12v8M8.75 15.25 12 12l3.25 3.25" />
+    </svg>
+  );
+}
+
 export function PlusIcon({ size = 16 }: { size?: number }): React.JSX.Element {
   return (
     <svg {...svgProps(size)}>

@@ -1053,8 +1053,7 @@ select:disabled {
 /*
  * La tabla del roster. `table-layout: auto` a propósito: los apellidos varían mucho más
  * que el número de empleado, y fijar las columnas dejaría la mitad de la fila vacía.
- * Cuatro columnas cortas más la de acciones entran en el ancho de un teléfono (ADR-010)
- * porque la de acciones envuelve sus botones en vez de estirarse.
+ * Las columnas conservan su alineación en pantallas angostas mediante el scroll del roster.
  */
 .table {
   width: 100%;
@@ -1310,81 +1309,188 @@ select:disabled {
   gap: var(--space-3);
 }
 
+/* En el roster el botón comparte base con el campo, no con la etiqueta del selector. */
+.roster-header__actions {
+  align-items: flex-end;
+  gap: var(--space-4);
+}
+
+.roster-header .site-card {
+  min-height: 48px;
+}
+
+@media (min-width: 48.01rem) {
+  .roster-header .site-picker {
+    flex-basis: 15.5rem;
+    width: 15.5rem;
+  }
+}
+
+@media (max-width: 48rem) {
+  .roster-header__actions,
+  .roster-header .scheduling__header-add {
+    width: 100%;
+  }
+}
+
 /*
- * El selector de planta: UNA FILA, no un campo. Alfiler y "Site" contra el borde
- * izquierdo, la planta elegida contra el derecho. El `<select>` pierde su marco porque
- * el marco ya lo pone la tarjeta — dos rectángulos anidados para un solo control era
- * ruido, y en un teléfono la etiqueta arriba del control gastaba un renglón entero en
- * repetir algo que la fila ya dice.
- *
- * La silueta la dibuja `SitePicker`, no la ruta: las dos consolas que lo usan tenían
- * este envoltorio copiado y podían separarse sin que nadie lo notara.
+ * El selector de planta. La etiqueta queda arriba y el disparador se divide en una celda
+ * de ubicación y otra de valor: la misma jerarquía se repite en el menú abierto.
  */
-.site-card {
+.site-picker {
   position: relative;
+  flex: 0 0 22rem;
+  width: 22rem;
+  max-width: 100%;
+  min-width: 0;
+}
+
+@media (max-width: 48rem) {
+  .site-picker {
+    flex-basis: 100%;
+    width: 100%;
+  }
+}
+
+.site-picker__label {
+  display: block;
+  margin: 0 0 var(--space-2) var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
+}
+
+.site-card {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  flex: 0 1 22rem;
-  min-height: 56px;
-  border: 1px solid var(--line);
+  width: 100%;
+  min-width: 0;
+  min-height: 64px;
+  padding: 0;
+  border: 1px solid var(--brand);
   border-radius: var(--radius-lg);
-  padding: var(--space-2) var(--space-4);
   margin: 0;
+  background: var(--paper);
+  box-sizing: border-box;
+  overflow: hidden;
+  color: var(--ink);
+  text-align: left;
+}
+
+.site-card--button {
+  cursor: pointer;
+}
+
+.site-card--button:hover {
+  background: var(--tint-bg);
+}
+
+.site-card--button:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: var(--space-0-5);
 }
 
 .site-card__icon {
   flex: none;
   display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  width: var(--space-12);
+  border-right: 1px solid var(--line);
   color: var(--brand);
 }
 
-.site-card__label {
-  flex: none;
-  font-weight: var(--weight-normal);
-}
-
-/*
- * El valor se va al final y es el que cede ancho: con un nombre largo en un teléfono, lo
- * que se recorta es la planta y no la etiqueta que explica qué es ese texto.
- */
 .site-card__value {
-  margin-left: auto;
+  flex: 1;
   min-width: 0;
+  padding: 0 var(--space-4);
+  font-size: var(--text-lg);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/*
- * Sin marco, sin fondo y sin la flecha del navegador: el marco lo pone la tarjeta y la
- * flecha la dibujamos nosotros. Ocupa el resto de la fila —no sólo el ancho del nombre—
- * para que el área de toque sea la fila entera, y reserva a la derecha el lugar del
- * chevron para que el nombre no se le meta debajo.
- */
-.site-card__select {
-  flex: 1;
-  min-width: 0;
-  min-height: 40px;
-  padding: 0 calc(var(--space-5) + var(--space-4)) 0 0;
-  border: none;
-  background: none;
-  appearance: none;
-  text-align: right;
-}
-
-.site-card__select:focus-visible {
-  outline: 2px solid currentColor;
-  outline-offset: 4px;
-  border-radius: var(--radius);
-}
-
-/* Decorativo y encima del `<select>`, así que no puede robarle el toque. */
 .site-card__chevron {
-  position: absolute;
-  right: var(--space-4);
+  flex: none;
   display: inline-flex;
-  pointer-events: none;
+  margin-right: var(--space-4);
+  color: var(--muted);
+  transform: rotate(180deg);
+  transition: transform 160ms ease;
+}
+
+.site-card__chevron[data-open] {
+  transform: rotate(0);
+}
+
+.site-picker__list {
+  position: absolute;
+  z-index: 2;
+  top: calc(100% + var(--space-2));
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+  padding: var(--space-2);
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--paper);
+  box-shadow: 0 var(--space-2) var(--space-6) var(--line);
+}
+
+.site-picker__option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: 56px;
+  padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: var(--text-base);
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.site-picker__option:last-child,
+.site-picker__option[aria-selected="true"] {
+  border-bottom-color: transparent;
+}
+
+.site-picker__option:hover,
+.site-picker__option:focus-visible,
+.site-picker__option[aria-selected="true"] {
+  outline: none;
+  background: var(--tint-bg);
+}
+
+.site-picker__option[aria-selected="true"] {
+  color: var(--brand);
+  font-weight: var(--weight-strong);
+}
+
+.site-picker__option-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-8);
+  height: var(--space-8);
+  color: var(--muted);
+}
+
+.site-picker__option[aria-selected="true"] .site-picker__option-icon {
+  border-radius: var(--radius-pill);
+  background: var(--brand);
+  color: var(--paper);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-card__chevron {
+    transition-duration: 0ms;
+  }
 }
 
 .card {
@@ -1843,6 +1949,22 @@ select:disabled {
   background: var(--brand);
   border-color: var(--brand);
   color: var(--paper);
+}
+
+/*
+ * "Add person" al lado del `SitePicker`: es la acción principal del encabezado, no una
+ * entre varias tarjetas, así que lleva el relleno macizo de `button--primary` — pero del
+ * tamaño de su contenido, igual que `.mapping__add`, para no estirarse al ancho de la fila.
+ */
+.scheduling__header-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 48px;
+  padding-inline: var(--space-6);
+  width: auto;
+  white-space: nowrap;
 }
 
 .button--danger {
@@ -5279,14 +5401,18 @@ button.schedule-cell:focus-visible {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2) var(--space-3);
-  padding: var(--space-3) var(--space-4);
+  gap: var(--space-3) var(--space-5);
+  padding: var(--space-4);
   border-bottom: 1px solid var(--line);
 }
 
 .roster__import {
   flex: 0 0 auto;
   width: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
 }
 
 .import-dialog__form {
@@ -5330,10 +5456,11 @@ button.schedule-cell:focus-visible {
 /* Un `<label>` con el ícono adentro: el borde lo pone el envoltorio y no el input, así el
    foco encierra al ícono también. Mismo recurso que el buscador de ubicaciones. */
 .roster__search {
-  flex: 1 1 16rem;
+  flex: 1 1 28rem;
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  max-width: 42rem;
   min-height: 48px;
   padding: 0 var(--space-3);
   border: 1px solid var(--line-control);
@@ -5370,10 +5497,10 @@ button.schedule-cell:focus-visible {
 }
 
 .roster__count {
-  margin-left: auto;
   font-size: var(--text-sm);
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* Las dos notas de lista vacía ocupan el lugar de la tabla, así que llevan su aire. */
@@ -5388,23 +5515,23 @@ button.schedule-cell:focus-visible {
 
 .roster__table {
   margin: 0;
-  /* La tabla nunca es más angosta que esto: por debajo, deslizar es mejor que cinco
+  /* La tabla nunca es más angosta que esto: por debajo, deslizar es mejor que seis
      columnas comprimidas a una palabra por renglón. */
-  min-width: 44rem;
+  min-width: 72rem;
 }
 
 .roster__table th,
 .roster__table td {
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-3) var(--space-5);
 }
 
-/* El encabezado, con el mismo tratamiento que el del catálogo: tinte, versalitas y peso.
-   Es lo que marca dónde empieza el cuerpo cuando la tabla se desliza. */
+/* El encabezado usa la misma superficie que las filas; la divisoria conserva la lectura
+   horizontal sin sumar un bloque de color que compita con las píldoras. */
 .roster__table thead th {
-  background: var(--tint-bg);
-  font-size: var(--text-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  background: var(--paper);
+  font-size: var(--text-sm);
+  text-transform: none;
+  letter-spacing: normal;
   white-space: nowrap;
 }
 
@@ -5413,6 +5540,25 @@ button.schedule-cell:focus-visible {
 .roster__table tbody th {
   font-weight: var(--weight-strong);
   white-space: nowrap;
+}
+
+.roster__person {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.roster__avatar {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--radius-pill);
+  background: var(--tint-bg);
+  color: var(--brand);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
 }
 
 /* Deslizar el ojo por doscientas filas de cinco columnas es donde se pierde el renglón: el
@@ -5438,10 +5584,70 @@ button.schedule-cell:focus-visible {
   color: var(--muted);
 }
 
+.roster__access {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  white-space: nowrap;
+  font-size: var(--text-sm);
+}
+
+.roster__access-dot {
+  width: var(--space-2);
+  height: var(--space-2);
+  border-radius: var(--radius-pill);
+  background: currentColor;
+}
+
+.roster__access--active {
+  color: var(--state-ok);
+}
+
+.roster__access--pending {
+  color: var(--warn-ink);
+}
+
+.roster__access--none {
+  color: var(--state-neutral);
+}
+
+.roster__table th:last-child,
+.roster__table td:last-child {
+  text-align: right;
+}
+
+.roster__table .table__actions {
+  justify-content: flex-end;
+}
+
+.roster__table .status-pill {
+  background: var(--paper);
+}
+
 /* La acción de una fila es del tamaño de su texto y no del ancho de la celda: `--outline` y
    `--danger-quiet` toman el ancho entero, que en una tabla estira la columna hasta comerse
    el nombre. El piso de 48px del `button` base se queda (ADR-010). */
 .roster__action {
   width: auto;
   white-space: nowrap;
+}
+
+.roster__action.button--danger-quiet {
+  border-color: var(--line-control);
+  background: var(--paper);
+}
+
+@media (max-width: 48rem) {
+  .roster__search {
+    flex-basis: 100%;
+    max-width: none;
+  }
+
+  .roster__import {
+    margin-left: 0;
+  }
+
+  .roster__count {
+    margin-left: auto;
+  }
 }
