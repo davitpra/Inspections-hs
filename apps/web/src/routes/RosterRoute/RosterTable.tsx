@@ -2,6 +2,7 @@ import { useId, useState } from 'react';
 import type { PersonWithAccount } from '@hs/contracts';
 
 import { SearchIcon, UploadIcon } from '../../components/icons';
+import { RowMenu } from '../../components/RowMenu';
 import {
   accessCellClass,
   accessCellLabel,
@@ -116,51 +117,54 @@ export function RosterTable({
                 </tr>
               </thead>
               <tbody>
-                {visible.map((person) => (
-                  <tr key={person.id}>
-                    <th scope="row" aria-label={personName(person)}>
-                      <span className="roster__person">
-                        <span className="roster__avatar" aria-hidden="true">
-                          {personInitials(person)}
+                {visible.map((person) => {
+                  const actions = rowActions(person, mayInvite);
+
+                  return (
+                    <tr key={person.id}>
+                      <th scope="row" aria-label={personName(person)}>
+                        <span className="roster__person">
+                          <span className="roster__avatar" aria-hidden="true">
+                            {personInitials(person)}
+                          </span>
+                          <span>{personName(person)}</span>
                         </span>
-                        <span>{personName(person)}</span>
-                      </span>
-                    </th>
-                    <td className="roster__number">{person.employee_number}</td>
-                    {/* La píldora ubica el rol en la escala del resto de la app sin
-                        reemplazar la palabra — ver `roleCellLabel`, "Worker" incluido. */}
-                    <td>
-                      <span className={roleCellClass(person)}>{roleCellLabel(person)}</span>
-                    </td>
-                    {/* El guión y no el vacío: en una tabla donde la mayoría de las filas no
-                        tiene cuenta, la columna en blanco se lee como una columna rota. */}
-                    <td className="roster__email">{emailCellLabel(person) || '—'}</td>
-                    <td>
-                      <span className={accessCellClass(person)}>
-                        <span className="roster__access-dot" aria-hidden="true" />
-                        {accessCellLabel(person)}
-                      </span>
-                    </td>
-                    {/* El acto tiene columna propia: el rol se compara hacia abajo, el botón
-                        es un acto, y mezclados el ancho cambiaba fila por fila. Qué ofrece
-                        cada una lo decide `rowActions`. */}
-                    <td>
-                      <div className="table__actions">
-                        {rowActions(person, mayInvite).map((action) => (
-                          <button
-                            key={action.kind}
-                            type="button"
-                            className={action.className}
-                            aria-label={action.label}
-                            onClick={() => onAct(dialogFor(person, action))}
-                          >
-                            {action.text}
-                          </button>
-                        ))}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </th>
+                      <td className="roster__number">{person.employee_number}</td>
+                      {/* La píldora ubica el rol en la escala del resto de la app sin
+                          reemplazar la palabra — ver `roleCellLabel`, "Worker" incluido. */}
+                      <td>
+                        <span className={roleCellClass(person)}>{roleCellLabel(person)}</span>
+                      </td>
+                      {/* El guión y no el vacío: en una tabla donde la mayoría de las filas no
+                          tiene cuenta, la columna en blanco se lee como una columna rota. */}
+                      <td className="roster__email">{emailCellLabel(person) || '—'}</td>
+                      <td>
+                        <span className={accessCellClass(person)}>
+                          <span className="roster__access-dot" aria-hidden="true" />
+                          {accessCellLabel(person)}
+                        </span>
+                      </td>
+                      {/* El acto tiene columna propia: el rol se compara hacia abajo, el botón
+                          es un acto, y mezclados el ancho cambiaba fila por fila. Qué ofrece
+                          cada una lo decide `rowActions`. */}
+                      <td className="roster__actions-cell">
+                        {actions.length > 0 ? (
+                          <div className="table__actions">
+                            <RowMenu
+                              label={`More actions for ${personName(person)}`}
+                              actions={actions.map((action) => ({
+                                label: action.text,
+                                tone: action.kind === 'remove' ? 'danger' : undefined,
+                                onSelect: () => onAct(dialogFor(person, action)),
+                              }))}
+                            />
+                          </div>
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

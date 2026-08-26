@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PersonWithAccount, Session, Site } from '@hs/contracts';
 
@@ -97,6 +97,16 @@ function renderRoute(client = new QueryClient({ defaultOptions: { queries: { ret
     ),
     client,
   };
+}
+
+function openRowMenu(personName: string): HTMLElement {
+  const button = screen.getByRole('button', { name: `More actions for ${personName}` });
+  fireEvent.click(button);
+  return within(button.parentElement as HTMLElement).getByRole('menu');
+}
+
+function clickRowAction(personName: string, action: string): void {
+  fireEvent.click(within(openRowMenu(personName)).getByRole('menuitem', { name: action }));
 }
 
 beforeEach(() => {
@@ -584,7 +594,8 @@ describe('las columnas Role y Actions (proposal)', () => {
     renderRoute();
     await screen.findByRole('rowheader', { name: 'Reid, Ada' });
 
-    expect(screen.getAllByRole('button', { name: /to JHSC$/i }).length).toBe(1);
+    expect(within(openRowMenu('Reid, Ada')).getByRole('menuitem', { name: 'Invite to JHSC' })).toBeTruthy();
+    expect(within(openRowMenu('Alvarez, Bruno')).queryByRole('menuitem', { name: 'Invite to JHSC' })).toBeNull();
   });
 
   it('invitar vuelve a pedir el roster', async () => {
@@ -598,7 +609,7 @@ describe('las columnas Role y Actions (proposal)', () => {
 
     const callsBefore = listPeople.mock.calls.length;
 
-    fireEvent.click(screen.getByRole('button', { name: /Invite Reid, Ada \(10472\) to JHSC/i }));
+    clickRowAction('Reid, Ada', 'Invite to JHSC');
 
     fireEvent.change(screen.getByLabelText(/Email for Reid, Ada/i), {
       target: { value: 'ada.reid@example.com' },
@@ -641,7 +652,7 @@ describe('las columnas Role y Actions (proposal)', () => {
     renderRoute();
     await screen.findByRole('rowheader', { name: 'Reid, Ada' });
 
-    fireEvent.click(screen.getByRole('button', { name: /Invite Reid, Ada \(10472\) to JHSC/i }));
+    clickRowAction('Reid, Ada', 'Invite to JHSC');
 
     fireEvent.change(screen.getByLabelText(/Email for Reid, Ada/i), {
       target: { value: 'ada.reid@example.com' },
@@ -650,7 +661,7 @@ describe('las columnas Role y Actions (proposal)', () => {
 
     // La fila ya muestra el rol —el refetch llegó— y el link sigue en pantalla, en el modal.
     expect(await screen.findByText('JHSC member (invited)')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /Invite Reid, Ada \(10472\) to JHSC/i })).toBeNull();
+    expect(within(openRowMenu('Reid, Ada')).queryByRole('menuitem', { name: 'Invite to JHSC' })).toBeNull();
     expect(screen.getByRole('button', { name: /Copy invitation link/i })).toBeTruthy();
   });
 
@@ -671,7 +682,7 @@ describe('las columnas Role y Actions (proposal)', () => {
     renderRoute();
     await screen.findByRole('rowheader', { name: 'Reid, Ada' });
 
-    fireEvent.click(screen.getByRole('button', { name: /Invite Reid, Ada \(10472\) to JHSC/i }));
+    clickRowAction('Reid, Ada', 'Invite to JHSC');
 
     fireEvent.change(screen.getByLabelText(/Email for Reid, Ada/i), {
       target: { value: 'ada.reid@example.com' },
@@ -698,7 +709,7 @@ describe('las columnas Role y Actions (proposal)', () => {
     renderRoute();
     await screen.findByRole('rowheader', { name: 'Reid, Ada' });
 
-    fireEvent.click(screen.getByRole('button', { name: /Invite Reid, Ada \(10472\) to JHSC/i }));
+    clickRowAction('Reid, Ada', 'Invite to JHSC');
     fireEvent.change(screen.getByLabelText(/Email for Reid, Ada/i), {
       target: { value: 'ada.reid@example.com' },
     });
@@ -707,7 +718,7 @@ describe('las columnas Role y Actions (proposal)', () => {
     expect(screen.queryByLabelText(/Email for Reid, Ada/i)).toBeNull();
     expect(inviteAsJhscMember).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole('button', { name: /Invite Reid, Ada \(10472\) to JHSC/i }));
+    clickRowAction('Reid, Ada', 'Invite to JHSC');
     expect((screen.getByLabelText(/Email for Reid, Ada/i) as HTMLInputElement).value).toBe('');
   });
 });
@@ -731,18 +742,17 @@ describe('reemitir el link (reissue-invitation-link-from-roster)', () => {
     renderRoute();
     await screen.findByRole('rowheader', { name: 'Reid, Ada' });
 
-    expect(
-      screen.getByRole('button', { name: /New invitation link for Reid, Ada \(10472\)/i }),
-    ).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /Invite Reid, Ada \(10472\) to JHSC/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /New invitation link for Alvarez, Bruno/i })).toBeNull();
+    const adaMenu = openRowMenu('Reid, Ada');
+    expect(within(adaMenu).getByRole('menuitem', { name: 'New link' })).toBeTruthy();
+    expect(within(adaMenu).queryByRole('menuitem', { name: 'Invite to JHSC' })).toBeNull();
+    expect(within(openRowMenu('Alvarez, Bruno')).queryByRole('menuitem', { name: 'New link' })).toBeNull();
   });
 
   it('una persona sin cuenta no ofrece "New link"', async () => {
     renderRoute();
     await screen.findByRole('rowheader', { name: 'Reid, Ada' });
 
-    expect(screen.queryByRole('button', { name: /New invitation link/i })).toBeNull();
+    expect(within(openRowMenu('Reid, Ada')).queryByRole('menuitem', { name: 'New link' })).toBeNull();
   });
 
   it('precarga el email registrado y no deja emitir mientras carga', async () => {
@@ -762,9 +772,7 @@ describe('reemitir el link (reissue-invitation-link-from-roster)', () => {
     renderRoute();
     await screen.findByRole('rowheader', { name: 'Reid, Ada' });
 
-    fireEvent.click(
-      screen.getByRole('button', { name: /New invitation link for Reid, Ada \(10472\)/i }),
-    );
+    clickRowAction('Reid, Ada', 'New link');
 
     expect(
       (screen.getByRole('button', { name: /Generate new link/i }) as HTMLButtonElement).disabled,
@@ -801,9 +809,7 @@ describe('reemitir el link (reissue-invitation-link-from-roster)', () => {
     renderRoute();
     await screen.findByRole('rowheader', { name: 'Reid, Ada' });
 
-    fireEvent.click(
-      screen.getByRole('button', { name: /New invitation link for Reid, Ada \(10472\)/i }),
-    );
+    clickRowAction('Reid, Ada', 'New link');
     expect(screen.getByText(/previous link stops working/i)).toBeTruthy();
 
     await waitFor(() =>
@@ -841,9 +847,7 @@ describe('reemitir el link (reissue-invitation-link-from-roster)', () => {
     renderRoute();
     await screen.findByRole('rowheader', { name: 'Reid, Ada' });
 
-    fireEvent.click(
-      screen.getByRole('button', { name: /New invitation link for Reid, Ada \(10472\)/i }),
-    );
+    clickRowAction('Reid, Ada', 'New link');
 
     await waitFor(() =>
       expect((screen.getByLabelText('Email') as HTMLInputElement).value).toBe(
@@ -884,15 +888,10 @@ describe('quitar el acceso (remove-jhsc-access-from-roster)', () => {
     renderRoute();
     await screen.findByRole('rowheader', { name: 'Reid, Ada' });
 
-    expect(
-      screen.getByRole('button', { name: /Cancel the invitation of Reid, Ada \(10472\)/i }),
-    ).toBeTruthy();
-    expect(
-      screen.getByRole('button', { name: /Remove Alvarez, Bruno \(10473\) from JHSC/i }),
-    ).toBeTruthy();
-    expect(
-      screen.queryByRole('button', { name: /Remove Reid, Ada \(10472\) from JHSC/i }),
-    ).toBeNull();
+    const adaMenu = openRowMenu('Reid, Ada');
+    expect(within(adaMenu).getByRole('menuitem', { name: 'Cancel invitation' })).toBeTruthy();
+    expect(within(openRowMenu('Alvarez, Bruno')).getByRole('menuitem', { name: 'Remove' })).toBeTruthy();
+    expect(within(adaMenu).queryByRole('menuitem', { name: 'Remove' })).toBeNull();
   });
 
   // El roster administra el acceso que el roster otorga. Un supervisor no se toca de acá.
@@ -904,8 +903,7 @@ describe('quitar el acceso (remove-jhsc-access-from-roster)', () => {
     renderRoute();
     await screen.findByRole('rowheader', { name: 'Reid, Ada' });
 
-    expect(screen.queryByRole('button', { name: /from JHSC/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /Cancel the invitation/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'More actions for Reid, Ada' })).toBeNull();
   });
 
   it('confirma antes de quitar, y solo llama al servidor al confirmar', async () => {
@@ -915,9 +913,7 @@ describe('quitar el acceso (remove-jhsc-access-from-roster)', () => {
     renderRoute();
     await screen.findByRole('rowheader', { name: 'Reid, Ada' });
 
-    fireEvent.click(
-      screen.getByRole('button', { name: /Remove Reid, Ada \(10472\) from JHSC/i }),
-    );
+    clickRowAction('Reid, Ada', 'Remove');
 
     expect(
       screen.getByRole('heading', { name: /Remove Reid, Ada \(10472\) from the JHSC\?/i }),
@@ -936,9 +932,7 @@ describe('quitar el acceso (remove-jhsc-access-from-roster)', () => {
     renderRoute();
     await screen.findByRole('rowheader', { name: 'Reid, Ada' });
 
-    fireEvent.click(
-      screen.getByRole('button', { name: /Cancel the invitation of Reid, Ada \(10472\)/i }),
-    );
+    clickRowAction('Reid, Ada', 'Cancel invitation');
 
     expect(screen.getByText(/invitation link stops working/i)).toBeTruthy();
     expect(screen.queryByText(/any session they have open ends/i)).toBeNull();
@@ -957,13 +951,12 @@ describe('quitar el acceso (remove-jhsc-access-from-roster)', () => {
 
     expect(screen.queryByText(/JHSC member/i)).toBeNull();
     expect(screen.getByText('Worker')).toBeTruthy();
-    expect(
-      screen.getByRole('button', { name: /Invite Reid, Ada \(10472\) to JHSC/i }),
-    ).toBeTruthy();
+    const menu = openRowMenu('Reid, Ada');
+    expect(within(menu).getByRole('menuitem', { name: 'Invite to JHSC' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Restore/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /New invitation link for Reid, Ada/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /Cancel the invitation of Reid, Ada/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /Remove Reid, Ada/i })).toBeNull();
+    expect(within(menu).queryByRole('menuitem', { name: 'New link' })).toBeNull();
+    expect(within(menu).queryByRole('menuitem', { name: 'Cancel invitation' })).toBeNull();
+    expect(within(menu).queryByRole('menuitem', { name: 'Remove' })).toBeNull();
   });
 
   it('vuelve a invitar por el mismo camino que una persona sin cuenta', async () => {
@@ -976,7 +969,7 @@ describe('quitar el acceso (remove-jhsc-access-from-roster)', () => {
     renderRoute();
     await screen.findByRole('rowheader', { name: 'Reid, Ada' });
 
-    fireEvent.click(screen.getByRole('button', { name: /Invite Reid, Ada \(10472\) to JHSC/i }));
+    clickRowAction('Reid, Ada', 'Invite to JHSC');
 
     // El correo se pide de cero, como en cualquier invitación.
     expect((screen.getByLabelText(/Email for Reid, Ada/i) as HTMLInputElement).value).toBe('');
@@ -1005,7 +998,7 @@ describe('quitar el acceso (remove-jhsc-access-from-roster)', () => {
     renderRoute();
     await screen.findByRole('rowheader', { name: 'Reid, Ada' });
 
-    expect(screen.queryByRole('button', { name: /Invite Reid, Ada/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'More actions for Reid, Ada' })).toBeNull();
   });
 
   // El roster administra el acceso que el roster otorga: la cuenta inactiva de un
@@ -1018,7 +1011,7 @@ describe('quitar el acceso (remove-jhsc-access-from-roster)', () => {
     renderRoute();
     await screen.findByRole('rowheader', { name: 'Reid, Ada' });
 
-    expect(screen.queryByRole('button', { name: /Invite Reid, Ada/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'More actions for Reid, Ada' })).toBeNull();
   });
 });
 
@@ -1040,8 +1033,8 @@ describe('el asiento en el JHSC (coordinator-jhsc-seat)', () => {
     renderRoute();
     await screen.findByRole('rowheader', { name: 'Reid, Ada' });
 
-    expect(screen.getByRole('button', { name: /Seat Reid, Ada \(10472\) on the JHSC/i })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /Seat Alvarez, Bruno/i })).toBeNull();
+    expect(within(openRowMenu('Reid, Ada')).getByRole('menuitem', { name: 'Join JHSC' })).toBeTruthy();
+    expect(within(openRowMenu('Alvarez, Bruno')).queryByRole('menuitem', { name: 'Join JHSC' })).toBeNull();
   });
 
   it('la celda Role dice el asiento de quien lo tiene', async () => {
@@ -1058,9 +1051,8 @@ describe('el asiento en el JHSC (coordinator-jhsc-seat)', () => {
 
     renderRoute();
 
-    fireEvent.click(
-      await screen.findByRole('button', { name: /Seat Reid, Ada \(10472\) on the JHSC/i }),
-    );
+    await screen.findByRole('rowheader', { name: 'Reid, Ada' });
+    clickRowAction('Reid, Ada', 'Join JHSC');
 
     // El diálogo está abierto y todavía no se escribió nada.
     expect(screen.getByRole('heading', { name: /Seat Reid, Ada \(10472\) on the JHSC\?/i })).toBeTruthy();
@@ -1082,9 +1074,8 @@ describe('el asiento en el JHSC (coordinator-jhsc-seat)', () => {
 
     renderRoute();
 
-    fireEvent.click(
-      await screen.findByRole('button', { name: /Remove Reid, Ada \(10472\) from the JHSC seat/i }),
-    );
+    await screen.findByRole('rowheader', { name: 'Reid, Ada' });
+    clickRowAction('Reid, Ada', 'Leave JHSC');
 
     expect(screen.getByText(/Inspections already assigned to them stay assigned/i)).toBeTruthy();
 

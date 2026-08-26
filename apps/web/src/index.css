@@ -5632,6 +5632,14 @@ button.schedule-cell:focus-visible {
   justify-content: flex-end;
 }
 
+/* El «⋮» se ancla en absoluto (ver `.row-menu`), así que la celda tiene que reservarle la
+   posición contra la que se ancla — la misma razón de `.requirements-table__actions-cell`. */
+.roster__actions-cell {
+  position: relative;
+  width: 1%;
+  white-space: nowrap;
+}
+
 .roster__table .status-pill {
   background: var(--paper);
 }
