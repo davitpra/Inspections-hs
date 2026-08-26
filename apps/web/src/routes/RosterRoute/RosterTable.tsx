@@ -68,7 +68,7 @@ export function RosterTable({
             className="button--outline roster__import"
             onClick={onImport}
           >
-            <UploadIcon /> Import roster
+            <UploadIcon /> Import people
           </button>
         ) : null}
 
@@ -86,7 +86,7 @@ export function RosterTable({
           distintos: el primero es un roster sin importar, el segundo es un tipeo.
         */}
         {ready && people.length === 0 ? (
-          <p className="note">No one is on the roster of {siteName}.</p>
+          <p className="note">No people have been added to {siteName}.</p>
         ) : null}
         {ready && people.length > 0 && visible.length === 0 ? (
           <p className="note">No one matches “{search}”.</p>
@@ -104,7 +104,7 @@ export function RosterTable({
         {visible.length > 0 ? (
           <div className="roster__scroll">
             <table className="table roster__table">
-              <caption className="roster__sr">Roster of {siteName}</caption>
+              <caption className="roster__sr">People at {siteName}</caption>
               <thead>
                 <tr>
                   <th scope="col">Name</th>

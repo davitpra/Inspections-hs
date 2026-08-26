@@ -84,7 +84,7 @@ export function AddPersonDialog({
       onClose={onClose}
     >
       <h2 id={titleId}>Add person</h2>
-      <p className="modal__text">Adds one person to the roster of {siteName}.</p>
+      <p className="modal__text">Adds one person to {siteName}.</p>
 
       <form
         onSubmit={(event) => {

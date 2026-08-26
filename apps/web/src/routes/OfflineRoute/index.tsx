@@ -63,7 +63,7 @@ export function OfflineRoute(): React.JSX.Element {
             <ListIcon size={16} /> Template administration.
           </li>
           <li>
-            <ListIcon size={16} /> Account and roster settings.
+            <ListIcon size={16} /> People and account settings.
           </li>
         </ul>
       </div>

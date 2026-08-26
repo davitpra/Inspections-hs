@@ -107,10 +107,10 @@ describe('la presentación del reporte de importación', () => {
   });
 
   it.each([
-    ['empty', 'Import roster'],
-    ['ready', 'Import roster'],
+    ['empty', 'Import people'],
+    ['ready', 'Import people'],
     ['pending', 'Importing…'],
-    ['success', 'Import roster'],
+    ['success', 'Import people'],
     ['error', 'Try again'],
   ] as const)('nombra el botón en %s', (state, label) => {
     expect(importButtonText(state)).toBe(label);

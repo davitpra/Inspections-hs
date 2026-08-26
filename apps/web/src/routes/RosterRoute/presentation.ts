@@ -17,7 +17,7 @@ export function sortRejections(rejections: readonly RosterRejection[]): RosterRe
 }
 
 export function importButtonText(state: ImportState): string {
-  return state === 'pending' ? 'Importing…' : state === 'error' ? 'Try again' : 'Import roster';
+  return state === 'pending' ? 'Importing…' : state === 'error' ? 'Try again' : 'Import people';
 }
 
 /** El alta de UNA persona no tiene un estado `success` propio: el diálogo se cierra solo. */

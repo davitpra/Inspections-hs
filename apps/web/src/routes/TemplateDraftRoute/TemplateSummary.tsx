@@ -9,6 +9,8 @@ import { BuildingIcon, DocumentIcon, PinIcon } from "../../components/icons";
 import { PublishReadiness } from "./PublishReadiness";
 import {
   locationCoverage,
+  publishButtonLabel,
+  saveButtonLabel,
   scopeLabel,
   sectionAppliesTo,
   scopeNotice,
@@ -33,12 +35,26 @@ export function TemplateSummary({
   locations,
   sites,
   siteIds,
+  dirty,
+  saving,
+  canSave,
+  canPublish,
+  publishing,
+  onSave,
+  onPublish,
 }: {
   document: TemplateDraftDocument;
   issues: readonly DraftIssue[];
   locations: readonly Location[];
   sites: readonly Site[];
   siteIds: readonly string[];
+  dirty: boolean;
+  saving: boolean;
+  canSave: boolean;
+  canPublish: boolean;
+  publishing: boolean;
+  onSave: () => void;
+  onPublish: () => void;
 }): React.JSX.Element {
   const counts = summaryCounts(document, locations, siteIds);
 
@@ -61,7 +77,9 @@ export function TemplateSummary({
             <BuildingIcon size={18} />
             <strong>{scopeLabel(siteIds, sites)}</strong>
           </p>
-          <p className="note builder__scope-note">{scopeNotice(siteIds, sites)}</p>
+          <p className="note builder__scope-note">
+            {scopeNotice(siteIds, sites)}
+          </p>
         </div>
 
         <dl className="builder__counts">
@@ -130,6 +148,26 @@ export function TemplateSummary({
       </section>
 
       <PublishReadiness issues={issues} />
+
+      <div className="builder__aside-actions">
+        <button
+          type="button"
+          className="button--primary builder__save"
+          onClick={onSave}
+          disabled={!canSave}
+        >
+          {saveButtonLabel(saving, dirty)}
+        </button>
+
+        <button
+          type="button"
+          className="button--primary builder__publish"
+          onClick={onPublish}
+          disabled={!canPublish || publishing}
+        >
+          {publishButtonLabel(publishing)}
+        </button>
+      </div>
     </aside>
   );
 }

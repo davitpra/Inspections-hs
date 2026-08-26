@@ -1321,8 +1321,8 @@ select:disabled {
 
 @media (min-width: 48.01rem) {
   .roster-header .site-picker {
-    flex-basis: 15.5rem;
-    width: 15.5rem;
+    flex-basis: 20rem;
+    width: 20rem;
   }
 }
 
@@ -3865,6 +3865,18 @@ button.schedule-cell:focus-visible {
 /* El único botón de la pantalla que no ocupa el ancho: `.button--primary` es `width: 100%`
    porque casi siempre cierra un formulario, y acá vive en un renglón con otras dos cosas. */
 .builder__save {
+  width: auto;
+}
+
+/* Guardar y publicar, al pie del resumen: las dos únicas acciones que escriben, una al
+   lado de la otra y del mismo ancho. */
+.builder__aside-actions {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.builder__aside-actions .button--primary {
+  flex: 1;
   width: auto;
 }
 

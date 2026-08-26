@@ -46,24 +46,24 @@ export class RosterException extends HttpException {
 export const rosterForbidden = (): RosterException =>
   new RosterException(
     'roster_forbidden',
-    'Only the HS coordinator can read the roster',
+    'Only the HS coordinator can view people and access',
     HttpStatus.FORBIDDEN,
   );
 
 export const rosterImportForbidden = (): RosterException =>
   new RosterException(
     'roster_forbidden',
-    'Only the HS coordinator can import the roster',
+    'Only the HS coordinator can import people',
     HttpStatus.FORBIDDEN,
   );
 
 export const rosterFileUnusable = (reason: string): RosterException =>
-  new RosterException('roster_file_unusable', `The roster file is unusable: ${reason}`, HttpStatus.BAD_REQUEST);
+  new RosterException('roster_file_unusable', `The people CSV file is unusable: ${reason}`, HttpStatus.BAD_REQUEST);
 
 export const rosterFileTooLarge = (): RosterException =>
   new RosterException(
     'roster_file_too_large',
-    'The roster file must not exceed 2 MiB',
+    'The people CSV file must not exceed 2 MiB',
     HttpStatus.PAYLOAD_TOO_LARGE,
   );
 

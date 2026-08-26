@@ -1,6 +1,6 @@
 import { RowMenu } from '../../components/RowMenu';
 import { DocumentIcon } from '../../components/icons';
-import { publishButtonLabel, saveButtonLabel, saveStateLabel } from './presentation';
+import { saveStateLabel } from './presentation';
 
 /**
  * El encabezado de la consola: qué pantalla es, cómo está el borrador, y el guardado.
@@ -24,24 +24,12 @@ export function DraftHeader({
   templateName,
   nextVersion,
   dirty,
-  saving,
-  canSave,
-  canPublish,
-  publishing,
-  onSave,
-  onPublish,
   onDiscard,
 }: {
   revising: boolean;
   templateName: string;
   nextVersion: number;
   dirty: boolean;
-  saving: boolean;
-  canSave: boolean;
-  canPublish: boolean;
-  publishing: boolean;
-  onSave: () => void;
-  onPublish: () => void;
   onDiscard: () => void;
 }): React.JSX.Element {
   return (
@@ -67,24 +55,6 @@ export function DraftHeader({
           </span>
           <span className="note">{saveStateLabel(dirty)}</span>
         </div>
-
-        <button
-          type="button"
-          className="button--primary builder__save"
-          onClick={onSave}
-          disabled={!canSave}
-        >
-          {saveButtonLabel(saving, dirty)}
-        </button>
-
-        <button
-          type="button"
-          className="button--primary builder__publish"
-          onClick={onPublish}
-          disabled={!canPublish || publishing}
-        >
-          {publishButtonLabel(publishing)}
-        </button>
 
         {/*
           El menú vuelve a anclarse por CSS a la esquina del bloque, así que necesita un

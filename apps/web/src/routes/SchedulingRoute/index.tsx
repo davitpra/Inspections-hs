@@ -46,12 +46,16 @@ export function SchedulingRoute(): React.JSX.Element {
 
   return (
     <>
-      <header className="scheduling__top">
+      <header className="scheduling__top roster-header">
         <div className="scheduling__header">
           <div className="scheduling__title"><span className="scheduling__icon"><CalendarIcon size={22} /></span><h1>Scheduling</h1></div>
           <p className="scheduling__subtitle">Plan and assign each inspection period this site owes throughout the year.</p>
         </div>
-        {sites.isSuccess && !noActiveSite ? <SitePicker sites={sites.data ?? []} value={siteId} onChange={setChosenSite} siteName={siteName} /> : null}
+        {sites.isSuccess && !noActiveSite ? (
+          <div className="scheduling__header-actions roster-header__actions">
+            <SitePicker sites={sites.data ?? []} value={siteId} onChange={setChosenSite} siteName={siteName} />
+          </div>
+        ) : null}
       </header>
 
       {sites.isLoading || schedules.isLoading || scheduled.isLoading ? <p className="status-card"><CalendarIcon size={20} /> Loading scheduling data…</p> : null}

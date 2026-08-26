@@ -29,7 +29,7 @@ export function RosterHeader({
           <span className="scheduling__icon">
             <PersonIcon size={22} />
           </span>
-          <h1>Roster</h1>
+          <h1>People &amp; Access</h1>
         </div>
         <p className="scheduling__subtitle">
           Everyone who works at this plant, and who of them can sign in to the JHSC console.

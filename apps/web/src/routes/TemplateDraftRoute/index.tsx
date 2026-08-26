@@ -274,14 +274,6 @@ function DraftForm({
         templateName={loaded.name}
         nextVersion={loaded.next_version}
         dirty={dirty}
-        saving={save.isPending}
-        canSave={
-          dirty && !save.isPending && name.trim() !== "" && siteIds.length > 0
-        }
-        canPublish={canPublishPermission && canPublishDraft(dirty, issues)}
-        publishing={publish.isPending}
-        onSave={() => save.mutate()}
-        onPublish={() => setPublishDialog(true)}
         onDiscard={() => discard.mutate()}
       />
 
@@ -331,6 +323,15 @@ function DraftForm({
           locations={locations}
           sites={sites}
           siteIds={siteIds}
+          dirty={dirty}
+          saving={save.isPending}
+          canSave={
+            dirty && !save.isPending && name.trim() !== "" && siteIds.length > 0
+          }
+          canPublish={canPublishPermission && canPublishDraft(dirty, issues)}
+          publishing={publish.isPending}
+          onSave={() => save.mutate()}
+          onPublish={() => setPublishDialog(true)}
         />
       </div>
     </>

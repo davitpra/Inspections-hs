@@ -23,14 +23,14 @@ describe('visibleNavItems', () => {
     const labels = visibleNavItems(account('hs_coordinator')).map((item) => item.label);
 
     expect(labels).toContain('Scheduling');
-    expect(labels).toContain('Roster');
+    expect(labels).toContain('People');
   });
 
   it('no se los ofrece a un inspector, que no puede administrar ninguna de las dos', () => {
     const labels = visibleNavItems(account('supervisor')).map((item) => item.label);
 
     expect(labels).not.toContain('Scheduling');
-    expect(labels).not.toContain('Roster');
+    expect(labels).not.toContain('People');
     // Y sí conserva lo que es de todos: el menú no queda vacío.
     expect(labels).toContain('Inspections');
   });

@@ -93,7 +93,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     icon: CalendarIcon,
     visible: canAdministerScheduling,
   },
-  { to: '/roster', label: 'Roster', icon: PersonIcon, visible: canAdministerRoster },
+  { to: '/roster', label: 'People', icon: PersonIcon, visible: canAdministerRoster },
   { to: '/templates', label: 'Templates', icon: DocumentIcon, visible: canAuthorTemplates },
   {
     to: '/catalog/locations',
@@ -136,7 +136,7 @@ const TITLES: readonly (readonly [string, string])[] = [
   ['/incidents/*', 'Incident'],
   ['/recurrence', 'Recurring findings'],
   ['/scheduling', 'Scheduling'],
-  ['/roster', 'Roster'],
+  ['/roster', 'People'],
   ['/templates', 'Templates'],
   ['/templates/drafts/*', 'Template'],
   ['/catalog/locations', 'Locations'],

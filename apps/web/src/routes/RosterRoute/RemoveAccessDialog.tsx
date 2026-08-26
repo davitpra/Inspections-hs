@@ -66,8 +66,8 @@ export function RemoveAccessDialog({
 
       <p>
         {canSignIn
-          ? 'They lose access immediately and any session they have open ends. They stay on the roster — losing access is not leaving the company.'
-          : 'The invitation link stops working. They stay on the roster and can be invited again later.'}
+          ? 'They lose access immediately and any session they have open ends. They remain listed at this site because losing access is not leaving the company.'
+          : 'The invitation link stops working. They remain listed at this site and can be invited again later.'}
       </p>
 
       <button type="button" onClick={() => remove.mutate()} disabled={remove.isPending}>

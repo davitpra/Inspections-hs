@@ -44,7 +44,7 @@ export const accountForbidden = (): AccountException =>
 export const accountPersonNotFound = (): AccountException =>
   new AccountException(
     'account_person_not_found',
-    'No person on the roster matches that id, or it is outside your scope',
+    'No person matches that id, or it is outside your scope',
     HttpStatus.BAD_REQUEST,
   );
 
@@ -105,7 +105,7 @@ export const accountAlreadyActive = (): AccountException =>
 export const accountRoleNotRemovable = (): AccountException =>
   new AccountException(
     'account_role_not_removable',
-    'Only a JHSC member account can be withdrawn from the roster',
+    'Only a JHSC member account can have access removed here',
     HttpStatus.FORBIDDEN,
   );
 

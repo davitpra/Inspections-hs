@@ -59,7 +59,7 @@ export function ImportDialog({
       }}
       onClose={onClose}
     >
-      <h2 id={titleId}>Import roster</h2>
+      <h2 id={titleId}>Import people</h2>
       <p className="modal__text">
         Rows for any site you administer may be applied, regardless of the site currently shown.
       </p>
@@ -71,7 +71,7 @@ export function ImportDialog({
           if (file && state !== 'pending') rosterImport.mutate(file);
         }}
       >
-        <label htmlFor={fileId}>Roster CSV file</label>
+        <label htmlFor={fileId}>People CSV file</label>
         <input
           id={fileId}
           type="file"
@@ -94,10 +94,10 @@ export function ImportDialog({
         </div>
       </form>
 
-      {state === 'pending' ? <p role="status">Importing roster…</p> : null}
+      {state === 'pending' ? <p role="status">Importing people…</p> : null}
       {state === 'error' ? (
         <p role="alert" className="notice notice--warn">
-          {rosterImport.error?.message ?? 'The roster could not be imported.'}
+          {rosterImport.error?.message ?? 'The people list could not be imported.'}
         </p>
       ) : null}
 

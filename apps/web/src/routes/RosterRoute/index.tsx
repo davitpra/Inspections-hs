@@ -54,9 +54,9 @@ export function RosterRoute(): React.JSX.Element {
     // para llenar el log de 403.
     return (
       <>
-        <h1>Roster</h1>
+        <h1>People &amp; Access</h1>
         <p className="notice">
-          Only the H&amp;S coordinator can administer the roster.
+          Only the H&amp;S coordinator can manage people and access.
         </p>
       </>
     );
@@ -132,19 +132,6 @@ function RosterConsole({
         onAddPerson={() => setAdding(true)}
       />
 
-      <div className="notice-card">
-        <div className="notice-card__body">
-          <span className="notice-card__icon">
-            <InfoIcon size={20} />
-          </span>
-          <p className="notice-card__text">
-            Use Import roster to apply names, sites and active status from one CSV across any site
-            you administer, or Add person to get someone on the roster before the next file
-            arrives. Correcting an existing person is still only done from the CSV.
-          </p>
-        </div>
-      </div>
-
       {roster.isError ? (
         <p className="status-card status-card--error">
           <InfoIcon size={20} /> This view needs a connection.
@@ -169,7 +156,7 @@ function RosterConsole({
             {
               icon: <PersonIcon size={20} />,
               number: counts.total,
-              label: "On the roster",
+              label: "People at this site",
             },
             {
               icon: <CheckIcon size={20} />,

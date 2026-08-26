@@ -21,7 +21,7 @@ export function readableKind(kind: string): string {
     case 'locations':
       return 'the location list';
     case 'roster':
-      return 'the roster';
+      return 'the people list';
     default:
       return kind;
   }
