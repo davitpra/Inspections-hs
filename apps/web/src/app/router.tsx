@@ -9,6 +9,7 @@ import { z } from 'zod';
 
 import { AcceptInvitationRoute } from '../routes/AcceptInvitationRoute';
 import { ActionRoute } from '../routes/ActionRoute';
+import { ActionsForInspectionRoute } from '../routes/ActionsForInspectionRoute';
 import { ActionsRoute } from '../routes/ActionsRoute';
 import { CaptureRoute } from '../routes/CaptureRoute';
 import { Form7Route } from '../routes/Form7Route';
@@ -212,6 +213,15 @@ const actionsRoute = createRoute({
   component: ActionsRoute,
 });
 
+// Tres segmentos, no dos, así que no compite con `/actions/$id` (el detalle de una
+// acción): el router los distingue por la cantidad de segmentos, sin depender del
+// orden de declaración.
+const actionsForInspectionRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/actions/inspection/$inspectionId',
+  component: ActionsForInspectionRoute,
+});
+
 const actionRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/actions/$id',
@@ -380,6 +390,7 @@ const routeTree = rootRoute.addChildren([
   publishedTemplateRoute,
   locationsRoute,
   actionsRoute,
+  actionsForInspectionRoute,
   actionRoute,
   incidentsRoute,
   reportIncidentRoute,

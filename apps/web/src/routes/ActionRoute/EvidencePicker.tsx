@@ -15,7 +15,7 @@ export function EvidencePicker({
   onChange: (next: { kind: EvidenceInput['kind']; file: File }[]) => void;
 }): React.JSX.Element {
   return (
-    <fieldset>
+    <fieldset className="action-detail__evidence">
       <legend>Evidence</legend>
 
       {(['before', 'after'] as const).map((kind) => (
@@ -35,7 +35,7 @@ export function EvidencePicker({
         </label>
       ))}
 
-      <p>
+      <p className="action-detail__evidence-count">
         {files.filter((item) => item.kind === 'after').length} after,{' '}
         {files.filter((item) => item.kind === 'before').length} before
       </p>

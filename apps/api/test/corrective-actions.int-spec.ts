@@ -179,6 +179,31 @@ async function openAction(
   return action.id;
 }
 
+async function openManualAction(): Promise<string> {
+  const draftId = randomUUID();
+  const finding = await findings.report(asSupervisor(), {
+    site_id: SITE_A,
+    draft_finding_id: draftId,
+    details: {
+      description: 'Damaged dock barrier found outside the inspection route',
+      location_id: locationA,
+      photo_object_keys: [`${SITE_A}/manual/${draftId}/${randomUUID()}`],
+    },
+    occurred_at: '2026-08-04T10:00:00-04:00',
+    classification: {
+      probability: 'possible',
+      severity: 'moderate',
+      control_level: 'engineering',
+    },
+  });
+  const action = await actions.create(asCoordinator(), finding.id, {
+    assignee_person_id: supervisor.personId,
+    description: 'Replace the damaged barrier at the loading dock',
+  });
+
+  return action.id;
+}
+
 /**
  * Vencer una acción sin esperar tres días: el trabajo recibe `now` por payload, así que
  * se lo sitúa en el futuro. Es la misma puerta que usa la recuperación manual del día
@@ -367,6 +392,27 @@ describe('el recorrido completo de R3', () => {
     expect(found?.state).toBe('open');
     expect(found?.overdue).toBe(false);
     expect(found?.severity).toBe('major');
+    expect(found?.site_name).toBe('act-a');
+    expect(found?.assignee_name).not.toBeNull();
+    expect(found?.source).toMatchObject({
+      kind: 'inspection',
+      finding_id: expect.any(String),
+      inspection_id: expect.any(String),
+      scheduled_inspection_id: expect.any(String),
+      template_id: templateId,
+      template_name: 'Monthly walkthrough',
+    });
+    expect(found).not.toHaveProperty('events');
+  });
+
+  it('el listado distingue un hallazgo manual sin inventarle una plantilla', async () => {
+    const actionId = await openManualAction();
+    const listed = await actions.list(asCoordinator());
+
+    expect(listed.find((item) => item.id === actionId)?.source).toMatchObject({
+      kind: 'manual_finding',
+      finding_id: expect.any(String),
+    });
   });
 });
 

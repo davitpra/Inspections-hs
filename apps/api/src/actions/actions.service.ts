@@ -5,6 +5,7 @@ import {
   transitionFor,
   type Action,
   type ActionState,
+  type ActionSummary,
   type CreateActionRequest,
   type CreateInvestigationActionRequest,
   type Severity,
@@ -265,7 +266,7 @@ export class ActionsService {
     });
   }
 
-  async list(session: SessionScope): Promise<Action[]> {
+  async list(session: SessionScope): Promise<ActionSummary[]> {
     return this.db.withSessionClient(session, (client) => listActions(client));
   }
 

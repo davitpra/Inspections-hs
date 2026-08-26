@@ -1,25 +1,29 @@
-import { useQuery } from '@tanstack/react-query';
-import { Link, useSearch } from '@tanstack/react-router';
-import { useState } from 'react';
+import { useQuery } from "@tanstack/react-query";
+import { Link, useSearch } from "@tanstack/react-router";
+import { useState } from "react";
 
-import { listPendingInspections, listScheduled, listSites } from '../../api/inspections';
-import { queryKeys } from '../../api/query-keys';
-import { InstallPrompt } from '../../app/InstallPrompt';
-import { useAppSession } from '../../app/session-context';
-import { CalendarIcon } from '../../components/icons';
-import type { DraftRow as DraftRowData } from '../../offline/db';
-import { listDrafts } from '../../offline/drafts';
-import { DeviceDrafts } from './DeviceDrafts';
-import { DiscardDraftDialog } from './DiscardDraftDialog';
-import { InspectorSchedule } from './InspectorSchedule';
-import { RecentInspections } from './RecentInspections';
-import { ScheduledInspections } from './ScheduledInspections';
-import { draftPeriodStart, pendingWork } from './presentation';
+import {
+  listPendingInspections,
+  listScheduled,
+  listSites,
+} from "../../api/inspections";
+import { queryKeys } from "../../api/query-keys";
+import { InstallPrompt } from "../../app/InstallPrompt";
+import { useAppSession } from "../../app/session-context";
+import { CalendarIcon } from "../../components/icons";
+import type { DraftRow as DraftRowData } from "../../offline/db";
+import { listDrafts } from "../../offline/drafts";
+import { DeviceDrafts } from "./DeviceDrafts";
+import { DiscardDraftDialog } from "./DiscardDraftDialog";
+import { InspectorSchedule } from "./InspectorSchedule";
+import { RecentInspections } from "./RecentInspections";
+import { ScheduledInspections } from "./ScheduledInspections";
+import { draftPeriodStart, pendingWork } from "./presentation";
 
 /** La entrada del inspector: primero todo lo que debe; después, historia y trabajo local. */
 export function InspectorHomeRoute(): React.JSX.Element {
   const { account } = useAppSession();
-  const { submitted } = useSearch({ from: '/' });
+  const { submitted } = useSearch({ from: "/" });
   const [discarding, setDiscarding] = useState<DraftRowData | null>(null);
   const pending = useQuery({
     queryKey: queryKeys.pendingInspections(),
@@ -48,12 +52,12 @@ export function InspectorHomeRoute(): React.JSX.Element {
 
   return (
     <>
-      <InstallPrompt />
-
       <header className="scheduling__top">
         <div className="scheduling__header">
           <div className="scheduling__title">
-            <span className="scheduling__icon"><CalendarIcon size={22} /></span>
+            <span className="scheduling__icon">
+              <CalendarIcon size={22} />
+            </span>
             <h1>My inspections</h1>
           </div>
           <p className="scheduling__subtitle">
@@ -65,10 +69,11 @@ export function InspectorHomeRoute(): React.JSX.Element {
         </Link>
       </header>
 
-      {submitted === 'accepted' ? (
+      <InstallPrompt />
+      {submitted === "accepted" ? (
         <p className="notice">
-          Your signed inspection was sent and accepted. It is no longer waiting on this
-          device.
+          Your signed inspection was sent and accepted. It is no longer waiting
+          on this device.
         </p>
       ) : null}
 

@@ -9,6 +9,8 @@ import {
   TRANSITIONS,
   VERIFIER_ROLES,
   type ActionState,
+  actionListSchema,
+  actionSummarySchema,
   createActionRequestSchema,
   dueAt,
   escalationLevelsDue,
@@ -237,5 +239,66 @@ describe('los requests', () => {
 
   it('un estado inventado se rechaza', () => {
     expect(transitionRequestSchema.safeParse({ to: 'escalated' }).success).toBe(false);
+  });
+});
+
+describe('el resumen del listado', () => {
+  const ACTION_ID = '22222222-2222-4222-8222-222222222222';
+  const SITE_ID = '33333333-3333-4333-8333-333333333333';
+  const FINDING_ID = '44444444-4444-4444-8444-444444444444';
+  const INSPECTION_ID = '55555555-5555-4555-8555-555555555555';
+  const SCHEDULED_ID = '66666666-6666-4666-8666-666666666666';
+  const TEMPLATE_ID = '77777777-7777-4777-8777-777777777777';
+  const INVESTIGATION_ID = '88888888-8888-4888-8888-888888888888';
+
+  const summary = (source: unknown) => ({
+    id: ACTION_ID,
+    site_id: SITE_ID,
+    site_name: 'Glencoe',
+    assignee_person_id: PERSON_ID,
+    assignee_name: 'Dana Okafor',
+    description: 'Install a fixed guard on the infeed of line 3',
+    severity: 'major',
+    due_at: '2026-08-28T16:00:00.000Z',
+    state: 'open',
+    overdue: false,
+    escalations: [],
+    source,
+  });
+
+  it.each([
+    {
+      kind: 'inspection',
+      finding_id: FINDING_ID,
+      inspection_id: INSPECTION_ID,
+      scheduled_inspection_id: SCHEDULED_ID,
+      template_id: TEMPLATE_ID,
+      template_name: 'Monthly workplace inspection',
+    },
+    { kind: 'manual_finding', finding_id: FINDING_ID },
+    { kind: 'investigation', investigation_id: INVESTIGATION_ID },
+  ])('acepta la fuente $kind', (source) => {
+    expect(actionSummarySchema.safeParse(summary(source)).success).toBe(true);
+  });
+
+  it('el listado no acepta el historial de detalle', () => {
+    const withHistory = {
+      ...summary({ kind: 'manual_finding', finding_id: FINDING_ID }),
+      events: [],
+    };
+
+    expect(actionListSchema.safeParse([withHistory]).success).toBe(false);
+  });
+
+  it('una fuente no puede mezclar campos de dos orígenes', () => {
+    const result = actionSummarySchema.safeParse(
+      summary({
+        kind: 'manual_finding',
+        finding_id: FINDING_ID,
+        investigation_id: INVESTIGATION_ID,
+      }),
+    );
+
+    expect(result.success).toBe(false);
   });
 });

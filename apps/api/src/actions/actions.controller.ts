@@ -4,6 +4,7 @@ import {
   createInvestigationActionRequestSchema,
   transitionRequestSchema,
   type Action,
+  type ActionSummary,
 } from '@hs/contracts';
 
 import { CurrentSession } from '../auth/session.decorator';
@@ -30,7 +31,7 @@ export class ActionsController {
   constructor(private readonly actions: ActionsService) {}
 
   @Get('actions')
-  async list(@CurrentSession() session: SessionContext): Promise<Action[]> {
+  async list(@CurrentSession() session: SessionContext): Promise<ActionSummary[]> {
     return this.actions.list(session);
   }
 

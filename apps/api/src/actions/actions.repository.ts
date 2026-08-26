@@ -3,6 +3,7 @@ import type {
   Action,
   ActionEvent,
   ActionState,
+  ActionSummary,
   EscalationLevel,
   EvidenceInput,
   Severity,
@@ -203,12 +204,7 @@ export async function lastExecutor(
   return rows[0]?.actor_user_id ?? null;
 }
 
-/**
- * El listado, con el estado derivado, el stream completo y los escalamientos.
- *
- * El estado sale de `DISTINCT ON` sobre los eventos —no de una columna, que no
- * existe— y `overdue` de comparar `due_at` con el reloj del servidor al leer.
- */
+/** El detalle conserva el stream completo; el listado usa una proyección aparte. */
 const ACTION_SELECT = `
   SELECT a.id, a.site_id, a.finding_id, a.investigation_id, a.assignee_person_id,
          a.description, a.severity,
@@ -258,10 +254,52 @@ const ACTION_SELECT = `
         FROM corrective_action_escalation x WHERE x.action_id = a.id
     ) esc ON true`;
 
-export async function listActions(client: PoolClient): Promise<Action[]> {
-  const { rows } = await client.query<ActionRow>(`${ACTION_SELECT} ORDER BY a.due_at`);
+/**
+ * La cola operativa resuelve su contexto en una consulta y no descarga el stream.
+ * Ningún join agrega un filtro de sitio: cada tabla aislada sigue bajo RLS (ADR-004).
+ */
+const ACTION_SUMMARY_SELECT = `
+  SELECT a.id, a.site_id, site.name AS site_name,
+         a.finding_id, a.investigation_id, a.assignee_person_id,
+         CASE WHEN person.id IS NULL THEN NULL
+              ELSE person.first_name || ' ' || person.last_name END AS assignee_name,
+         a.description, a.severity, a.due_at,
+         state.to_state AS state,
+         (a.due_at < now()) AS overdue,
+         COALESCE(esc.escalations, '[]'::jsonb) AS escalations,
+         finding.inspection_id,
+         inspection.scheduled_inspection_id,
+         scheduled.template_id,
+         template.name AS template_name
+    FROM corrective_action a
+    JOIN site ON site.id = a.site_id
+    LEFT JOIN person ON person.id = a.assignee_person_id
+    LEFT JOIN finding ON finding.id = a.finding_id
+    LEFT JOIN inspection ON inspection.id = finding.inspection_id
+    LEFT JOIN scheduled_inspection scheduled ON scheduled.id = inspection.scheduled_inspection_id
+    LEFT JOIN template ON template.id = scheduled.template_id
+    LEFT JOIN LATERAL (
+      SELECT event.to_state FROM corrective_action_event event
+       WHERE event.action_id = a.id
+       ORDER BY event.position DESC
+       LIMIT 1
+    ) state ON true
+    LEFT JOIN LATERAL (
+      SELECT jsonb_agg(jsonb_build_object(
+               'level', escalation.level,
+               'days_overdue', escalation.days_overdue,
+               'escalated_at', escalation.escalated_at)
+               ORDER BY escalation.escalated_at) AS escalations
+        FROM corrective_action_escalation escalation
+       WHERE escalation.action_id = a.id
+    ) esc ON true`;
 
-  return rows.map(toAction);
+export async function listActions(client: PoolClient): Promise<ActionSummary[]> {
+  const { rows } = await client.query<ActionSummaryRow>(
+    `${ACTION_SUMMARY_SELECT} ORDER BY a.due_at, a.id`,
+  );
+
+  return rows.map(toActionSummary);
 }
 
 export async function readAction(client: PoolClient, actionId: string): Promise<Action | null> {
@@ -306,6 +344,82 @@ interface ActionRow {
   overdue: boolean;
   events: RawEvent[];
   escalations: RawEscalation[];
+}
+
+interface ActionSummaryRow {
+  id: string;
+  site_id: string;
+  site_name: string;
+  finding_id: string | null;
+  investigation_id: string | null;
+  assignee_person_id: string;
+  assignee_name: string | null;
+  description: string;
+  severity: Severity;
+  due_at: Date;
+  state: ActionState;
+  overdue: boolean;
+  escalations: RawEscalation[];
+  inspection_id: string | null;
+  scheduled_inspection_id: string | null;
+  template_id: string | null;
+  template_name: string | null;
+}
+
+function toActionSummary(row: ActionSummaryRow): ActionSummary {
+  const common = {
+    id: row.id,
+    site_id: row.site_id,
+    site_name: row.site_name,
+    assignee_person_id: row.assignee_person_id,
+    assignee_name: row.assignee_name,
+    description: row.description,
+    severity: row.severity,
+    due_at: row.due_at.toISOString(),
+    state: row.state,
+    overdue: row.overdue,
+    escalations: row.escalations.map((item) => ({
+      level: item.level,
+      days_overdue: item.days_overdue,
+      escalated_at: new Date(item.escalated_at).toISOString(),
+    })),
+  };
+
+  if (row.investigation_id !== null) {
+    return {
+      ...common,
+      source: { kind: 'investigation', investigation_id: row.investigation_id },
+    };
+  }
+
+  if (row.finding_id === null) throw new Error(`Action ${row.id} has no parent`);
+
+  if (row.inspection_id === null) {
+    return {
+      ...common,
+      source: { kind: 'manual_finding', finding_id: row.finding_id },
+    };
+  }
+
+  if (
+    row.scheduled_inspection_id === null ||
+    row.template_id === null ||
+    row.template_name === null
+  ) {
+    throw new Error(`Inspection source for action ${row.id} is incomplete`);
+  }
+
+  return {
+    ...common,
+    source: {
+      kind: 'inspection',
+      finding_id: row.finding_id,
+      inspection_id: row.inspection_id,
+      scheduled_inspection_id: row.scheduled_inspection_id,
+      template_id: row.template_id,
+      template_name: row.template_name,
+    },
+  };
 }
 
 function toAction(row: ActionRow): Action {

@@ -365,6 +365,52 @@ export const actionEscalationSchema = z.strictObject({
 
 export type ActionEscalation = z.infer<typeof actionEscalationSchema>;
 
+/** El hallazgo de inspección conserva la identidad estable de su plantilla. */
+export const inspectionActionSourceSchema = z.strictObject({
+  kind: z.literal('inspection'),
+  finding_id: z.uuid(),
+  inspection_id: z.uuid(),
+  scheduled_inspection_id: z.uuid(),
+  template_id: z.uuid(),
+  template_name: z.string().min(1),
+});
+
+export const manualFindingActionSourceSchema = z.strictObject({
+  kind: z.literal('manual_finding'),
+  finding_id: z.uuid(),
+});
+
+export const investigationActionSourceSchema = z.strictObject({
+  kind: z.literal('investigation'),
+  investigation_id: z.uuid(),
+});
+
+export const actionSourceSchema = z.discriminatedUnion('kind', [
+  inspectionActionSourceSchema,
+  manualFindingActionSourceSchema,
+  investigationActionSourceSchema,
+]);
+
+export type ActionSource = z.infer<typeof actionSourceSchema>;
+
+/** Una fila operativa del listado, sin afirmar que trae el stream de eventos. */
+export const actionSummarySchema = z.strictObject({
+  id: z.uuid(),
+  site_id: z.uuid(),
+  site_name: z.string().min(1),
+  assignee_person_id: z.uuid(),
+  assignee_name: z.string().min(1).nullable(),
+  description: z.string(),
+  severity: severitySchema,
+  due_at: z.iso.datetime({ offset: true }),
+  state: actionStateSchema,
+  overdue: z.boolean(),
+  escalations: z.array(actionEscalationSchema),
+  source: actionSourceSchema,
+});
+
+export type ActionSummary = z.infer<typeof actionSummarySchema>;
+
 /**
  * Una acción correctiva tal como la devuelve la API.
  *
@@ -404,7 +450,7 @@ export const actionSchema = z.strictObject({
 
 export type Action = z.infer<typeof actionSchema>;
 
-export const actionListSchema = z.array(actionSchema);
+export const actionListSchema = z.array(actionSummarySchema);
 
 export type ActionList = z.infer<typeof actionListSchema>;
 

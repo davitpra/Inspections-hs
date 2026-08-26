@@ -1332,6 +1332,12 @@ describe('el segundo padre de la acción correctiva', () => {
     expect(action.investigation_id).toBe(one(rows).id);
     expect(action.severity).toBe('catastrophic');
 
+    const listed = await actions.list(asCoordinator());
+    expect(listed.find((item) => item.id === action.id)?.source).toEqual({
+      kind: 'investigation',
+      investigation_id: one(rows).id,
+    });
+
     // `catastrophic` son 3 días en la misma tabla que usan las acciones de hallazgo.
     const days =
       (new Date(action.due_at).getTime() - new Date(action.created_at).getTime()) /

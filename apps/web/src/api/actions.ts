@@ -4,6 +4,7 @@ import {
   notificationSchema,
   presignUploadResponseSchema,
   type Action,
+  type ActionSummary,
   type EvidenceInput,
   type Notification,
   type PresignUploadResponse,
@@ -26,7 +27,7 @@ import { get, post } from './request';
  * acción no tiene esa restricción.
  */
 
-export async function listActions(): Promise<Action[]> {
+export async function listActions(): Promise<ActionSummary[]> {
   return get('/actions', (value) => actionListSchema.parse(value));
 }
 
@@ -81,4 +82,4 @@ export async function uploadEvidence(actionId: string, file: File): Promise<stri
   return presigned.object_key;
 }
 
-export type { Action, EvidenceInput, Notification };
+export type { Action, ActionSummary, EvidenceInput, Notification };
