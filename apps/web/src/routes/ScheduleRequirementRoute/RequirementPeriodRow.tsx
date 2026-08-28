@@ -1,99 +1,63 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
-import type { InspectionSchedule } from '@hs/contracts';
-
-import { createScheduledInspection } from '../../api/inspections';
-import { queryKeys } from '../../api/query-keys';
 import { civilToday } from '../../presentation/dates';
-import { PeriodAssignment } from './PeriodAssignment';
-import { entryKey, periodLabel, periodStatus, rowControl, rowInspector, rowNote } from './presentation';
+import { actionLabel, periodLabel, periodStatus, rowControl, rowInspector, rowNote } from './presentation';
 import type { YearEntry } from '../../presentation/scheduling';
 
+/**
+ * Una fila del plan anual: qué período, en qué estado, de quién, y UN botón.
+ *
+ * La fila no escribe nada. Antes traía la mutación de apertura, el checkbox de
+ * visibilidad, el selector de inspector y su error adentro de las celdas: con una regla
+ * mensual eso son doce formularios apilados y el plan deja de poder leerse de un vistazo.
+ * Ahora avisa QUÉ se quiso hacer y la ruta abre el diálogo — que además tiene que colgar
+ * de un nodo que sobreviva a la mutación, porque al abrirse un período esta fila cambia
+ * de `unopened` a `opened` y con eso cambia su `key` (misma razón que
+ * `SchedulingRoute/RequirementConfirmDialog`).
+ */
 export function RequirementPeriodRow({
   entry,
-  rule,
   year,
   canAdminister,
   publishedVersion,
+  onAct,
 }: {
   entry: YearEntry;
-  rule: InspectionSchedule;
   year: string;
   canAdminister: boolean;
   publishedVersion: number | null;
+  onAct: (kind: 'open' | 'assign') => void;
 }): React.JSX.Element {
-  const queryClient = useQueryClient();
   const control = rowControl(entry, canAdminister);
-  const [error, setError] = useState<string | null>(null);
-  const [visibleEarly, setVisibleEarly] = useState(false);
-  const open = useMutation({
-    mutationFn: () => {
-      if (entry.kind !== 'unopened') throw new Error('This period is already open');
-      return createScheduledInspection({
-        site_id: entry.period.site_id,
-        template_id: entry.period.template_id,
-        period_start: entry.period.period_start,
-        visible_early: visibleEarly,
-      });
-    },
-    onSuccess: () => {
-      setError(null);
-      void queryClient.invalidateQueries({ queryKey: queryKeys.scheduledInspections() });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.pendingInspections() });
-    },
-    onError: (caught: Error) => setError(caught.message),
-  });
-  const opened = entry.kind === 'opened' ? entry.inspection : null;
   const note = rowNote(entry, civilToday());
   const label = periodLabel(entry, year);
+  const action = actionLabel(entry, control);
 
   return (
-    <tr key={entryKey(entry)} className={`annual-plan-row annual-plan-row--${control}`}>
+    <tr className="annual-plan-row">
       <th scope="row" data-label="Period">
         <span className="annual-plan-row__period">{label}</span>
       </th>
-      <td data-label="Status" className="annual-plan-row__status-cell">
+      <td data-label="Status">
         <span className={`annual-plan-row__status status-pill status-pill--${statusClassName(entry)}`}>{periodStatus(entry)}</span>
-        {note ? <span className="annual-plan-row__note">{note}</span> : null}
+        {note ? <span className={`annual-plan-row__note annual-plan-row__note--${note.tone}`}>{note.text}</span> : null}
       </td>
-      {control === 'open' ? (
-        <>
-          <td data-label="Inspector"><span className="note">Not assigned yet</span></td>
-          <td data-label="Action" className="annual-plan-row__action-cell">
-            <div className="annual-plan__action">
-              <span className="note">
-                {publishedVersion === null ? 'Published version unavailable' : `Freezes version ${publishedVersion}`}
-              </span>
-              <label className="annual-plan__early-toggle">
-                <input
-                  type="checkbox"
-                  checked={visibleEarly}
-                  disabled={open.isPending}
-                  onChange={(event) => setVisibleEarly(event.target.checked)}
-                />
-                Make visible to the inspector before the period starts
-              </label>
-              <button
-                type="button"
-                className="button--outline"
-                aria-label={`Open ${label}`}
-                disabled={open.isPending || publishedVersion === null}
-                onClick={() => open.mutate()}
-              >
-                {open.isPending ? 'Opening…' : 'Open period'}
-              </button>
-              {error ? <p className="notice notice--warn" role="alert">{error}</p> : null}
-            </div>
-          </td>
-        </>
-      ) : control === 'assign' && opened ? (
-        <PeriodAssignment inspection={opened} siteId={rule.site_id} periodLabel={label} />
-      ) : (
-        <>
-          <td data-label="Inspector"><span>{rowInspector(entry)}</span></td>
-          <td data-label="Action" className="annual-plan-row__action-cell"><span className="note">None</span></td>
-        </>
-      )}
+      <td data-label="Inspector">{rowInspector(entry)}</td>
+      {/* Vacía cuando no hay nada que ofrecer, y no un «None» que en teléfono se apila
+          como una fila más de la tarjeta (ver `:empty` en `index.css`). */}
+      <td className="annual-plan-row__action-cell" data-label="Action">
+        {action ? (
+          <div className="table__actions">
+            <button
+              type="button"
+              className="button--outline"
+              aria-label={control === 'open' ? `Open ${label}` : `${action} for ${label}`}
+              disabled={control === 'open' && publishedVersion === null}
+              onClick={() => onAct(control === 'open' ? 'open' : 'assign')}
+            >
+              {action}
+            </button>
+          </div>
+        ) : null}
+      </td>
     </tr>
   );
 }
@@ -101,5 +65,6 @@ export function RequirementPeriodRow({
 function statusClassName(entry: YearEntry): string {
   if (entry.kind === 'unopened') return 'not-opened';
   if (entry.inspection.cancelled_at !== null) return 'cancelled';
+
   return entry.inspection.status;
 }

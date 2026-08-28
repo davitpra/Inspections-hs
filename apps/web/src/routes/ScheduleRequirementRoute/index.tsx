@@ -9,9 +9,11 @@ import { InfoIcon } from '../../components/icons';
 import { YearNavigator } from '../../components/YearNavigator';
 import { canAdministerScheduling } from '../../permissions/session';
 import { currentCivilYear } from '../../presentation/dates';
-import { earliestEligibleYear, frequencyNote } from '../../presentation/scheduling';
+import { earliestEligibleYear, frequencyNote, type YearEntry } from '../../presentation/scheduling';
+import { AssignInspectorDialog } from './AssignInspectorDialog';
+import { OpenPeriodDialog } from './OpenPeriodDialog';
 import { RequirementPeriodRow } from './RequirementPeriodRow';
-import { entryKey, requirementYear } from './presentation';
+import { entryKey, periodLabel, requirementYear } from './presentation';
 
 export function ScheduleRequirementRoute(): React.JSX.Element {
   const { scheduleId } = useParams({ from: '/scheduling/$scheduleId' });
@@ -28,6 +30,18 @@ export function ScheduleRequirementRoute(): React.JSX.Element {
     retry: false,
   });
   const [year, setYear] = useState(() => currentCivilYear());
+  /*
+    Qué se está por escribir, colgado de la RUTA y no de la fila: al abrirse un período la
+    entrada pasa de `unopened` a `opened` y con eso cambia su `key`, así que la fila que
+    disparó la acción deja de existir mientras el diálogo todavía tiene que poder mostrar
+    el error (misma razón que `SchedulingRoute/RequirementConfirmDialog`).
+  */
+  const [acting, setActing] = useState<{ entry: YearEntry; kind: 'open' | 'assign' } | null>(null);
+
+  const changeYear = (nextYear: string) => {
+    setYear(nextYear);
+    setActing(null);
+  };
 
   if (schedules.isLoading || scheduled.isLoading || sites.isLoading) {
     return <p className="status-card">Loading requirement plan…</p>;
@@ -67,13 +81,13 @@ export function ScheduleRequirementRoute(): React.JSX.Element {
             <h2 id="annual-plan-heading">Annual plan</h2>
             <p className="note">Each period owed by this requirement, with its inspector.</p>
           </div>
-          <YearNavigator year={year} earliestYear={earliestYear} onYearChange={setYear} />
+          <YearNavigator year={year} earliestYear={earliestYear} onYearChange={changeYear} />
         </div>
         {entries.length === 0 ? (
           <div className="schedule-empty"><strong>No periods owed in this year.</strong><span>This requirement owes no period in {year}.</span></div>
         ) : (
           <div className="annual-plan__table-wrap">
-            <table className="annual-plan__table" aria-label={`Annual plan for ${rule.template_name}`}>
+            <table className="table annual-plan__table" aria-label={`Annual plan for ${rule.template_name}`}>
               <thead>
                 <tr>
                   <th scope="col">Period</th>
@@ -87,10 +101,10 @@ export function ScheduleRequirementRoute(): React.JSX.Element {
                   <RequirementPeriodRow
                     key={entryKey(entry)}
                     entry={entry}
-                    rule={rule}
                     year={year}
                     canAdminister={canAdminister}
                     publishedVersion={publishedVersion}
+                    onAct={(kind) => setActing({ entry, kind })}
                   />
                 ))}
               </tbody>
@@ -100,6 +114,25 @@ export function ScheduleRequirementRoute(): React.JSX.Element {
         {canAdminister && templates.isError ? <p className="notice notice--warn" role="alert">Published template version could not be loaded. Opening periods is unavailable.</p> : null}
         <p className="annual-plan__foot">Opening a period freezes the published template version. Assignment is a separate confirmed action.</p>
       </section>
+
+      {acting?.kind === 'open' && acting.entry.kind === 'unopened' ? (
+        <OpenPeriodDialog
+          key={entryKey(acting.entry)}
+          period={acting.entry.period}
+          label={periodLabel(acting.entry, year)}
+          publishedVersion={publishedVersion}
+          onClose={() => setActing(null)}
+        />
+      ) : null}
+      {acting?.kind === 'assign' && acting.entry.kind === 'opened' ? (
+        <AssignInspectorDialog
+          key={entryKey(acting.entry)}
+          inspection={acting.entry.inspection}
+          siteId={rule.site_id}
+          label={periodLabel(acting.entry, year)}
+          onClose={() => setActing(null)}
+        />
+      ) : null}
     </>
   );
 }
