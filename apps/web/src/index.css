@@ -2711,12 +2711,24 @@ select:disabled {
   background: currentColor;
 }
 
-.schedule-legend__item--not-due { color: var(--state-neutral); }
-.schedule-legend__item--unopened { color: var(--warn-ink); }
-.schedule-legend__item--open { color: var(--state-info); }
-.schedule-legend__item--completed { color: var(--state-ok); }
-.schedule-legend__item--missed { color: var(--state-danger); }
-.schedule-legend__item--cancelled { color: var(--state-neutral); }
+.schedule-legend__item--not-due {
+  color: var(--state-neutral);
+}
+.schedule-legend__item--unopened {
+  color: var(--warn-ink);
+}
+.schedule-legend__item--open {
+  color: var(--state-info);
+}
+.schedule-legend__item--completed {
+  color: var(--state-ok);
+}
+.schedule-legend__item--missed {
+  color: var(--state-danger);
+}
+.schedule-legend__item--cancelled {
+  color: var(--state-neutral);
+}
 
 .requirements-section__head .note {
   margin: var(--space-1) 0 0;
@@ -3424,8 +3436,8 @@ button.schedule-cell:focus-visible {
     display: grid;
     grid-template-columns: auto auto minmax(0, 1fr) auto auto;
     grid-template-areas:
-      'icon name    name      status menu'
-      'icon cadence inspector status menu';
+      "icon name    name      status menu"
+      "icon cadence inspector status menu";
     align-items: center;
     column-gap: var(--space-2);
     row-gap: var(--space-1);
@@ -3470,8 +3482,12 @@ button.schedule-cell:focus-visible {
     font-size: var(--text-sm);
   }
 
-  .requirements-table .requirement-row__cadence { grid-area: cadence; }
-  .requirements-table .requirement-row__inspector { grid-area: inspector; }
+  .requirements-table .requirement-row__cadence {
+    grid-area: cadence;
+  }
+  .requirements-table .requirement-row__inspector {
+    grid-area: inspector;
+  }
 
   .requirements-table .requirement-row__cadence::before,
   .requirements-table .requirement-row__inspector::before {
@@ -3481,7 +3497,7 @@ button.schedule-cell:focus-visible {
 
   /* El punto separa los dos datos de la línea; es del mismo tono que las etiquetas. */
   .requirements-table .requirement-row__cadence::after {
-    content: '·';
+    content: "·";
     color: var(--muted);
   }
 
