@@ -38,6 +38,7 @@ function validTemplateVersion() {
     site_id: SITE_ID,
     template_version_id: VERSION_ID,
     version: 2,
+    template_name: 'Monthly workplace inspection',
     document: validDocument(),
     inspector_id: INSPECTOR_ID,
   };
@@ -104,6 +105,23 @@ describe('templateVersionPackageSchema', () => {
     const { inspector_id: _omitted, ...withoutInspector } = validTemplateVersion();
 
     expect(templateVersionPackageSchema.safeParse(withoutInspector).success).toBe(false);
+  });
+
+  /**
+   * Sin el nombre, la pantalla de captura no puede decir contra qué formulario se está
+   * recorriendo, y no hay forma de averiguarlo sin red.
+   */
+  it('rechaza una respuesta sin template_name', () => {
+    const { template_name: _omitted, ...withoutName } = validTemplateVersion();
+
+    expect(templateVersionPackageSchema.safeParse(withoutName).success).toBe(false);
+  });
+
+  it('rechaza un template_name vacío', () => {
+    expect(
+      templateVersionPackageSchema.safeParse({ ...validTemplateVersion(), template_name: '' })
+        .success,
+    ).toBe(false);
   });
 });
 

@@ -177,6 +177,7 @@ export function templateVersionPackage(
     site_id: '66666666-6666-4666-8666-666666666666',
     template_version_id: '22222222-2222-4222-8222-222222222222',
     version: 2,
+    template_name: 'Monthly workplace inspection',
     document: TEST_DOCUMENT,
     inspector_id: null,
     ...overrides,

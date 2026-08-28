@@ -684,10 +684,19 @@ export class InspectionsService {
   ): Promise<TemplateVersionPackage> {
     const inspection = await this.requireActive(client, id);
 
-    const { rows } = await client.query<{ version: number; document: TemplateDocument }>(
-      `SELECT version, document
-         FROM template_version
-        WHERE id = $1`,
+    // El nombre sale de `template` y no del documento: el documento solo tiene títulos de
+    // sección, y el dispositivo necesita nombrar la inspección estando sin señal. Es el
+    // nombre de HOY —no se congela con la versión—, así que no identifica nada: lo que ata
+    // la inspección a un documento sigue siendo `template_version_id`.
+    const { rows } = await client.query<{
+      version: number;
+      document: TemplateDocument;
+      template_name: string;
+    }>(
+      `SELECT tv.version, tv.document, t.name AS template_name
+         FROM template_version tv
+         JOIN template t ON t.id = tv.template_id
+        WHERE tv.id = $1`,
       [inspection.template_version_id],
     );
 
@@ -698,6 +707,7 @@ export class InspectionsService {
       site_id: inspection.site_id,
       template_version_id: inspection.template_version_id,
       version: row.version,
+      template_name: row.template_name,
       document: row.document,
       inspector_id: inspection.inspector_id,
     };

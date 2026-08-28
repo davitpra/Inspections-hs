@@ -62,7 +62,11 @@ describe('prefetchInspection', () => {
     expect(result.stored).toEqual(['template_version', 'locations', 'roster']);
     expect(result.missing).toEqual([]);
     expect(await isFieldReady(INSPECTION_ID, database)).toBe(true);
-    expect((await storedTemplateVersion(INSPECTION_ID, database))?.version).toBe(2);
+    const version = await storedTemplateVersion(INSPECTION_ID, database);
+    expect(version?.version).toBe(2);
+    // El nombre de la plantilla queda guardado con el documento: es lo que la pantalla de
+    // captura muestra después, sin red.
+    expect(version?.template_name).toBe('Monthly workplace inspection');
     expect(await storedLocations(INSPECTION_ID, database)).toHaveLength(1);
     expect(await storedRoster(INSPECTION_ID, database)).toHaveLength(1);
   });

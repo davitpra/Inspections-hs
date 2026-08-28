@@ -138,6 +138,10 @@ describe('el paquete de campo completo', () => {
     expect(version.version).toBe(2);
     expect(version.inspector_id).toBe(inspector.accountId);
 
+    // El nombre de la plantilla viaja con el paquete: es lo único que le permite al
+    // dispositivo nombrar contra qué formulario se recorre estando sin señal.
+    expect(version.template_name).toBe('Monthly walkthrough');
+
     // Y el documento es el que el motor de formularios acepta como entrada.
     expect(templateDocumentSchema.safeParse(version.document).success).toBe(true);
 
@@ -281,6 +285,7 @@ describe('el congelamiento de la versión', () => {
 
     expect(first.template_version_id).toBe(versionV3);
     expect(first.version).toBe(3);
+    expect(first.template_name).toBe('Monthly walkthrough');
     expect(JSON.stringify(first.document)).toContain('Version three');
     expect(second).toEqual(first);
 

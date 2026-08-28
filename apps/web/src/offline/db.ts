@@ -142,6 +142,13 @@ export type PrefetchPayload =
        * ver `captureEligibility` en `drafts.ts`.
        */
       inspector_id?: string | null;
+      /**
+       * Opcional por el mismo motivo que `inspector_id`, y con la misma consecuencia
+       * acotada: un paquete bajado antes de que el campo existiera no tiene cómo nombrar
+       * la plantilla, y el encabezado de la captura muestra solo la fecha hasta que se
+       * vuelva a descargar — ver `captureSubtitle`.
+       */
+      template_name?: string;
     }
   | { kind: 'locations'; locations: LocationOption[] }
   | { kind: 'roster'; people: PersonOption[] };

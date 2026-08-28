@@ -38,11 +38,18 @@ import { personOptionSchema } from './identity.js';
  * rechazaría al firmar. `null` significa "sin inspector asignado", un estado real y no
  * un dato ausente — el envío se rechaza igual. Servirlo NO recorta quién puede leer esta
  * ruta: sigue siendo cualquier cuenta cuyo alcance de sesión llegue a la inspección.
+ *
+ * `template_name` viaja por el mismo motivo que los dos anteriores: la pantalla de captura
+ * tiene que poder NOMBRAR contra qué formulario se está recorriendo **sin red**, y el
+ * documento congelado solo trae títulos de sección. Es un dato de la plantilla y no de la
+ * versión —el nombre no se congela, se lee el de hoy— y por eso no identifica nada: lo que
+ * ata la inspección a un documento sigue siendo `template_version_id`.
  */
 export const templateVersionPackageSchema = z.strictObject({
   site_id: z.uuid(),
   template_version_id: z.uuid(),
   version: z.int().positive(),
+  template_name: z.string().min(1),
   document: templateDocumentSchema,
   inspector_id: z.uuid().nullable(),
 });
