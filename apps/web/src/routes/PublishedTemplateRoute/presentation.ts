@@ -2,8 +2,11 @@ import {
   CONDITION_OPERATORS,
   type Condition,
   type ConditionOperator,
+  type Location,
+  type Site,
   type TemplateDocument,
   type TemplateItem,
+  type TemplateSection,
   type VisibleWhen,
 } from '@hs/contracts';
 import {
@@ -132,6 +135,48 @@ export function failureThresholdLabel(threshold: {
 
 export function responseTypeLabel(item: TemplateItem): string {
   return RESPONSE_TYPE_LABELS[item.response_type];
+}
+
+/** Las plantas donde una ubicación compartida tiene fila física mapeada. */
+function locationCoverage(
+  code: string | undefined,
+  locations: readonly Location[],
+  siteIds: readonly string[],
+): string[] {
+  return siteIds.filter((siteId) =>
+    locations.some(
+      (location) =>
+        location.site_id === siteId &&
+        location.organization_location_code === code &&
+        location.deactivated_at === null,
+    ),
+  );
+}
+
+function scopeLabel(siteIds: readonly string[], sites: readonly Site[]): string {
+  const named = sites.filter((site) => siteIds.includes(site.id));
+
+  if (named.length === 0) return 'No plants';
+  if (named.length === sites.length) return sites.length > 1 ? 'Both plants' : named[0]!.name;
+  if (named.length === 1) return `${named[0]!.name} only`;
+
+  return named.map((site) => site.name).join(', ');
+}
+
+/** Dónde resuelve la ubicación compartida de una sección, para el lector del documento. */
+export function sectionAppliesTo(
+  section: TemplateSection,
+  locations: readonly Location[],
+  siteIds: readonly string[],
+  sites: readonly Site[],
+): string {
+  const code = section.organization_location_code;
+
+  if (!code) return 'No location assigned';
+
+  const covered = locationCoverage(code, locations, siteIds);
+
+  return covered.length === 0 ? 'No plant has this location' : scopeLabel(covered, sites);
 }
 
 export { CONDITION_OPERATORS, FAILURE_OPERATORS };

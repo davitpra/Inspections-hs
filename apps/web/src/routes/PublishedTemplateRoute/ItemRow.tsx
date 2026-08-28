@@ -53,7 +53,7 @@ export function ItemRow({
         {finding.length > 0 ? (
           <div className="published-template__finding">
             <p className="published-template__detail-label">
-              Finding prescription
+              Corrective Action:
             </p>
             <ul>
               {finding.map((line) => (

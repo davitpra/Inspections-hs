@@ -5,16 +5,49 @@ import type { PublishedTemplateVersion } from '@hs/contracts';
 
 import { PublishedTemplateRoute } from './index';
 
+const ST_THOMAS = '11111111-1111-4111-8111-111111111111';
+const GLENCOE = '11111111-1111-4111-8111-111111111112';
+
 const getPublishedTemplateVersion = vi.hoisted(() => vi.fn());
 const reviseTemplate = vi.hoisted(() => vi.fn());
+const listCatalogLocations = vi.hoisted(() => vi.fn());
+const listSites = vi.hoisted(() => vi.fn());
 const navigate = vi.hoisted(() => vi.fn());
-const account = vi.hoisted(() => ({ current: null as { role: string } | null }));
+const account = vi.hoisted(() => ({
+  current: null as { role: string; siteScope: string[] } | null,
+}));
 
 vi.mock('../../api/templates', () => ({ getPublishedTemplateVersion, reviseTemplate }));
+vi.mock('../../api/catalog', () => ({ listCatalogLocations }));
+vi.mock('../../api/inspections', () => ({ listSites }));
 
 vi.mock('../../app/session-context', () => ({
   useAppSession: () => ({ account: account.current }),
 }));
+
+const SITES = [
+  { id: ST_THOMAS, code: 'st-thomas', name: 'St. Thomas', deactivated_at: null },
+  { id: GLENCOE, code: 'glencoe', name: 'Glencoe', deactivated_at: null },
+];
+
+const LOCATIONS = [
+  {
+    id: 'p1',
+    site_id: ST_THOMAS,
+    code: 'shipping-dock',
+    name: 'Shipping dock',
+    deactivated_at: null,
+    organization_location_code: 'shipping-dock',
+  },
+  {
+    id: 'p2',
+    site_id: GLENCOE,
+    code: 'receiving-dock',
+    name: 'Receiving dock',
+    deactivated_at: null,
+    organization_location_code: 'shipping-dock',
+  },
+];
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
@@ -62,6 +95,7 @@ const version: PublishedTemplateVersion = {
             position: 1,
             required: false,
             response_type: 'yes_no',
+            fails_on: 'no',
           },
         ],
       },
@@ -77,6 +111,7 @@ const version: PublishedTemplateVersion = {
             position: 1,
             required: true,
             response_type: 'yes_no',
+            fails_on: 'no',
           },
           {
             item_key: 'first.temperature',
@@ -112,9 +147,11 @@ function renderRoute(): void {
 beforeEach(() => {
   getPublishedTemplateVersion.mockReset().mockResolvedValue(version);
   reviseTemplate.mockReset().mockResolvedValue({ id: '88888888-8888-4888-8888-888888888888' });
+  listCatalogLocations.mockReset().mockResolvedValue(LOCATIONS);
+  listSites.mockReset().mockResolvedValue(SITES);
   navigate.mockReset();
   // Sin cuenta de coordinador por defecto: la pantalla es de lectura para todos los demás.
-  account.current = { role: 'inspector' };
+  account.current = { role: 'inspector', siteScope: [ST_THOMAS, GLENCOE] };
 });
 
 afterEach(() => {
@@ -136,14 +173,15 @@ describe('PublishedTemplateRoute', () => {
       'Second section',
       'Second question',
     ]);
-    expect(screen.getByText('shipping-dock')).toBeTruthy();
+    expect(screen.getByText('Both plants')).toBeTruthy();
     expect(screen.getAllByText('Required')).toHaveLength(2);
     expect(screen.getByText('Range: 0 to 100')).toBeTruthy();
     expect(screen.getByText('Decimal places: 1')).toBeTruthy();
     expect(screen.getByText('Corrective action: Stop the machine and investigate the temperature.')).toBeTruthy();
     expect(screen.getByText('Fails above 80')).toBeTruthy();
     expect(screen.getByText('Shown when Is the guard in place? is false')).toBeTruthy();
-    expect(screen.queryByRole('button')).toBeNull();
+    // Los únicos botones son los chevrons de colapso de sección, uno por sección.
+    expect(screen.getAllByRole('button')).toHaveLength(2);
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(screen.queryByRole('combobox')).toBeNull();
   });
@@ -169,7 +207,7 @@ describe('PublishedTemplateRoute', () => {
   });
 
   it('el coordinador empieza la revisión y llega al borrador sembrado', async () => {
-    account.current = { role: 'hs_coordinator' };
+    account.current = { role: 'hs_coordinator', siteScope: [ST_THOMAS, GLENCOE] };
 
     renderRoute();
 
@@ -189,20 +227,20 @@ describe('PublishedTemplateRoute', () => {
   });
 
   it('empezar la revisión no vuelve editable la versión', async () => {
-    account.current = { role: 'hs_coordinator' };
+    account.current = { role: 'hs_coordinator', siteScope: [ST_THOMAS, GLENCOE] };
 
     renderRoute();
 
     await screen.findByRole('button', { name: /Edit template/ });
 
-    // El único control de la pantalla sigue siendo el que abre el borrador.
-    expect(screen.getAllByRole('button')).toHaveLength(1);
+    // El botón que abre el borrador, más los chevrons de colapso de cada sección.
+    expect(screen.getAllByRole('button')).toHaveLength(3);
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(screen.queryByRole('combobox')).toBeNull();
   });
 
   it('si la revisión no se puede abrir, lo dice y no navega', async () => {
-    account.current = { role: 'hs_coordinator' };
+    account.current = { role: 'hs_coordinator', siteScope: [ST_THOMAS, GLENCOE] };
     reviseTemplate.mockRejectedValue(new Error('offline'));
 
     renderRoute();

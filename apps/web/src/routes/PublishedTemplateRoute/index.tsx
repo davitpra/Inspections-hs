@@ -2,12 +2,16 @@ import { sectionsInDocumentOrder } from '@hs/forms';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from '@tanstack/react-router';
 
+import { listCatalogLocations } from '../../api/catalog';
+import { listSites } from '../../api/inspections';
 import { getPublishedTemplateVersion } from '../../api/templates';
 import { queryKeys } from '../../api/query-keys';
 import { useAppSession } from '../../app/session-context';
 import { GridIcon, InfoIcon } from '../../components/icons';
+import { TemplateSectionCard } from '../../components/TemplateSectionCard';
 import { canPublishTemplates } from '../../permissions/session';
-import { SectionCard } from './SectionCard';
+import { ItemRow } from './ItemRow';
+import { sectionAppliesTo, visibilityLabel } from './presentation';
 import { VersionHeader } from './VersionHeader';
 
 /**
@@ -26,6 +30,14 @@ export function PublishedTemplateRoute(): React.JSX.Element {
     queryKey: queryKeys.publishedTemplateVersion(versionId),
     queryFn: () => getPublishedTemplateVersion(versionId),
     retry: false,
+  });
+  const locations = useQuery({
+    queryKey: queryKeys.catalogLocations(),
+    queryFn: listCatalogLocations,
+  });
+  const sites = useQuery({
+    queryKey: queryKeys.sites(),
+    queryFn: listSites,
   });
 
   if (version.isError) {
@@ -51,19 +63,38 @@ export function PublishedTemplateRoute(): React.JSX.Element {
   }
 
   const documentOrder = sectionsInDocumentOrder(version.data.document);
+  const siteIds = account?.siteScope ?? [];
 
   return (
     <>
       <VersionHeader version={version.data} canRevise={canPublishTemplates(account)} />
       <div className="published-template__document">
         {documentOrder.map(([section, items], index) => (
-          <SectionCard
+          <TemplateSectionCard
             key={section.section_key}
             section={section}
-            items={items}
             index={index}
-            document={version.data.document}
-          />
+            appliesTo={sectionAppliesTo(
+              section,
+              locations.data ?? [],
+              siteIds,
+              (sites.data ?? []).filter((site) => siteIds.includes(site.id)),
+            )}
+            condition={
+              section.visible_when
+                ? visibilityLabel(section.visible_when, version.data.document)
+                : undefined
+            }
+          >
+            {items.map((item, itemIndex) => (
+              <ItemRow
+                key={item.item_key}
+                item={item}
+                index={itemIndex}
+                document={version.data.document}
+              />
+            ))}
+          </TemplateSectionCard>
         ))}
       </div>
     </>

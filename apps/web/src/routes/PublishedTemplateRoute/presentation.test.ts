@@ -1,4 +1,4 @@
-import type { TemplateDocument, TemplateItem, VisibleWhen } from '@hs/contracts';
+import type { Location, Site, TemplateDocument, TemplateItem, TemplateSection, VisibleWhen } from '@hs/contracts';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -6,6 +6,7 @@ import {
   findingConfiguration,
   responseConfiguration,
   responseTypeLabel,
+  sectionAppliesTo,
   totalItems,
   visibilityLabel,
 } from './presentation';
@@ -171,5 +172,75 @@ describe('PublishedTemplateRoute presentation', () => {
       'Fails above 80',
     ]);
     expect(failureThresholdLabel({ operator: 'lte', value: 10 })).toBe('Fails at or below 10');
+  });
+});
+
+describe('sectionAppliesTo', () => {
+  const ST_THOMAS = '11111111-1111-4111-8111-111111111111';
+  const GLENCOE = '11111111-1111-4111-8111-111111111112';
+
+  const SITES: Site[] = [
+    { id: ST_THOMAS, code: 'st-thomas', name: 'St. Thomas', deactivated_at: null },
+    { id: GLENCOE, code: 'glencoe', name: 'Glencoe', deactivated_at: null },
+  ];
+
+  const LOCATIONS: Location[] = [
+    {
+      id: 'p1',
+      site_id: ST_THOMAS,
+      code: 'shipping-dock',
+      name: 'Shipping dock',
+      deactivated_at: null,
+      organization_location_code: 'dock',
+    },
+    {
+      id: 'p2',
+      site_id: GLENCOE,
+      code: 'receiving-dock',
+      name: 'Receiving dock',
+      deactivated_at: null,
+      organization_location_code: 'dock',
+    },
+  ];
+
+  function section(overrides: Partial<TemplateSection> = {}): TemplateSection {
+    return {
+      section_key: 'cold-storage',
+      section_title: 'Cold storage',
+      position: 1,
+      items: [],
+      ...overrides,
+    };
+  }
+
+  it('dice el nombre de las plantas cuando la ubicación resuelve en las dos', () => {
+    expect(
+      sectionAppliesTo(section({ organization_location_code: 'dock' }), LOCATIONS, [ST_THOMAS, GLENCOE], SITES),
+    ).toBe('Both plants');
+  });
+
+  it('dice cuál planta cuando solo esa está en el alcance', () => {
+    expect(
+      sectionAppliesTo(section({ organization_location_code: 'dock' }), LOCATIONS, [ST_THOMAS], [
+        SITES[0]!,
+      ]),
+    ).toBe('St. Thomas');
+  });
+
+  it('dice que no hay ubicación cuando la sección no tiene una asignada', () => {
+    expect(sectionAppliesTo(section(), LOCATIONS, [ST_THOMAS, GLENCOE], SITES)).toBe(
+      'No location assigned',
+    );
+  });
+
+  it('dice que ninguna planta la tiene cuando el código no mapea en el alcance', () => {
+    expect(
+      sectionAppliesTo(
+        section({ organization_location_code: 'boiler' }),
+        LOCATIONS,
+        [ST_THOMAS, GLENCOE],
+        SITES,
+      ),
+    ).toBe('No plant has this location');
   });
 });

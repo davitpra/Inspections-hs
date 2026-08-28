@@ -5579,7 +5579,6 @@ button.schedule-cell:focus-visible {
 }
 
 .published-template__eyebrow,
-.published-template__section-number,
 .published-template__detail-label {
   margin: 0;
   color: var(--muted);
@@ -5617,24 +5616,30 @@ button.schedule-cell:focus-visible {
 }
 
 .published-template__section {
+  position: relative;
   padding: var(--space-4);
+  border-radius: var(--radius-lg);
 }
 
 .published-template__section-head {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-4);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
 }
 
-.published-template__section-head h2 {
-  margin: var(--space-0-5) 0 0;
+.published-template__section-title {
+  min-width: 0;
+  flex: 1;
 }
 
-.published-template__location {
+.published-template__section-title h2 {
   margin: 0;
-  color: var(--muted);
-  text-align: right;
+  font-size: var(--text-lg);
+}
+
+.published-template__section-title .note {
+  margin: 0;
 }
 
 .published-template__condition {
@@ -5723,14 +5728,8 @@ button.schedule-cell:focus-visible {
 }
 
 @media (max-width: 48rem) {
-  .published-template__section-head,
   .published-template__item-head {
     display: block;
-  }
-
-  .published-template__location {
-    margin-top: var(--space-2);
-    text-align: left;
   }
 
   .published-template__item-head .status-pill {
