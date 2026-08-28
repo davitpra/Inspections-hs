@@ -17,7 +17,7 @@
 ## 4. Verification
 
 - [x] 4.1 Validate the OpenSpec change and run relevant contract, API and web tests
-- [ ] 4.2 Run repository build before typecheck, then lint and the full unit test suite
+- [x] 4.2 Run repository build before typecheck, then lint and the full unit test suite
 
 La verificación completa ejecutó build, typecheck y lint correctamente. La suite unitaria queda
 bloqueada por dos expectativas preexistentes de `ScheduleRequirementRoute/index.test.tsx` que no

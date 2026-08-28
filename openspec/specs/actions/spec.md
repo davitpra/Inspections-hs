@@ -1,29 +1,27 @@
 ## Purpose
 
-Turns a classified finding, or the investigation of an incident, into an obligation with a named
-owner and a deadline derived from its severity, records every step of that obligation as an
-immutable event rather than a status column, requires evidence and a second person's verification
-to close it, and escalates it to the supervisor and then to management when it runs past its
-deadline unclosed.
+Turns a finding, or the investigation of an incident, into an obligation with a named owner and a
+deadline declared by the HS coordinator, records every step of that obligation as an immutable event
+rather than a status column, requires evidence and a second person's verification to close it, and
+escalates it to the supervisor and then to management when it runs past its deadline unclosed.
 
 ## Requirements
 
 ### Requirement: A corrective action belongs to exactly one parent, a finding or an investigation
 
 The system SHALL store every corrective action as a `corrective_action` row carrying `site_id`,
-`assignee_person_id`, `description`, `due_at`, `severity`, `created_by` and exactly one of
-`finding_id` and `investigation_id`. A parent MAY have many corrective actions and a corrective
-action SHALL belong to exactly one parent, as §4 closed; the exactly-one rule SHALL be a check
-constraint in the database and not an application check. The system SHALL refuse to create an
-action for a finding that has no current `finding_risk_assessment`, because that finding cannot
-yield a severity and an action without a deadline can never be overdue and therefore never
-escalates. The action's `site_id` SHALL be the `site_id` of its parent, enforced by the engine
-through the composite foreign key of whichever parent it names.
+`assignee_person_id`, `description`, `due_at`, `created_by` and exactly one of `finding_id` and
+`investigation_id`. A parent MAY have many corrective actions and a corrective action SHALL belong
+to exactly one parent, as §4 closed; the exactly-one rule SHALL be a check constraint in the
+database and not an application check. The system SHALL NOT require anything of the parent beyond
+its existence within the session's scope: a finding carries no classification and yields no
+property the action derives. The action's `site_id` SHALL be the `site_id` of its parent, enforced
+by the engine through the composite foreign key of whichever parent it names.
 
-#### Scenario: An action is created for a classified finding
+#### Scenario: An action is created for a finding
 
-- **WHEN** the HS coordinator creates an action for a finding classified `likely` × `major`, with
-  an `assignee_person_id` and a `description`
+- **WHEN** the HS coordinator creates an action for a finding, with an `assignee_person_id`, a
+  `description` and a `due_at`
 - **THEN** a `corrective_action` row is created referencing that `finding_id`
 - **AND** its `investigation_id` is null
 - **AND** its `site_id` is the finding's `site_id`
@@ -31,17 +29,16 @@ through the composite foreign key of whichever parent it names.
 #### Scenario: An action is created for an investigation
 
 - **WHEN** the HS coordinator creates an action for an investigation, with an
-  `assignee_person_id`, a `description` and a `severity`
+  `assignee_person_id`, a `description` and a `due_at`
 - **THEN** a `corrective_action` row is created referencing that `investigation_id`
 - **AND** its `finding_id` is null
 - **AND** its `site_id` is the investigation's `site_id`
 
-#### Scenario: An unclassified finding cannot receive an action
+#### Scenario: A finding needs nothing else to receive an action
 
-- **GIVEN** a derived finding with no `finding_risk_assessment` row
+- **GIVEN** a derived finding just created by an accepted submission
 - **WHEN** an action is created for it
-- **THEN** the request is rejected with the code `finding_not_classified`
-- **AND** no `corrective_action` row is created
+- **THEN** the `corrective_action` row is created
 
 #### Scenario: An action with no parent is refused
 
@@ -118,61 +115,48 @@ audit chain has to be able to state.
 - **AND** the transitions recorded by the coordinator on their behalf name the coordinator's
   account as actor
 
-### Requirement: The deadline is derived from the action's severity and frozen at creation
+### Requirement: The deadline is stated by the HS coordinator and frozen at creation
 
-The system SHALL compute `due_at` from the action's `severity` through a fixed table:
-`catastrophic` 3 days, `major` 7 days, `moderate` 14 days, `minor` 30 days, `negligible` 60 days.
-When the parent is a finding, the system SHALL take that `severity` from the finding's current
-classification at the moment the action is created and SHALL ignore any severity the caller
-supplies, deriving it from `severity` and NOT from `risk_level` as §3 R2 states. When the parent
-is an investigation, there is no classification to read, so the system SHALL require the HS
-coordinator to state the `severity` and SHALL refuse the creation without it. The system SHALL
-ignore any `due_at` a caller supplies in either case, and SHALL store on the action the `severity`
-the deadline was derived from, so the record states what was promised and why. Reclassifying the
-finding afterwards SHALL NOT move the `due_at` of an action that already exists; a shorter
-deadline is obtained by opening a new action. The table is configuration written in code, not an
-authoritative legal rule.
+The system SHALL require a `due_at` when a corrective action is created, for a finding and for an
+investigation alike, and SHALL store it unchanged on the row, so the record states what was
+promised the day it was promised. The system SHALL refuse a creation with no `due_at`, and SHALL
+refuse a `due_at` that is not later than the moment of creation with the code `invalid_due_at`,
+because an action born overdue escalates before anyone can act on it. That comparison reads the
+current time, so it SHALL be enforced when the request is served and not by a database check. The
+system SHALL NOT derive the deadline from any property of the parent and SHALL NOT store a severity
+on the action. An action's `due_at` SHALL never move afterwards; a different deadline is obtained
+by opening a new action.
 
-#### Scenario: A major finding gets seven days
+#### Scenario: The stored deadline is the one the coordinator stated
 
-- **GIVEN** a finding whose current classification carries `severity` `major`
-- **WHEN** an action is created for it on `2026-08-10T09:00:00-04:00`
-- **THEN** its `due_at` is `2026-08-17T09:00:00-04:00`
-- **AND** its `severity` is `major`
+- **WHEN** the HS coordinator creates an action on `2026-08-10T09:00:00-04:00` stating `due_at`
+  `2026-09-30T17:00:00-04:00`
+- **THEN** the stored `due_at` is `2026-09-30T17:00:00-04:00`
 
-#### Scenario: An action of an investigation takes the severity the coordinator states
+#### Scenario: An action of an investigation states its deadline the same way
 
-- **WHEN** the coordinator creates an action for an investigation stating `severity` `moderate` on
-  `2026-08-10T09:00:00-04:00`
-- **THEN** its `due_at` is `2026-08-24T09:00:00-04:00`
-- **AND** its `severity` is `moderate`
+- **WHEN** the HS coordinator creates an action for an investigation stating a `due_at` two weeks
+  out
+- **THEN** the stored `due_at` is that date
+- **AND** no `severity` is required and none is stored
 
-#### Scenario: An action of an investigation without a severity is refused
+#### Scenario: A deadline already past is refused
 
-- **WHEN** an action is created for an investigation with no `severity`
-- **THEN** the request is rejected with the code `severity_required`
+- **WHEN** an action is created with a `due_at` one day before the moment of creation
+- **THEN** the request is rejected with the code `invalid_due_at`
+- **AND** no `corrective_action` row is created
 
-#### Scenario: A severity supplied for a finding's action is ignored
+#### Scenario: An action with no deadline is refused
 
-- **WHEN** an action is created for a `moderate` finding claiming `severity` `negligible`
-- **THEN** the stored `severity` is `moderate` and the deadline is 14 days out
+- **WHEN** an action is created with no `due_at`
+- **THEN** the request is rejected
+- **AND** no `corrective_action` row is created
 
-#### Scenario: The stored deadline is the table's, not the caller's
+#### Scenario: The deadline of an open action does not move
 
-- **WHEN** an action is created for a `catastrophic` finding claiming a `due_at` ninety days away
-- **THEN** the stored `due_at` is three days from creation
-
-#### Scenario: All five severities are covered
-
-- **WHEN** the deadline is computed for each of the five severities from the same instant
-- **THEN** the results are 3, 7, 14, 30 and 60 days respectively
-
-#### Scenario: Reclassifying does not move an open action's deadline
-
-- **GIVEN** an action created from a `moderate` classification, with a `due_at` 14 days out
-- **WHEN** the coordinator reclassifies the finding as `catastrophic`
-- **THEN** the existing action's `due_at` is unchanged
-- **AND** its `severity` is still `moderate`
+- **GIVEN** an action created with a `due_at` fourteen days out
+- **WHEN** an `UPDATE` sets its `due_at` to a later date
+- **THEN** the engine rejects the update and the stored `due_at` is unchanged
 ### Requirement: The state of an action is derived from its events and is never stored as a column
 
 The system SHALL record every step of an action as a `corrective_action_event` row and SHALL NOT
@@ -451,9 +435,13 @@ SHALL be delivered in the application; the system SHALL NOT depend on outbound e
 The system SHALL return corrective actions only for the sites in the session's scope, enforced by
 the row level security policy on `corrective_action`, `corrective_action_event`,
 `corrective_action_evidence` and `corrective_action_escalation`, and not by a `WHERE site_id`
-clause in the endpoint. A listing SHALL carry, for each action, its finding, its assignee, its
-`due_at`, its derived current state, whether it is past `due_at`, and the escalation levels it has
-reached. A request for an action outside the session's scope SHALL be answered exactly as one for
+clause in the endpoint. A listing SHALL carry, for each action, its parent identifier, assignee,
+assignee name when visible, site name, `due_at`, derived current state, whether it is past `due_at`,
+the escalation levels it has reached, and a source discriminated as an inspection finding, manual
+finding or incident investigation. An inspection-finding source SHALL carry the stable template
+identity and historical template name needed to filter actions across template versions. The
+listing SHALL omit event and evidence history; an individual action read SHALL retain that complete
+history. A request for an action outside the session's scope SHALL be answered exactly as one for
 an action that does not exist.
 
 #### Scenario: A supervisor of one site does not see the other's actions
@@ -473,27 +461,119 @@ an action that does not exist.
 - **GIVEN** an action in `in_progress` whose `due_at` was two days ago
 - **WHEN** it is listed
 - **THEN** its state is reported as `in_progress`
-- **AND** it is reported as overdue, computed from `due_at` and the current time
+- **AND** its `overdue` is reported as true, computed from `due_at` and the current time
+
+#### Scenario: An inspection action names its source template
+
+- **GIVEN** an action whose `finding_id` belongs to an inspection made with a historical template version
+- **WHEN** actions are listed
+- **THEN** its `source.kind` is `inspection`
+- **AND** its `source.template_id` and `source.template_name` identify the stable template regardless of version
+
+#### Scenario: Non-inspection actions remain visible
+
+- **GIVEN** one action from a manual finding and one from an incident investigation
+- **WHEN** actions are listed
+- **THEN** their `source.kind` values are `manual_finding` and `investigation`, respectively
+
+#### Scenario: The listing omits detail history
+
+- **GIVEN** an action with events and evidence
+- **WHEN** actions are listed
+- **THEN** the summary contains neither `events` nor evidence
+- **AND** reading that action by id returns its complete `events` and evidence
 
 #### Scenario: A transaction with no declared scope sees nothing
 
 - **WHEN** a transaction that declared no site scope selects from the four tables
 - **THEN** all four return no rows, even though rows exist
 
+### Requirement: Coordinators can create corrective actions from findings in the actions workspace
+
+The system SHALL show findings within the reader's site scope in the corrective actions workspace,
+including findings with no corrective action and findings that already have one or more corrective
+actions. For an authenticated `hs_coordinator`, the system SHALL offer a creation form for each
+finding with exactly the required fields `assignee_person_id`, `description`, and `due_at`. The
+assignee choices SHALL contain only active people of that finding's site. For every other role, the
+system SHALL show the findings without offering the creation form. This presentation rule SHALL NOT
+replace server authorization.
+
+#### Scenario: A finding with no action is available to the coordinator
+
+- **GIVEN** a finding in the coordinator's site scope has no corrective actions
+- **WHEN** the coordinator opens the corrective actions workspace
+- **THEN** the finding is shown with a control to create a corrective action
+
+#### Scenario: A finding remains available after its first action
+
+- **GIVEN** a finding in the coordinator's site scope already has one corrective action
+- **WHEN** the coordinator opens the corrective actions workspace
+- **THEN** the finding remains shown with its current action count
+- **AND** the coordinator can open the form to create another corrective action for it
+
+#### Scenario: Assignee choices come from the finding's site
+
+- **GIVEN** a finding belongs to St. Thomas and active people exist in St. Thomas and Glencoe
+- **WHEN** the coordinator opens the creation form for that finding
+- **THEN** `assignee_person_id` can be selected only from active people of St. Thomas
+
+#### Scenario: A non-coordinator cannot attempt creation from the workspace
+
+- **WHEN** a supervisor opens the corrective actions workspace
+- **THEN** scoped findings and existing corrective actions remain readable
+- **AND** no control to create a corrective action is shown
+
+### Requirement: Creating an action from the workspace requires a complete future commitment
+
+The system SHALL submit a finding action only when `assignee_person_id` names one of the offered
+people, `description` satisfies the corrective action contract, and `due_at` is later than the
+current instant. While the creation is pending, the system SHALL prevent a duplicate submission.
+After a successful creation, the system SHALL close the form, show the created action in the
+corrective actions workspace, and update the source finding's action count. If creation fails, the
+system SHALL keep the entered values available for correction and SHALL present the failure without
+claiming that the action was created.
+
+#### Scenario: A coordinator creates a complete action
+
+- **GIVEN** the coordinator has selected an active `assignee_person_id` of the finding's site,
+  entered a valid `description`, and selected a future `due_at`
+- **WHEN** the coordinator submits the form
+- **THEN** one corrective action is created for that finding with those three values
+- **AND** the created action appears in the corrective actions workspace
+- **AND** the finding's action count increases by one
+
+#### Scenario: A past deadline is not submitted
+
+- **WHEN** the coordinator enters a `due_at` that is not later than the current instant
+- **THEN** the form reports that the deadline must be in the future
+- **AND** no creation request is submitted
+
+#### Scenario: A pending creation cannot be submitted twice
+
+- **GIVEN** a creation request is pending
+- **WHEN** the coordinator attempts to submit the same form again
+- **THEN** no second creation request is submitted
+
+#### Scenario: A rejected creation preserves the draft
+
+- **GIVEN** the coordinator has completed the creation form
+- **WHEN** the creation request fails
+- **THEN** the form remains open with `assignee_person_id`, `description`, and `due_at` preserved
+- **AND** the failure is shown to the coordinator
+
 ### Requirement: A shared remediation is grouped without changing anything
 
 The system SHALL accept an optional `remediation_group_id` on a corrective action, shared by the
 several actions that one piece of work resolves, as pregunta cerrada 9 decided. The system SHALL
 NOT let that identifier alter deadlines, escalation or verification: each action of a group SHALL
-keep its own `due_at` derived from its own finding's severity, SHALL escalate on its own, and
-SHALL be closed by its own verified event.
+keep the `due_at` it was created with, SHALL escalate on its own, and SHALL be closed by its own
+verified event.
 
 #### Scenario: Grouped actions keep their own deadlines
 
-- **GIVEN** seven actions sharing one `remediation_group_id`, created from findings of different
-  severities
+- **GIVEN** seven actions sharing one `remediation_group_id`, created with different deadlines
 - **WHEN** their deadlines are read
-- **THEN** each `due_at` is the one derived from its own finding's severity
+- **THEN** each `due_at` is the one its creation declared
 
 #### Scenario: Closing one action of a group closes only that one
 
