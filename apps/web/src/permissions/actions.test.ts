@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { ASSIGNEE, transitionsFrom, type Action, type ActionState, type Session } from '@hs/contracts';
+import {
+  ASSIGNEE,
+  ROLES,
+  transitionsFrom,
+  type Action,
+  type ActionState,
+  type Session,
+} from '@hs/contracts';
 
-import { canAttempt } from './actions';
+import { canAttempt, canCreateAction } from './actions';
 
 const PERSON = '11111111-1111-4111-8111-111111111111';
 const OTHER_PERSON = '22222222-2222-4222-8222-222222222222';
@@ -35,6 +42,18 @@ function session(role: Session['role'], personId = PERSON): Session {
     recordsTo: null,
   };
 }
+
+describe('la creación de acciones', () => {
+  it('se ofrece solo al coordinador', () => {
+    for (const role of ROLES) {
+      expect(canCreateAction(session(role))).toBe(role === 'hs_coordinator');
+    }
+  });
+
+  it('no se ofrece sin sesión', () => {
+    expect(canCreateAction(null)).toBe(false);
+  });
+});
 
 /** Lo que la pantalla ofrece, derivado de la misma tabla que el servidor aplica. */
 function offered(state: ActionState, actor: Session | null): string[] {

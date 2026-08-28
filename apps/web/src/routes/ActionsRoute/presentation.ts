@@ -1,4 +1,50 @@
-import type { ActionSummary } from '@hs/contracts';
+import type { ActionSummary, Finding } from '@hs/contracts';
+
+export interface FindingActionRow {
+  finding: Finding;
+  actionCount: number;
+}
+
+/** Conserva todos los hallazgos y cuenta las acciones que señalan a cada uno. */
+export function findingsWithActionCounts(
+  findings: readonly Finding[],
+  actions: readonly ActionSummary[],
+): FindingActionRow[] {
+  const counts = new Map<string, number>();
+
+  for (const action of actions) {
+    if ('finding_id' in action.source) {
+      counts.set(action.source.finding_id, (counts.get(action.source.finding_id) ?? 0) + 1);
+    }
+  }
+
+  return findings
+    .map((finding) => ({ finding, actionCount: counts.get(finding.id) ?? 0 }))
+    .sort(
+      (left, right) =>
+        right.finding.occurred_at.localeCompare(left.finding.occurred_at) ||
+        left.finding.id.localeCompare(right.finding.id),
+    );
+}
+
+export type DueAtResult =
+  | { success: true; dueAt: string }
+  | { success: false; message: string };
+
+/** Convierte el valor local del navegador a un instante ISO y comprueba el plazo al enviar. */
+export function futureDueAt(value: string, now: Date): DueAtResult {
+  const instant = new Date(value);
+
+  if (value === '' || Number.isNaN(instant.getTime())) {
+    return { success: false, message: 'Choose a valid deadline.' };
+  }
+
+  if (instant.getTime() <= now.getTime()) {
+    return { success: false, message: 'Deadline must be in the future.' };
+  }
+
+  return { success: true, dueAt: instant.toISOString() };
+}
 
 export interface InspectionActionGroup {
   /** El `inspection_id` del grupo, o `'other'` para lo que no cuelga de ninguna inspección. */

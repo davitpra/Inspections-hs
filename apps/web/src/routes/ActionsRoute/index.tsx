@@ -1,10 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { listActions } from '../../api/actions';
+import { listFindings } from '../../api/findings';
 import { queryKeys } from '../../api/query-keys';
-import { CheckIcon } from '../../components/icons';
+import { useAppSession } from '../../app/session-context';
+import { AlertCircleIcon, CheckCircleIcon, CheckIcon, ListIcon } from '../../components/icons';
+import { canCreateAction } from '../../permissions/actions';
+import { FindingsTable } from './FindingsTable';
 import { InspectionsTable } from './InspectionsTable';
-import { groupActionsByInspection } from './presentation';
+import { findingsWithActionCounts, groupActionsByInspection } from './presentation';
 
 /**
  * Las inspecciones de las plantas del alcance que tienen alguna acción correctiva
@@ -19,6 +23,12 @@ import { groupActionsByInspection } from './presentation';
  * se juntan en un solo grupo, "Other sources", en vez de perderse de esta pantalla.
  */
 export function ActionsRoute(): React.JSX.Element {
+  const { account } = useAppSession();
+  const findings = useQuery({
+    queryKey: queryKeys.findings(),
+    queryFn: listFindings,
+    retry: false,
+  });
   const actions = useQuery({
     queryKey: queryKeys.actions(),
     queryFn: listActions,
@@ -27,37 +37,90 @@ export function ActionsRoute(): React.JSX.Element {
 
   const all = actions.data ?? [];
   const groups = groupActionsByInspection(all);
+  const findingRows = findingsWithActionCounts(findings.data ?? [], all);
+  const activeCount = all.filter((action) => action.state !== 'closed').length;
+  const overdueCount = all.filter(
+    (action) => action.overdue && action.state !== 'closed',
+  ).length;
 
   return (
-    <>
-      <header className="scheduling__top">
-        <div className="scheduling__header">
-          <div className="scheduling__title">
-            <span className="scheduling__icon">
+    <div className="actions-overview">
+      <header className="actions-overview__hero">
+        <div className="actions-overview__intro">
+          <div className="actions-overview__title">
+            <span className="actions-overview__title-icon">
               <CheckIcon size={22} />
             </span>
-            <h1>
-              Corrective actions{' '}
-              {actions.isSuccess ? <span className="note">({groups.length})</span> : null}
-            </h1>
+            <div>
+              <p className="actions-overview__eyebrow">Safety follow-through</p>
+              <h1>Corrective actions</h1>
+            </div>
           </div>
-          <p className="scheduling__subtitle">
-            Inspections with corrective actions for your sites. Open one to see its actions.
+          <p className="actions-overview__subtitle">
+            Review findings, create commitments, and open an inspection to track its corrective actions.
           </p>
         </div>
+
+        <dl className="actions-overview__stats" aria-label="Corrective action summary">
+          <div className="actions-overview__stat">
+            <dt><ListIcon size={17} /> Total actions</dt>
+            <dd>{actions.isSuccess ? all.length : '—'}</dd>
+          </div>
+          <div className="actions-overview__stat">
+            <dt><CheckCircleIcon size={17} /> Active</dt>
+            <dd>{actions.isSuccess ? activeCount : '—'}</dd>
+          </div>
+          <div className="actions-overview__stat actions-overview__stat--warn">
+            <dt><AlertCircleIcon size={17} /> Overdue</dt>
+            <dd>{actions.isSuccess ? overdueCount : '—'}</dd>
+          </div>
+          <div className="actions-overview__stat">
+            <dt>Inspection groups</dt>
+            <dd>{actions.isSuccess ? groups.length : '—'}</dd>
+          </div>
+        </dl>
       </header>
 
-      {actions.isError ? (
-        <p className="notice">Corrective actions need a connection.</p>
-      ) : null}
+      <FindingsTable
+        rows={findingRows}
+        findingsLoading={findings.isLoading}
+        findingsError={findings.isError}
+        actionCountsAvailable={actions.isSuccess}
+        allowCreation={canCreateAction(account)}
+      />
 
-      {actions.isLoading ? <p>Loading corrective actions…</p> : null}
+      <section className="card actions-overview__section" aria-labelledby="existing-actions-heading">
+        <div className="actions-overview__section-head">
+          <div>
+            <p className="actions-overview__eyebrow">Work in progress</p>
+            <h2 id="existing-actions-heading">Existing corrective actions</h2>
+            <p>Open an inspection to review its commitments and move work forward.</p>
+          </div>
+          {actions.isSuccess ? (
+            <span className="actions-overview__count">{groups.length} {groups.length === 1 ? 'group' : 'groups'}</span>
+          ) : null}
+        </div>
 
-      {actions.isSuccess && groups.length === 0 ? (
-        <p>No corrective actions have been recorded for your sites.</p>
-      ) : null}
+        {actions.isError ? (
+          <p className="status-card status-card--error">
+            <AlertCircleIcon size={20} /> Corrective actions need a connection.
+          </p>
+        ) : null}
 
-      {groups.length > 0 ? <InspectionsTable groups={groups} /> : null}
-    </>
+        {actions.isLoading ? (
+          <p className="status-card"><ListIcon size={20} /> Loading corrective actions…</p>
+        ) : null}
+
+        {actions.isSuccess && groups.length === 0 ? (
+          <div className="actions-overview__empty">
+            <span className="actions-overview__empty-icon"><CheckCircleIcon size={24} /></span>
+            <strong>No corrective actions yet</strong>
+            <p>No corrective actions have been recorded for your sites.</p>
+          </div>
+        ) : null}
+
+        {groups.length > 0 ? <InspectionsTable groups={groups} /> : null}
+      </section>
+    </div>
   );
 }

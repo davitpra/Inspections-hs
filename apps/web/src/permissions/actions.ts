@@ -1,5 +1,10 @@
 import { ASSIGNEE, type Action, type ActionTransition, type Session } from '@hs/contracts';
 
+/** La interfaz ofrece la creación únicamente al coordinador; el servidor vuelve a autorizarla. */
+export function canCreateAction(account: Session | null): boolean {
+  return account?.role === 'hs_coordinator';
+}
+
 /**
  * Si esta cuenta puede intentar esta transición, según la MISMA tabla que el servidor.
  *

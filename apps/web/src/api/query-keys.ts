@@ -119,6 +119,7 @@ export const queryKeys = {
   outbox: (userId?: string) => key('outbox', userId),
 
   // Acciones correctivas y bandeja.
+  findings: () => key('findings'),
   actions: () => key('actions'),
   action: (id?: string) => key('action', id),
   notifications: () => key('notifications'),

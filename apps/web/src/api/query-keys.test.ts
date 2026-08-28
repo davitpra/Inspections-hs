@@ -5,6 +5,12 @@ import { queryKeys } from './query-keys';
 const INSPECTION = '11111111-1111-4111-8111-111111111111';
 const ACCOUNT = '44444444-4444-4444-8444-444444444444';
 
+describe('claves del espacio de acciones', () => {
+  it('mantiene una clave compartida y estable para los hallazgos', () => {
+    expect(queryKeys.findings()).toEqual(['findings']);
+  });
+});
+
 /** `invalidateQueries` empareja por prefijo: esta es la regla que las claves deben cumplir. */
 function isPrefixOf(
   prefix: readonly (string | number)[],

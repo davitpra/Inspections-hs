@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { ActionSummary } from '@hs/contracts';
+import type { ActionSummary, Finding } from '@hs/contracts';
 
-import { groupActionsByInspection } from './presentation';
+import { findingsWithActionCounts, futureDueAt, groupActionsByInspection } from './presentation';
 
 const SITE_A = '11111111-1111-4111-8111-111111111111';
 const SITE_B = '22222222-2222-4222-8222-222222222222';
@@ -33,6 +33,92 @@ function action(overrides: Partial<ActionSummary> = {}): ActionSummary {
     ...overrides,
   };
 }
+
+function finding(overrides: Partial<Finding> = {}): Finding {
+  return {
+    id: '77777777-7777-4777-8777-777777777777',
+    site_id: SITE_A,
+    origin: 'inspection',
+    inspection_id: INSPECTION_A,
+    template_version_item_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    item_key: 'machine.guarding',
+    location_id: null,
+    description: 'The fixed guard is missing from the line infeed',
+    photo_object_keys: ['findings/guard.jpg'],
+    reported_by: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    occurred_at: '2026-08-27T14:00:00.000Z',
+    recorded_at: '2026-08-27T14:05:00.000Z',
+    recurrence: null,
+    ...overrides,
+  };
+}
+
+describe('los hallazgos accionables', () => {
+  it('conserva un hallazgo sin acciones', () => {
+    expect(findingsWithActionCounts([finding()], [])).toEqual([
+      { finding: finding(), actionCount: 0 },
+    ]);
+  });
+
+  it('cuenta una y varias acciones sin perder ningún hallazgo', () => {
+    const secondFinding = finding({
+      id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      description: 'Emergency stop is not reachable from the operator station',
+    });
+    const secondAction = action({ id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd' });
+
+    expect(
+      findingsWithActionCounts([finding(), secondFinding], [action(), secondAction]).map((row) => ({
+        id: row.finding.id,
+        count: row.actionCount,
+      })),
+    ).toEqual([
+      { id: finding().id, count: 2 },
+      { id: secondFinding.id, count: 0 },
+    ]);
+  });
+
+  it('ordena por ocurrencia descendente y desempata por id', () => {
+    const older = finding({
+      id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+      occurred_at: '2026-08-20T14:00:00.000Z',
+    });
+    const firstAtSameInstant = finding({ id: '11111111-1111-4111-8111-111111111111' });
+
+    expect(
+      findingsWithActionCounts([older, finding(), firstAtSameInstant], []).map(
+        (row) => row.finding.id,
+      ),
+    ).toEqual([firstAtSameInstant.id, finding().id, older.id]);
+  });
+});
+
+describe('el plazo del formulario', () => {
+  const now = new Date('2026-08-28T12:00:00.000Z');
+
+  it('convierte datetime-local a un instante ISO', () => {
+    const value = '2026-08-29T12:00';
+
+    expect(futureDueAt(value, now)).toEqual({
+      success: true,
+      dueAt: new Date(value).toISOString(),
+    });
+  });
+
+  it('rechaza un valor vacío o inválido', () => {
+    expect(futureDueAt('', now)).toEqual({
+      success: false,
+      message: 'Choose a valid deadline.',
+    });
+  });
+
+  it('rechaza un plazo que no es futuro', () => {
+    expect(futureDueAt('2026-08-28T12:00:00.000Z', now)).toEqual({
+      success: false,
+      message: 'Deadline must be in the future.',
+    });
+  });
+});
 
 describe('la agrupación de acciones por inspección', () => {
   it('agrupa por inspection_id y junta lo que no tiene inspección en "other"', () => {
