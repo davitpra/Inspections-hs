@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 
+import { useOnline } from '../offline/online';
 import { emptyStatus, unsyncedLabel, unsyncedStatus, type UnsyncedStatus } from '../offline/unsynced';
+import { WifiOffIcon } from './icons';
 
 /**
  * El indicador permanente de ADR-010.
@@ -12,9 +14,16 @@ import { emptyStatus, unsyncedLabel, unsyncedStatus, type UnsyncedStatus } from 
  *
  * Está presente en TODA pantalla de captura, con o sin red. Que no haya conexión es
  * exactamente cuando el número importa más.
+ *
+ * «You're offline» va DELANTE del número y no en lugar de él. El número es el hecho —tanto
+ * trabajo no salió de este teléfono— y la falta de red es la explicación de por qué. Sin la
+ * explicación, un inspector con señal y un inspector sin señal leen el mismo aviso y solo
+ * uno de los dos puede hacer algo al respecto. El ícono no lleva texto propio: lo nombra la
+ * línea que tiene al lado.
  */
 export function UnsyncedIndicator({ accountId }: { accountId: string | null }): React.JSX.Element | null {
   const status = useUnsyncedStatus(accountId);
+  const online = useOnline();
   const label = unsyncedLabel(status);
 
   if (!label) return null;
@@ -25,12 +34,20 @@ export function UnsyncedIndicator({ accountId }: { accountId: string | null }): 
       role={status.warn ? 'alert' : 'status'}
       aria-live="polite"
     >
-      <p className="unsynced__count">{label}</p>
-      {status.warn ? (
-        <p className="unsynced__warning">
-          Connect to the network to submit your work. Nothing has left this device yet.
+      {online ? null : <WifiOffIcon />}
+
+      <div className="unsynced__text">
+        <p className="unsynced__count">
+          {online ? null : <strong className="unsynced__lead">You&rsquo;re offline</strong>}
+          {label}
         </p>
-      ) : null}
+
+        {status.warn ? (
+          <p className="unsynced__warning">
+            Connect to the network to submit your work. Nothing has left this device yet.
+          </p>
+        ) : null}
+      </div>
     </aside>
   );
 }

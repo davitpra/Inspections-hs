@@ -229,6 +229,36 @@ export function CloseIcon({ size = 24 }: { size?: number }): React.JSX.Element {
   );
 }
 
+/**
+ * Sin red. Las ondas tachadas y no una nube: lo que falta es la conexión del dispositivo,
+ * no un servicio remoto, y esa distinción es la que hace accionable el aviso — el inspector
+ * tiene que buscar señal, no esperar a que alguien arregle algo del otro lado.
+ */
+export function WifiOffIcon({ size = 20 }: { size?: number }): React.JSX.Element {
+  return (
+    <svg {...svgProps(size)}>
+      <path d="M2 4l20 20" />
+      <path d="M4.5 9.5A15 15 0 0 1 9 6.9" />
+      <path d="M1.5 6A19 19 0 0 1 6 3.2" />
+      <path d="M14.5 6.6A15 15 0 0 1 22.5 12" />
+      <path d="M7.5 13A9.5 9.5 0 0 1 12 11" />
+      <path d="M16.5 13A9.5 9.5 0 0 0 14 11.4" />
+      <path d="M10.5 16.5a3 3 0 0 1 3.6.4" />
+      <path d="M12 20h.01" />
+    </svg>
+  );
+}
+
+/** La cámara del campo: lo que abre el control de foto, con texto al lado. */
+export function CameraIcon({ size = 20 }: { size?: number }): React.JSX.Element {
+  return (
+    <svg {...svgProps(size)}>
+      <path d="M4 7h3l1.5-2h7L17 7h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1Z" />
+      <circle cx="12" cy="13" r="3.5" />
+    </svg>
+  );
+}
+
 export function SearchIcon({ size = 16 }: { size?: number }): React.JSX.Element {
   return (
     <svg {...svgProps(size)}>

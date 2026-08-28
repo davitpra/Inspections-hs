@@ -891,9 +891,22 @@ select:disabled {
   position: sticky;
   top: 0;
   z-index: 10;
+  /* El ícono al costado del bloque de texto entero, alineado arriba: con dos renglones
+     quedaría flotando en el medio de la frase. */
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--line);
   background: var(--paper);
+}
+
+.unsynced > svg {
+  flex: none;
+}
+
+.unsynced__text {
+  min-width: 0;
 }
 
 .unsynced--warn {
@@ -905,6 +918,13 @@ select:disabled {
 
 .unsynced__count {
   margin: 0;
+}
+
+/* «You're offline» delante del número: el número es el hecho —tanto trabajo no salió de
+   este teléfono— y la falta de red es la explicación de por qué. El separador va acá y no en
+   el JSX porque existe solo cuando existe el lead. */
+.unsynced__lead::after {
+  content: " • ";
 }
 
 .unsynced__warning {
