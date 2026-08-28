@@ -62,6 +62,7 @@ function document(): TemplateDocument {
             position: 1,
             required: true,
             response_type: 'yes_no' as const,
+            fails_on: 'no' as const,
           },
           {
             item_key: 'fnd.eyewash',
@@ -69,6 +70,7 @@ function document(): TemplateDocument {
             position: 2,
             required: true,
             response_type: 'yes_no_na' as const,
+            fails_on: 'no' as const,
           },
           {
             item_key: 'fnd.rating',

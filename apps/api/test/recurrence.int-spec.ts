@@ -132,7 +132,11 @@ function item(
   position: number,
   responseType: 'yes_no' | 'yes_no_na',
 ): TemplateSection['items'][number] {
-  return { item_key: itemKey, prompt, position, required: true, response_type: responseType };
+  const base = { item_key: itemKey, prompt, position, required: true, fails_on: 'no' as const };
+
+  return responseType === 'yes_no'
+    ? { ...base, response_type: 'yes_no' }
+    : { ...base, response_type: 'yes_no_na' };
 }
 
 // ---------------------------------------------------------------------------

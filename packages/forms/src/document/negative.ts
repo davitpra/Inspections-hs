@@ -1,5 +1,10 @@
 import type { AnswerSet } from './answers.js';
-import { itemsInDocumentOrder, type TemplateDocument } from './schema.js';
+import {
+  itemsInDocumentOrder,
+  type TemplateDocument,
+  type TemplateItem,
+  type YesNoNaFailsOn,
+} from './schema.js';
 import { evaluateVisibility, isVisible } from './visibility.js';
 
 /**
@@ -16,10 +21,25 @@ import { evaluateVisibility, isVisible } from './visibility.js';
  */
 
 /**
- * Los dos únicos valores que son un incumplimiento.
+ * Qué respuestas de `yes_no_na` cuentan como incumplimiento, por modo de fallo.
  *
- * `na` NO está y esa ausencia es la regla: "no aplica" es una tercera respuesta,
- * no una falla (requisitos §4, tipo `yes_no_na`).
+ * A diferencia de `yes_no`, acá `na` sí puede ser (parte de) la falla: un modo
+ * como `no_na` existe para el ítem donde "no aplica" declarado a la ligera
+ * amerita la misma revisión que un "No" — el `finding` para ese caso no es
+ * automático, pero se acepta la respuesta.
+ */
+const YES_NO_NA_FAILING_ANSWERS: Record<YesNoNaFailsOn, readonly string[]> = {
+  no: ['no'],
+  yes: ['yes'],
+  na: ['na'],
+  no_na: ['no', 'na'],
+  yes_na: ['yes', 'na'],
+};
+
+/**
+ * `yes_no` y `yes_no_na` son configurables por ítem (`fails_on`, por defecto
+ * `'no'`): el autor elige qué respuesta o respuestas cuentan como
+ * incumplimiento, y esta función lee esa elección en vez de asumirla.
  *
  * Ningún otro `response_type` deriva hallazgo. `scale` y `number` no tienen
  * umbral en el documento —el `weight` del riesgo E está oculto a propósito y no
@@ -27,9 +47,12 @@ import { evaluateVisibility, isVisible } from './visibility.js';
  * los textos no tienen semántica de cumplimiento. El día que un ítem la
  * necesite, la decisión es del builder y se toma explícitamente.
  */
-function isNegative(responseType: string, answer: unknown): boolean {
-  if (responseType === 'yes_no') return answer === false;
-  if (responseType === 'yes_no_na') return answer === 'no';
+function isNegative(item: TemplateItem, answer: unknown): boolean {
+  if (item.response_type === 'yes_no') return answer === (item.fails_on === 'yes');
+
+  if (item.response_type === 'yes_no_na') {
+    return typeof answer === 'string' && YES_NO_NA_FAILING_ANSWERS[item.fails_on].includes(answer);
+  }
 
   return false;
 }
@@ -50,7 +73,7 @@ export function negativeAnswers(document: TemplateDocument, answers: AnswerSet):
     .filter(
       (item) =>
         isVisible(visibility, item.item_key) &&
-        isNegative(item.response_type, answers[item.item_key]),
+        isNegative(item, answers[item.item_key]),
     )
     .map((item) => item.item_key);
 }

@@ -50,7 +50,9 @@ function usableDocument(
       {
         section_key: 'guarding',
         section_title: 'Guarding',
-        items: [{ item_key: itemKey, prompt, required: true, response_type: 'yes_no' }],
+        items: [
+          { item_key: itemKey, prompt, required: true, response_type: 'yes_no', fails_on: 'no' },
+        ],
       },
     ],
   };
@@ -267,6 +269,7 @@ describe('publicar la revisión', () => {
                 prompt: 'Is the interlock working?',
                 required: true,
                 response_type: 'yes_no',
+                fails_on: 'no',
               },
             ],
           },

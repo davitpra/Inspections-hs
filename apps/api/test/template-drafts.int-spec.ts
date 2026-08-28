@@ -62,6 +62,7 @@ function usableDocument(itemKey = 'guard.fitted'): TemplateDraftDocument {
             prompt: 'Is the guard fitted?',
             required: true,
             response_type: 'yes_no',
+            fails_on: 'no',
           },
         ],
       },
@@ -682,6 +683,7 @@ describe('publicar un borrador', () => {
       section_key: 'guarding',
       prompt: 'Is the guard fitted?',
       response_type: 'yes_no',
+      fails_on: 'no',
       required: true,
     });
     expect((await templates.list(asCoordinator())).some((each) => each.id === published.template_id)).toBe(

@@ -195,6 +195,7 @@ export function addItem(
         prompt: '',
         required: true,
         response_type: 'yes_no',
+        fails_on: 'no',
       },
     ],
   }));
@@ -375,7 +376,7 @@ export function setConfig(
   sectionIndex: number,
   itemIndex: number,
   field: string,
-  value: number | readonly ChoiceOption[],
+  value: number | string | readonly ChoiceOption[],
 ): TemplateDraftDocument {
   return withItem(document, sectionIndex, itemIndex, (item) =>
     field in item ? ({ ...item, [field]: value } as TemplateDraftItem) : item,

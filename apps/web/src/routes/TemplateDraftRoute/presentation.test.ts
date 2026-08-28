@@ -34,8 +34,8 @@ function document(): TemplateDraftDocument {
         section_key: 'a',
         section_title: 'A',
         items: [
-          { item_key: 'one', prompt: 'One', required: true, response_type: 'yes_no' },
-          { item_key: 'two', prompt: 'Two', required: true, response_type: 'yes_no' },
+          { item_key: 'one', prompt: 'One', required: true, response_type: 'yes_no', fails_on: 'no' },
+          { item_key: 'two', prompt: 'Two', required: true, response_type: 'yes_no', fails_on: 'no' },
         ],
       },
       { section_key: 'b', section_title: 'B', items: [] },
@@ -366,7 +366,9 @@ describe('summaryCounts', () => {
           section_key: 'a',
           section_title: 'A',
           organization_location_code: 'dock',
-          items: [{ item_key: 'one', prompt: 'One', required: true, response_type: 'yes_no' }],
+          items: [
+            { item_key: 'one', prompt: 'One', required: true, response_type: 'yes_no', fails_on: 'no' },
+          ],
         },
         { section_key: 'b', section_title: 'B', organization_location_code: 'boiler', items: [] },
       ],

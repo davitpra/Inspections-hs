@@ -45,6 +45,7 @@ function documentWith(itemKeys: readonly string[]): TemplateDocument {
         prompt: `Prompt for ${item_key}`,
         position: index + 1,
         response_type: 'yes_no' as const,
+        fails_on: 'no' as const,
         required: true,
       })),
     },

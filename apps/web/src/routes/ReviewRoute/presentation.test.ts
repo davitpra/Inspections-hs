@@ -22,6 +22,7 @@ const DOCUMENT: TemplateDocument = {
           position: 1,
           required: true,
           response_type: 'yes_no',
+          fails_on: 'no',
         },
       ],
     },
@@ -36,6 +37,7 @@ const DOCUMENT: TemplateDocument = {
           position: 1,
           required: true,
           response_type: 'yes_no',
+          fails_on: 'no',
         },
         {
           item_key: 'emergency.extinguisher-photo',

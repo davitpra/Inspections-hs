@@ -595,9 +595,12 @@ describe('defaultItemConfig', () => {
     );
   });
 
+  it('yes_no y yes_no_na nacen fallando en "No"', () => {
+    expect(defaultItemConfig('yes_no')).toEqual({ fails_on: 'no' });
+    expect(defaultItemConfig('yes_no_na')).toEqual({ fails_on: 'no' });
+  });
+
   it('los tipos sin configuración no agregan campos', () => {
-    expect(defaultItemConfig('yes_no')).toEqual({});
-    expect(defaultItemConfig('yes_no_na')).toEqual({});
     expect(defaultItemConfig('signature')).toEqual({});
   });
 });
@@ -628,6 +631,7 @@ describe('draftFromDocument devuelve el documento congelado a forma de borrador'
             prompt: 'Is the guard fitted?',
             required: true,
             response_type: 'yes_no',
+            fails_on: 'no',
           },
           {
             item_key: 'guard.gap',
@@ -649,6 +653,7 @@ describe('draftFromDocument devuelve el documento congelado a forma de borrador'
             prompt: 'Are the walkways clear?',
             required: true,
             response_type: 'yes_no_na',
+            fails_on: 'no',
           },
         ],
       },

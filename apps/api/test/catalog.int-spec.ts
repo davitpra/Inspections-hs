@@ -113,6 +113,7 @@ beforeAll(async () => {
             prompt: 'Machine guards present?',
             position: 1,
             response_type: 'yes_no',
+            fails_on: 'no',
             required: true,
           },
         ],

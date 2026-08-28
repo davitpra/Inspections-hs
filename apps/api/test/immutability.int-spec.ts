@@ -257,6 +257,7 @@ describe('el envío de una inspección y sus respuestas', () => {
               position: 1,
               required: true,
               response_type: 'yes_no',
+              fails_on: 'no',
             },
             {
               item_key: 'imm.exits',
@@ -264,6 +265,7 @@ describe('el envío de una inspección y sus respuestas', () => {
               position: 2,
               required: true,
               response_type: 'yes_no',
+              fails_on: 'no',
             },
           ],
         },

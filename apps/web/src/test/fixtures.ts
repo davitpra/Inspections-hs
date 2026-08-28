@@ -24,6 +24,7 @@ export const TEST_DOCUMENT: TemplateDocument = {
           position: 1,
           required: true,
           response_type: 'yes_no',
+          fails_on: 'no',
         },
         {
           item_key: 'guarding.applies',
@@ -31,6 +32,7 @@ export const TEST_DOCUMENT: TemplateDocument = {
           position: 2,
           required: false,
           response_type: 'yes_no_na',
+          fails_on: 'no',
         },
         {
           item_key: 'guarding.rating',

@@ -79,10 +79,30 @@ export type ChoiceOption = z.infer<typeof choiceOptionSchema>;
  * sobra un campo, es un ítem que alguien escribió mal. Tiene que romper CI y no
  * descubrirse en la primera inspección.
  */
-const yesNoItem = z.strictObject({ ...itemBase, response_type: z.literal('yes_no') });
+const yesNoItem = z.strictObject({
+  ...itemBase,
+  response_type: z.literal('yes_no'),
+  fails_on: z.enum(['yes', 'no']).default('no'),
+});
 
-/** `na` es una tercera respuesta, no un incumplimiento: "no aplica" no deriva hallazgo. */
-const yesNoNaItem = z.strictObject({ ...itemBase, response_type: z.literal('yes_no_na') });
+/**
+ * Los cinco modos de fallo de `yes_no_na`: cuál o cuáles de las tres respuestas
+ * cuentan como incumplimiento. `na` puede ser parte de la falla —a diferencia de
+ * `yes_no`, acá el autor puede decidir que "no aplica" también amerita
+ * revisión— pero siempre acompañada de `yes` o `no`, nunca las tres juntas: un
+ * ítem que falla con cualquier respuesta no es una pregunta de cumplimiento.
+ */
+export const YES_NO_NA_FAILS_ON = ['no', 'yes', 'no_na', 'na', 'yes_na'] as const;
+
+export const yesNoNaFailsOnSchema = z.enum(YES_NO_NA_FAILS_ON);
+
+export type YesNoNaFailsOn = z.infer<typeof yesNoNaFailsOnSchema>;
+
+const yesNoNaItem = z.strictObject({
+  ...itemBase,
+  response_type: z.literal('yes_no_na'),
+  fails_on: yesNoNaFailsOnSchema.default('no'),
+});
 
 const scaleItem = z.strictObject({
   ...itemBase,

@@ -179,6 +179,7 @@ describe('el modelo publicado acepta los nueve tipos', () => {
               position: 1,
               required: true,
               response_type: 'yes_no',
+              fails_on: 'no',
             },
           ],
         },

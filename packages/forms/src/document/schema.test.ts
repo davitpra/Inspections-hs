@@ -17,6 +17,7 @@ function validDocument(): TemplateDocument {
             position: 4,
             response_type: 'yes_no',
             required: true,
+            fails_on: 'no',
           },
           {
             item_key: 'housekeeping.aisles-clear',
@@ -24,6 +25,7 @@ function validDocument(): TemplateDocument {
             position: 5,
             response_type: 'yes_no',
             required: true,
+            fails_on: 'no',
           },
         ],
       },
@@ -91,6 +93,7 @@ describe('templateDocumentSchema', () => {
           position: 4,
           response_type: 'yes_no',
           required: true,
+          fails_on: 'no',
         },
       ],
     });
@@ -111,6 +114,7 @@ describe('templateDocumentSchema', () => {
           position: 1,
           response_type: 'yes_no',
           required: true,
+          fails_on: 'no',
         },
       ],
     });

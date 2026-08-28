@@ -32,14 +32,16 @@ function document(): TemplateDraftDocument {
         section_key: 'intake',
         section_title: 'Intake',
         items: [
-          { item_key: 'a', prompt: 'A', required: true, response_type: 'yes_no' },
-          { item_key: 'b', prompt: 'B', required: true, response_type: 'yes_no' },
+          { item_key: 'a', prompt: 'A', required: true, response_type: 'yes_no', fails_on: 'no' },
+          { item_key: 'b', prompt: 'B', required: true, response_type: 'yes_no', fails_on: 'no' },
         ],
       },
       {
         section_key: 'storage',
         section_title: 'Storage',
-        items: [{ item_key: 'c', prompt: 'C', required: true, response_type: 'yes_no' }],
+        items: [
+          { item_key: 'c', prompt: 'C', required: true, response_type: 'yes_no', fails_on: 'no' },
+        ],
       },
     ],
   };
@@ -421,7 +423,7 @@ describe('duplicar', () => {
           section_title: 'Intake',
           organization_location_code: 'dock',
           items: [
-            { item_key: 'a', prompt: 'A', required: true, response_type: 'yes_no' },
+            { item_key: 'a', prompt: 'A', required: true, response_type: 'yes_no', fails_on: 'no' },
             {
               item_key: 'b',
               prompt: 'How bad?',

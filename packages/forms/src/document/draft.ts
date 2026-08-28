@@ -3,7 +3,12 @@ import { z } from 'zod';
 import { referencedItemKeys, visibleWhenSchema } from './conditions.js';
 import { findingSchema, type FindingPrescription } from './controls.js';
 import { ITEM_KEY_PATTERN, SECTION_KEY_PATTERN } from './keys.js';
-import { templateDocumentSchema, type ResponseType, type TemplateDocument } from './schema.js';
+import {
+  templateDocumentSchema,
+  yesNoNaFailsOnSchema,
+  type ResponseType,
+  type TemplateDocument,
+} from './schema.js';
 
 /**
  * El documento de una plantilla **mientras se escribe**.
@@ -57,8 +62,16 @@ const draftItemBase = {
 };
 
 const draftItemSchema = z.discriminatedUnion('response_type', [
-  z.strictObject({ ...draftItemBase, response_type: z.literal('yes_no') }),
-  z.strictObject({ ...draftItemBase, response_type: z.literal('yes_no_na') }),
+  z.strictObject({
+    ...draftItemBase,
+    response_type: z.literal('yes_no'),
+    fails_on: z.enum(['yes', 'no']).default('no'),
+  }),
+  z.strictObject({
+    ...draftItemBase,
+    response_type: z.literal('yes_no_na'),
+    fails_on: yesNoNaFailsOnSchema.default('no'),
+  }),
   z.strictObject({
     ...draftItemBase,
     response_type: z.literal('scale'),
@@ -572,6 +585,9 @@ function checkVisibility(draft: TemplateDraftDocument, issues: DraftIssue[]): vo
 export function defaultItemConfig(responseType: ResponseType): Record<string, unknown> {
   // `finding` es una prescripción autoral, no configuración de respuesta: los ítems nacen sin ella.
   switch (responseType) {
+    case 'yes_no':
+    case 'yes_no_na':
+      return { fails_on: 'no' };
     case 'scale':
       return { min: 1, max: 5 };
     case 'text':

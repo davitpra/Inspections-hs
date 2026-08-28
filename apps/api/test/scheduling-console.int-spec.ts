@@ -60,6 +60,7 @@ function documentFor(itemKey: string): TemplateDocument {
             position: 1,
             required: true,
             response_type: 'yes_no',
+            fails_on: 'no',
           },
         ],
       },

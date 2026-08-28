@@ -82,6 +82,7 @@ function document(): TemplateDocument {
             position: index + 1,
             required: true,
             response_type: 'yes_no' as const,
+            fails_on: 'no' as const,
           })),
           {
             item_key: 'sub.guards',
@@ -89,6 +90,7 @@ function document(): TemplateDocument {
             position: FILLER_COUNT + 1,
             required: true,
             response_type: 'yes_no' as const,
+            fails_on: 'no' as const,
           },
           {
             item_key: 'sub.spill-present',
@@ -96,6 +98,7 @@ function document(): TemplateDocument {
             position: FILLER_COUNT + 2,
             required: true,
             response_type: 'yes_no_na' as const,
+            fails_on: 'no' as const,
           },
           {
             // Solo se pregunta si hubo derrame: es el ítem con el que se prueba que una
@@ -105,6 +108,7 @@ function document(): TemplateDocument {
             position: FILLER_COUNT + 3,
             required: true,
             response_type: 'yes_no' as const,
+            fails_on: 'no' as const,
             visible_when: {
               item_key: 'sub.spill-present',
               operator: 'equals' as const,

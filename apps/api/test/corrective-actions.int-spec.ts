@@ -74,6 +74,7 @@ function document(): TemplateDocument {
             position: 1,
             required: true,
             response_type: 'yes_no' as const,
+            fails_on: 'no' as const,
           },
         ],
       },

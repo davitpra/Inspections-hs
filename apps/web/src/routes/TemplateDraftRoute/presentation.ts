@@ -6,8 +6,8 @@ import {
   type Site,
   type TemplateDraftDocument,
   type TemplateDraftSection,
-} from '@hs/contracts';
-import { FAILURE_OPERATORS, type FailureOperator } from '@hs/forms';
+} from "@hs/contracts";
+import { FAILURE_OPERATORS, type FailureOperator } from "@hs/forms";
 
 /**
  * La lógica pura de presentación del editor. Lo que EDITA el documento vive en `edits.ts`:
@@ -17,7 +17,10 @@ import { FAILURE_OPERATORS, type FailureOperator } from '@hs/forms';
 
 /** Cuántas preguntas tiene el documento entero. */
 export function totalItems(document: TemplateDraftDocument): number {
-  return document.sections.reduce((count, section) => count + section.items.length, 0);
+  return document.sections.reduce(
+    (count, section) => count + section.items.length,
+    0,
+  );
 }
 
 /**
@@ -44,7 +47,10 @@ export type DraftEdits = {
  * ordena antes de comparar: es un conjunto, y tickear y destickear la misma planta no es un
  * cambio pendiente aunque devuelva la lista en otro orden.
  */
-export function hasUnsavedChanges(edited: DraftEdits, saved: DraftEdits): boolean {
+export function hasUnsavedChanges(
+  edited: DraftEdits,
+  saved: DraftEdits,
+): boolean {
   return (
     edited.name !== saved.name ||
     JSON.stringify(edited.document) !== JSON.stringify(saved.document) ||
@@ -65,12 +71,14 @@ export function hasUnsavedChanges(edited: DraftEdits, saved: DraftEdits): boolea
  * nueve ramas de `ResponseTypeConfig` en un archivo que no dibuja nada.
  */
 const TYPES_WITH_CONFIG: readonly ResponseType[] = [
-  'scale',
-  'text',
-  'number',
-  'single_choice',
-  'multi_choice',
-  'photo',
+  "yes_no",
+  "yes_no_na",
+  "scale",
+  "text",
+  "number",
+  "single_choice",
+  "multi_choice",
+  "photo",
 ];
 
 export function hasConfiguration(responseType: ResponseType): boolean {
@@ -78,29 +86,41 @@ export function hasConfiguration(responseType: ResponseType): boolean {
 }
 
 export const FAILURE_OPERATOR_LABELS: Record<FailureOperator, string> = {
-  lt: 'Less than',
-  lte: 'Less than or equal to',
-  gt: 'Greater than',
-  gte: 'Greater than or equal to',
+  lt: "Less than",
+  lte: "Less than or equal to",
+  gt: "Greater than",
+  gte: "Greater than or equal to",
 };
 
-export const FAILURE_OPERATOR_OPTIONS: readonly { value: FailureOperator; label: string }[] =
-  FAILURE_OPERATORS.map((value) => ({ value, label: FAILURE_OPERATOR_LABELS[value] }));
+export const FAILURE_OPERATOR_OPTIONS: readonly {
+  value: FailureOperator;
+  label: string;
+}[] = FAILURE_OPERATORS.map((value) => ({
+  value,
+  label: FAILURE_OPERATOR_LABELS[value],
+}));
 
 /** Prescripción inicial: el autor completa la acción y ajusta el umbral medido. */
 export function defaultFinding(
   responseType: ResponseType,
-): NonNullable<TemplateDraftDocument['sections'][number]['items'][number]['finding']> {
+): NonNullable<
+  TemplateDraftDocument["sections"][number]["items"][number]["finding"]
+> {
   return {
-    corrective_action: '',
-    ...(responseType === 'scale' || responseType === 'number'
-      ? { fails_when: { operator: 'lt' as const, value: responseType === 'scale' ? 1 : 0 } }
+    corrective_action: "",
+    ...(responseType === "scale" || responseType === "number"
+      ? {
+          fails_when: {
+            operator: "lt" as const,
+            value: responseType === "scale" ? 1 : 0,
+          },
+        }
       : {}),
   };
 }
 
 export function findingButtonLabel(hasFinding: boolean): string {
-  return hasFinding ? 'Edit finding' : 'Add finding';
+  return hasFinding ? "Edit action" : "Add action";
 }
 
 /**
@@ -110,22 +130,25 @@ export function findingButtonLabel(hasFinding: boolean): string {
  * sería la peor clase de mentira, la que tranquiliza.
  */
 export function saveStateLabel(dirty: boolean): string {
-  return dirty ? 'Unsaved changes' : 'Saved';
+  return dirty ? "Unsaved changes" : "Saved";
 }
 
 /** El texto del botón de guardar según en qué está. */
 export function saveButtonLabel(pending: boolean, dirty: boolean): string {
-  if (pending) return 'Saving…';
-  return dirty ? 'Save draft' : 'Saved';
+  if (pending) return "Saving…";
+  return dirty ? "Save draft" : "Saved";
 }
 
 /** El botón solo ofrece el punto de no retorno para el último documento guardado y completo. */
-export function canPublish(dirty: boolean, issues: readonly DraftIssue[]): boolean {
+export function canPublish(
+  dirty: boolean,
+  issues: readonly DraftIssue[],
+): boolean {
   return !dirty && issues.length === 0;
 }
 
 export function publishButtonLabel(pending: boolean): string {
-  return pending ? 'Publishing…' : 'Publish';
+  return pending ? "Publishing…" : "Publish";
 }
 
 /**
@@ -218,7 +241,8 @@ export function offerableLocations(
   current?: string,
 ): OrganizationLocationOption[] {
   return organizationLocations.filter(
-    (each) => each.code === current || isFullyCovered(each.code, locations, siteIds),
+    (each) =>
+      each.code === current || isFullyCovered(each.code, locations, siteIds),
   );
 }
 
@@ -253,14 +277,18 @@ export function strandedSections(
  * «only» aparece SOLO cuando el alcance es más chico que la organización. Con una sola
  * planta configurada, «St. Thomas only» sugeriría que existe otra donde no vale.
  */
-export function scopeLabel(siteIds: readonly string[], sites: readonly Site[]): string {
+export function scopeLabel(
+  siteIds: readonly string[],
+  sites: readonly Site[],
+): string {
   const named = sites.filter((site) => siteIds.includes(site.id));
 
-  if (named.length === 0) return 'No plants';
-  if (named.length === sites.length) return sites.length > 1 ? 'Both plants' : named[0]!.name;
+  if (named.length === 0) return "No plants";
+  if (named.length === sites.length)
+    return sites.length > 1 ? "Both plants" : named[0]!.name;
   if (named.length === 1) return `${named[0]!.name} only`;
 
-  return named.map((site) => site.name).join(', ');
+  return named.map((site) => site.name).join(", ");
 }
 
 /**
@@ -271,17 +299,23 @@ export function scopeLabel(siteIds: readonly string[], sites: readonly Site[]): 
  * texto —y no decir «the selected plants»— es lo que hace que se lea como una frase sobre
  * SU plantilla y no como una leyenda genérica.
  */
-export function scopeNotice(siteIds: readonly string[], sites: readonly Site[]): string {
+export function scopeNotice(
+  siteIds: readonly string[],
+  sites: readonly Site[],
+): string {
   const named = sites.filter((site) => siteIds.includes(site.id));
 
   if (named.length === 0) {
-    return 'This template names no plant yet, so no section can name a location.';
+    return "This template names no plant yet, so no section can name a location.";
   }
 
   const list =
     named.length === 1
       ? named[0]!.name
-      : `${named.slice(0, -1).map((site) => site.name).join(', ')} and ${named.at(-1)!.name}`;
+      : `${named
+          .slice(0, -1)
+          .map((site) => site.name)
+          .join(", ")} and ${named.at(-1)!.name}`;
 
   return named.length === 1
     ? `This template will only be available at ${list}. Its sections can name any location mapped there in Location mapping.`
@@ -315,7 +349,16 @@ export function scopeOptions(
 
   if (ordered.length < 2) return single;
 
-  return [...single, { label: scopeLabel(ordered.map((site) => site.id), ordered), siteIds: ordered.map((site) => site.id) }];
+  return [
+    ...single,
+    {
+      label: scopeLabel(
+        ordered.map((site) => site.id),
+        ordered,
+      ),
+      siteIds: ordered.map((site) => site.id),
+    },
+  ];
 }
 
 /**
@@ -333,13 +376,15 @@ export function sectionAppliesTo(
 ): string {
   const code = section.organization_location_code;
 
-  if (!code) return 'No location yet';
+  if (!code) return "No location yet";
 
   const covered = [...locationCoverage(code, locations, siteIds)]
     .filter(([, resolved]) => resolved !== undefined)
     .map(([siteId]) => siteId);
 
-  return covered.length === 0 ? 'No plant has this location' : scopeLabel(covered, sites);
+  return covered.length === 0
+    ? "No plant has this location"
+    : scopeLabel(covered, sites);
 }
 
 /** Los tres números del panel de resumen. */
@@ -351,7 +396,10 @@ export function summaryCounts(
   const linked = new Set(
     document.sections
       .map((section) => section.organization_location_code)
-      .filter((code): code is string => Boolean(code) && isFullyCovered(code, locations, siteIds)),
+      .filter(
+        (code): code is string =>
+          Boolean(code) && isFullyCovered(code, locations, siteIds),
+      ),
   );
 
   return {

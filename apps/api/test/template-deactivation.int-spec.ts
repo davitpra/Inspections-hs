@@ -50,7 +50,13 @@ function usableDocument(itemKey: string): TemplateDraftDocument {
         section_key: 'guarding',
         section_title: 'Guarding',
         items: [
-          { item_key: itemKey, prompt: 'Is the guard fitted?', required: true, response_type: 'yes_no' },
+          {
+            item_key: itemKey,
+            prompt: 'Is the guard fitted?',
+            required: true,
+            response_type: 'yes_no',
+            fails_on: 'no',
+          },
         ],
       },
     ],

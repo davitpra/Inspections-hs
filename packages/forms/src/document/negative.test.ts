@@ -49,6 +49,15 @@ describe('negativeAnswers', () => {
     expect(negativeAnswers(parse([yesNo]), {})).toEqual([]);
   });
 
+  it('con fails_on: "yes", deriva del "Sí" y no del "No"', () => {
+    const invertedYesNo = { ...yesNo, fails_on: 'yes' as const };
+
+    expect(negativeAnswers(parse([invertedYesNo]), { 'guards.present': true })).toEqual([
+      'guards.present',
+    ]);
+    expect(negativeAnswers(parse([invertedYesNo]), { 'guards.present': false })).toEqual([]);
+  });
+
   it.each([
     ['no', ['eyewash.tested']],
     ['yes', []],
@@ -57,8 +66,34 @@ describe('negativeAnswers', () => {
     expect(negativeAnswers(parse([yesNoNa]), { 'eyewash.tested': answer })).toEqual(expected);
   });
 
-  it('na no es un incumplimiento aunque el ítem sea required', () => {
+  it('con el modo por defecto ("no"), na no es un incumplimiento aunque el ítem sea required', () => {
     expect(negativeAnswers(parse([yesNoNa]), { 'eyewash.tested': 'na' })).toEqual([]);
+  });
+
+  it('con fails_on: "yes", yes_no_na deriva del "Sí" y "na" sigue sin ser un incumplimiento', () => {
+    const invertedYesNoNa = { ...yesNoNa, fails_on: 'yes' as const };
+
+    expect(negativeAnswers(parse([invertedYesNoNa]), { 'eyewash.tested': 'yes' })).toEqual([
+      'eyewash.tested',
+    ]);
+    expect(negativeAnswers(parse([invertedYesNoNa]), { 'eyewash.tested': 'no' })).toEqual([]);
+    expect(negativeAnswers(parse([invertedYesNoNa]), { 'eyewash.tested': 'na' })).toEqual([]);
+  });
+
+  it.each([
+    ['no_na', 'no', ['eyewash.tested']],
+    ['no_na', 'na', ['eyewash.tested']],
+    ['no_na', 'yes', []],
+    ['na', 'na', ['eyewash.tested']],
+    ['na', 'no', []],
+    ['na', 'yes', []],
+    ['yes_na', 'yes', ['eyewash.tested']],
+    ['yes_na', 'na', ['eyewash.tested']],
+    ['yes_na', 'no', []],
+  ] as const)('con fails_on: "%s", la respuesta "%s" deriva %j', (failsOn, answer, expected) => {
+    const item = { ...yesNoNa, fails_on: failsOn };
+
+    expect(negativeAnswers(parse([item]), { 'eyewash.tested': answer })).toEqual(expected);
   });
 
   /**

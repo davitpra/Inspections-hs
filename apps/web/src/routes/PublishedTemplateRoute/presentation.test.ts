@@ -23,6 +23,7 @@ const document: TemplateDocument = {
           position: 2,
           required: true,
           response_type: 'yes_no',
+          fails_on: 'no',
         },
         {
           item_key: 'guarding.reason',
@@ -98,8 +99,8 @@ describe('PublishedTemplateRoute presentation', () => {
 
   it('presenta la configuración concreta de cada tipo', () => {
     const items: TemplateItem[] = [
-      { ...document.sections[0]!.items[0]!, response_type: 'yes_no' },
-      { ...document.sections[0]!.items[0]!, response_type: 'yes_no_na' },
+      { ...document.sections[0]!.items[0]!, response_type: 'yes_no', fails_on: 'no' },
+      { ...document.sections[0]!.items[0]!, response_type: 'yes_no_na', fails_on: 'no' },
       { ...document.sections[0]!.items[0]!, response_type: 'scale', min: 1, max: 5 },
       { ...document.sections[0]!.items[1]!, response_type: 'text', max_length: 200 },
       {
@@ -127,8 +128,8 @@ describe('PublishedTemplateRoute presentation', () => {
 
     expect(items.map(responseTypeLabel)).toHaveLength(9);
     expect(items.map((item) => responseConfiguration(item))).toEqual([
-      ['No additional settings'],
-      ['No additional settings'],
+      ['Fails on: No'],
+      ['Fails on: No'],
       ['Range: 1 to 5'],
       ['Maximum length: 200 characters'],
       ['Range: 0 to 100', 'Decimal places: 1'],
@@ -136,6 +137,23 @@ describe('PublishedTemplateRoute presentation', () => {
       ['Options: Yes (yes)', 'Selections: 0 to 1'],
       ['Photos: 1 to 3'],
       ['No additional settings'],
+    ]);
+  });
+
+  it('presenta los cinco modos de fallo de yes_no_na', () => {
+    const modes = ['no', 'yes', 'no_na', 'na', 'yes_na'] as const;
+    const items: TemplateItem[] = modes.map((fails_on) => ({
+      ...document.sections[0]!.items[0]!,
+      response_type: 'yes_no_na',
+      fails_on,
+    }));
+
+    expect(items.map((item) => responseConfiguration(item))).toEqual([
+      ['Fails on: No'],
+      ['Fails on: Yes'],
+      ['Fails on: No or N/A'],
+      ['Fails on: N/A only'],
+      ['Fails on: Yes or N/A'],
     ]);
   });
 

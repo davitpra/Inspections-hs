@@ -81,7 +81,7 @@ export function SectionCard({
     prompt: (itemIndex: number, prompt: string) => void;
     required: (itemIndex: number, required: boolean) => void;
     responseType: (itemIndex: number, responseType: ResponseType) => void;
-    number: (itemIndex: number, field: string, value: number) => void;
+    number: (itemIndex: number, field: string, value: number | string) => void;
     optionChange: (
       itemIndex: number,
       optionIndex: number,

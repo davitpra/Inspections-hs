@@ -52,7 +52,7 @@ export function ItemRow({
   onPrompt: (prompt: string) => void;
   onRequired: (required: boolean) => void;
   onResponseType: (responseType: ResponseType) => void;
-  onNumber: (field: string, value: number) => void;
+  onNumber: (field: string, value: number | string) => void;
   onOptions: {
     change: (optionIndex: number, change: Partial<ChoiceOption>) => void;
     add: () => void;

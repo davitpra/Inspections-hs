@@ -25,6 +25,7 @@ export {
   ITEM_KEY_PATTERN,
   RESPONSE_TYPES,
   SECTION_KEY_PATTERN,
+  YES_NO_NA_FAILS_ON,
   choiceOptionSchema,
   conditionSchema,
   defaultItemConfig,
@@ -40,6 +41,7 @@ export {
   templateItemSchema,
   templateSectionSchema,
   visibleWhenSchema,
+  yesNoNaFailsOnSchema,
   type ChoiceOption,
   type Condition,
   type ConditionOperator,
@@ -54,4 +56,5 @@ export {
   type TemplateItemOf,
   type TemplateSection,
   type VisibleWhen,
+  type YesNoNaFailsOn,
 } from '@hs/forms';

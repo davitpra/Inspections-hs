@@ -12,7 +12,7 @@ import {
   type FailureOperator,
 } from '@hs/forms';
 
-import { RESPONSE_TYPE_LABELS } from '../../presentation/templates';
+import { RESPONSE_TYPE_LABELS, YES_NO_NA_FAILS_ON_LABELS } from '../../presentation/templates';
 
 /** La lógica pura para leer un documento publicado sin convertirlo en un formulario. */
 
@@ -86,7 +86,9 @@ export function visibilityLabel(
 export function responseConfiguration(item: TemplateItem): string[] {
   switch (item.response_type) {
     case 'yes_no':
+      return [`Fails on: ${item.fails_on === 'yes' ? 'Yes' : 'No'}`];
     case 'yes_no_na':
+      return [`Fails on: ${YES_NO_NA_FAILS_ON_LABELS[item.fails_on]}`];
     case 'signature':
       return ['No additional settings'];
     case 'scale':

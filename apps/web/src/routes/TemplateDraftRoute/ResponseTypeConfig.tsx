@@ -1,6 +1,7 @@
 import { useId } from 'react';
 import type { ChoiceOption, TemplateDraftItem } from '@hs/contracts';
 
+import { YES_NO_NA_FAILS_ON_OPTIONS } from '../../presentation/templates';
 import { ChoiceOptionsEditor } from './ChoiceOptionsEditor';
 
 /**
@@ -13,8 +14,8 @@ import { ChoiceOptionsEditor } from './ChoiceOptionsEditor';
  * defensa; la otra la pone `changeResponseType` en `edits.ts`, que reemplaza la
  * configuración en vez de mezclarla.
  *
- * Cuatro de los nueve tipos no configuran nada —`yes_no`, `yes_no_na`, `signature` y el
- * `default`— y devuelven `null` en vez de un bloque vacío.
+ * Dos de los nueve tipos no configuran nada —`signature` y el `default`— y
+ * devuelven `null` en vez de un bloque vacío.
  *
  * **Los números se leen como números.** `Number(event.target.value)` sobre un input vacío da
  * `NaN`, que rompería el esquema; se cae al valor actual, así que borrar el campo deja lo
@@ -28,7 +29,7 @@ export function ResponseTypeConfig({
   onOptions,
 }: {
   item: TemplateDraftItem;
-  onNumber: (field: string, value: number) => void;
+  onNumber: (field: string, value: number | string) => void;
   onOptions: {
     change: (index: number, change: Partial<ChoiceOption>) => void;
     add: () => void;
@@ -58,7 +59,46 @@ export function ResponseTypeConfig({
     </div>
   );
 
+  const failsOn = (
+    value: string,
+    options: readonly { value: string; label: string }[],
+    hint: string,
+  ): React.JSX.Element => (
+    <div className="filters">
+      <label htmlFor={`${controlId}-fails_on`}>Fails when answered</label>
+      <select
+        id={`${controlId}-fails_on`}
+        value={value}
+        onChange={(event) => onNumber('fails_on', event.target.value)}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      <span className="note">{hint}</span>
+    </div>
+  );
+
   switch (item.response_type) {
+    case 'yes_no':
+      return failsOn(
+        item.fails_on,
+        [
+          { value: 'no', label: 'No' },
+          { value: 'yes', label: 'Yes' },
+        ],
+        'The other answer is treated as compliant.',
+      );
+
+    case 'yes_no_na':
+      return failsOn(
+        item.fails_on,
+        YES_NO_NA_FAILS_ON_OPTIONS,
+        'Pick which answer, or pair of answers, counts as a finding.',
+      );
+
     case 'scale':
       return (
         <div className="item-editor__fields">
@@ -117,7 +157,7 @@ export function ResponseTypeConfig({
       );
 
     default:
-      // `yes_no`, `yes_no_na` y `signature` no configuran nada.
+      // `signature` no configura nada.
       return null;
   }
 }

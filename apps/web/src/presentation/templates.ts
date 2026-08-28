@@ -1,4 +1,4 @@
-import { RESPONSE_TYPES, type ResponseType } from '@hs/contracts';
+import { RESPONSE_TYPES, YES_NO_NA_FAILS_ON, type ResponseType, type YesNoNaFailsOn } from '@hs/contracts';
 
 /**
  * Cómo se llama cada cosa de una plantilla en pantalla.
@@ -25,8 +25,8 @@ export const RESPONSE_TYPE_LABELS: Record<ResponseType, string> = {
 
 /** Una línea sobre qué le pide al inspector cada tipo, para el selector. */
 export const RESPONSE_TYPE_HINTS: Record<ResponseType, string> = {
-  yes_no: 'A compliant or non-compliant answer. "No" becomes a finding.',
-  yes_no_na: 'Adds "not applicable", which is not a failure.',
+  yes_no: 'A compliant or non-compliant answer — pick which one triggers a finding below.',
+  yes_no_na: 'Adds "not applicable" — pick which answer, or pair of answers, triggers a finding below.',
   scale: 'A whole number between the bounds you set.',
   text: 'Free text up to a length you set.',
   number: 'A measurement, with bounds and decimal places.',
@@ -39,6 +39,25 @@ export const RESPONSE_TYPE_HINTS: Record<ResponseType, string> = {
 /** Los nueve tipos en el orden en que el motor los declara, para poblar el selector. */
 export const RESPONSE_TYPE_OPTIONS: readonly { value: ResponseType; label: string }[] =
   RESPONSE_TYPES.map((value) => ({ value, label: RESPONSE_TYPE_LABELS[value] }));
+
+/**
+ * Cómo se lee cada modo de fallo de `yes_no_na`, tanto en el selector del editor como en
+ * la vista de solo lectura de la plantilla publicada.
+ *
+ * "No" y "Yes" son los mismos dos que ofrece `yes_no`; los tres restantes son lo que
+ * `yes_no_na` agrega — que "not applicable" también pueda ser, sola o acompañada, la
+ * respuesta que amerita revisión.
+ */
+export const YES_NO_NA_FAILS_ON_LABELS: Record<YesNoNaFailsOn, string> = {
+  no: 'No',
+  yes: 'Yes',
+  no_na: 'No or N/A',
+  na: 'N/A only',
+  yes_na: 'Yes or N/A',
+};
+
+export const YES_NO_NA_FAILS_ON_OPTIONS: readonly { value: YesNoNaFailsOn; label: string }[] =
+  YES_NO_NA_FAILS_ON.map((value) => ({ value, label: YES_NO_NA_FAILS_ON_LABELS[value] }));
 
 /**
  * Lo que dice un borrador sobre sí mismo en el listado.

@@ -127,6 +127,7 @@ beforeAll(async () => {
         prompt: 'Machine guards present?',
         position: 4,
         response_type: 'yes_no',
+        fails_on: 'no',
         required: true,
       },
     ),
@@ -145,6 +146,7 @@ beforeAll(async () => {
         prompt: 'Are machine guards in place and secured on all packaging lines?',
         position: 1,
         response_type: 'yes_no',
+        fails_on: 'no',
         required: true,
       },
     ),
@@ -274,6 +276,7 @@ describe('fidelidad legal: cada hallazgo resuelve la pregunta que se hizo', () =
       section_key: 'general',
       position: 4,
       response_type: 'yes_no',
+      fails_on: 'no',
     });
   });
 
@@ -316,6 +319,7 @@ describe('linaje y punto ciego', () => {
                 prompt: 'Are machine guards in place on packaging line 3?',
                 position: 1,
                 response_type: 'yes_no',
+                fails_on: 'no',
                 required: true,
               },
             ],
