@@ -86,3 +86,19 @@ export function photoCountText(count: number): string {
 
   return count === 1 ? '1 photo' : `${count} photos`;
 }
+
+/**
+ * Los chips de la cabecera de sección.
+ *
+ * Cuántas respuestas quedaron registradas lo cuenta el motor y cuántos hallazgos abrió la
+ * sección lo cuentan los hallazgos que llegaron con el envío; estas funciones solo les
+ * ponen nombre. Se dicen en plural porque una sección con una sola respuesta es común, y
+ * «1 answers» delata que el número lo escribió una plantilla y no alguien que lo leyó.
+ */
+export function answersLabel(count: number): string {
+  return count === 1 ? '1 answer' : `${count} answers`;
+}
+
+export function findingsLabel(count: number): string {
+  return count === 1 ? '1 finding' : `${count} findings`;
+}

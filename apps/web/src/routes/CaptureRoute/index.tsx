@@ -30,14 +30,10 @@ import {
 import type { FindingDraftRow } from '../../offline/db';
 import { capturePhoto, discardPhoto } from '../../offline/photos';
 import { missingForField, storedTemplateVersion } from '../../offline/prefetch';
+import { draftStatusLabel, draftStatusPill, draftSubtitle } from '../../presentation/drafts';
 import { ItemRow } from './ItemRow';
 import { Preview } from './Preview';
-import {
-  answeredLabel,
-  captureSubtitle,
-  draftStatusLabel,
-  draftStatusPill,
-} from './presentation';
+import { answeredLabel } from './presentation';
 
 /**
  * La captura. Todo lo que pasa acá pasa sin red.
@@ -316,7 +312,7 @@ function Walkthrough({ id }: { id: string }): React.JSX.Element {
         </div>
         {stored.data ? (
           <p className="scheduling__subtitle">
-            {captureSubtitle(stored.data.template_name, row.created_at)}
+            {draftSubtitle(stored.data.template_name, row.created_at)}
           </p>
         ) : null}
       </div>

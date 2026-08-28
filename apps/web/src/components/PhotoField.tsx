@@ -2,6 +2,7 @@ import { MAX_UPLOAD_BYTES } from '@hs/contracts';
 import { useEffect, useMemo, useRef } from 'react';
 
 import { photoBlob, type PhotoRow } from '../offline/db';
+import { photoStateClass, photoStateLabel } from '../presentation/photos';
 import { CameraIcon } from './icons';
 
 /**
@@ -15,9 +16,9 @@ const SIZE_HINT = `JPEG or PNG, up to ${Math.round(MAX_UPLOAD_BYTES / 1024 / 102
  * Las fotos de un ítem. Se ven desde el dispositivo, sin red: los bytes están en Dexie
  * desde el momento de la captura y el `blob:` se arma acá.
  *
- * El estado de subida se muestra al lado de cada una. No es decoración: una foto en
- * `pending` es la razón por la que el envío todavía no salió, y el inspector tiene que
- * poder verlo sin abrir la cola.
+ * El estado de subida se muestra al lado de cada una, con las palabras de
+ * `presentation/photos.ts`: `pending` es lo normal —la foto está guardada y sube con el
+ * envío—, y solo `failed` se lee como aviso.
  */
 export function PhotoField({
   id,
@@ -54,8 +55,8 @@ export function PhotoField({
         {previews.map(({ photo, url }) => (
           <li key={photo.id} className="photos__item">
             <img src={url} alt="" />
-            <span className={`photos__state photos__state--${photo.upload_state}`}>
-              {photo.upload_state === 'uploaded' ? 'Uploaded' : 'Not uploaded'}
+            <span className={photoStateClass(photo.upload_state)}>
+              {photoStateLabel(photo.upload_state)}
             </span>
             {photo.upload_state === 'uploaded' ? null : (
               <button type="button" onClick={() => onDiscard(photo.id)}>

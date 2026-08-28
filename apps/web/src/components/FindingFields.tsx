@@ -1,11 +1,11 @@
 import {
   FINDING_DESCRIPTION_MAX,
   FINDING_DESCRIPTION_MIN,
-} from '@hs/contracts';
+} from "@hs/contracts";
 
-import type { FindingDraftRow, PhotoRow } from '../offline/db';
-import { AlertCircleIcon } from './icons';
-import { PhotoField } from './PhotoField';
+import type { FindingDraftRow, PhotoRow } from "../offline/db";
+import { AlertCircleIcon } from "./icons";
+import { PhotoField } from "./PhotoField";
 
 /**
  * Requisitos §3 R2 — Lo que se le pide al inspector cuando responde que no.
@@ -44,24 +44,16 @@ export function FindingFields({
   finding: FindingDraftRow | undefined;
   photos: PhotoRow[];
   disabled: boolean;
-  onChange: (patch: Partial<Pick<FindingDraftRow, 'description' | 'location_id'>>) => void;
+  onChange: (
+    patch: Partial<Pick<FindingDraftRow, "description" | "location_id">>,
+  ) => void;
   onCapturePhoto: (blob: Blob) => void;
   onDiscardPhoto: (photoId: string) => void;
 }): React.JSX.Element {
-  const description = finding?.description ?? '';
+  const description = finding?.description ?? "";
 
   return (
     <div className="finding">
-      {/*
-        Ámbar y con ícono: no es un error del inspector —contestar que no es una respuesta
-        válida— sino trabajo que se abrió y que hay que completar antes de firmar. Rojo lo
-        leería como algo que hizo mal.
-      */}
-      <p className="finding__title">
-        <AlertCircleIcon size={16} />
-        This needs a finding
-      </p>
-
       {/*
         Lo que la plantilla ya decidió para esta pregunta, tal como se congeló al
         publicar. Va ARRIBA del campo porque es contexto para redactar la observación y no
@@ -80,6 +72,15 @@ export function FindingFields({
           <p>{correctiveAction}</p>
         </div>
       ) : null}
+      {/*
+        Ámbar y con ícono: no es un error del inspector —contestar que no es una respuesta
+        válida— sino trabajo que se abrió y que hay que completar antes de firmar. Rojo lo
+        leería como algo que hizo mal.
+      */}
+      <p className="finding__title">
+        <AlertCircleIcon size={16} />
+        This needs a finding
+      </p>
 
       {/*
         El asterisco va FUERA del `<label>`, y no es un detalle de maquetado: el nombre
@@ -89,7 +90,9 @@ export function FindingFields({
       */}
       <div className="finding__label">
         <label htmlFor={`finding-description-${itemKey}`}>What is wrong?</label>
-        <span className="required-mark" aria-hidden="true">*</span>
+        <span className="required-mark" aria-hidden="true">
+          *
+        </span>
       </div>
 
       <textarea
@@ -114,8 +117,8 @@ export function FindingFields({
         se lee como una condición para empezar en vez de como el largo que falta.
       */}
       <p className="finding__hint" id={`finding-description-hint-${itemKey}`}>
-        At least {FINDING_DESCRIPTION_MIN} characters — whoever reads this months from
-        now was not there.
+        At least {FINDING_DESCRIPTION_MIN} characters — whoever reads this
+        months from now was not there.
       </p>
 
       {/*

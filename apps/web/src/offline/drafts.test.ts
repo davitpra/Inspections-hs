@@ -135,10 +135,10 @@ describe('saveAnswer', () => {
   });
 
   /**
-   * Spec: "A killed application loses nothing" — doce respuestas sobreviven a recrear
+    * Spec: "A killed application loses nothing" — respuestas sobreviven a recrear
    * la base desde cero, que es el equivalente de cerrar la aplicación.
    */
-  it('doce respuestas sobreviven a cerrar y reabrir la aplicación', async () => {
+  it('las respuestas sobreviven a cerrar y reabrir la aplicación', async () => {
     database = freshDatabase();
     const draft = await openDraft(input(), database);
 
@@ -149,7 +149,6 @@ describe('saveAnswer', () => {
       ['guarding.gap', 12.5],
       ['guarding.hazards', ['pinch', 'noise']],
       ['guarding.reason', 'The guard was removed for maintenance'],
-      ['guarding.severity', 'high'],
       ['closing.signature', { object_key: 'k', signed_at: '2026-08-01T10:00:00.000Z' }],
     ];
 
@@ -157,16 +156,9 @@ describe('saveAnswer', () => {
       await saveAnswer(draft.client_submission_id, key, value, TEST_DOCUMENT, database);
     }
 
-    // Y cuatro más, reescribiendo las mismas keys: un `put` sobre la clave compuesta.
+    // Y tres más, reescribiendo las mismas keys: un `put` sobre la clave compuesta.
     await saveAnswer(draft.client_submission_id, 'guarding.rating', 5, TEST_DOCUMENT, database);
     await saveAnswer(draft.client_submission_id, 'guarding.gap', 3.2, TEST_DOCUMENT, database);
-    await saveAnswer(
-      draft.client_submission_id,
-      'guarding.severity',
-      'low',
-      TEST_DOCUMENT,
-      database,
-    );
     await saveAnswer(
       draft.client_submission_id,
       'guarding.applies',
@@ -181,7 +173,6 @@ describe('saveAnswer', () => {
 
     expect(Object.keys(loaded?.answers ?? {})).toHaveLength(entries.length);
     expect(loaded?.answers['guarding.rating']).toBe(5);
-    expect(loaded?.answers['guarding.severity']).toBe('low');
     // Spec: "the inspection resumes at the item that was last shown".
     expect(loaded?.draft.current_item_key).toBe('guarding.applies');
   });
@@ -208,15 +199,7 @@ describe('saveAnswer', () => {
       TEST_DOCUMENT,
       database,
     );
-    await saveAnswer(
-      draft.client_submission_id,
-      'guarding.severity',
-      'high',
-      TEST_DOCUMENT,
-      database,
-    );
-
-    expect(await database.answers.count()).toBe(3);
+    expect(await database.answers.count()).toBe(2);
 
     // El inspector se corrige: ahora los guardas SÍ están, y los dos ítems que
     // dependían de que no lo estuvieran desaparecen.
@@ -228,7 +211,7 @@ describe('saveAnswer', () => {
       database,
     );
 
-    expect(pruned.sort()).toEqual(['guarding.reason', 'guarding.severity']);
+    expect(pruned.sort()).toEqual(['guarding.reason']);
 
     const loaded = await loadDraft(draft.client_submission_id, database);
     expect(loaded?.answers['guarding.reason']).toBeUndefined();

@@ -11,6 +11,13 @@ import { getAction, transitionAction, uploadEvidence } from "../../api/actions";
 import { queryKeys } from "../../api/query-keys";
 import { useAppSession } from "../../app/session-context";
 import { StateBadge } from "../../components/StateBadge";
+import {
+  AlertCircleIcon,
+  CalendarIcon,
+  CameraIcon,
+  CheckCircleIcon,
+  ListIcon,
+} from "../../components/icons";
 import { canAttempt } from "../../permissions/actions";
 import { STATE_LABELS, transitionLabel } from "../../presentation/actions";
 import { formatDay } from "../../presentation/dates";
@@ -88,120 +95,173 @@ export function ActionRoute(): React.JSX.Element {
   );
 
   return (
-    <>
-      <Link to="/actions" className="back-link">
-        Back to corrective actions
-      </Link>
+    <div className="action-detail">
+      <nav className="action-detail__nav" aria-label="Breadcrumb">
+        <Link to="/actions" className="back-link">
+          Back to corrective actions
+        </Link>
+      </nav>
 
-      <header className="card action-detail__head">
-        <div className="card__head">
+      <header className="action-detail__head">
+        <div className="action-detail__title">
+          <p className="action-detail__eyebrow">Corrective action</p>
           <h1>{current.description}</h1>
-          <StateBadge state={current.state} />
         </div>
-        <p className="action-detail__meta">
-          Due {formatDay(current.due_at)}
+
+        <div className="action-detail__summary">
+          <StateBadge state={current.state} />
+          <p className="action-detail__due">
+            <CalendarIcon size={18} />
+            <span>
+              <span className="action-detail__due-label">Due date</span>
+              <strong>{formatDay(current.due_at)}</strong>
+            </span>
+          </p>
           {current.overdue && current.state !== "closed" ? (
             <span className="badge badge--overdue">Overdue</span>
           ) : null}
-        </p>
+        </div>
       </header>
 
       {current.escalations.length > 0 ? (
-        <p className="notice notice--warn">
-          Escalated to{" "}
-          {current.escalations
-            .map(
-              (escalation) =>
-                `${escalation.level} (${escalation.days_overdue} days late)`,
-            )
-            .join(", ")}
-        </p>
+        <div className="notice notice--warn action-detail__escalation">
+          <AlertCircleIcon size={20} />
+          <p>
+            <strong>Escalated</strong>
+            <span>
+              Sent to{" "}
+              {current.escalations
+                .map(
+                  (escalation) =>
+                    `${escalation.level} (${escalation.days_overdue} days late)`,
+                )
+                .join(", ")}
+            </span>
+          </p>
+        </div>
       ) : null}
 
-      <section>
-        <h2>History</h2>
-        {/* El stream, en orden. Es el registro: no hay estado que mostrar aparte de esto. */}
-        <ol className="list">
-          {current.events.map((event) => (
-            <li key={event.id} className="list__row">
-              <span>
-                {STATE_LABELS[event.to_state]} — {formatDay(event.occurred_at)}
-              </span>
-              {event.reason ? <p>Reason: {event.reason}</p> : null}
-              {event.note ? <p>{event.note}</p> : null}
-              {event.evidence.length > 0 ? (
-                <p>
-                  {event.evidence.filter((item) => item.kind === "before").length}{" "}
-                  before,{" "}
-                  {event.evidence.filter((item) => item.kind === "after").length}{" "}
-                  after
-                </p>
-              ) : null}
-            </li>
-          ))}
-        </ol>
-      </section>
-
-      {current.state === "closed" ? (
-        // `closed` es terminal: no hay botón de reabrir, y su ausencia es la decisión
-        // (design D14). Si el trabajo se deshizo, lo que hay es un hallazgo nuevo.
-        <p className="notice">
-          This action is closed. Work that comes undone is reported as a new
-          finding.
-        </p>
-      ) : (
-        <section className="card">
-          <h2>What now</h2>
-
-          {available.some((transition) =>
-            transition.requires.includes("after_evidence"),
-          ) ? (
-            <EvidencePicker files={files} onChange={setFiles} />
-          ) : null}
-
-          {available.some((transition) =>
-            transition.requires.includes("reason"),
-          ) ? (
-            <label className="action-detail__field">
-              Reason
-              <textarea
-                value={reason}
-                onChange={(event) => setReason(event.target.value)}
-              />
-            </label>
-          ) : null}
-
-          <label className="action-detail__field">
-            Note (optional)
-            <textarea
-              value={note}
-              onChange={(event) => setNote(event.target.value)}
-            />
-          </label>
-
-          {available.length > 0 ? (
-            <div className="action-detail__actions">
-              {available.map((transition, index) => (
-                <button
-                  key={transition.to}
-                  type="button"
-                  className={index === 0 ? "button--primary" : "button--outline"}
-                  disabled={move.isPending}
-                  onClick={() => move.mutate(transition)}
-                >
-                  {transitionLabel(current.state, transition.to)}
-                </button>
-              ))}
+      <div className="action-detail__layout">
+        <section className="card action-detail__history" aria-labelledby="action-history-heading">
+          <div className="action-detail__section-head">
+            <span className="action-detail__section-icon">
+              <ListIcon size={20} />
+            </span>
+            <div>
+              <h2 id="action-history-heading">History</h2>
+              <p>{current.events.length} recorded {current.events.length === 1 ? "event" : "events"}</p>
             </div>
-          ) : (
-            <p className="notice">
-              Nothing for you to do here: someone else has to move this one
-              along.
-            </p>
-          )}
+          </div>
+
+          {/* El stream, en orden. Es el registro: no hay estado que mostrar aparte de esto. */}
+          <ol className="action-detail__timeline">
+            {current.events.map((event) => {
+              const beforeCount = event.evidence.filter((item) => item.kind === "before").length;
+              const afterCount = event.evidence.filter((item) => item.kind === "after").length;
+
+              return (
+                <li key={event.id} className="action-detail__event">
+                  <span className="action-detail__event-marker" aria-hidden="true" />
+                  <div className="action-detail__event-content">
+                    <div className="action-detail__event-head">
+                      <strong>{STATE_LABELS[event.to_state]}</strong>
+                      <time dateTime={event.occurred_at}>{formatDay(event.occurred_at)}</time>
+                    </div>
+                    {event.reason ? (
+                      <p className="action-detail__event-detail">
+                        <span>Reason</span>
+                        {event.reason}
+                      </p>
+                    ) : null}
+                    {event.note ? <p className="action-detail__event-note">{event.note}</p> : null}
+                    {event.evidence.length > 0 ? (
+                      <p className="action-detail__event-evidence">
+                        <CameraIcon size={16} />
+                        {beforeCount} before, {afterCount} after
+                      </p>
+                    ) : null}
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
         </section>
-      )}
-      {error ? <p className="notice notice--warn">{error}</p> : null}
-    </>
+
+        <aside className="action-detail__aside">
+          {current.state === "closed" ? (
+            // `closed` es terminal: no hay botón de reabrir, y su ausencia es la decisión
+            // (design D14). Si el trabajo se deshizo, lo que hay es un hallazgo nuevo.
+            <section className="card action-detail__closed">
+              <span className="action-detail__closed-icon">
+                <CheckCircleIcon size={24} />
+              </span>
+              <div>
+                <h2>Action closed</h2>
+                <p>Work that comes undone is reported as a new finding.</p>
+              </div>
+            </section>
+          ) : (
+            <section className="card action-detail__work" aria-labelledby="action-next-heading">
+              <div className="action-detail__section-head">
+                <div>
+                  <p className="action-detail__eyebrow">Next step</p>
+                  <h2 id="action-next-heading">What now</h2>
+                </div>
+              </div>
+
+              {available.some((transition) =>
+                transition.requires.includes("after_evidence"),
+              ) ? (
+                <EvidencePicker files={files} onChange={setFiles} />
+              ) : null}
+
+              {available.some((transition) =>
+                transition.requires.includes("reason"),
+              ) ? (
+                <label className="action-detail__field">
+                  <span>Reason</span>
+                  <textarea
+                    value={reason}
+                    onChange={(event) => setReason(event.target.value)}
+                  />
+                </label>
+              ) : null}
+
+              <label className="action-detail__field">
+                <span>
+                  Note <span className="action-detail__optional">Optional</span>
+                </span>
+                <textarea
+                  value={note}
+                  onChange={(event) => setNote(event.target.value)}
+                />
+              </label>
+
+              {available.length > 0 ? (
+                <div className="action-detail__actions">
+                  {available.map((transition, index) => (
+                    <button
+                      key={transition.to}
+                      type="button"
+                      className={index === 0 ? "button--primary" : "button--outline"}
+                      disabled={move.isPending}
+                      onClick={() => move.mutate(transition)}
+                    >
+                      {transitionLabel(current.state, transition.to)}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="notice action-detail__waiting">
+                  Nothing for you to do here: someone else has to move this one along.
+                </p>
+              )}
+
+              {error ? <p className="notice notice--warn action-detail__error">{error}</p> : null}
+            </section>
+          )}
+        </aside>
+      </div>
+    </div>
   );
 }

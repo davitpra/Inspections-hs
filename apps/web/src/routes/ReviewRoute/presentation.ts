@@ -249,3 +249,57 @@ function numberDetail(detail: Readonly<Record<string, unknown>>, key: string): n
 
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
+
+/**
+ * EL VEREDICTO DE LA PANTALLA, en una línea y su explicación.
+ *
+ * Es lo primero que se lee al llegar, y por eso responde la única pregunta con la que el
+ * inspector abre esta pantalla: ¿puedo firmar o no? Antes eso había que deducirlo —una
+ * frase suelta cuando estaba todo, un aviso ámbar cuando no— y las dos vivían en el mismo
+ * lugar de la página sin decir cuál era el estado.
+ *
+ * El texto de abajo NO repite el de arriba: el título dice en qué estado está, el texto
+ * dice qué hacer con eso. Repetirlo sería gastar el renglón que nombra la salida.
+ */
+export function verdict(stops: number): { readonly title: string; readonly text: string } {
+  if (stops === 0) {
+    return {
+      title: 'Ready to sign',
+      text: 'Everything required has been answered. Signing sends this inspection.',
+    };
+  }
+
+  return {
+    title: `${stops} item${stops === 1 ? '' : 's'} still need${stops === 1 ? 's' : ''} your attention`,
+    text: 'Fix each one in the walkthrough. Signing opens as soon as the list is empty.',
+  };
+}
+
+/** La píldora que cuenta las paradas. Cuenta cosas, no dice qué hacer: ese es el veredicto. */
+export function stopsLabel(stops: number): string {
+  return `${stops} to fix`;
+}
+
+/**
+ * Las fotos que todavía no salieron del dispositivo.
+ *
+ * No bloquea firmar y el texto lo dice antes que nada: una foto pendiente es trabajo del
+ * outbox, no una parada del recorrido. Sin esa aclaración el número se lee como un
+ * impedimento más y el inspector se queda esperando una barra de progreso que no le toca
+ * mirar.
+ */
+export function pendingPhotosNote(pending: number): string {
+  return `${pending} photo${pending === 1 ? '' : 's'} still to upload. They go out before the submission itself — you can sign now and they will be sent together when there is a connection.`;
+}
+
+/**
+ * Cuánto se contestó, dicho como cobertura y no como progreso.
+ *
+ * "12 of 12 answered" y no un porcentaje: el porcentaje es la lectura de quien todavía
+ * está trabajando —y esa vive en la pantalla de la asignación—, mientras que acá lo que se
+ * revisa es qué se va a firmar. El denominador son los ítems VISIBLES, que es el que
+ * cuenta `@hs/forms`: un ítem que otra respuesta ocultó no está sin contestar, no existe.
+ */
+export function coverageLabel(answered: number, total: number): string {
+  return `${answered} of ${total} answered`;
+}

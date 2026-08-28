@@ -1,7 +1,7 @@
 import type { TemplateItem } from '@hs/forms';
 import { describe, expect, it } from 'vitest';
 
-import { answerText, photoCountText } from './presentation';
+import { answersLabel, answerText, findingsLabel, photoCountText } from './presentation';
 
 function item(overrides: Record<string, unknown>): TemplateItem {
   return {
@@ -104,5 +104,16 @@ describe('photoCountText', () => {
     expect(photoCountText(0)).toBe('No photos');
     expect(photoCountText(1)).toBe('1 photo');
     expect(photoCountText(3)).toBe('3 photos');
+  });
+});
+
+describe('los chips de la cabecera de sección', () => {
+  it('concuerdan en número', () => {
+    expect(answersLabel(0)).toBe('0 answers');
+    expect(answersLabel(1)).toBe('1 answer');
+    expect(answersLabel(12)).toBe('12 answers');
+
+    expect(findingsLabel(1)).toBe('1 finding');
+    expect(findingsLabel(3)).toBe('3 findings');
   });
 });

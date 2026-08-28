@@ -1,13 +1,25 @@
-import { evaluateVisibility, sectionsInDocumentOrder } from '@hs/forms';
+import {
+  countAnsweredBySection,
+  evaluateVisibility,
+  sectionsInDocumentOrder,
+} from '@hs/forms';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from '@tanstack/react-router';
 
 import { getSubmittedInspection } from '../../api/inspections';
 import { queryKeys } from '../../api/query-keys';
 import { Fact, Facts } from '../../components/Facts';
-import { CalendarIcon, ClockIcon, PersonIcon, PinIcon } from '../../components/icons';
+import {
+  AlertCircleIcon,
+  CalendarIcon,
+  ClockIcon,
+  LockIcon,
+  PersonIcon,
+  PinIcon,
+} from '../../components/icons';
+import { TemplateSectionCard } from '../../components/TemplateSectionCard';
 import { formatCivilDay, periodLabel } from '../../presentation/dates';
-import { answerText, photoCountText } from './presentation';
+import { answersLabel, answerText, findingsLabel, photoCountText } from './presentation';
 
 /**
  * Una inspección enviada, leída de vuelta.
@@ -23,6 +35,12 @@ import { answerText, photoCountText } from './presentation';
  * tiene respuestas— y por el mismo motivo: cada una tiene que describir la recorrida que le
  * corresponde. Dibujar el documento completo mostraría preguntas que nunca se hicieron y
  * las marcaría sin contestar, que se lee como una inspección incompleta.
+ *
+ * SE DIBUJA COMO SE CAMINÓ. Las mismas tarjetas de sección numeradas y las mismas fichas
+ * de pregunta que la captura, porque es la misma recorrida vista después: quien firmó
+ * tiene que poder reconocer su propio recorrido, y quien audita tiene que poder seguirlo
+ * contra el formulario. Lo único que cambia es que donde había un control ahora hay el
+ * valor que quedó — ver el comentario de `answerText`.
  *
  * De servidor y sin red no hay: el borrador local cubre los días siguientes al envío y
  * nada más (ADR-010).
@@ -47,8 +65,8 @@ export function InspectionReportRoute(): React.JSX.Element {
           so reading one needs a connection.
         </p>
         <p>
-          <Link className="back-link" to="/inspections/past">
-            Back to past inspections
+          <Link className="back-link" to="/historical">
+            Back to historical inspections
           </Link>
         </p>
       </>
@@ -61,28 +79,46 @@ export function InspectionReportRoute(): React.JSX.Element {
     report.findings.map((finding) => [finding.item_key, finding] as const),
   );
 
-  return (
-    <>
-      <header className="scheduling__top">
-        <div className="scheduling__header">
-          <div className="scheduling__title">
-            <span className="scheduling__icon">
-              <CalendarIcon size={22} />
-            </span>
-            <h1>{report.template_name}</h1>
-          </div>
-          <p className="scheduling__subtitle">
-            {periodLabel(report.period_start, report.period_months)} — submitted and
-            accepted. This record cannot be changed.
-          </p>
-        </div>
-      </header>
+  /**
+   * El chip «N answers» de cada cabecera, contado por el motor y no por esta pantalla —
+   * igual que en la captura. La regla de qué ítem se ve y cuál cuenta es la misma que
+   * decidió si la inspección estaba completa al firmar; volver a escribirla acá daría un
+   * número que puede discrepar del que dejó firmar.
+   */
+  const answeredBySection = new Map(
+    countAnsweredBySection(report.document, report.answers).map((entry) => [
+      entry.section_key,
+      entry.answered,
+    ]),
+  );
 
-      <p>
-        <Link className="back-link" to="/inspections/past">
-          Back to past inspections
+  return (
+    <div className="report">
+      <nav className="report__nav" aria-label="Inspection navigation">
+        <Link className="back-link" to="/historical">
+          Back to historical inspections
         </Link>
-      </p>
+      </nav>
+
+      {/*
+        El encabezado nombra QUÉ se está leyendo —la plantilla, que es lo que se reconoce—
+        y la píldora dice en qué estado quedó. Es el mismo encabezado del recorrido y de la
+        firma, así que la inspección se llama igual antes y después de enviarse.
+      */}
+      <header className="scheduling__header report__header">
+        <div className="scheduling__title">
+          <span className="scheduling__icon">
+            <CalendarIcon size={22} />
+          </span>
+          <h1>{report.template_name}</h1>
+          <span className="status-pill status-pill--completed">Accepted</span>
+        </div>
+        {/* El candado no decora: es lo único de la pantalla que dice que acá no se edita. */}
+        <p className="scheduling__subtitle report__locked">
+          <LockIcon size={16} />
+          Submitted and accepted. This record cannot be changed.
+        </p>
+      </header>
 
       <Facts>
         <Fact
@@ -122,40 +158,85 @@ export function InspectionReportRoute(): React.JSX.Element {
         yet. Where one exists, it is counted below.
       </p>
 
-      {sectionsInDocumentOrder(report.document).map(([section, items]) => {
+      {sectionsInDocumentOrder(report.document).map(([section, items], sectionIndex) => {
         const answered = items.filter((item) => visibility[item.item_key]);
         if (answered.length === 0) return null;
 
+        const found = answered.filter((item) => findingsByItem.has(item.item_key)).length;
+
         return (
-          <section key={section.section_key}>
-            <h2>{section.section_title}</h2>
+          <TemplateSectionCard
+            key={section.section_key}
+            section={section}
+            index={sectionIndex}
+            headerAccessory={
+              <>
+                <span className="status-pill status-pill--completed">
+                  {answersLabel(answeredBySection.get(section.section_key) ?? 0)}
+                </span>
+                {/*
+                  El segundo chip solo cuando hay hallazgos. Una sección limpia no dibuja
+                  «0 findings»: el cero se lee como una casilla más que revisar, y lo que
+                  esta pantalla tiene que dejar encontrar rápido es dónde hubo algo.
+                */}
+                {found > 0 ? (
+                  <span className="status-pill status-pill--finding">{findingsLabel(found)}</span>
+                ) : null}
+              </>
+            }
+          >
+            {answered.map((item, itemIndex) => {
+              const finding = findingsByItem.get(item.item_key);
+              const value = report.answers[item.item_key];
 
-            <ul className="grid--list">
-              {answered.map((item) => {
-                const finding = findingsByItem.get(item.item_key);
+              return (
+                <li key={item.item_key} className="report__item">
+                  <span className="report__item-number" aria-hidden>
+                    {itemIndex + 1}
+                  </span>
 
-                return (
-                  <li key={item.item_key} className="list__row list__row--stacked">
-                    <p className="section-row__title">{item.prompt}</p>
-                    <p className="facts__value">
-                      {answerText(item, report.answers[item.item_key])}
-                    </p>
+                  <div className="report__item-body">
+                    {/*
+                      La pregunta a la izquierda y el valor contra el borde derecho, en la
+                      misma columna en la que estuvo el control durante la recorrida. Sobre
+                      cuarenta preguntas seguidas es lo que deja leer la columna de
+                      respuestas de un vistazo en vez de cazarla al final de cada enunciado.
+                    */}
+                    <div className="report__item-line">
+                      <p className="report__item-prompt">{item.prompt}</p>
+                      <p
+                        className={
+                          value === undefined
+                            ? 'report__answer report__answer--empty'
+                            : 'report__answer'
+                        }
+                      >
+                        {answerText(item, value)}
+                      </p>
+                    </div>
 
+                    {/*
+                      El hallazgo se lee como se escribió: el mismo bloque `.finding` de la
+                      captura, con su filete y su título ámbar. No es un `notice` — un aviso
+                      es algo que el sistema dice, y esto es lo que el inspector observó.
+                    */}
                     {finding ? (
-                      <div className="notice notice--warn">
-                        <p>{finding.description}</p>
-                        <p className="list__aside">
-                          {photoCountText(finding.photo_object_keys.length)}
+                      <div className="finding">
+                        <p className="finding__title">
+                          <AlertCircleIcon size={16} />
+                          Finding
                         </p>
+                        <p className="report__finding-text">{finding.description}</p>
+                        <p className="note">{photoCountText(finding.photo_object_keys.length)}</p>
                       </div>
                     ) : null}
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
+                  </div>
+                </li>
+              );
+            })}
+          </TemplateSectionCard>
         );
       })}
-    </>
+    </div>
   );
 }

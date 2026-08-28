@@ -3,7 +3,17 @@ import type { TemplateDocument, Violation } from '@hs/forms';
 import { describe, expect, it } from 'vitest';
 
 import { IncompleteFindingsError } from '../../offline/drafts';
-import { andList, blockers, findingReason, signFailure, violationReason } from './presentation';
+import {
+  andList,
+  blockers,
+  coverageLabel,
+  findingReason,
+  pendingPhotosNote,
+  signFailure,
+  stopsLabel,
+  verdict,
+  violationReason,
+} from './presentation';
 
 /**
  * Dos secciones y tres ítems, con las `position` desordenadas a propósito: el orden que
@@ -216,5 +226,51 @@ describe('cuando firmar falla', () => {
 
   it('ante cualquier otro error confirma que no se envió nada', () => {
     expect(signFailure(new Error('boom'))).toMatch(/Nothing was saved and nothing was sent/);
+  });
+});
+
+describe('verdict', () => {
+  it('dice que se puede firmar cuando no queda ninguna parada', () => {
+    expect(verdict(0).title).toBe('Ready to sign');
+  });
+
+  /** Singular y plural, incluido el verbo: "1 item still needs" y "2 items still need". */
+  it('concuerda el número con el verbo', () => {
+    expect(verdict(1).title).toBe('1 item still needs your attention');
+    expect(verdict(3).title).toBe('3 items still need your attention');
+  });
+
+  /** El texto de abajo nombra la salida; el título ya dijo el estado. */
+  it('no repite el título en el texto', () => {
+    const blocked = verdict(2);
+
+    expect(blocked.text).toContain('walkthrough');
+    expect(blocked.text).not.toContain(blocked.title);
+  });
+});
+
+describe('stopsLabel', () => {
+  it('cuenta las paradas que quedan', () => {
+    expect(stopsLabel(1)).toBe('1 to fix');
+    expect(stopsLabel(4)).toBe('4 to fix');
+  });
+});
+
+describe('pendingPhotosNote', () => {
+  it('concuerda el número con el sustantivo', () => {
+    expect(pendingPhotosNote(1)).toContain('1 photo still to upload');
+    expect(pendingPhotosNote(2)).toContain('2 photos still to upload');
+  });
+
+  /** Firmar no espera a las fotos, y el texto tiene que decirlo. */
+  it('aclara que se puede firmar igual', () => {
+    expect(pendingPhotosNote(3)).toContain('you can sign now');
+  });
+});
+
+describe('coverageLabel', () => {
+  it('escribe la cobertura sobre los ítems visibles', () => {
+    expect(coverageLabel(12, 12)).toBe('12 of 12 answered');
+    expect(coverageLabel(0, 8)).toBe('0 of 8 answered');
   });
 });

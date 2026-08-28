@@ -1,3 +1,4 @@
+import type { TemplateDocument } from '@hs/forms';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -52,7 +53,8 @@ function renderRoute(): void {
 
 function loadedDraft(status: 'capturing' | 'signed' = 'capturing') {
   return {
-    draft: { client_submission_id: 'draft-1', status },
+    // `created_at` no es decorado: el encabezado lo fecha, y sin él la pantalla no se pinta.
+    draft: { client_submission_id: 'draft-1', status, created_at: '2026-08-26T14:42:00.000Z' },
     answers: {},
     photos: [],
     findings: [],
@@ -222,5 +224,82 @@ describe('destino después de firmar', () => {
 
     // El mensaje interno del error no llega a la pantalla.
     expect(screen.queryByText(/incomplete finding/)).toBeNull();
+  });
+});
+
+/**
+ * LO QUE LA PANTALLA DICE AL LLEGAR.
+ *
+ * La única pregunta con la que se abre esta pantalla es si se puede firmar, y la respuesta
+ * tiene que estar escrita —no deducible del botón deshabilitado ni del color de un aviso.
+ * El documento viaja completo a propósito: `validateAnswers` es la regla real, la misma que
+ * corre el servidor (ADR-007), y lo que se verifica es que su resultado llegue a la pantalla
+ * como una parada con nombre.
+ */
+describe('el veredicto', () => {
+  const DOCUMENT: TemplateDocument = {
+    sections: [
+      {
+        section_key: 'emergency',
+        section_title: 'Emergency preparedness',
+        position: 1,
+        items: [
+          {
+            item_key: 'emergency.exits-unobstructed',
+            prompt: 'Are emergency exits unobstructed?',
+            position: 1,
+            required: true,
+            response_type: 'yes_no',
+            fails_on: 'no',
+          },
+        ],
+      },
+    ],
+  };
+
+  beforeEach(() => {
+    useAppSession.mockReturnValue({ account: { userId: ACCOUNT } });
+    findDraft.mockResolvedValue({ client_submission_id: 'draft-1' });
+    storedTemplateVersion.mockResolvedValue({
+      inspector_id: ACCOUNT,
+      template_name: 'Monthly workplace inspection',
+    });
+  });
+
+  it('nombra la parada que falta y no deja firmar', async () => {
+    loadDraft.mockResolvedValue(loadedDraft());
+    documentForDraft.mockResolvedValue(DOCUMENT);
+
+    renderRoute();
+
+    await waitFor(() => {
+      expect(screen.getByText('1 item still needs your attention')).toBeTruthy();
+    });
+
+    // La pregunta como se leyó en el recorrido, y la instrucción — nunca la `item_key`.
+    expect(screen.getByText('Are emergency exits unobstructed?')).toBeTruthy();
+    expect(screen.getByText('Answer this question.')).toBeTruthy();
+    expect(screen.queryByText(/emergency\.exits-unobstructed/)).toBeNull();
+
+    expect(
+      screen.getByRole('button', { name: 'Sign and submit' }).hasAttribute('disabled'),
+    ).toBe(true);
+  });
+
+  it('dice que se puede firmar cuando no queda nada, y contra qué inspección', async () => {
+    loadDraft.mockResolvedValue({
+      ...loadedDraft(),
+      // `yes_no` es booleano en el motor; `fails_on: 'no'` hace de `false` la negativa.
+      answers: { 'emergency.exits-unobstructed': true },
+    });
+    documentForDraft.mockResolvedValue(DOCUMENT);
+
+    renderRoute();
+
+    await waitFor(() => expect(screen.getByText('Ready to sign')).toBeTruthy());
+
+    // El encabezado nombra el formulario: en el punto de no retorno, contra qué se firma.
+    expect(screen.getByText(/Monthly workplace inspection/)).toBeTruthy();
+    expect(screen.getByText('1 of 1 answered')).toBeTruthy();
   });
 });

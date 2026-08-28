@@ -1,5 +1,7 @@
 import type { EvidenceInput } from '@hs/contracts';
 
+import { UploadIcon } from '../../components/icons';
+
 /**
  * Los archivos que acompañan una transición, antes de subirlos.
  *
@@ -19,9 +21,9 @@ export function EvidencePicker({
       <legend>Evidence</legend>
 
       {(['before', 'after'] as const).map((kind) => (
-        <label key={kind}>
-          {kind === 'after' ? 'After (required)' : 'Before (optional)'}
+        <label key={kind} className="action-detail__evidence-upload">
           <input
+            className="action-detail__file-input"
             type="file"
             accept="image/jpeg,image/png"
             multiple
@@ -32,6 +34,13 @@ export function EvidencePicker({
               ])
             }
           />
+          <span className="action-detail__upload-icon">
+            <UploadIcon size={20} />
+          </span>
+          <span>
+            <strong>{kind === 'after' ? 'Add after photos' : 'Add before photos'}</strong>
+            <small>{kind === 'after' ? 'Required to complete the work' : 'Optional context'}</small>
+          </span>
         </label>
       ))}
 
