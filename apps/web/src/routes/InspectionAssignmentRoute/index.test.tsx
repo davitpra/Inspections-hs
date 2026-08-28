@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { InspectionAssignmentRoute } from './index';
@@ -8,14 +8,21 @@ const listPendingInspections = vi.hoisted(() => vi.fn());
 const listSites = vi.hoisted(() => vi.fn());
 const listDrafts = vi.hoisted(() => vi.fn());
 const loadDraft = vi.hoisted(() => vi.fn());
+const discardDraft = vi.hoisted(() => vi.fn());
 const missingForField = vi.hoisted(() => vi.fn());
 const storedTemplateVersion = vi.hoisted(() => vi.fn());
 const prefetchedAt = vi.hoisted(() => vi.fn());
 const useAppSession = vi.hoisted(() => vi.fn());
 const params = vi.hoisted(() => vi.fn());
+const navigate = vi.hoisted(() => vi.fn());
 
 vi.mock('../../api/inspections', () => ({ listPendingInspections, listSites }));
-vi.mock('../../offline/drafts', () => ({ listDrafts, loadDraft }));
+vi.mock('../../offline/drafts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../offline/drafts')>()),
+  listDrafts,
+  loadDraft,
+  discardDraft,
+}));
 vi.mock('../../offline/prefetch', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../offline/prefetch')>()),
   missingForField,
@@ -25,6 +32,7 @@ vi.mock('../../offline/prefetch', async (importOriginal) => ({
 vi.mock('../../app/session-context', () => ({ useAppSession }));
 vi.mock('@tanstack/react-router', () => ({
   useParams: () => params(),
+  useNavigate: () => navigate,
   Link: ({
     to,
     params: linkParams,
@@ -71,7 +79,7 @@ function pending(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function draft(status: 'capturing' | 'signed') {
+function draft(status: 'capturing' | 'signed' | 'accepted') {
   return {
     client_submission_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     scheduled_inspection_id: SECOND,
@@ -105,6 +113,7 @@ describe('InspectionAssignmentRoute', () => {
     listSites.mockResolvedValue([{ id: SITE, code: 'GLE', name: 'Glencoe', deactivated_at: null }]);
     listDrafts.mockResolvedValue([]);
     loadDraft.mockResolvedValue(null);
+    discardDraft.mockResolvedValue(true);
     missingForField.mockResolvedValue([]);
     storedTemplateVersion.mockResolvedValue(null);
     prefetchedAt.mockResolvedValue(null);
@@ -167,6 +176,45 @@ describe('InspectionAssignmentRoute', () => {
 
     expect((await screen.findByRole('alert')).textContent).toMatch(/needs a connection/);
     expect(screen.queryByRole('link', { name: /Start inspection/ })).toBeNull();
+  });
+
+  it('lista el borrador de ESTA asignación y ofrece su confirmación de descarte', async () => {
+    listDrafts.mockResolvedValue([draft('capturing')]);
+    renderRoute();
+
+    const table = await screen.findByRole('table', { name: 'Draft on this device' });
+    expect(within(table).getByText('Second requirement')).toBeTruthy();
+    expect(within(table).getByText('Glencoe')).toBeTruthy();
+    expect(within(table).getByText('Draft')).toBeTruthy();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'More actions for the draft started 2026-08-01' }),
+    );
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Discard draft' }));
+    expect(screen.getByRole('button', { name: 'Discard the draft' })).toBeTruthy();
+    expect(screen.getByText(/no copy to bring back/)).toBeTruthy();
+  });
+
+  it('un borrador firmado se abre pero ya no se descarta', async () => {
+    listDrafts.mockResolvedValue([draft('signed')]);
+    renderRoute();
+
+    await screen.findByRole('table', { name: 'Draft on this device' });
+    fireEvent.click(
+      screen.getByRole('button', { name: 'More actions for the draft started 2026-08-01' }),
+    );
+    expect(screen.getByRole('menuitem', { name: 'Open' })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: 'Discard draft' })).toBeNull();
+  });
+
+  it('sin trabajo local lo dice, y lo aceptado ya no es un borrador', async () => {
+    renderRoute();
+    expect(await screen.findByText('No draft in progress on this device.')).toBeTruthy();
+
+    cleanup();
+    listDrafts.mockResolvedValue([draft('accepted')]);
+    renderRoute();
+    expect(await screen.findByText('No draft in progress on this device.')).toBeTruthy();
   });
 
   it('mantiene la carga sin elegir una asignación por su cuenta', async () => {

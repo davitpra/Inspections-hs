@@ -5,7 +5,7 @@ import { queryKeys } from '../../api/query-keys';
 import { DownloadForField } from '../../components/FieldPackage';
 import type { DraftRow } from '../../offline/db';
 import { missingForField } from '../../offline/prefetch';
-import { assignmentState, readiness } from '../../presentation/inspections';
+import { assignmentState, opensCapture, readiness } from '../../presentation/inspections';
 import type { ScheduledInspectionRowPresentation } from './presentation';
 
 export function ScheduledInspectionRow({
@@ -28,8 +28,6 @@ export function ScheduledInspectionRow({
     overdue: inspection.overdue,
     draftStatus: draft?.status ?? null,
   });
-  const captureAction =
-    decision.action === 'start' || decision.action === 'resume' || decision.action === 'open';
 
   return (
     <tr>
@@ -56,7 +54,7 @@ export function ScheduledInspectionRow({
         {decision.action === 'download' ? (
           <DownloadForField id={inspection.id} advance={draft === null} />
         ) : null}
-        {captureAction ? (
+        {opensCapture(decision.action) ? (
           <Link
             to="/inspections/$id"
             params={{ id: inspection.id }}

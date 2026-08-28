@@ -4,6 +4,7 @@ import { Link, useParams } from '@tanstack/react-router';
 
 import { getSubmittedInspection } from '../../api/inspections';
 import { queryKeys } from '../../api/query-keys';
+import { Fact, Facts } from '../../components/Facts';
 import { CalendarIcon, ClockIcon, PersonIcon, PinIcon } from '../../components/icons';
 import { formatCivilDay, periodLabel } from '../../presentation/dates';
 import { answerText, photoCountText } from './presentation';
@@ -83,43 +84,33 @@ export function InspectionReportRoute(): React.JSX.Element {
         </Link>
       </p>
 
-      <dl className="facts">
-        <div className="facts__item">
-          <span className="facts__label">
-            <CalendarIcon size={16} /> Month
-          </span>
-          <span className="facts__value">
-            {periodLabel(report.period_start, report.period_months)}
-          </span>
-        </div>
+      <Facts>
+        <Fact
+          icon={<CalendarIcon size={16} />}
+          label="Month"
+          value={periodLabel(report.period_start, report.period_months)}
+        />
 
-        <div className="facts__item">
-          <span className="facts__label">
-            <PersonIcon size={16} /> Signed by
-          </span>
-          <span className="facts__value">{report.submitted_by_name ?? '—'}</span>
-        </div>
+        <Fact
+          icon={<PersonIcon size={16} />}
+          label="Signed by"
+          value={report.submitted_by_name ?? '—'}
+        />
 
-        <div className="facts__item">
-          <span className="facts__label">
-            <ClockIcon size={16} /> Signed on
-          </span>
-          <span className="facts__value">
-            {formatCivilDay(report.signed_at)}
-            <span className="facts__hint">Received {formatCivilDay(report.received_at)}</span>
-          </span>
-        </div>
+        <Fact
+          icon={<ClockIcon size={16} />}
+          label="Signed on"
+          value={formatCivilDay(report.signed_at)}
+          hints={[`Received ${formatCivilDay(report.received_at)}`]}
+        />
 
-        <div className="facts__item">
-          <span className="facts__label">
-            <PinIcon size={16} /> Template version
-          </span>
-          <span className="facts__value">
-            Version {report.template_version}
-            <span className="facts__hint">{report.answer_count} answers recorded</span>
-          </span>
-        </div>
-      </dl>
+        <Fact
+          icon={<PinIcon size={16} />}
+          label="Template version"
+          value={`Version ${report.template_version}`}
+          hints={[`${report.answer_count} answers recorded`]}
+        />
+      </Facts>
 
       {/*
         Las fotos y la firma se guardaron como object keys y todavía no se pueden mirar.

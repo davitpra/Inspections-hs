@@ -20,10 +20,9 @@ import { TrashIcon } from '../../components/icons';
  * listado sin esa fila; el diálogo tiene que colgar de un nodo que sobreviva a la mutación,
  * y ese nodo es la ruta. Es el mismo motivo que documenta `RequirementConfirmDialog`.
  *
- * EL ÍCONO Y EL COLOR DE PELIGRO ESTÁN EN EL TÍTULO, no en el botón solo: de qué clase es
- * la decisión se ve antes de leer la pregunta, que es cuando todavía sirve. El botón que
- * descarta queda en `--danger` y el que no hace nada, sin chrome de peligro: las dos salidas
- * comparten renglón y tienen que distinguirse sin leerlas.
+ * Como el borrador se puede recuperar, el diálogo usa el color de marca en vez del color de
+ * peligro. El botón que descarta queda como acción primaria y el que no hace nada, sin chrome:
+ * las dos salidas comparten renglón y tienen que distinguirse sin leerlas.
  */
 export function DiscardDraftDialog({
   draftId,
@@ -50,35 +49,51 @@ export function DiscardDraftDialog({
   });
 
   return (
-    <dialog ref={dialogRef} className="modal" onClose={onClose}>
+    <dialog
+      ref={dialogRef}
+      className="modal discard-draft-dialog discard-draft-dialog--recoverable"
+      aria-labelledby="discard-draft-title"
+      aria-describedby="discard-draft-description"
+      onClose={onClose}
+    >
       <div className="modal__head">
-        <span className="modal__icon">
+        <span className="modal__icon discard-draft-dialog__icon" aria-hidden="true">
           <TrashIcon size={20} />
         </span>
-        <h2>Discard “{draftName}”?</h2>
+        <div>
+          <span className="discard-draft-dialog__eyebrow">Draft removal</span>
+          <h2 id="discard-draft-title">Discard “{draftName}”?</h2>
+        </div>
       </div>
 
-      <p className="modal__text">
+      <p id="discard-draft-description" className="modal__text discard-draft-dialog__text">
         It disappears from this list and its key becomes available again. Nothing is deleted,
         so it can be recovered by whoever maintains the database.
       </p>
 
+      {discard.isError ? (
+        <p className="notice notice--warn" role="alert">{discard.error.message}</p>
+      ) : null}
+
       <div className="modal__actions">
         <button
           type="button"
-          className="button--danger"
+          className="button--primary"
           onClick={() => discard.mutate()}
           disabled={discard.isPending}
         >
           {discard.isPending ? 'Discarding…' : 'Discard draft'}
         </button>
 
-        <button type="button" onClick={() => dialogRef.current?.close()}>
+        <button
+          type="button"
+          className="discard-draft-dialog__cancel"
+          onClick={() => dialogRef.current?.close()}
+          disabled={discard.isPending}
+        >
           Keep it
         </button>
       </div>
-
-      {discard.isError ? <p className="notice">{(discard.error as Error).message}</p> : null}
     </dialog>
   );
 }

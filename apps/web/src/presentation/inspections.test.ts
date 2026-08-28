@@ -4,6 +4,7 @@ import {
   assignmentState,
   completedInspections,
   dueIn,
+  opensCapture,
   readiness,
   recentCompleted,
 } from './inspections';
@@ -29,6 +30,16 @@ describe('dueIn', () => {
   it('lo vencido se lee para atrás', () => {
     expect(dueIn('2026-08-10', '2026-08-15')).toBe('5 days overdue');
     expect(dueIn('2026-08-14', '2026-08-15')).toBe('1 day overdue');
+  });
+});
+
+describe('opensCapture', () => {
+  it('entra a la captura solo cuando hay algo que recorrer', () => {
+    expect(opensCapture('start')).toBe(true);
+    expect(opensCapture('resume')).toBe(true);
+    expect(opensCapture('open')).toBe(true);
+    expect(opensCapture('download')).toBe(false);
+    expect(opensCapture('none')).toBe(false);
   });
 });
 

@@ -35,6 +35,15 @@ export interface AssignmentState {
   pillClass: string;
 }
 
+/**
+ * Si la acción decidida entra a la captura. Se pregunta acá y no en cada superficie
+ * porque las dos que la ofrecen —la fila de la pantalla de inicio y la asignación
+ * destacada— tienen que abrir en los mismos casos.
+ */
+export function opensCapture(action: AssignmentAction): boolean {
+  return action === 'start' || action === 'resume' || action === 'open';
+}
+
 const OVERDUE_PILL = {
   pillLabel: 'Overdue',
   pillClass: 'status-pill status-pill--overdue',

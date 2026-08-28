@@ -2449,6 +2449,9 @@ select:disabled {
 
 .status-pill {
   font-size: var(--text-sm);
+  /* Su peso es suyo y no el del contenedor: la misma píldora aparece en una celda de
+     tabla y dentro de un `.facts__value`, y tiene que leerse igual en las dos. */
+  font-weight: var(--weight-normal);
   padding: var(--space-0-5) var(--space-2);
   border-radius: var(--radius-pill);
   border: 1px solid var(--line);
@@ -2790,18 +2793,38 @@ select:disabled {
   border-bottom: 0;
 }
 
-.scheduled-inspections__table {
+/* Los borradores del dispositivo son la misma tabla que las inspecciones agendadas: la
+   misma sección, el mismo alto de fila y la misma tarjeta en teléfono. Comparten regla en
+   vez de clase para que ninguna de las dos se llame como la otra. */
+.scheduled-inspections__table,
+.device-drafts__table {
   margin: var(--space-4) 0 0;
 }
 
 .scheduled-inspections__table tbody tr:last-child th,
-.scheduled-inspections__table tbody tr:last-child td {
+.scheduled-inspections__table tbody tr:last-child td,
+.device-drafts__table tbody tr:last-child th,
+.device-drafts__table tbody tr:last-child td {
   border-bottom: 0;
 }
 
-.scheduled-inspection-row__action {
+.scheduled-inspection-row__action,
+.device-drafts__action {
   width: 1%;
   white-space: nowrap;
+}
+
+/* El «⋮» se ancla en absoluto (ver `.row-menu`), así que la celda tiene que reservarle la
+   posición contra la que se ancla — la misma razón de `.requirements-table__actions-cell`.
+   El ancho lo pone el encabezado «Actions»: adentro no queda nada en flujo. */
+.device-drafts__action {
+  position: relative;
+  min-width: 3rem;
+}
+
+.device-drafts__action .table__actions {
+  flex-wrap: nowrap;
+  justify-content: flex-end;
 }
 
 .scheduled-inspection-row__action .notice {
@@ -3361,7 +3384,8 @@ button.schedule-cell:focus-visible {
     font-weight: var(--weight-strong);
   }
 
-  .scheduled-inspections__table thead {
+  .scheduled-inspections__table thead,
+  .device-drafts__table thead {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -3374,19 +3398,27 @@ button.schedule-cell:focus-visible {
   .scheduled-inspections__table tbody,
   .scheduled-inspections__table tr,
   .scheduled-inspections__table th,
-  .scheduled-inspections__table td {
+  .scheduled-inspections__table td,
+  .device-drafts__table,
+  .device-drafts__table tbody,
+  .device-drafts__table tr,
+  .device-drafts__table th,
+  .device-drafts__table td {
     display: block;
     width: 100%;
     box-sizing: border-box;
   }
 
-  .scheduled-inspections__table tr {
+  .scheduled-inspections__table tr,
+  .device-drafts__table tr {
     padding: var(--space-3) 0;
     border-top: 1px solid var(--line);
   }
 
   .scheduled-inspections__table th,
-  .scheduled-inspections__table td {
+  .scheduled-inspections__table td,
+  .device-drafts__table th,
+  .device-drafts__table td {
     display: grid;
     grid-template-columns: minmax(7rem, 0.42fr) minmax(0, 1fr);
     gap: var(--space-2);
@@ -3395,15 +3427,29 @@ button.schedule-cell:focus-visible {
   }
 
   .scheduled-inspections__table th::before,
-  .scheduled-inspections__table td::before {
+  .scheduled-inspections__table td::before,
+  .device-drafts__table th::before,
+  .device-drafts__table td::before {
     content: attr(data-label);
     color: var(--muted);
     font-size: var(--text-sm);
     font-weight: var(--weight-strong);
   }
 
-  .scheduled-inspection-row__action {
+  .scheduled-inspection-row__action,
+  .device-drafts__action {
     white-space: normal;
+  }
+
+  /* El «⋮» se ancla en absoluto y la celda no tiene nada en flujo que le dé alto: en la
+     tarjeta de teléfono se lo da a mano, y la etiqueta se va —los tres puntos no necesitan
+     que se los presente (mismo criterio que `.requirements-table__actions-cell`). */
+  .device-drafts__table .device-drafts__action {
+    min-height: 2.25rem;
+  }
+
+  .device-drafts__table .device-drafts__action::before {
+    content: none;
   }
 
   /*
@@ -3621,11 +3667,40 @@ button.schedule-cell:focus-visible {
    datos, el anillo de progreso y la fila de una sección.
    --------------------------------------------------------------------------- */
 
+.assignment-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding-bottom: var(--space-8);
+}
+
+.assignment-page__nav {
+  min-height: 1.5rem;
+}
+
+.assignment-page__nav .back-link,
+.assignment-page__status > :last-child {
+  margin-bottom: 0;
+}
+
+.assignment-page__status:empty {
+  display: none;
+}
+
+/*
+ * El héroe NO ES UNA TARJETA: es el encabezado de la pantalla. No lleva marco propio
+ * porque adentro ya hay dos cosas que dibujan el suyo —la tarjeta de planta y la grilla de
+ * `.facts`—, y un borde alrededor de eso eran tres rectángulos concéntricos. Lo que separa
+ * el encabezado de lo que sigue es el `gap` de `.assignment-page`, igual que en el resto de
+ * las consolas.
+ *
+ * Sin marco tampoco hay padding: el título arranca alineado con el link de volver y con el
+ * borde de las tarjetas de abajo, en vez de estar corrido media pulgada sin motivo visible.
+ */
 .assignment {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  margin: 0 0 var(--space-6);
 }
 
 .assignment__head {
@@ -3638,14 +3713,46 @@ button.schedule-cell:focus-visible {
 
 .assignment__head h1 {
   margin: 0;
+  max-width: 40rem;
+  line-height: 1.2;
 }
 
+.assignment__head .scheduling__subtitle {
+  max-width: 42rem;
+  margin-bottom: 0;
+}
+
+/*
+ * Los botones se alinean al PIE de la fila, no al centro: el selector de planta trae su
+ * etiqueta "Site" encima de la tarjeta, así que centrar dejaba a los botones a media altura
+ * de un bloque más alto y desalineados con la tarjeta misma. Con `flex-end` las tres cajas
+ * comparten el borde inferior y, como las tres miden 48px (ADR-010), también el superior.
+ */
 .assignment__actions {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-end;
   gap: var(--space-3);
   flex: none;
+}
+
+/*
+ * La tarjeta de planta comparte fila con las acciones, así que se achica: en la consola es
+ * el control que manda y ocupa 22rem, acá es un dato al lado del CTA. La altura baja a la de
+ * los botones para que las tres cosas se lean como una sola tira.
+ *
+ * El ancho se toca solo en pantalla ancha: abajo de 48rem el selector ya se estira solo, y
+ * una regla sin `@media` le ganaría por especificidad.
+ */
+.assignment__actions .site-card {
+  min-height: 48px;
+}
+
+@media (min-width: 48.01rem) {
+  .assignment__actions .site-picker {
+    flex-basis: 16rem;
+    width: 16rem;
+  }
 }
 
 /*
@@ -3684,25 +3791,72 @@ button.schedule-cell:focus-visible {
   white-space: nowrap;
 }
 
-/* Una sola columna, al ancho completo de `.shell__main`: el progreso arriba y la
-   preparación debajo. Fueron dos columnas —la preparación al lado— y eso dejaba el progreso
-   en dos tercios del ancho mientras el resto de las pantallas lo ocupaban entero; al
-   navegar entre ellas el contenido saltaba de ancho sin que nada lo justificara. Las dos
-   tarjetas del costado eran contexto, no trabajo, y abajo se leen igual — a diferencia del
-   resumen del builder, que es lo único que se mira MIENTRAS se escribe y por eso conserva
-   su columna. Sin dos columnas tampoco hay corte a ~58rem: la forma es la misma en todo
-   ancho. */
+/* El progreso es el trabajo principal; la preparación queda visible a su lado sin competir
+   con el héroe. En pantallas angostas ambos vuelven a una sola columna. */
 .assignment__layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-4);
+  grid-template-columns: minmax(0, 2fr) minmax(16rem, 1fr);
+  gap: var(--space-6);
   align-items: start;
+}
+
+.assignment__main {
+  min-width: 0;
+}
+
+.assignment__main > .card {
+  min-height: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: var(--space-6);
+  border-radius: var(--radius-lg);
 }
 
 .assignment__aside {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+  position: sticky;
+  top: var(--space-4);
+}
+
+.assignment-guide {
+  margin: 0;
+  padding: var(--space-5);
+  border-radius: var(--radius-lg);
+}
+
+.assignment-guide__head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.assignment-guide__head h2,
+.assignment-guide__head p {
+  margin: 0;
+}
+
+.assignment-guide__head h2 {
+  font-size: var(--text-base);
+}
+
+.assignment-guide__head p {
+  margin-top: var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.assignment-guide__icon {
+  flex: none;
+  width: var(--space-8);
+  height: var(--space-8);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-pill);
+  background: var(--brand);
+  color: var(--paper);
 }
 
 /* La tira de datos que identifica la asignación: mismas divisorias que `.stats-bar`, con
@@ -3840,6 +3994,37 @@ button.schedule-cell:focus-visible {
   flex: none;
   margin-top: var(--space-0-5);
   color: var(--state-ok);
+}
+
+@media (max-width: 58rem) {
+  .assignment__layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .assignment__aside {
+    position: static;
+  }
+}
+
+@media (max-width: 36rem) {
+  .assignment-page {
+    gap: var(--space-4);
+  }
+
+  .assignment__actions,
+  .assignment__actions > * {
+    width: 100%;
+  }
+
+  .assignment__cta,
+  .assignment__action {
+    justify-content: center;
+  }
+
+  .assignment__main > .card,
+  .assignment-guide {
+    padding: var(--space-4);
+  }
 }
 
 /* ---------------------------------------------------------------------------
@@ -5725,6 +5910,170 @@ button.schedule-cell:focus-visible {
 
 .modal .notice {
   margin: var(--space-4) 0 0;
+}
+
+/*
+ * Descartar un borrador de plantilla es destructivo para el flujo de trabajo, pero no para
+ * los datos. Las superficies siguen siendo neutras para que el diálogo no se lea como una
+ * alarma.
+ */
+.discard-draft-dialog {
+  width: min(30rem, 92vw);
+  padding: 0;
+  overflow: hidden auto;
+  border-radius: var(--radius-lg);
+}
+
+.discard-draft-dialog .modal__head {
+  align-items: flex-start;
+  padding: var(--space-6) var(--space-6) 0;
+}
+
+.discard-draft-dialog__icon {
+  display: grid;
+  flex: 0 0 48px;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border-radius: var(--radius-lg);
+  background: var(--tint-bg);
+}
+
+.discard-draft-dialog__eyebrow {
+  display: block;
+  margin: 0 0 var(--space-1);
+  color: var(--state-danger);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-strong);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.discard-draft-dialog__text {
+  margin: var(--space-5) var(--space-6) 0;
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--tint-bg);
+}
+
+.discard-draft-dialog .notice {
+  margin: var(--space-4) var(--space-6) 0;
+}
+
+.discard-draft-dialog .modal__actions {
+  margin-top: var(--space-6);
+  padding: var(--space-4) var(--space-6) var(--space-6);
+  border-top: 1px solid var(--line);
+}
+
+.discard-draft-dialog .button--danger {
+  border-color: var(--state-danger);
+  background: var(--paper);
+  color: var(--state-danger);
+  font-weight: var(--weight-strong);
+}
+
+.discard-draft-dialog--recoverable .modal__icon,
+.discard-draft-dialog--recoverable .discard-draft-dialog__eyebrow {
+  color: var(--brand);
+}
+
+.discard-draft-dialog__cancel {
+  border-color: transparent;
+  font-weight: var(--weight-strong);
+}
+
+/*
+ * A diferencia del borrador de plantilla, este borrador solo existe en el dispositivo.
+ * La fecha identifica el recorrido y el bloque enumera exactamente lo que no se puede
+ * recuperar sin convertir todo el diálogo en una superficie de alarma.
+ */
+.inspection-discard-dialog__date {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-5) var(--space-6) 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.inspection-discard-dialog__date svg {
+  flex: none;
+  color: var(--brand);
+}
+
+.inspection-discard-dialog__date strong {
+  margin-left: auto;
+  color: var(--ink);
+}
+
+.discard-draft-dialog--permanent .discard-draft-dialog__text {
+  margin-top: var(--space-3);
+  border-color: var(--line);
+  background: var(--tint-bg);
+  color: var(--ink);
+}
+
+.discard-draft-dialog--permanent .modal__icon,
+.discard-draft-dialog--permanent .discard-draft-dialog__eyebrow {
+  color: var(--brand);
+}
+
+.discard-draft-dialog--permanent .button--danger {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: var(--paper);
+}
+
+.inspection-discard-dialog__loss > strong {
+  display: block;
+  color: var(--ink);
+}
+
+.inspection-discard-dialog__loss ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: var(--space-3) 0;
+  padding: 0;
+  list-style: none;
+}
+
+.inspection-discard-dialog__loss li {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
+}
+
+.inspection-discard-dialog__loss p {
+  margin: 0;
+}
+
+@media (max-width: 30rem) {
+  .discard-draft-dialog .modal__head {
+    padding: var(--space-5) var(--space-4) 0;
+  }
+
+  .discard-draft-dialog__text {
+    margin: var(--space-4) var(--space-4) 0;
+  }
+
+  .inspection-discard-dialog__date {
+    margin: var(--space-4) var(--space-4) 0;
+  }
+
+  .discard-draft-dialog .notice {
+    margin-inline: var(--space-4);
+  }
+
+  .discard-draft-dialog .modal__actions {
+    padding: var(--space-4);
+  }
 }
 
 /*

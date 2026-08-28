@@ -9,7 +9,6 @@ const listSites = vi.hoisted(() => vi.fn());
 const listScheduled = vi.hoisted(() => vi.fn());
 const listTemplates = vi.hoisted(() => vi.fn());
 const listDrafts = vi.hoisted(() => vi.fn());
-const discardDraft = vi.hoisted(() => vi.fn());
 const missingForField = vi.hoisted(() => vi.fn());
 const prefetchInspection = vi.hoisted(() => vi.fn());
 const useAppSession = vi.hoisted(() => vi.fn());
@@ -24,7 +23,6 @@ vi.mock('../../api/inspections', () => ({
 vi.mock('../../offline/drafts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../offline/drafts')>()),
   listDrafts,
-  discardDraft,
 }));
 vi.mock('../../offline/prefetch', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../offline/prefetch')>()),
@@ -137,7 +135,6 @@ describe('InspectorHomeRoute', () => {
     listScheduled.mockResolvedValue([]);
     listTemplates.mockResolvedValue([]);
     listDrafts.mockResolvedValue([]);
-    discardDraft.mockResolvedValue(true);
     missingForField.mockResolvedValue([]);
     useAppSession.mockReturnValue({ account: { userId: USER, siteScope: [SITE] } });
     search.mockReturnValue({});
@@ -218,14 +215,13 @@ describe('InspectorHomeRoute', () => {
     expect(screen.getByRole('link', { name: pending().template_name })).toBeTruthy();
   });
 
-  it('conserva los borradores locales y su confirmación de descarte', async () => {
+  it('no lista los borradores del dispositivo: viven en la página de su asignación', async () => {
     listDrafts.mockResolvedValue([draft()]);
     renderRoute();
 
-    await screen.findByText('Draft');
-    fireEvent.click(screen.getByRole('button', { name: 'Discard the draft started 2026-08-01' }));
-    expect(screen.getByRole('button', { name: 'Discard the draft' })).toBeTruthy();
-    expect(screen.getByText(/no copy to bring back/)).toBeTruthy();
+    await screen.findByRole('table', { name: 'Scheduled inspections' });
+    expect(screen.queryByRole('heading', { name: /Draft on this device/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /More actions for the draft/ })).toBeNull();
   });
 
   it('muestra en el calendario anual todos los estados propios y permite leer su detalle', async () => {

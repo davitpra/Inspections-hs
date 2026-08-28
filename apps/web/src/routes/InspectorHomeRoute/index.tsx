@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearch } from "@tanstack/react-router";
-import { useState } from "react";
 
 import {
   listPendingInspections,
@@ -11,20 +10,20 @@ import { queryKeys } from "../../api/query-keys";
 import { InstallPrompt } from "../../app/InstallPrompt";
 import { useAppSession } from "../../app/session-context";
 import { CalendarIcon } from "../../components/icons";
-import type { DraftRow as DraftRowData } from "../../offline/db";
 import { listDrafts } from "../../offline/drafts";
-import { DeviceDrafts } from "./DeviceDrafts";
-import { DiscardDraftDialog } from "./DiscardDraftDialog";
 import { InspectorSchedule } from "./InspectorSchedule";
 import { RecentInspections } from "./RecentInspections";
 import { ScheduledInspections } from "./ScheduledInspections";
-import { draftPeriodStart, pendingWork } from "./presentation";
 
-/** La entrada del inspector: primero todo lo que debe; después, historia y trabajo local. */
+/**
+ * La entrada del inspector: todo lo que debe, y después su historia.
+ *
+ * Los borradores de este dispositivo NO se listan acá: cada uno vive en la página de su
+ * asignación, que es donde se retoman y donde se descartan.
+ */
 export function InspectorHomeRoute(): React.JSX.Element {
   const { account } = useAppSession();
   const { submitted } = useSearch({ from: "/" });
-  const [discarding, setDiscarding] = useState<DraftRowData | null>(null);
   const pending = useQuery({
     queryKey: queryKeys.pendingInspections(),
     queryFn: listPendingInspections,
@@ -48,7 +47,6 @@ export function InspectorHomeRoute(): React.JSX.Element {
   const loading = pending.isPending || sites.isPending || drafts.isPending;
   const siteName = (siteId: string): string =>
     sites.data?.find((site) => site.id === siteId)?.name ?? siteId;
-  const working = pendingWork(drafts.data ?? []);
 
   return (
     <>
@@ -88,14 +86,6 @@ export function InspectorHomeRoute(): React.JSX.Element {
       />
 
       {account ? (
-        <InspectorSchedule
-          scheduled={scheduled.data ?? []}
-          accountId={account.userId}
-          status={scheduled.status}
-        />
-      ) : null}
-
-      {account ? (
         <RecentInspections
           scheduled={scheduled.data ?? []}
           userId={account.userId}
@@ -103,19 +93,11 @@ export function InspectorHomeRoute(): React.JSX.Element {
         />
       ) : null}
 
-      <DeviceDrafts
-        drafts={working}
-        periodStart={(draft) => draftPeriodStart(draft, pending.data ?? [])}
-        siteName={siteName}
-        onDiscard={setDiscarding}
-      />
-
-      {discarding && account ? (
-        <DiscardDraftDialog
-          clientSubmissionId={discarding.client_submission_id}
+      {account ? (
+        <InspectorSchedule
+          scheduled={scheduled.data ?? []}
           accountId={account.userId}
-          startedOn={discarding.created_at.slice(0, 10)}
-          onClose={() => setDiscarding(null)}
+          status={scheduled.status}
         />
       ) : null}
     </>
