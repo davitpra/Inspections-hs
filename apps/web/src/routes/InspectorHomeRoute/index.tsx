@@ -12,14 +12,15 @@ import { useAppSession } from "../../app/session-context";
 import { CalendarIcon } from "../../components/icons";
 import { listDrafts } from "../../offline/drafts";
 import { InspectorSchedule } from "./InspectorSchedule";
-import { RecentInspections } from "./RecentInspections";
 import { ScheduledInspections } from "./ScheduledInspections";
 
 /**
- * La entrada del inspector: todo lo que debe, y después su historia.
+ * La entrada del inspector: lo que debe, y cuándo lo debe.
  *
  * Los borradores de este dispositivo NO se listan acá: cada uno vive en la página de su
- * asignación, que es donde se retoman y donde se descartan.
+ * asignación, que es donde se retoman y donde se descartan. Lo ya cerrado tampoco: la
+ * historia entera está a un link de la cabecera, y un recorte de las últimas repetía la
+ * misma tabla en la pantalla que existe para lo que falta hacer.
  */
 export function InspectorHomeRoute(): React.JSX.Element {
   const { account } = useAppSession();
@@ -62,8 +63,8 @@ export function InspectorHomeRoute(): React.JSX.Element {
             Choose an assigned inspection to prepare and complete.
           </p>
         </div>
-        <Link to="/inspections/past" className="list__action">
-          View past inspections
+        <Link to="/historical" className="list__action">
+          View historical inspections
         </Link>
       </header>
 
@@ -84,14 +85,6 @@ export function InspectorHomeRoute(): React.JSX.Element {
         draftsError={drafts.isError}
         ready={pending.isSuccess && sites.isSuccess && drafts.isSuccess}
       />
-
-      {account ? (
-        <RecentInspections
-          scheduled={scheduled.data ?? []}
-          userId={account.userId}
-          siteName={siteName}
-        />
-      ) : null}
 
       {account ? (
         <InspectorSchedule

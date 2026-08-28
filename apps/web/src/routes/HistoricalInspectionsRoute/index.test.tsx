@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { PastInspectionsRoute } from './index';
+import { HistoricalInspectionsRoute } from './index';
 
 const listSites = vi.hoisted(() => vi.fn());
 const listScheduled = vi.hoisted(() => vi.fn());
@@ -65,7 +65,7 @@ function renderRoute(): void {
 
   render(
     <QueryClientProvider client={client}>
-      <PastInspectionsRoute />
+      <HistoricalInspectionsRoute />
     </QueryClientProvider>,
   );
 }
@@ -80,7 +80,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe('PastInspectionsRoute', () => {
+describe('HistoricalInspectionsRoute', () => {
   it('lista lo completado con su fecha de cierre, lo más reciente primero', async () => {
     listScheduled.mockResolvedValue([
       scheduled({ id: 'may', period_start: '2027-05-01', completed_at: '2027-05-30T18:00:00.000Z' }),
@@ -140,7 +140,7 @@ describe('PastInspectionsRoute', () => {
 
     renderRoute();
 
-    expect(await screen.findByText(/Past inspections need a connection/)).toBeTruthy();
+    expect(await screen.findByText(/Historical inspections need a connection/)).toBeTruthy();
     expect(screen.queryByText('You have not completed any inspections yet.')).toBeNull();
   });
 

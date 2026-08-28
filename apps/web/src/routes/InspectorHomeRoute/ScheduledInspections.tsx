@@ -1,9 +1,9 @@
-import type { PendingInspection } from '@hs/contracts';
+import type { PendingInspection } from "@hs/contracts";
 
-import type { DraftRow } from '../../offline/db';
-import { civilToday } from '../../presentation/dates';
-import { ScheduledInspectionRow } from './ScheduledInspectionRow';
-import { scheduledInspectionRows } from './presentation';
+import type { DraftRow } from "../../offline/db";
+import { civilToday } from "../../presentation/dates";
+import { ScheduledInspectionRow } from "./ScheduledInspectionRow";
+import { scheduledInspectionRows } from "./presentation";
 
 interface ScheduledInspectionsProps {
   inspections?: readonly PendingInspection[];
@@ -34,17 +34,22 @@ export function ScheduledInspections({
       <div className="requirements-section__head">
         <div>
           <h2 id="scheduled-heading">
-            Scheduled inspections{' '}
+            Scheduled inspections{" "}
             {inspections ? <span className="note">({rows.length})</span> : null}
           </h2>
-          <p className="note">Every inspection assigned to you that still needs to be sent.</p>
+          <p className="note">
+            Every inspection assigned to you that still needs to be sent.
+          </p>
         </div>
       </div>
 
-      {loading ? <p className="schedule-empty">Loading scheduled inspections…</p> : null}
+      {loading ? (
+        <p className="schedule-empty">Loading scheduled inspections…</p>
+      ) : null}
       {remoteError ? (
         <p className="notice notice--warn" role="alert">
-          Scheduled inspections need a connection. Try again when you are online.
+          Scheduled inspections need a connection. Try again when you are
+          online.
         </p>
       ) : null}
       {draftsError ? (
@@ -57,11 +62,14 @@ export function ScheduledInspections({
       ) : null}
 
       {ready && rows.length > 0 ? (
-        <table className="table scheduled-inspections__table" aria-label="Scheduled inspections">
+        <table
+          className="table scheduled-inspections__table"
+          aria-label="Scheduled inspections"
+        >
           <thead>
             <tr>
-              <th scope="col">Period</th>
-              <th scope="col">Requirement</th>
+              <th scope="col">Month</th>
+              <th scope="col">Inspection</th>
               <th scope="col">Site</th>
               <th scope="col">Due</th>
               <th scope="col">Status</th>

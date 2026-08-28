@@ -168,8 +168,8 @@ describe('InspectorHomeRoute', () => {
     renderRoute();
 
     expect(await screen.findByText(/sent and accepted/)).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'View past inspections' }).getAttribute('href')).toBe(
-      '/inspections/past',
+    expect(screen.getByRole('link', { name: 'View historical inspections' }).getAttribute('href')).toBe(
+      '/historical',
     );
   });
 

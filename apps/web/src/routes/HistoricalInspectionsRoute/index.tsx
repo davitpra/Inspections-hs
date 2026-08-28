@@ -12,15 +12,14 @@ import { completedInspections } from '../../presentation/inspections';
  * Todo lo que esta cuenta cerró, no solo lo último.
  *
  * Lee con la MISMA consulta y la MISMA clave que la pantalla de inicio, así que llegar acá
- * desde el pie de "Recent inspections" no cuesta una llamada: es la caché ya tibia, leída
- * entera en vez de recortada a tres.
+ * desde su cabecera no cuesta una llamada: es la caché ya tibia, leída con otro filtro.
  *
  * De servidor y sin reintento, como el resto de lo que se lista acá: el historial no es
  * trabajo en curso y no tiene por qué estar en el dispositivo. ADR-010 presupone el
  * almacenamiento local para lo que está en vuelo —siete días—, no para un archivo que
  * crece solo.
  */
-export function PastInspectionsRoute(): React.JSX.Element {
+export function HistoricalInspectionsRoute(): React.JSX.Element {
   const { account } = useAppSession();
 
   const sites = useQuery({ queryKey: queryKeys.sites(), queryFn: listSites, retry: false });
@@ -43,7 +42,7 @@ export function PastInspectionsRoute(): React.JSX.Element {
             <span className="scheduling__icon">
               <CalendarIcon size={22} />
             </span>
-            <h1>Past inspections</h1>
+            <h1>Historical inspections</h1>
           </div>
           <p className="scheduling__subtitle">
             Every workplace inspection you have completed, most recent first.
@@ -59,7 +58,8 @@ export function PastInspectionsRoute(): React.JSX.Element {
 
       {scheduled.isError ? (
         <p className="notice">
-          Past inspections need a connection. They are kept on the server, not on this device.
+          Historical inspections need a connection. They are kept on the server, not on this
+          device.
         </p>
       ) : null}
 

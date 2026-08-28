@@ -3,6 +3,7 @@ import type { Session } from '@hs/contracts';
 import {
   CalendarIcon,
   CheckIcon,
+  ClipboardIcon,
   ClockIcon,
   DocumentIcon,
   InboxIcon,
@@ -39,6 +40,7 @@ import {
  */
 export type NavPath =
   | '/'
+  | '/historical'
   | '/actions'
   | '/recurrence'
   | '/scheduling'
@@ -85,6 +87,7 @@ export type NavItem = {
  */
 export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/', label: 'Inspections', icon: ListIcon },
+  { to: '/historical', label: 'Historical inspections', icon: ClipboardIcon },
   { to: '/actions', label: 'Corrective actions', icon: CheckIcon },
   { to: '/recurrence', label: 'Recurring findings', icon: ClockIcon },
   {
@@ -123,7 +126,7 @@ export function visibleNavItems(account: Session): readonly NavItem[] {
  */
 const TITLES: readonly (readonly [string, string])[] = [
   ['/', 'Inspections'],
-  ['/inspections/past', 'Past inspections'],
+  ['/historical', 'Historical inspections'],
   ['/inspections/*/capture', 'Inspection'],
   ['/inspections/*/review', 'Review'],
   ['/inspections/*/report', 'Inspection report'],

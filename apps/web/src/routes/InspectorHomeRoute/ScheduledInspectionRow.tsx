@@ -31,12 +31,12 @@ export function ScheduledInspectionRow({
 
   return (
     <tr>
-      <th scope="row" data-label="Period">{row.period}</th>
-      <td data-label="Requirement">
+      <th scope="row" data-label="Month">{row.period}</th>
+      <td data-label="Inspection">
         <Link
           to="/inspections/$id"
           params={{ id: inspection.id }}
-          className="scheduled-inspection-row__link"
+          className="table__link"
         >
           {inspection.template_name}
         </Link>

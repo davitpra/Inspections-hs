@@ -13,6 +13,7 @@ import { ActionsForInspectionRoute } from '../routes/ActionsForInspectionRoute';
 import { ActionsRoute } from '../routes/ActionsRoute';
 import { CaptureRoute } from '../routes/CaptureRoute';
 import { Form7Route } from '../routes/Form7Route';
+import { HistoricalInspectionsRoute } from '../routes/HistoricalInspectionsRoute';
 import { InboxRoute } from '../routes/InboxRoute';
 import { InspectionReportRoute } from '../routes/InspectionReportRoute';
 import { InspectionAssignmentRoute } from '../routes/InspectionAssignmentRoute';
@@ -21,7 +22,6 @@ import { IncidentRoute } from '../routes/IncidentRoute';
 import { IncidentsRoute } from '../routes/IncidentsRoute';
 import { OfflineRoute } from '../routes/OfflineRoute';
 import { OutboxRoute } from '../routes/OutboxRoute';
-import { PastInspectionsRoute } from '../routes/PastInspectionsRoute';
 import { RecurrenceRoute } from '../routes/RecurrenceRoute';
 import { ReportIncidentRoute } from '../routes/ReportIncidentRoute';
 import { ReviewRoute } from '../routes/ReviewRoute';
@@ -182,19 +182,6 @@ const inspectionReportRoute = createRoute({
   component: InspectionReportRoute,
 });
 
-/**
- * El historial. Un solo segmento bajo `/inspections`, así que no compite con
- * `/inspections/$id/capture`, que tiene tres.
- *
- * No entra a la barra de navegación: se llega desde el pie de "Recent inspections", en la
- * pantalla de inicio, que es donde la pregunta aparece.
- */
-const pastInspectionsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/inspections/past',
-  component: PastInspectionsRoute,
-});
-
 const inspectionAssignmentRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/inspections/$id',
@@ -205,6 +192,20 @@ const reviewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/inspections/$id/review',
   component: ReviewRoute,
+});
+
+/**
+ * El historial. Ruta propia y de un solo segmento: no es una inspección ni un paso de una,
+ * es el archivo de lo ya cerrado, y colgarla de `/inspections` la ponía a competir con
+ * `/inspections/$id`.
+ *
+ * Está en la barra de navegación: es la única entrada, ahora que la pantalla de inicio ya
+ * no tiene una tarjeta de recientes desde la cual llegar.
+ */
+const historicalInspectionsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/historical',
+  component: HistoricalInspectionsRoute,
 });
 
 const actionsRoute = createRoute({
@@ -377,7 +378,7 @@ const outboxRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   inspectorHomeRoute,
   captureRoute,
-  pastInspectionsRoute,
+  historicalInspectionsRoute,
   inspectionAssignmentRoute,
   inspectionReportRoute,
   reviewRoute,

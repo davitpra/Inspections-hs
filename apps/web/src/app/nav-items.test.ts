@@ -40,6 +40,7 @@ describe('sectionTitle', () => {
   it('nombra la raíz sin dejar que sea prefijo de todo', () => {
     expect(sectionTitle('/')).toBe('Inspections');
     expect(sectionTitle('/outbox')).toBe('Waiting to be sent');
+    expect(sectionTitle('/historical')).toBe('Historical inspections');
   });
 
   it('nombra las pantallas con id, que son a las que se llega desde otra', () => {
@@ -52,7 +53,6 @@ describe('sectionTitle', () => {
     expect(sectionTitle('/incidents/report')).toBe('Report an incident');
     expect(sectionTitle('/incidents/abc-123')).toBe('Incident');
     expect(sectionTitle('/incidents/abc-123/form7')).toBe('Form 7');
-    expect(sectionTitle('/inspections/past')).toBe('Past inspections');
     expect(sectionTitle('/inspections/abc-123')).toBe('Inspection');
   });
 

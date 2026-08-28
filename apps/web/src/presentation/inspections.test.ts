@@ -6,7 +6,6 @@ import {
   dueIn,
   opensCapture,
   readiness,
-  recentCompleted,
 } from './inspections';
 
 describe('readiness', () => {
@@ -155,15 +154,5 @@ describe('lo completado por este inspector', () => {
       'june',
       'may',
     ]);
-  });
-
-  it('la tarjeta de inicio recorta al límite; la definición de "completado" es la misma', () => {
-    const items = [
-      scheduled({ id: 'may', period_start: '2026-05-01' }),
-      scheduled({ id: 'july', period_start: '2026-07-01' }),
-      scheduled({ id: 'june', period_start: '2026-06-01' }),
-    ];
-
-    expect(recentCompleted(items, 'user-1', 2).map((item) => item.id)).toEqual(['july', 'june']);
   });
 });
