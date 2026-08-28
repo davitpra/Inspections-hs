@@ -55,6 +55,9 @@ const VERSION = '33333333-3333-4333-8333-333333333333';
 const ACCOUNT = '44444444-4444-4444-8444-444444444444';
 const OTHER_ACCOUNT = '55555555-5555-4555-8555-555555555555';
 
+/** El borrador siempre tiene fecha de creación: `openDraft` la escribe al abrirlo. */
+const STARTED_AT = '2026-08-26T14:42:00.000Z';
+
 function renderRoute(): void {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
@@ -83,6 +86,7 @@ describe('elegibilidad de captura', () => {
     missingForField.mockResolvedValue([]);
     storedTemplateVersion.mockResolvedValue({
       site_id: SITE,
+      version: 3,
       template_version_id: VERSION,
       inspector_id: OTHER_ACCOUNT,
     });
@@ -103,6 +107,7 @@ describe('elegibilidad de captura', () => {
     missingForField.mockResolvedValue([]);
     storedTemplateVersion.mockResolvedValue({
       site_id: SITE,
+      version: 3,
       template_version_id: VERSION,
       inspector_id: null,
     });
@@ -117,11 +122,13 @@ describe('elegibilidad de captura', () => {
     expect(openDraft).not.toHaveBeenCalled();
   });
 
-  it('abre el borrador cuando la cuenta es la asignada', async () => {
+  it('abre el borrador cuando la cuenta es la asignada, y nombra la plantilla', async () => {
     useAppSession.mockReturnValue({ account: { userId: ACCOUNT }, ready: true });
     missingForField.mockResolvedValue([]);
     storedTemplateVersion.mockResolvedValue({
       site_id: SITE,
+      version: 3,
+      template_name: 'Monthly workplace inspection',
       template_version_id: VERSION,
       inspector_id: ACCOUNT,
     });
@@ -129,7 +136,12 @@ describe('elegibilidad de captura', () => {
     findDraft.mockResolvedValue(undefined);
     openDraft.mockResolvedValue({ client_submission_id: 'draft-1' });
     loadDraft.mockResolvedValue({
-      draft: { client_submission_id: 'draft-1', status: 'capturing', template_version_id: VERSION },
+      draft: {
+        client_submission_id: 'draft-1',
+        status: 'capturing',
+        template_version_id: VERSION,
+        created_at: STARTED_AT,
+      },
       answers: {},
       photos: [],
       findings: [],
@@ -140,6 +152,12 @@ describe('elegibilidad de captura', () => {
 
     await waitFor(() => expect(openDraft).toHaveBeenCalled());
     expect(screen.queryByText('Not your inspection')).toBeNull();
+
+    // El encabezado dice contra QUÉ formulario se está recorriendo, sin haber pedido nada
+    // por red: el nombre viaja en el paquete descargado.
+    expect(
+      await screen.findByText(/Monthly workplace inspection • Started/),
+    ).toBeTruthy();
   });
 
   /**
@@ -152,6 +170,7 @@ describe('elegibilidad de captura', () => {
     missingForField.mockResolvedValue([]);
     storedTemplateVersion.mockResolvedValue({
       site_id: SITE,
+      version: 3,
       template_version_id: VERSION,
       inspector_id: OTHER_ACCOUNT,
     });
@@ -159,7 +178,12 @@ describe('elegibilidad de captura', () => {
     findDraft.mockResolvedValue({ client_submission_id: 'draft-1' });
     openDraft.mockResolvedValue({ client_submission_id: 'draft-1' });
     loadDraft.mockResolvedValue({
-      draft: { client_submission_id: 'draft-1', status: 'capturing', template_version_id: VERSION },
+      draft: {
+        client_submission_id: 'draft-1',
+        status: 'capturing',
+        template_version_id: VERSION,
+        created_at: STARTED_AT,
+      },
       answers: {},
       photos: [],
       findings: [],
@@ -176,12 +200,17 @@ describe('elegibilidad de captura', () => {
   it('abre el borrador cuando la descarga guardada no tiene inspector_id', async () => {
     useAppSession.mockReturnValue({ account: { userId: ACCOUNT }, ready: true });
     missingForField.mockResolvedValue([]);
-    storedTemplateVersion.mockResolvedValue({ site_id: SITE, template_version_id: VERSION });
+    storedTemplateVersion.mockResolvedValue({ site_id: SITE, version: 3, template_version_id: VERSION });
     storedLocations.mockResolvedValue([]);
     findDraft.mockResolvedValue(undefined);
     openDraft.mockResolvedValue({ client_submission_id: 'draft-1' });
     loadDraft.mockResolvedValue({
-      draft: { client_submission_id: 'draft-1', status: 'capturing', template_version_id: VERSION },
+      draft: {
+        client_submission_id: 'draft-1',
+        status: 'capturing',
+        template_version_id: VERSION,
+        created_at: STARTED_AT,
+      },
       answers: {},
       photos: [],
       findings: [],
@@ -211,6 +240,7 @@ describe('un borrador atado a una versión que el dispositivo ya no tiene', () =
     missingForField.mockResolvedValue([]);
     storedTemplateVersion.mockResolvedValue({
       site_id: SITE,
+      version: 3,
       template_version_id: OTHER_VERSION,
       inspector_id: ACCOUNT,
     });
@@ -218,7 +248,12 @@ describe('un borrador atado a una versión que el dispositivo ya no tiene', () =
     findDraft.mockResolvedValue({ client_submission_id: 'draft-1' });
     openDraft.mockResolvedValue({ client_submission_id: 'draft-1' });
     loadDraft.mockResolvedValue({
-      draft: { client_submission_id: 'draft-1', status, template_version_id: VERSION },
+      draft: {
+        client_submission_id: 'draft-1',
+        status,
+        template_version_id: VERSION,
+        created_at: STARTED_AT,
+      },
       answers: {},
       photos: [],
       findings: [],
@@ -283,6 +318,7 @@ describe('la vista previa de una asignación', () => {
     search = { preview: '1' };
     storedTemplateVersion.mockResolvedValue({
       site_id: SITE,
+      version: 3,
       template_version_id: VERSION,
       document: DOCUMENT,
     });
@@ -291,6 +327,7 @@ describe('la vista previa de una asignación', () => {
 
     expect(await screen.findByText('Are floors clear of obstructions?')).toBeTruthy();
     expect(screen.getByText('Work areas and housekeeping')).toBeTruthy();
+    expect(screen.queryByText('0 answered')).toBeNull();
 
     expect(openDraft).not.toHaveBeenCalled();
     expect(loadDraft).not.toHaveBeenCalled();
@@ -372,6 +409,7 @@ describe('la acción correctiva prescrita', () => {
     missingForField.mockResolvedValue([]);
     storedTemplateVersion.mockResolvedValue({
       site_id: SITE,
+      version: 3,
       template_version_id: VERSION,
       inspector_id: ACCOUNT,
     });
@@ -379,7 +417,12 @@ describe('la acción correctiva prescrita', () => {
     findDraft.mockResolvedValue({ client_submission_id: 'draft-1' });
     openDraft.mockResolvedValue({ client_submission_id: 'draft-1' });
     loadDraft.mockResolvedValue({
-      draft: { client_submission_id: 'draft-1', status: 'capturing', template_version_id: VERSION },
+      draft: {
+        client_submission_id: 'draft-1',
+        status: 'capturing',
+        template_version_id: VERSION,
+        created_at: STARTED_AT,
+      },
       answers: { guard_in_place: false, floors_clear: false },
       photos: [],
       findings: [
@@ -396,6 +439,7 @@ describe('la acción correctiva prescrita', () => {
     openWithNegativeAnswers();
 
     expect(await screen.findByText(PRESCRIBED)).toBeTruthy();
+    expect(screen.getByText('2 answered')).toBeTruthy();
     expect(screen.getAllByText('Corrective action')).toHaveLength(1);
 
     // Lo prescrito no es lo observado: el campo sigue esperando lo que el inspector vio.

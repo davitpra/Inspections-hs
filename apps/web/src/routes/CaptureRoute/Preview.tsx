@@ -4,6 +4,7 @@ import { Link } from '@tanstack/react-router';
 
 import { getTemplateVersionPackage } from '../../api/inspections';
 import { queryKeys } from '../../api/query-keys';
+import { TemplateSectionCard } from '../../components/TemplateSectionCard';
 import { storedTemplateVersion } from '../../offline/prefetch';
 import { ItemRow } from './ItemRow';
 
@@ -83,14 +84,18 @@ export function Preview({ id }: { id: string }): React.JSX.Element {
         describiendo un recorrido más corto que el real — justo la mentira equivocada para
         alguien que está decidiendo si le entra hoy.
       */}
-      {sectionsInDocumentOrder(document).map(([section, items]) => (
-        <section key={section.section_key}>
-          <h2>{section.section_title}</h2>
-
-          {items.map((item) => (
+      {/*
+        La MISMA tarjeta que la captura, y sin el chip de contadas: acá no hay respuestas
+        que contar. Que las dos pantallas se dibujen igual es el punto de la vista previa —
+        lo que se mira ahora es exactamente lo que se va a recorrer después.
+      */}
+      {sectionsInDocumentOrder(document).map(([section, items], sectionIndex) => (
+        <TemplateSectionCard key={section.section_key} section={section} index={sectionIndex}>
+          {items.map((item, itemIndex) => (
             <ItemRow
               key={item.item_key}
               item={item}
+              index={itemIndex}
               value={undefined}
               invalid={false}
               negative={false}
@@ -105,7 +110,7 @@ export function Preview({ id }: { id: string }): React.JSX.Element {
               onDiscardPhoto={() => {}}
             />
           ))}
-        </section>
+        </TemplateSectionCard>
       ))}
 
       <p>

@@ -4,6 +4,7 @@ import {
 } from '@hs/contracts';
 
 import type { FindingDraftRow, PhotoRow } from '../offline/db';
+import { AlertCircleIcon } from './icons';
 import { PhotoField } from './PhotoField';
 
 /**
@@ -51,7 +52,15 @@ export function FindingFields({
 
   return (
     <div className="finding">
-      <p className="finding__title">This needs a finding</p>
+      {/*
+        Ámbar y con ícono: no es un error del inspector —contestar que no es una respuesta
+        válida— sino trabajo que se abrió y que hay que completar antes de firmar. Rojo lo
+        leería como algo que hizo mal.
+      */}
+      <p className="finding__title">
+        <AlertCircleIcon size={16} />
+        This needs a finding
+      </p>
 
       {/*
         Lo que la plantilla ya decidió para esta pregunta, tal como se congeló al
@@ -72,16 +81,17 @@ export function FindingFields({
         </div>
       ) : null}
 
-      <label htmlFor={`finding-description-${itemKey}`}>What is wrong?</label>
       {/*
-        El mínimo se DICE mientras se escribe, no al firmar. Es el mismo del contrato y
-        el mismo `CHECK` de la migración: descubrirlo en la pantalla de revisión obliga
-        al inspector a volver a un ítem que puede estar a media planta de distancia.
+        El asterisco va FUERA del `<label>`, y no es un detalle de maquetado: el nombre
+        accesible de un campo es el texto entero de su etiqueta, y metido adentro el campo
+        pasaría a llamarse «What is wrong? *». Se dibuja al lado, `aria-hidden`, porque lo
+        que hace obligatorio al campo ya se comprueba antes de firmar.
       */}
-      <p className="finding__hint" id={`finding-description-hint-${itemKey}`}>
-        At least {FINDING_DESCRIPTION_MIN} characters — whoever reads this months from
-        now was not there.
-      </p>
+      <div className="finding__label">
+        <label htmlFor={`finding-description-${itemKey}`}>What is wrong?</label>
+        <span className="required-mark" aria-hidden="true">*</span>
+      </div>
+
       <textarea
         id={`finding-description-${itemKey}`}
         aria-describedby={`finding-description-hint-${itemKey}`}
@@ -94,6 +104,19 @@ export function FindingFields({
         // debounce es una ventana en la que Android puede matar el proceso.
         onChange={(event) => onChange({ description: event.target.value })}
       />
+
+      {/*
+        El mínimo se DICE mientras se escribe, no al firmar. Es el mismo del contrato y el
+        mismo `CHECK` de la migración: descubrirlo en la pantalla de revisión obliga al
+        inspector a volver a un ítem que puede estar a media planta de distancia.
+
+        Debajo del campo y no arriba: es la medida de lo que se está escribiendo, y arriba
+        se lee como una condición para empezar en vez de como el largo que falta.
+      */}
+      <p className="finding__hint" id={`finding-description-hint-${itemKey}`}>
+        At least {FINDING_DESCRIPTION_MIN} characters — whoever reads this months from
+        now was not there.
+      </p>
 
       {/*
         La foto es obligatoria, y por eso `maxCount` es alto y no hay estado en el que el

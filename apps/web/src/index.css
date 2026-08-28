@@ -194,6 +194,23 @@ button,
   box-sizing: border-box;
 }
 
+/* La marca va DENTRO del botón elegido, junto a la etiqueta. El relleno solo no alcanza:
+   es color, y con guantes o con sol encima de la pantalla la forma es lo que queda legible
+   (WCAG 1.4.1 — el color no puede ser el único portador). */
+.choices__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  /*
+   * Piso más alto que los 48px de cualquier botón: acá el ancho lo fija la etiqueta, y
+   * etiquetas cortas ("1", "Yes", "N/A") dan botones angostísimos que se apuntan mal con
+   * guantes y quedan de tamaños distintos en la misma fila. 6rem los empareja y deja lugar
+   * a la marca del elegido sin que el botón cambie de ancho al seleccionarlo.
+   */
+  min-width: 6rem;
+}
+
 .choices__button.is-selected {
   background: var(--brand);
   border-color: var(--brand);
@@ -1498,21 +1515,117 @@ select:disabled {
   font-weight: var(--weight-strong);
 }
 
-.item {
-  padding: var(--space-4) 0;
-  border-bottom: 1px solid var(--line);
+/* ---------------------------------------------------------------------------
+   La captura — fila de pregunta.
+
+   La tarjeta de sección es la misma de la lectura publicada y sus estilos viven con
+   `.published-template__section`. Acá queda solo lo propio de la pregunta interactiva.
+   --------------------------------------------------------------------------- */
+
+/* Cada pregunta, su propia ficha. `relative` ancla el «⋮» (ver `.row-menu`), y el borde es
+   lo que separa una pregunta de la siguiente cuando la de arriba abrió un hallazgo entero
+   —descripción, foto, prescripción— y una línea divisoria ya no alcanza para saber dónde
+   termina. */
+.capture__item {
+  position: relative;
+  padding: var(--space-4);
+  /* El hueco del «⋮», para que el enunciado no le pase por debajo. */
+  padding-right: var(--space-12);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
 }
 
-.item label {
+.capture__item + .capture__item {
+  margin-top: var(--space-3);
+}
+
+.capture__item-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-3);
+}
+
+/* Cuadrado tenue y no el círculo `--brand` de la sección: en una recorrida de cuarenta
+   preguntas, cuarenta círculos verdes compiten con las dos o tres secciones que sí ordenan
+   la pantalla. El número acá es referencia para nombrar la pregunta en voz alta, no
+   jerarquía. */
+.capture__item-number {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--radius);
+  background: var(--tint-bg);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
+}
+
+.capture__item label {
   display: block;
   font-weight: var(--weight-strong);
-  margin-bottom: var(--space-2);
 }
 
-.item fieldset {
+.capture__item fieldset {
   border: 0;
   margin: 0;
   padding: 0;
+}
+
+/* La respuesta contra el borde derecho de la ficha. El enunciado se lee de izquierda a
+   derecha y termina ahí; con cuarenta preguntas seguidas, las opciones alineadas en una
+   misma columna a la derecha dan un blanco fijo para el pulgar en vez de uno que se corre
+   según cuántas opciones tenga cada pregunta. `> ` a propósito: es la respuesta del ítem,
+   no las opciones que pueda dibujar el bloque de hallazgo. */
+.capture__item fieldset > .choices {
+  justify-content: flex-end;
+}
+
+/* Lo obligatorio. Es `aria-hidden` en todos los usos: lo que hace obligatorio a un campo se
+   comprueba antes de firmar, y esto solo lo anticipa a la vista. */
+.required-mark {
+  color: var(--state-danger);
+}
+
+/* El paso siguiente al pie de la recorrida: relleno, ancho entero y con los 48px de toque
+   de ADR-010. En el flujo y no fijo al pie — una barra flotante en un teléfono tapa el
+   último control de la última pregunta, que es donde el inspector está escribiendo. */
+.capture__review {
+  min-height: 48px;
+  width: 100%;
+  padding: var(--space-2) var(--space-5);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  background: var(--brand);
+  border: 1px solid var(--brand);
+  border-radius: var(--radius);
+  color: var(--paper);
+  font-weight: var(--weight-strong);
+  text-decoration: none;
+}
+
+/* El encabezado de la pantalla usa el bloque genérico `.scheduling__*`; solo separa. */
+.capture__header {
+  margin: 0 0 var(--space-6);
+}
+
+@media (max-width: 30rem) {
+  /* En un teléfono el «⋮» de cada pregunta ya no cabe al lado del enunciado sin partirlo en
+     palabras sueltas: el menú se queda donde está y el enunciado recupera el ancho, pasando
+     por debajo de él. Con dos renglones de enunciado el menú queda arriba a la derecha, que
+     es donde se lo busca. */
+  .capture__item {
+    padding-right: var(--space-4);
+  }
+
+  .capture__item-head {
+    padding-right: var(--space-10);
+  }
 }
 
 /*
@@ -1522,6 +1635,48 @@ select:disabled {
  * había tomado. La barra de la izquierda es lo que dice, sin leerlo, que este texto vino
  * escrito de antes y no lo escribió el inspector.
  */
+/* El bloque de hallazgo: lo que se abre cuando la respuesta es negativa. Se separa de la
+   respuesta con un filete y no con una tarjeta más — está DENTRO de la pregunta, y otra caja
+   adentro de la ficha haría parecer que es un ítem aparte. */
+.finding {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--line);
+}
+
+/* Ámbar, que es lo que en esta aplicación significa «falta algo» (`--warn-*`), y no rojo:
+   contestar que no es una respuesta válida, no un error del inspector. */
+.finding__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+  color: var(--warn-ink);
+  font-weight: var(--weight-strong);
+}
+
+.finding__title svg {
+  flex: none;
+}
+
+/* El asterisco al lado de la etiqueta, no adentro (ver el comentario de `FindingFields`). */
+.finding__label {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  margin: 0 0 var(--space-2);
+}
+
+.finding__label label {
+  font-weight: var(--weight-strong);
+}
+
+.finding__hint {
+  margin: var(--space-1) 0 var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
 .finding__prescription {
   background: var(--tint-bg);
   border-left: var(--space-0-5) solid var(--brand);
@@ -1588,6 +1743,41 @@ select:disabled {
 .photos__state--pending,
 .photos__state--failed {
   color: var(--warn-ink);
+}
+
+/* Añadir una foto. Borde punteado, que es lo que en toda la aplicación significa «acá falta
+   algo que vos ponés» —la misma receta que las tarjetas vacías— y no un botón macizo más:
+   en un hallazgo la foto está pendiente hasta que se saca, y el control tiene que leerse
+   como el hueco que es. Ancho auto y no `100%`: al lado de una foto ya sacada. */
+.photos__add {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  text-align: start;
+  border: 1px dashed var(--line-control);
+  background: var(--paper);
+  color: var(--muted);
+}
+
+.photos__add svg {
+  flex: none;
+  color: var(--brand);
+}
+
+.photos__add-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+}
+
+.photos__add-title {
+  color: var(--ink);
+  font-weight: var(--weight-strong);
+}
+
+.photos__add-hint {
+  font-size: var(--text-sm);
 }
 
 .onboarding {

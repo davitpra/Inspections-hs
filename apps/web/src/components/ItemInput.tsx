@@ -1,17 +1,8 @@
-import { YES_NO_NA_VALUES, type TemplateItem } from '@hs/forms';
+import { YES_NO_NA_VALUES, type TemplateItem } from "@hs/forms";
 
-import type { PhotoRow } from '../offline/db';
-import { PhotoField } from './PhotoField';
-
-/**
- * Los nueve tipos de ítem, renderizados contra el documento CONGELADO.
- *
- * La configuración —el rango de la escala, el largo del texto, las opciones, cuántas
- * fotos— sale del documento y no de este archivo. El cliente no tiene una segunda
- * opinión sobre qué es válido: `validateAnswers` de `@hs/forms` es la misma función que
- * el servidor corre al recibir el envío (ADR-007), y por eso acá no hay una sola regla
- * de validación escrita a mano.
- */
+import type { PhotoRow } from "../offline/db";
+import { CheckCircleIcon } from "./icons";
+import { PhotoField } from "./PhotoField";
 
 export interface ItemInputProps {
   item: TemplateItem;
@@ -28,33 +19,33 @@ export function ItemInput(props: ItemInputProps): React.JSX.Element {
   const inputId = `item-${item.item_key}`;
 
   switch (item.response_type) {
-    case 'yes_no':
+    case "yes_no":
       return (
         <ChoiceButtons
           id={inputId}
           options={[
-            { value: true, label: 'Yes' },
-            { value: false, label: 'No' },
+            { value: true, label: "Yes" },
+            { value: false, label: "No" },
           ]}
           selected={value}
           onSelect={onChange}
         />
       );
 
-    case 'yes_no_na':
+    case "yes_no_na":
       return (
         <ChoiceButtons
           id={inputId}
           options={YES_NO_NA_VALUES.map((option) => ({
             value: option,
-            label: option === 'na' ? 'N/A' : option === 'yes' ? 'Yes' : 'No',
+            label: option === "na" ? "N/A" : option === "yes" ? "Yes" : "No",
           }))}
           selected={value}
           onSelect={onChange}
         />
       );
 
-    case 'scale':
+    case "scale":
       return (
         <ChoiceButtons
           id={inputId}
@@ -67,11 +58,11 @@ export function ItemInput(props: ItemInputProps): React.JSX.Element {
         />
       );
 
-    case 'text':
+    case "text":
       return (
         <textarea
           id={inputId}
-          value={typeof value === 'string' ? value : ''}
+          value={typeof value === "string" ? value : ""}
           maxLength={item.max_length}
           rows={3}
           aria-invalid={props.invalid}
@@ -79,7 +70,7 @@ export function ItemInput(props: ItemInputProps): React.JSX.Element {
         />
       );
 
-    case 'number':
+    case "number":
       return (
         <input
           id={inputId}
@@ -88,25 +79,30 @@ export function ItemInput(props: ItemInputProps): React.JSX.Element {
           min={item.min}
           max={item.max}
           step={item.decimals === 0 ? 1 : 10 ** -item.decimals}
-          value={typeof value === 'number' ? value : ''}
+          value={typeof value === "number" ? value : ""}
           aria-invalid={props.invalid}
           onChange={(event) =>
-            onChange(event.target.value === '' ? null : Number(event.target.value))
+            onChange(
+              event.target.value === "" ? null : Number(event.target.value),
+            )
           }
         />
       );
 
-    case 'single_choice':
+    case "single_choice":
       return (
         <ChoiceButtons
           id={inputId}
-          options={item.options.map((option) => ({ value: option.value, label: option.label }))}
+          options={item.options.map((option) => ({
+            value: option.value,
+            label: option.label,
+          }))}
           selected={value}
           onSelect={onChange}
         />
       );
 
-    case 'multi_choice': {
+    case "multi_choice": {
       const selected = Array.isArray(value) ? (value as string[]) : [];
 
       return (
@@ -131,7 +127,7 @@ export function ItemInput(props: ItemInputProps): React.JSX.Element {
       );
     }
 
-    case 'photo':
+    case "photo":
       return (
         <PhotoField
           id={inputId}
@@ -142,7 +138,7 @@ export function ItemInput(props: ItemInputProps): React.JSX.Element {
         />
       );
 
-    case 'signature':
+    case "signature":
       /**
        * La firma viaja como object key, igual que las fotos (ADR-001): se sube antes
        * del envío y el envío la referencia. El trazo se captura como imagen y entra por
@@ -183,14 +179,27 @@ function ChoiceButtons({
         <button
           key={String(option.value)}
           type="button"
-          className={option.value === selected ? 'choices__button is-selected' : 'choices__button'}
+          className={
+            option.value === selected
+              ? "choices__button is-selected"
+              : "choices__button"
+          }
           aria-pressed={option.value === selected}
           // Deseleccionar tocando de nuevo: sin esto, un `yes_no` contestado por error
           // no se puede dejar sin contestar, y "sin contestar" es un estado que el motor
           // distingue de cualquier respuesta.
-          onClick={() => onSelect(option.value === selected ? null : option.value)}
+          onClick={() =>
+            onSelect(option.value === selected ? null : option.value)
+          }
         >
           {option.label}
+          {/*
+            La marca dentro del botón elegido. El relleno ya distingue el elegido del resto,
+            pero el relleno es color y nada más: con guantes, con sol encima de la pantalla o
+            con una escala de cinco pasos, la forma es lo que queda legible. Es el mismo
+            criterio con el que la matriz de cumplimiento dibuja una forma por estado.
+          */}
+          {option.value === selected ? <CheckCircleIcon size={16} /> : null}
         </button>
       ))}
     </div>

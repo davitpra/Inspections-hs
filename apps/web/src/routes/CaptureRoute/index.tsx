@@ -1,5 +1,6 @@
 import {
   countAnswered,
+  countAnsweredBySection,
   evaluateVisibility,
   negativeAnswers,
   sectionsInDocumentOrder,
@@ -12,6 +13,7 @@ import { Link, useParams, useSearch } from '@tanstack/react-router';
 import { queryKeys } from '../../api/query-keys';
 import { useAppSession } from '../../app/session-context';
 import { DownloadForField, readableKind } from '../../components/FieldPackage';
+import { TemplateSectionCard } from '../../components/TemplateSectionCard';
 import { UnsyncedIndicator } from '../../components/UnsyncedIndicator';
 import {
   captureEligibility,
@@ -30,6 +32,12 @@ import { capturePhoto, discardPhoto } from '../../offline/photos';
 import { missingForField, storedTemplateVersion } from '../../offline/prefetch';
 import { ItemRow } from './ItemRow';
 import { Preview } from './Preview';
+import {
+  answeredLabel,
+  captureSubtitle,
+  draftStatusLabel,
+  draftStatusPill,
+} from './presentation';
 
 /**
  * La captura. Todo lo que pasa acá pasa sin red.
@@ -279,12 +287,39 @@ function Walkthrough({ id }: { id: string }): React.JSX.Element {
   const validation = validateAnswers(document.data, answers);
   const violations = validation.ok ? [] : validation.violations;
 
+  /**
+   * El chip «N answered» de cada cabecera. Lo cuenta el motor y no esta pantalla: la regla
+   * de qué ítem se ve y cuál cuenta es la misma que decide si la inspección está completa,
+   * y escribirla otra vez acá sería un número que puede discrepar del que habilita firmar.
+   */
+  const answeredBySection = new Map(
+    countAnsweredBySection(document.data, answers).map((entry) => [
+      entry.section_key,
+      entry.answered,
+    ]),
+  );
+
   return (
     <>
       {/* Presente en TODA pantalla de captura, con o sin red (ADR-010). */}
       <UnsyncedIndicator accountId={account?.userId ?? null} />
 
-      <h1>Walkthrough</h1>
+      {/*
+        El encabezado nombra CONTRA QUÉ se está capturando: la plantilla, que es lo que el
+        inspector reconoce. La versión sigue importando —es lo que el envío lleva adentro—
+        pero se nombra donde hace falta leerla, en «Started against a different version».
+      */}
+      <div className="scheduling__header capture__header">
+        <div className="scheduling__title">
+          <h1>Walkthrough</h1>
+          <span className={draftStatusPill(row.status)}>{draftStatusLabel(row.status)}</span>
+        </div>
+        {stored.data ? (
+          <p className="scheduling__subtitle">
+            {captureSubtitle(stored.data.template_name, row.created_at)}
+          </p>
+        ) : null}
+      </div>
 
       {readOnly ? (
         <p className="notice">
@@ -292,18 +327,26 @@ function Walkthrough({ id }: { id: string }): React.JSX.Element {
         </p>
       ) : null}
 
-      {sectionsInDocumentOrder(document.data).map(([section, items]) => {
+      {sectionsInDocumentOrder(document.data).map(([section, items], sectionIndex) => {
         const visibleItems = items.filter((item) => visibility[item.item_key]);
         if (visibleItems.length === 0) return null;
 
         return (
-          <section key={section.section_key}>
-            <h2>{section.section_title}</h2>
-
-            {visibleItems.map((item) => (
+          <TemplateSectionCard
+            key={section.section_key}
+            section={section}
+            index={sectionIndex}
+            headerAccessory={
+              <span className="status-pill status-pill--draft">
+                {answeredLabel(answeredBySection.get(section.section_key) ?? 0)}
+              </span>
+            }
+          >
+            {visibleItems.map((item, itemIndex) => (
               <ItemRow
                 key={item.item_key}
                 item={item}
+                index={itemIndex}
                 value={answers[item.item_key]}
                 invalid={violations.some((violation) => violation.item_key === item.item_key)}
                 negative={negative.has(item.item_key)}
@@ -326,21 +369,21 @@ function Walkthrough({ id }: { id: string }): React.JSX.Element {
                 onDiscardPhoto={(photoId) => removePhoto.mutate(photoId)}
               />
             ))}
-          </section>
+          </TemplateSectionCard>
         );
       })}
 
       {/*
-        El paso siguiente del recorrido, y la única acción al pie: va con el chrome de
-        `list__action--block` —ancho entero, 48px de toque (ADR-010)— para que se toque
-        igual que "Resume" o "Start inspection" en la lista y no como texto corrido.
+        El paso siguiente del recorrido, y la única acción al pie: relleno y de ancho
+        entero, con los 48px de toque de ADR-010. Va RELLENO y no como el enlace de la
+        lista porque acá no compite con nada — es lo único que se hace cuando se terminó de
+        contestar, y el número que lleva adentro es lo que dice si ya se terminó.
+
+        En el flujo, no fijo al pie: una barra flotante en un teléfono se come el último
+        control de la última pregunta, que es justo donde el inspector está escribiendo.
       */}
       <p>
-        <Link
-          className="list__action list__action--block"
-          to="/inspections/$id/review"
-          params={{ id }}
-        >
+        <Link className="capture__review" to="/inspections/$id/review" params={{ id }}>
           Review and sign ({countAnswered(document.data, answers)} answered)
         </Link>
       </p>
