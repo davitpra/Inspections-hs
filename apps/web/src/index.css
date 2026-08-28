@@ -4831,9 +4831,13 @@ button.schedule-cell:focus-visible {
 
 /* La sección ------------------------------------------------------------- */
 
-/* `relative` para el `.row-menu` de la sección (ver `.row-menu`). */
+/* `relative` para el `.row-menu` de la sección (ver `.row-menu`). Radio de TARJETA, no de
+   control: `.card` hereda `--radius` y acá el hijo (`.item-editor`, cada pregunta) ya usa
+   `--radius-lg`, así que sin este override la tarjeta que contiene queda menos redondeada
+   que lo que contiene. */
 .builder__section {
   position: relative;
+  border-radius: var(--radius-lg);
 }
 
 .builder__section--stranded {
@@ -4866,7 +4870,13 @@ button.schedule-cell:focus-visible {
   gap: var(--space-2);
   /* El hueco que el encabezado le reserva al menú «⋮» (ver `.row-menu`). */
   padding-right: var(--space-12);
+  padding-bottom: var(--space-3);
   margin: 0 0 var(--space-3);
+  /* Separa el encabezado del contenido de abajo —ubicación, preguntas— con el mismo
+     filete que ya usa `.builder__add` antes de "Add question": una tarjeta que agrupa
+     tres bloques distintos (encabezado, configuración, preguntas) los lee mejor con el
+     mismo lenguaje de divisor en los dos cortes que con uno solo. */
+  border-bottom: 1px solid var(--line);
 }
 
 /* El «⋮» de la sección se centra con la fila del encabezado, no con el borde de arriba:
@@ -5074,6 +5084,8 @@ button.schedule-cell:focus-visible {
 
 .builder__questions-label {
   margin: 0 0 var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
   font-weight: var(--weight-strong);
 }
 
@@ -5167,6 +5179,7 @@ button.schedule-cell:focus-visible {
   gap: var(--space-2);
   min-height: 48px;
   white-space: nowrap;
+  margin-right: auto;
 }
 
 /* Cuadrado y sin texto: el engranaje es el nombre de la acción, y el `title` lo dice con
