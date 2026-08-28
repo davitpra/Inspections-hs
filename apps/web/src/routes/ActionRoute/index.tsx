@@ -99,7 +99,7 @@ export function ActionRoute(): React.JSX.Element {
           <StateBadge state={current.state} />
         </div>
         <p className="action-detail__meta">
-          Due {formatDay(current.due_at)} — severity {current.severity}
+          Due {formatDay(current.due_at)}
           {current.overdue && current.state !== "closed" ? (
             <span className="badge badge--overdue">Overdue</span>
           ) : null}

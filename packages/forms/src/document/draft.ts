@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { referencedItemKeys, visibleWhenSchema } from './conditions.js';
-import { findingSchema, type FindingPrescription } from './controls.js';
+import { findingSchema, type FindingPrescription } from './finding.js';
 import { ITEM_KEY_PATTERN, SECTION_KEY_PATTERN } from './keys.js';
 import {
   templateDocumentSchema,

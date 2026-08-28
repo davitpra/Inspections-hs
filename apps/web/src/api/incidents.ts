@@ -96,7 +96,7 @@ export async function createInvestigationAction(
   body: {
     assignee_person_id: string;
     description: string;
-    severity: string;
+    due_at: string;
     remediation_group_id?: string;
   },
 ): Promise<unknown> {

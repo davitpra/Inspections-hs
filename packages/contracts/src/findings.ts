@@ -1,25 +1,23 @@
-import { controlLevelSchema, ITEM_KEY_PATTERN } from '@hs/forms';
+import { ITEM_KEY_PATTERN } from '@hs/forms';
 import { z } from 'zod';
 
-export {
-  CONTROL_LEVELS,
-  controlLevelSchema,
-  type ControlLevel,
-} from '@hs/forms';
-
 /**
- * Requisitos §7 etapa 4 — El hallazgo y su clasificación de riesgo.
+ * Requisitos §7 etapa 4 — El hallazgo.
  *
  * Un hallazgo nace de una respuesta negativa durante la ingesta, o de la entrada
  * manual de un supervisor (§5 riesgo F). En los dos casos lleva descripción,
  * ubicación del catálogo cerrado y al menos una foto: es el R2 de §3, y sin los
  * tres el hallazgo no sirve para abrir una acción correctiva.
  *
+ * **El hallazgo no se clasifica.** La matriz de probabilidad × severidad y el
+ * nivel de la jerarquía de controles se retiraron antes de producción; ver
+ * ADR-014. De un hallazgo sale una acción correctiva con la fecha límite que el
+ * coordinador declara, sin ningún paso intermedio.
+ *
  * Lo que estos esquemas NO pueden validar es todo lo que depende del estado: que
- * la ubicación exista y sea del sitio, que el hallazgo exista, que quien
- * clasifica sea el coordinador, que la clasificación que se supera sea la
- * vigente. Eso son FKs, políticas RLS y triggers en
- * `apps/api/drizzle/0010_findings.sql`. Zod valida la forma.
+ * la ubicación exista y sea del sitio, que el hallazgo exista. Eso son FKs,
+ * políticas RLS y triggers en `apps/api/drizzle/0010_findings.sql`. Zod valida la
+ * forma.
  */
 
 const itemKeySchema = z
@@ -28,35 +26,6 @@ const itemKeySchema = z
 
 /** La misma forma que en `submissions.ts`: una key del bucket, nunca bytes (ADR-001). */
 const objectKeySchema = z.string().min(1).max(512);
-
-// ---------------------------------------------------------------------------
-// Las escalas de la matriz
-
-/**
- * Las cuatro listas cerradas de la clasificación.
- *
- * **Las mismas cuatro están escritas como `CHECK` en la migración 0010**, y un
- * test de integración las compara. SQL no puede importar TypeScript; la
- * duplicación es deliberada y está bajo prueba, igual que la de `RESPONSE_TYPES`
- * en 0007.
- *
- * El orden es significativo: es el índice 1..5 con el que la matriz de
- * `hs_risk_level` y de `apps/api/src/findings/risk.ts` calculan el nivel.
- */
-export const PROBABILITIES = ['rare', 'unlikely', 'possible', 'likely', 'almost_certain'] as const;
-
-export const SEVERITIES = ['negligible', 'minor', 'moderate', 'major', 'catastrophic'] as const;
-
-/** Derivado de los dos anteriores. **Nunca viaja en un request** (design D5). */
-export const RISK_LEVELS = ['low', 'medium', 'high', 'critical'] as const;
-
-export const probabilitySchema = z.enum(PROBABILITIES);
-export const severitySchema = z.enum(SEVERITIES);
-export const riskLevelSchema = z.enum(RISK_LEVELS);
-
-export type Probability = z.infer<typeof probabilitySchema>;
-export type Severity = z.infer<typeof severitySchema>;
-export type RiskLevel = z.infer<typeof riskLevelSchema>;
 
 /** De dónde nació el hallazgo. Determina si tiene `item_key` o no. */
 export const FINDING_ORIGINS = ['inspection', 'manual'] as const;
@@ -106,45 +75,6 @@ export const submissionFindingsSchema = z.record(itemKeySchema, findingDetailsSc
 export type SubmissionFindings = z.infer<typeof submissionFindingsSchema>;
 
 // ---------------------------------------------------------------------------
-// Clasificar
-
-/**
- * Lo que el coordinador aporta al clasificar.
- *
- * **`risk_level` no está y esa ausencia es el requisito**: lo calcula el motor a
- * partir de los otros dos y no hay forma de escribirlo desde afuera (D5).
- *
- * `reason` es obligatorio al reclasificar y está prohibido al clasificar por
- * primera vez. Acá viaja opcional porque el request no sabe cuál de las dos
- * cosas es —lo sabe el servidor, que ya leyó la vigente— y el `CHECK` de la
- * migración es la barrera final.
- */
-export const riskAssessmentRequestSchema = z.strictObject({
-  probability: probabilitySchema,
-  severity: severitySchema,
-  control_level: controlLevelSchema,
-  reason: z.string().trim().min(10).max(2000).optional(),
-});
-
-export type RiskAssessmentRequest = z.infer<typeof riskAssessmentRequestSchema>;
-
-/** Una clasificación, tal como se lee. */
-export const riskAssessmentSchema = z.strictObject({
-  id: z.uuid(),
-  probability: probabilitySchema,
-  severity: severitySchema,
-  /** Calculado por el motor. Se lee, no se escribe. */
-  risk_level: riskLevelSchema,
-  control_level: controlLevelSchema,
-  reason: z.string().nullable(),
-  supersedes_id: z.uuid().nullable(),
-  assessed_by: z.uuid(),
-  assessed_at: z.iso.datetime({ offset: true }),
-});
-
-export type RiskAssessment = z.infer<typeof riskAssessmentSchema>;
-
-// ---------------------------------------------------------------------------
 // La entrada manual
 
 /**
@@ -155,9 +85,9 @@ export type RiskAssessment = z.infer<typeof riskAssessmentSchema>;
  * igual que `client_submission_id`: es lo que le da a las fotos un prefijo propio
  * en el bucket cuando no hay inspección programada de la que colgar.
  *
- * Nace clasificado. Un hallazgo derivado puede esperar al coordinador porque el
- * inspector no clasifica; acá quien reporta ya está en la aplicación y con la
- * lista delante.
+ * Lleva exactamente lo mismo que uno derivado, porque es lo mismo: un peligro
+ * descrito, ubicado y fotografiado. El objeto es estricto, así que un
+ * `classification` de un cliente viejo se rechaza en vez de ignorarse.
  */
 export const manualFindingRequestSchema = z.strictObject({
   site_id: z.uuid(),
@@ -165,7 +95,6 @@ export const manualFindingRequestSchema = z.strictObject({
   details: findingDetailsSchema,
   /** Cuándo se vio, que no es cuándo se cargó. Mismo criterio que `signed_at`. */
   occurred_at: z.iso.datetime({ offset: true }),
-  classification: riskAssessmentRequestSchema.omit({ reason: true }),
 });
 
 export type ManualFindingRequest = z.infer<typeof manualFindingRequestSchema>;
@@ -184,7 +113,7 @@ export type ManualFindingRequest = z.infer<typeof manualFindingRequestSchema>;
  * serie de la vista diga 6 es correcto y está previsto.
  *
  * **`is_recurrent` no viaja en ningún request**: es una columna generada por el
- * motor a partir de `prior_count`, igual que `risk_level` (D5).
+ * motor a partir de `prior_count`, y se lee, no se escribe (D5).
  *
  * LA DISTINCIÓN QUE ESTE ESQUEMA EXISTE PARA SOSTENER, y que se pierde si alguien
  * decide "simplificar" el nulable:
@@ -222,9 +151,9 @@ export type FindingRecurrence = z.infer<typeof findingRecurrenceSchema>;
 /**
  * Un hallazgo tal como lo devuelve la API.
  *
- * `assessment` en `null` significa **sin clasificar**, que es un estado derivado
- * de que no exista ninguna fila y no un valor guardado en ningún lado (D10). No
- * hay campo `status` y esa ausencia es deliberada.
+ * No hay campo `status` y esa ausencia es deliberada: un hallazgo no tiene
+ * estado propio. Lo que se hizo con él son sus acciones correctivas, que se leen
+ * por su cuenta.
  *
  * Los tres campos de la identidad dual son nulables juntos: los tres tienen
  * valor en un hallazgo derivado y los tres son `null` en uno manual. El `CHECK`
@@ -243,7 +172,6 @@ export const findingSchema = z.strictObject({
   reported_by: z.uuid(),
   occurred_at: z.iso.datetime({ offset: true }),
   recorded_at: z.iso.datetime({ offset: true }),
-  assessment: riskAssessmentSchema.nullable(),
 
   /**
    * `null` en un hallazgo manual —y en uno anterior a la migración 0013, que no

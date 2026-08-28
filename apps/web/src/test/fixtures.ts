@@ -73,18 +73,6 @@ export const TEST_DOCUMENT: TemplateDocument = {
           visible_when: { item_key: 'guarding.installed', operator: 'equals', value: false },
         },
         {
-          item_key: 'guarding.severity',
-          prompt: 'Severity',
-          position: 7,
-          required: false,
-          response_type: 'single_choice',
-          options: [
-            { value: 'low', label: 'Low' },
-            { value: 'high', label: 'High' },
-          ],
-          visible_when: { item_key: 'guarding.installed', operator: 'equals', value: false },
-        },
-        {
           item_key: 'guarding.hazards',
           prompt: 'Hazards observed',
           position: 8,

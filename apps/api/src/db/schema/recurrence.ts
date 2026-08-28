@@ -77,7 +77,7 @@ export const findingRecurrence = pgTable(
     computedAt: timestamp('computed_at', { withTimezone: true }).notNull().defaultNow(),
 
     // Generada por el motor. Nunca se escribe desde acá — el mismo criterio que
-    // `finding_risk_assessment.risk_level` y `scheduled_inspection.period_end`.
+    // `scheduled_inspection.period_end` y otras columnas generadas por el motor.
     isRecurrent: boolean('is_recurrent')
       .notNull()
       .generatedAlwaysAs(sql`prior_count > 0`),

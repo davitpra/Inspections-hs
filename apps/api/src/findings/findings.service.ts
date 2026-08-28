@@ -2,19 +2,12 @@ import { Injectable } from '@nestjs/common';
 import type {
   Finding,
   ManualFindingRequest,
-  RiskAssessment,
-  RiskAssessmentRequest,
 } from '@hs/contracts';
-import type { DatabaseError, PoolClient } from 'pg';
+import type { PoolClient } from 'pg';
 
 import { DbService } from '../db/db.service';
 import type { SessionScope } from '../db/site-scope';
-import {
-  alreadyReclassified,
-  findingForbidden,
-  findingNotFound,
-  invalidFinding,
-} from './findings.errors';
+import { findingForbidden, findingNotFound, invalidFinding } from './findings.errors';
 import { foreignManualKeys } from './object-key';
 
 /**
@@ -22,16 +15,13 @@ import { foreignManualKeys } from './object-key';
  *
  * La derivación NO está acá: ocurre dentro de la transacción de la ingesta, en
  * `inspections/submissions.service.ts`, con la función pura de `derive.ts`. Este
- * servicio es el resto — reportar a mano, clasificar, y leer.
+ * servicio es el resto — reportar a mano y leer.
  *
  * QUÉ NO APLICA ESTE SERVICIO, porque lo aplica el motor (migración 0010):
  *
  *   - Que la ubicación sea del sitio del hallazgo   → FK compuesta.
  *   - Que un hallazgo manual no tenga `item_key`    → CHECK de origen.
  *   - Que exista al menos una foto                  → restricción diferida.
- *   - Que el nivel de riesgo sea el de la matriz    → columna generada.
- *   - Que reclasificar lleve motivo                 → CHECK de motivo.
- *   - Que la historia no se bifurque                → único de `supersedes_id`.
  *   - Que una planta no vea la otra                 → política RLS. No hay `WHERE
  *     site_id` en ninguna consulta de este archivo.
  *
@@ -46,9 +36,7 @@ export class FindingsService {
    * El hallazgo de entrada manual: el peligro que alguien ve fuera de una inspección,
    * y el casi-accidente presenciado que §5 riesgo F manda por este camino.
    *
-   * Nace clasificado, a diferencia de uno derivado. El inspector no clasifica —no es
-   * su trabajo y está en el campo—, pero quien reporta a mano ya está en la aplicación
-   * con la lista delante, y un hallazgo sin riesgo asignado es uno que nadie prioriza.
+   * No lleva clasificación: el coordinador declara la fecha límite al abrir una acción.
    */
   async report(session: SessionScope, payload: ManualFindingRequest): Promise<Finding> {
     if (!CAN_REPORT.has(session.role)) {
@@ -96,57 +84,12 @@ export class FindingsService {
         payload.details.photo_object_keys,
       );
 
-      await this.insertAssessment(client, findingId, payload.site_id, session.userId, {
-        ...payload.classification,
-        reason: undefined,
-      });
-
       return this.readOne(client, findingId);
     });
   }
 
   /**
-   * Clasificar y reclasificar son la misma operación: insertar una fila.
-   *
-   * La diferencia la decide el estado —si ya hay una vigente, la nueva la supera y
-   * exige motivo— y no un endpoint distinto. Dos rutas para dos casos del mismo hecho
-   * habrían dejado al cliente decidiendo cuál llamar, con la respuesta a esa pregunta
-   * en la base.
-   */
-  async classify(
-    session: SessionScope,
-    findingId: string,
-    payload: RiskAssessmentRequest,
-  ): Promise<Finding> {
-    if (session.role !== 'hs_coordinator') {
-      throw findingForbidden('Only the HS coordinator classifies a finding');
-    }
-
-    return this.db.withSessionClient(session, async (client) => {
-      const finding = await this.requireFinding(client, findingId);
-      const current = await this.currentAssessmentId(client, findingId);
-
-      // Las dos mitades del CHECK de la migración, comprobadas acá para devolver un
-      // 400 legible en vez de un error de restricción.
-      if (current !== null && payload.reason === undefined) {
-        throw invalidFinding('Reclassifying a finding requires a reason');
-      }
-
-      if (current === null && payload.reason !== undefined) {
-        throw invalidFinding('The first classification of a finding does not take a reason');
-      }
-
-      await this.insertAssessment(client, findingId, finding.site_id, session.userId, {
-        ...payload,
-        supersedesId: current,
-      });
-
-      return this.readOne(client, findingId);
-    });
-  }
-
-  /**
-   * El listado, con la clasificación vigente de cada hallazgo o su ausencia.
+   * El listado de hallazgos y sus fotos.
    *
    * Sin `WHERE site_id`: el recorte lo hace la política sobre la transacción (ADR-002).
    * Un miembro del JHSC de St. Thomas no ve Glencoe porque la política no se lo
@@ -209,79 +152,6 @@ export class FindingsService {
     );
   }
 
-  private async insertAssessment(
-    client: PoolClient,
-    findingId: string,
-    siteId: string,
-    assessedBy: string,
-    input: RiskAssessmentRequest & { supersedesId?: string | null },
-  ): Promise<void> {
-    try {
-      await client.query(
-        `INSERT INTO finding_risk_assessment (finding_id, site_id, probability, severity,
-                                              control_level, supersedes_id, reason, assessed_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [
-          findingId,
-          siteId,
-          input.probability,
-          input.severity,
-          input.control_level,
-          input.supersedesId ?? null,
-          input.reason ?? null,
-          assessedBy,
-        ],
-      );
-    } catch (error) {
-      // Alguien más reclasificó entre la lectura de la vigente y esta escritura. El
-      // único del motor es lo que lo detecta; acá solo se traduce.
-      if (isUniqueViolation(error, 'finding_risk_assessment_supersedes_id_key')) {
-        throw alreadyReclassified();
-      }
-
-      if (isUniqueViolation(error, 'finding_risk_assessment_initial_uq')) {
-        throw alreadyReclassified();
-      }
-
-      throw error;
-    }
-  }
-
-  /** La vigente: la que nadie supera. `null` significa sin clasificar (design D10). */
-  private async currentAssessmentId(
-    client: PoolClient,
-    findingId: string,
-  ): Promise<string | null> {
-    const { rows } = await client.query<{ id: string }>(
-      `SELECT a.id
-         FROM finding_risk_assessment a
-        WHERE a.finding_id = $1
-          AND NOT EXISTS (
-            SELECT 1 FROM finding_risk_assessment s WHERE s.supersedes_id = a.id)`,
-      [findingId],
-    );
-
-    return rows[0]?.id ?? null;
-  }
-
-  private async requireFinding(
-    client: PoolClient,
-    findingId: string,
-  ): Promise<{ site_id: string }> {
-    const { rows } = await client.query<{ site_id: string }>(
-      `SELECT site_id FROM finding WHERE id = $1`,
-      [findingId],
-    );
-
-    const row = rows[0];
-
-    // La de otra planta no devuelve cero filas porque se la filtre: la transacción no
-    // la ve. Por eso responde igual que uno que no existe.
-    if (!row) throw findingNotFound();
-
-    return row;
-  }
-
   private async readOne(client: PoolClient, findingId: string): Promise<Finding> {
     const { rows } = await client.query<FindingRow>(`${FINDING_SELECT} WHERE f.id = $1`, [
       findingId,
@@ -298,20 +168,11 @@ export class FindingsService {
 /** Quién puede cargar un hallazgo a mano (§4, tabla de roles). */
 const CAN_REPORT = new Set(['supervisor', 'management', 'hs_coordinator']);
 
-/**
- * La clasificación vigente se resuelve con un `LEFT JOIN LATERAL` sobre la fila que
- * nadie supera, apoyado en el índice parcial `finding_risk_assessment_initial_uq`.
- *
- * `LEFT` y no `INNER`: un hallazgo sin clasificar tiene que aparecer en el listado, y
- * aparecer como lo que es. Es la consulta que hace que "sin clasificar" pueda ser una
- * ausencia en vez de un valor guardado.
- */
+/** Las fotos se agregan en la consulta para que la lectura del hallazgo sea completa. */
 const FINDING_SELECT = `
   SELECT f.id, f.site_id, f.origin, f.inspection_id, f.template_version_item_id, f.item_key,
          f.location_id, f.description, f.reported_by, f.occurred_at, f.recorded_at,
          COALESCE(p.keys, ARRAY[]::text[]) AS photo_object_keys,
-         a.id AS assessment_id, a.probability, a.severity, a.risk_level, a.control_level,
-         a.reason, a.supersedes_id, a.assessed_by, a.assessed_at,
          rec.prior_count, rec.prior_count_site_wide, rec.window_months,
          rec.first_prior_occurred_at, rec.is_recurrent
     FROM finding f
@@ -319,13 +180,7 @@ const FINDING_SELECT = `
       SELECT array_agg(fp.object_key ORDER BY fp.created_at, fp.id) AS keys
         FROM finding_photo fp WHERE fp.finding_id = f.id
     ) p ON true
-    LEFT JOIN LATERAL (
-      SELECT r.* FROM finding_risk_assessment r
-       WHERE r.finding_id = f.id
-         AND NOT EXISTS (
-           SELECT 1 FROM finding_risk_assessment s WHERE s.supersedes_id = r.id)
-    ) a ON true
-    -- La marca de recurrencia (etapa 7). LEFT y no INNER porque hay dos clases de
+     -- La marca de recurrencia (etapa 7). LEFT y no INNER porque hay dos clases de
     -- hallazgo sin marca que igual tienen que aparecer en el listado: los manuales, que
     -- no tienen item_key y por lo tanto no tienen serie, y los anteriores a la
     -- migración 0013, que nacieron antes de que el mecanismo existiera.
@@ -344,15 +199,6 @@ interface FindingRow {
   occurred_at: Date;
   recorded_at: Date;
   photo_object_keys: string[];
-  assessment_id: string | null;
-  probability: RiskAssessment['probability'] | null;
-  severity: RiskAssessment['severity'] | null;
-  risk_level: RiskAssessment['risk_level'] | null;
-  control_level: RiskAssessment['control_level'] | null;
-  reason: string | null;
-  supersedes_id: string | null;
-  assessed_by: string | null;
-  assessed_at: Date | null;
   // Los cinco son null juntos: o hay fila de marca o no la hay.
   prior_count: number | null;
   prior_count_site_wide: number | null;
@@ -375,21 +221,6 @@ function toFinding(row: FindingRow): Finding {
     reported_by: row.reported_by,
     occurred_at: row.occurred_at.toISOString(),
     recorded_at: row.recorded_at.toISOString(),
-    // La ausencia de fila ES el estado "sin clasificar". No hay `status` que mantener.
-    assessment:
-      row.assessment_id === null
-        ? null
-        : {
-            id: row.assessment_id,
-            probability: row.probability as RiskAssessment['probability'],
-            severity: row.severity as RiskAssessment['severity'],
-            risk_level: row.risk_level as RiskAssessment['risk_level'],
-            control_level: row.control_level as RiskAssessment['control_level'],
-            reason: row.reason,
-            supersedes_id: row.supersedes_id,
-            assessed_by: row.assessed_by as string,
-            assessed_at: (row.assessed_at as Date).toISOString(),
-          },
     // La ausencia de fila y `is_recurrent: false` dicen cosas distintas y el contrato
     // las separa (design D8): `null` es "hallazgo manual, NUNCA se lo comparó con la
     // historia", y `false` es "se lo comparó, y es la primera vez".
@@ -405,12 +236,6 @@ function toFinding(row: FindingRow): Finding {
             is_recurrent: row.is_recurrent as boolean,
           },
   };
-}
-
-function isUniqueViolation(error: unknown, constraint: string): boolean {
-  const candidate = error as DatabaseError | undefined;
-
-  return candidate?.code === '23505' && candidate.constraint === constraint;
 }
 
 /**

@@ -13,7 +13,7 @@
 
 export * from './document/answers.js';
 export * from './document/conditions.js';
-export * from './document/controls.js';
+export * from './document/finding.js';
 export * from './document/draft.js';
 export * from './document/negative.js';
 export * from './document/progress.js';

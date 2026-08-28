@@ -3,16 +3,13 @@ import { describe, expect, it } from 'vitest';
 import {
   ACTION_STATES,
   ASSIGNEE,
-  DUE_DAYS_BY_SEVERITY,
   ESCALATION_DAYS,
-  SEVERITIES,
   TRANSITIONS,
   VERIFIER_ROLES,
   type ActionState,
   actionListSchema,
   actionSummarySchema,
   createActionRequestSchema,
-  dueAt,
   escalationLevelsDue,
   transitionFor,
   transitionRequestSchema,
@@ -118,52 +115,6 @@ describe('la máquina de estados', () => {
   });
 });
 
-describe('la fecha límite', () => {
-  const FROM = new Date('2026-08-10T13:00:00.000Z');
-
-  const CASES: ReadonlyArray<[(typeof SEVERITIES)[number], number]> = [
-    ['catastrophic', 3],
-    ['major', 7],
-    ['moderate', 14],
-    ['minor', 30],
-    ['negligible', 60],
-  ];
-
-  for (const [severity, days] of CASES) {
-    it(`${severity} vence a los ${days} días`, () => {
-      const result = dueAt(severity, FROM);
-
-      expect(result.getTime() - FROM.getTime()).toBe(days * 24 * 60 * 60 * 1000);
-    });
-  }
-
-  it('cubre las cinco severidades y ninguna más', () => {
-    expect(Object.keys(DUE_DAYS_BY_SEVERITY).sort()).toEqual([...SEVERITIES].sort());
-  });
-
-  it('a más severidad, menos plazo', () => {
-    const days = SEVERITIES.map((severity) => DUE_DAYS_BY_SEVERITY[severity]);
-
-    expect(days).toEqual([...days].sort((a, b) => b - a));
-  });
-
-  /**
-   * El comportamiento que design D5 acepta: el plazo son N × 24 horas exactas y no
-   * N días de calendario, así que cruzar el cambio de horario de Ontario mueve la
-   * hora local del vencimiento. Con un cron que corre a las 03:00 y umbrales de 3
-   * y 7 días, una hora no tiene consecuencia — pero queda afirmado para que un
-   * cambio futuro a días de calendario sea una decisión y no un accidente.
-   */
-  it('cruzar el cambio de horario mueve la hora local, no el plazo', () => {
-    // 2026-11-01 es el fin del horario de verano en Ontario.
-    const before = new Date('2026-10-29T13:00:00.000Z');
-    const result = dueAt('major', before);
-
-    expect(result.toISOString()).toBe('2026-11-05T13:00:00.000Z');
-    expect(result.getTime() - before.getTime()).toBe(7 * 24 * 60 * 60 * 1000);
-  });
-});
-
 describe('el escalamiento', () => {
   const DUE = new Date('2026-08-10T13:00:00.000Z');
 
@@ -193,11 +144,33 @@ describe('el escalamiento', () => {
 });
 
 describe('los requests', () => {
-  it('crear una acción no acepta `due_at` ni `severity`', () => {
+  it('crear una acción lleva su fecha límite', () => {
     const result = createActionRequestSchema.safeParse({
       assignee_person_id: PERSON_ID,
       description: 'Install a fixed guard on the infeed of line 3',
       due_at: '2027-01-01T00:00:00.000Z',
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  /** Sin fecha no hay obligación: una acción que no vence no escala nunca. */
+  it('crear una acción sin `due_at` se rechaza', () => {
+    const result = createActionRequestSchema.safeParse({
+      assignee_person_id: PERSON_ID,
+      description: 'Install a fixed guard on the infeed of line 3',
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  /** La severidad se retiró con la clasificación (ADR-014) y el objeto es estricto. */
+  it('crear una acción no acepta `severity`', () => {
+    const result = createActionRequestSchema.safeParse({
+      assignee_person_id: PERSON_ID,
+      description: 'Install a fixed guard on the infeed of line 3',
+      due_at: '2027-01-01T00:00:00.000Z',
+      severity: 'major',
     });
 
     expect(result.success).toBe(false);
@@ -207,6 +180,7 @@ describe('los requests', () => {
     const result = createActionRequestSchema.safeParse({
       assignee_person_id: PERSON_ID,
       description: 'fix',
+      due_at: '2027-01-01T00:00:00.000Z',
     });
 
     expect(result.success).toBe(false);
@@ -258,7 +232,6 @@ describe('el resumen del listado', () => {
     assignee_person_id: PERSON_ID,
     assignee_name: 'Dana Okafor',
     description: 'Install a fixed guard on the infeed of line 3',
-    severity: 'major',
     due_at: '2026-08-28T16:00:00.000Z',
     state: 'open',
     overdue: false,

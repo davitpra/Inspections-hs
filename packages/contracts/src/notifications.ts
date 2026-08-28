@@ -1,6 +1,5 @@
 import { z } from 'zod';
 
-import { severitySchema } from './findings.js';
 import { periodMonthsSchema } from './periods.js';
 import { incidentClassificationSchema } from './incidents.js';
 
@@ -62,12 +61,14 @@ export type InspectionPeriodOpenedPayload = z.infer<typeof inspectionPeriodOpene
  * Lleva `due_at` y no solo el id porque la bandeja tiene que poder decir "vence el
  * 17" sin ir a buscar la acción, que es la diferencia entre una notificación que
  * sirve y un aviso de que hay algo que mirar.
+ *
+ * `finding_id` es nulable porque una acción cuelga de un hallazgo **o** de una
+ * investigación (§4, etapa 6), y la de una investigación no tiene ninguno.
  */
 export const correctiveActionAssignedPayloadSchema = z.strictObject({
   action_id: z.uuid(),
-  finding_id: z.uuid(),
+  finding_id: z.uuid().nullable(),
   description: z.string().min(1),
-  severity: severitySchema,
   due_at: z.iso.datetime({ offset: true }),
 });
 

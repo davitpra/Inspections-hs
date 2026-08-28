@@ -51,7 +51,6 @@ describe('los tipos que la bandeja sabe leer', () => {
         action_id: ACTION,
         finding_id: FINDING,
         description: 'Install a fixed guard on the infeed of line 3',
-        severity: 'major',
         due_at: '2026-08-17T13:00:00.000Z',
       },
       corrective_action_overdue_supervisor: {

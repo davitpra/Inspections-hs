@@ -24,7 +24,7 @@ pnpm test                        # unitarios (rápidos, sin Docker)
 pnpm --filter api test:int       # integración contra Postgres real (testcontainers)
 ```
 
-Un solo test: `pnpm --filter api exec vitest run src/findings/risk.spec.ts`, o para
+Un solo test: `pnpm --filter api exec vitest run src/findings/derive.spec.ts`, o para
 integración `pnpm --filter api exec vitest run --config vitest.integration.config.mts test/findings.int-spec.ts`.
 `--filter web` y `--filter contracts` funcionan igual con `vitest run <archivo>`.
 

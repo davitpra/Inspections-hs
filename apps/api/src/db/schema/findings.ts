@@ -11,7 +11,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 
-import type { ControlLevel, FindingOrigin, Probability, RiskLevel, Severity } from '@hs/contracts';
+import type { FindingOrigin } from '@hs/contracts';
 
 import { location, site } from './catalog';
 import { appUser } from './identity';
@@ -20,19 +20,17 @@ import { templateItem, templateVersionItem } from './templates';
 
 /**
  * ADR-004 — La fuente de verdad de estas tablas es
- * `apps/api/drizzle/0010_findings.sql`, no este archivo.
+ * `apps/api/drizzle/0010_findings.sql` y la migración 0037, no este archivo.
  *
  * Acá solo viven los tipos con los que el repositorio consulta. El SQL lleva además
- * la restricción diferida de "al menos una foto", la función `hs_risk_level` que
- * alimenta la columna generada, la guarda de la clasificación, los de prohibición
- * de UPDATE/DELETE/TRUNCATE, los de auditoría, `hs_apply_site_isolation` y los
- * GRANT. Nada de eso lo sabe expresar un esquema de ORM. Por eso `drizzle-kit
+ * la restricción diferida de "al menos una foto", los de prohibición de
+ * UPDATE/DELETE/TRUNCATE, los de auditoría, `hs_apply_site_isolation` y los GRANT.
+ * Nada de eso lo sabe expresar un esquema de ORM. Por eso `drizzle-kit
  * generate` está prohibido: regeneraría el `.sql` a partir de esto y se llevaría
  * puesto el mecanismo. Si el SQL cambia, este espejo se actualiza a mano.
  *
  * **No hay ningún tipo `*Update` en este archivo y esa ausencia es deliberada**,
- * igual que en `inspections.ts`: 0010 no tiene un solo `GRANT UPDATE`. Reclasificar
- * un hallazgo es insertar una fila que supera a la vigente, no corregir una.
+ * igual que en `inspections.ts`: 0010 no tiene un solo `GRANT UPDATE`.
  */
 
 /**
@@ -99,7 +97,7 @@ export const finding = pgTable(
       foreignColumns: [location.siteId, location.id],
     }),
 
-    // Destino de las FK compuestas de `findingPhoto` y `findingRiskAssessment`.
+    // Destino de la FK compuesta de `findingPhoto`.
     unique('finding_id_site_uq').on(table.id, table.siteId),
 
     // El índice de la recurrencia de la etapa 7. Parcial: un hallazgo manual no tiene
@@ -150,87 +148,10 @@ export const findingPhoto = pgTable(
   ],
 );
 
-/**
- * La clasificación de riesgo (migración 0010). Requisitos §3 R2.
- *
- * **Append-only y encadenada por `supersedesId`.** La vigente es la fila que nadie
- * supera; un hallazgo sin ninguna fila acá está *sin clasificar*, que es una ausencia
- * y no un valor. No hay columna de estado y esa falta es el diseño.
- *
- * `riskLevel` es una columna GENERADA por `hs_risk_level(probability, severity)`: se
- * lee, no se escribe. Por eso no aparece en `NewFindingRiskAssessment`.
- */
-export const findingRiskAssessment = pgTable(
-  'finding_risk_assessment',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-
-    findingId: uuid('finding_id')
-      .notNull()
-      .references(() => finding.id),
-
-    siteId: uuid('site_id')
-      .notNull()
-      .references(() => site.id),
-
-    probability: text('probability').$type<Probability>().notNull(),
-    severity: text('severity').$type<Severity>().notNull(),
-
-    // Generada por el motor. Nunca se escribe desde acá — el mismo criterio que
-    // `scheduled_inspection.period_end`.
-    riskLevel: text('risk_level')
-      .$type<RiskLevel>()
-      .notNull()
-      .generatedAlwaysAs(sql`hs_risk_level(probability, severity)`),
-
-    controlLevel: text('control_level').$type<ControlLevel>().notNull(),
-
-    // La fila que esta supera. Su único es lo que impide que la historia se bifurque:
-    // dos reclasificaciones concurrentes de la misma vigente terminan con una que
-    // comete y otra que viola el único.
-    supersedesId: uuid('supersedes_id'),
-
-    reason: text('reason'),
-
-    assessedBy: uuid('assessed_by')
-      .notNull()
-      .references(() => appUser.id),
-    assessedAt: timestamp('assessed_at', { withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [
-    foreignKey({
-      columns: [table.supersedesId],
-      foreignColumns: [table.id],
-    }),
-    unique('finding_risk_assessment_supersedes_id_key').on(table.supersedesId),
-
-    foreignKey({
-      columns: [table.findingId, table.siteId],
-      foreignColumns: [finding.id, finding.siteId],
-    }),
-
-    // Reclasificar exige motivo; clasificar por primera vez no lo admite.
-    check(
-      'finding_risk_assessment_reason_check',
-      sql`(${table.supersedesId} IS NULL) = (${table.reason} IS NULL)`,
-    ),
-    check(
-      'finding_risk_assessment_reason_length_check',
-      sql`${table.reason} IS NULL OR char_length(${table.reason}) >= 10`,
-    ),
-
-    // Una sola clasificación inicial por hallazgo, y el índice del LEFT JOIN LATERAL
-    // que resuelve la vigente en el listado.
-    uniqueIndex('finding_risk_assessment_initial_uq')
-      .on(table.findingId)
-      .where(sql`${table.supersedesId} IS NULL`),
-    index('finding_risk_assessment_finding_idx').on(table.findingId, table.assessedAt),
-  ],
-);
+/* La clasificación de riesgo fue retirada por la migración 0037. */
 
 export type Finding = typeof finding.$inferSelect;
 export type FindingPhoto = typeof findingPhoto.$inferSelect;
-export type FindingRiskAssessment = typeof findingRiskAssessment.$inferSelect;
 
 /**
  * Lo que un caller aporta al insertar un hallazgo. `id` y `recordedAt` no están: los
@@ -252,13 +173,4 @@ export type NewFinding = Pick<
 export type NewFindingPhoto = Pick<
   typeof findingPhoto.$inferInsert,
   'findingId' | 'siteId' | 'objectKey'
->;
-
-/**
- * Lo que un caller aporta al clasificar. **`riskLevel` no está**: lo calcula el motor
- * y esa ausencia es el requisito (design D5).
- */
-export type NewFindingRiskAssessment = Pick<
-  typeof findingRiskAssessment.$inferInsert,
-  'findingId' | 'siteId' | 'probability' | 'severity' | 'controlLevel' | 'supersedesId' | 'reason' | 'assessedBy'
 >;

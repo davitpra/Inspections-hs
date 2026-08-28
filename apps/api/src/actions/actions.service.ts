@@ -1,14 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import {
   ASSIGNEE,
-  dueAt,
   transitionFor,
   type Action,
   type ActionState,
   type ActionSummary,
   type CreateActionRequest,
-  type CreateInvestigationActionRequest,
-  type Severity,
   type TransitionRequest,
 } from '@hs/contracts';
 import type { PoolClient } from 'pg';
@@ -19,8 +16,8 @@ import {
   actionForbidden,
   actionNotFound,
   evidenceRequired,
-  findingNotClassified,
   invalidAssignee,
+  invalidDueAt,
   invalidEvidence,
   invalidTransition,
   translatePgError,
@@ -54,8 +51,10 @@ import { foreignEvidenceKeys } from './object-key';
  *     site_id` en ninguna consulta de este módulo.
  *
  * Lo que sí comprueba: los roles y la relación "esta acción es mía" —que el motor no
- * conoce—, que el hallazgo esté clasificado, que el responsable sea una persona activa
- * de la planta, y las object keys de la evidencia. Las comprobaciones que duplican una
+ * conoce—, que el padre exista dentro del alcance, que el plazo sea futuro, que el
+ * responsable sea una persona activa de la planta, y las object keys de la evidencia.
+ * La garantía de que el plazo sea futuro NO la duplica el motor: depende del reloj y por
+ * eso vive solamente acá. Las comprobaciones que duplican una
  * barrera del motor existen para devolver un código legible; si el servicio se
  * equivoca, el motor rechaza igual y `translatePgError` traduce.
  */
@@ -64,7 +63,7 @@ export class ActionsService {
   constructor(private readonly db: DbService) {}
 
   /**
-   * Abrir una acción sobre un hallazgo clasificado.
+   * Abrir una acción sobre un hallazgo.
    *
    * La acción y su primer evento se escriben en la MISMA transacción, y no por prolijidad:
    * la restricción diferida de 0011 hace que una acción sin evento no llegue a existir,
@@ -80,43 +79,13 @@ export class ActionsService {
     }
 
     return this.db.withSessionClient(session, async (client) => {
-      const finding = await this.requireClassifiedFinding(client, findingId);
+      const siteId = await this.requireFindingSite(client, findingId);
 
-      await this.requireAssignablePerson(client, payload.assignee_person_id, finding.siteId);
-
-      const now = new Date();
-
-      const actionId = await this.guarded(() =>
-        insertAction(client, {
-          siteId: finding.siteId,
-          findingId,
-          investigationId: null,
-          assigneePersonId: payload.assignee_person_id,
-          description: payload.description,
-          severity: finding.severity,
-          // La fecha límite la calcula el motor puro, no el caller y no SQL (design D5).
-          dueAt: dueAt(finding.severity, now),
-          remediationGroupId: payload.remediation_group_id ?? null,
-          createdBy: session.userId,
-        }),
-      );
-
-      await this.guarded(() =>
-        insertEvent(client, {
-          actionId,
-          siteId: finding.siteId,
-          fromState: null,
-          toState: 'open',
-          actorUserId: session.userId,
-          note: null,
-          reason: null,
-          occurredAt: now,
-        }),
-      );
-
-      await this.notifyAssignee(client, actionId);
-
-      return this.readOne(client, actionId);
+      return this.createForParent(client, session, payload, {
+        siteId,
+        findingId,
+        investigationId: null,
+      });
     });
   }
 
@@ -208,10 +177,8 @@ export class ActionsService {
   /**
    * Abrir una acción sobre una investigación (§4, etapa 6).
    *
-   * **El mismo motor, la misma tabla de plazos, la misma evidencia, el mismo verificador
-   * distinto y el mismo escalamiento.** Lo único que cambia es de dónde sale la
-   * severidad: un hallazgo la tiene clasificada y una investigación no, así que acá la
-   * declara el coordinador y se congela igual en la fila (design D9).
+   * **El mismo motor, la misma fecha declarada, la misma evidencia, el mismo verificador
+   * y el mismo escalamiento.** Solo cambia el padre de la acción.
    *
    * Que el resto del ciclo de vida no distinga el padre no es una coincidencia: es lo
    * que hace que "el incidente usa el mismo motor que la acción correctiva" (§4) sea
@@ -220,7 +187,7 @@ export class ActionsService {
   async createForInvestigation(
     session: SessionScope,
     investigationId: string,
-    payload: CreateInvestigationActionRequest,
+    payload: CreateActionRequest,
   ): Promise<Action> {
     if (session.role !== 'hs_coordinator') {
       throw actionForbidden('Only the HS coordinator opens a corrective action');
@@ -229,40 +196,11 @@ export class ActionsService {
     return this.db.withSessionClient(session, async (client) => {
       const siteId = await this.requireInvestigationSite(client, investigationId);
 
-      await this.requireAssignablePerson(client, payload.assignee_person_id, siteId);
-
-      const now = new Date();
-
-      const actionId = await this.guarded(() =>
-        insertAction(client, {
-          siteId,
-          findingId: null,
-          investigationId,
-          assigneePersonId: payload.assignee_person_id,
-          description: payload.description,
-          severity: payload.severity,
-          dueAt: dueAt(payload.severity, now),
-          remediationGroupId: payload.remediation_group_id ?? null,
-          createdBy: session.userId,
-        }),
-      );
-
-      await this.guarded(() =>
-        insertEvent(client, {
-          actionId,
-          siteId,
-          fromState: null,
-          toState: 'open',
-          actorUserId: session.userId,
-          note: null,
-          reason: null,
-          occurredAt: now,
-        }),
-      );
-
-      await this.notifyAssignee(client, actionId);
-
-      return this.readOne(client, actionId);
+      return this.createForParent(client, session, payload, {
+        siteId,
+        findingId: null,
+        investigationId,
+      });
     });
   }
 
@@ -276,26 +214,12 @@ export class ActionsService {
 
   // -------------------------------------------------------------------------
 
-  /**
-   * El hallazgo tiene que existir en el alcance **y tener clasificación vigente**.
-   *
-   * La severidad que devuelve es la que se congela en la acción: si el coordinador
-   * reclasifica después, esta acción conserva la suya y su fecha límite (design D5).
-   */
-  private async requireClassifiedFinding(
+  private async requireFindingSite(
     client: PoolClient,
     findingId: string,
-  ): Promise<{ siteId: string; severity: Severity }> {
-    const { rows } = await client.query<{ site_id: string; severity: Severity | null }>(
-      `SELECT f.site_id, a.severity
-         FROM finding f
-         LEFT JOIN LATERAL (
-           SELECT r.severity FROM finding_risk_assessment r
-            WHERE r.finding_id = f.id
-              AND NOT EXISTS (
-                SELECT 1 FROM finding_risk_assessment s WHERE s.supersedes_id = r.id)
-         ) a ON true
-        WHERE f.id = $1`,
+  ): Promise<string> {
+    const { rows } = await client.query<{ site_id: string }>(
+      `SELECT site_id FROM finding WHERE id = $1`,
       [findingId],
     );
 
@@ -305,9 +229,52 @@ export class ActionsService {
     // responden como "no existe esta acción... para este hallazgo": el 404 es del
     // hallazgo, no de la acción.
     if (!row) throw actionNotFound();
-    if (row.severity === null) throw findingNotClassified();
 
-    return { siteId: row.site_id, severity: row.severity };
+    return row.site_id;
+  }
+
+  private async createForParent(
+    client: PoolClient,
+    session: SessionScope,
+    payload: CreateActionRequest,
+    parent: { siteId: string; findingId: string | null; investigationId: string | null },
+  ): Promise<Action> {
+    const now = new Date();
+    const dueAt = new Date(payload.due_at);
+
+    if (dueAt <= now) throw invalidDueAt();
+
+    await this.requireAssignablePerson(client, payload.assignee_person_id, parent.siteId);
+
+    const actionId = await this.guarded(() =>
+      insertAction(client, {
+        siteId: parent.siteId,
+        findingId: parent.findingId,
+        investigationId: parent.investigationId,
+        assigneePersonId: payload.assignee_person_id,
+        description: payload.description,
+        dueAt,
+        remediationGroupId: payload.remediation_group_id ?? null,
+        createdBy: session.userId,
+      }),
+    );
+
+    await this.guarded(() =>
+      insertEvent(client, {
+        actionId,
+        siteId: parent.siteId,
+        fromState: null,
+        toState: 'open',
+        actorUserId: session.userId,
+        note: null,
+        reason: null,
+        occurredAt: now,
+      }),
+    );
+
+    await this.notifyAssignee(client, actionId);
+
+    return this.readOne(client, actionId);
   }
 
   /**
@@ -408,8 +375,7 @@ export class ActionsService {
                 'action_id', a.id,
                 'finding_id', a.finding_id,
                 'description', a.description,
-                'severity', a.severity,
-                'due_at', a.due_at)
+                 'due_at', a.due_at)
          FROM corrective_action a
          JOIN app_user u ON u.person_id = a.assignee_person_id
                         AND u.deactivated_at IS NULL

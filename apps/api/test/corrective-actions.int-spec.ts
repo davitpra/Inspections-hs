@@ -26,12 +26,14 @@ import { createTemplate, publishVersion, registerItems } from './helpers/templat
  *   3. Dos transiciones concurrentes no bifurcan el stream.
  *   4. Quien ejecutó no puede verificar, ni siquiera insertando a mano.
  *   5. Declarar el trabajo hecho sin evidencia no llega a commitear.
- *   6. El plazo, congelado, sobrevive a una reclasificación.
+ *   6. El plazo declarado queda congelado desde la creación.
  *   7. Treinta corridas del cron escalan una vez por nivel.
  */
 
 const SITE_A = 'ac700000-0000-4000-8000-000000000001';
 const SITE_B = 'ac700000-0000-4000-8000-000000000002';
+const DUE_AT = '2050-01-01T17:00:00.000Z';
+const LATER_DUE_AT = '2050-02-01T17:00:00.000Z';
 
 let db: TestDatabase;
 let stack: SchedulingStack;
@@ -103,17 +105,8 @@ function nextPeriod(): string {
   return `${year}-${String(month).padStart(2, '0')}-01`;
 }
 
-/**
- * Un hallazgo derivado de un envío real, clasificado con la severidad pedida.
- *
- * Se llega hasta acá por el camino de verdad —envío → derivación → clasificación— y no
- * insertando filas: lo que este spec prueba cuelga de un hallazgo, y un hallazgo
- * fabricado a mano podría no parecerse al que produce la etapa 4.
- */
-async function classifiedFinding(
-  severity: string,
-  siteId = SITE_A,
-): Promise<{ findingId: string }> {
+/** Un hallazgo derivado de un envío real, todavía sin ninguna clasificación. */
+async function derivedFinding(siteId = SITE_A): Promise<{ findingId: string }> {
   const isB = siteId === SITE_B;
   const location = isB ? locationB : locationA;
   const account = isB ? inspectorB : inspector;
@@ -155,26 +148,21 @@ async function classifiedFinding(
 
   const findingId = one(rows).id;
 
-  await findings.classify(asCoordinator(), findingId, {
-    probability: 'possible',
-    severity: severity as 'major',
-    control_level: 'engineering',
-  });
-
   return { findingId };
 }
 
 /** Una acción abierta sobre un hallazgo nuevo, con el responsable pedido. */
 async function openAction(
-  options: { severity?: string; assignee?: string; siteId?: string } = {},
+  options: { assignee?: string; siteId?: string; dueAt?: string } = {},
 ): Promise<string> {
   const siteId = options.siteId ?? SITE_A;
-  const { findingId } = await classifiedFinding(options.severity ?? 'major', siteId);
+  const { findingId } = await derivedFinding(siteId);
 
   const action = await actions.create(asCoordinator(), findingId, {
     assignee_person_id:
       options.assignee ?? (siteId === SITE_B ? rosterPersonB : supervisor.personId),
     description: 'Install a fixed guard on the infeed of line 3',
+    due_at: options.dueAt ?? DUE_AT,
   });
 
   return action.id;
@@ -191,15 +179,11 @@ async function openManualAction(): Promise<string> {
       photo_object_keys: [`${SITE_A}/manual/${draftId}/${randomUUID()}`],
     },
     occurred_at: '2026-08-04T10:00:00-04:00',
-    classification: {
-      probability: 'possible',
-      severity: 'moderate',
-      control_level: 'engineering',
-    },
   });
   const action = await actions.create(asCoordinator(), finding.id, {
     assignee_person_id: supervisor.personId,
     description: 'Replace the damaged barrier at the loading dock',
+    due_at: DUE_AT,
   });
 
   return action.id;
@@ -331,6 +315,43 @@ afterAll(async () => {
   await db.stop();
 });
 
+describe('el esquema después de retirar la clasificación', () => {
+  it('elimina la tabla, las funciones y la columna sin abrir la acción', async () => {
+    const table = await db.migrator.query<{ table_name: string | null }>(
+      `SELECT to_regclass('public.finding_risk_assessment') AS table_name`,
+    );
+    const functions = await db.migrator.query<{ name: string }>(
+      `SELECT p.oid::regprocedure::text AS name
+         FROM pg_proc p
+        WHERE p.proname IN ('hs_finding_assessment_guard',
+                            'hs_finding_assessment_audit', 'hs_risk_level')
+        ORDER BY p.proname`,
+    );
+    const columns = await db.migrator.query<{ column_name: string }>(
+      `SELECT column_name
+         FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'corrective_action'
+          AND column_name = 'severity'`,
+    );
+    const privileges = await db.migrator.query<{ can_update: boolean; can_delete: boolean }>(
+      `SELECT has_table_privilege('hs_app', 'public.corrective_action', 'UPDATE') AS can_update,
+              has_table_privilege('hs_app', 'public.corrective_action', 'DELETE') AS can_delete`,
+    );
+    const policies = await db.migrator.query<{ count: string }>(
+      `SELECT count(*)::text AS count
+         FROM pg_policies
+        WHERE schemaname = 'public' AND tablename = 'corrective_action'`,
+    );
+
+    expect(table.rows[0]?.table_name).toBeNull();
+    expect(functions.rows).toHaveLength(0);
+    expect(columns.rows).toHaveLength(0);
+    expect(privileges.rows[0]).toEqual({ can_update: false, can_delete: false });
+    expect(Number(policies.rows[0]?.count)).toBeGreaterThan(0);
+  });
+});
+
 describe('el recorrido completo de R3', () => {
   it('abre, ejecuta, verifica y cierra, con el estado derivado en cada paso', async () => {
     const actionId = await openAction();
@@ -392,7 +413,6 @@ describe('el recorrido completo de R3', () => {
 
     expect(found?.state).toBe('open');
     expect(found?.overdue).toBe(false);
-    expect(found?.severity).toBe('major');
     expect(found?.site_name).toBe('act-a');
     expect(found?.assignee_name).not.toBeNull();
     expect(found?.source).toMatchObject({
@@ -759,7 +779,7 @@ describe('la evidencia', () => {
 });
 
 describe('la creación', () => {
-  it('un hallazgo sin clasificar no puede recibir acciones', async () => {
+  it('un hallazgo sin clasificar puede recibir acciones', async () => {
     const scheduled = await scheduleInspection(db.app, {
       siteId: SITE_A,
       periodStart: nextPeriod(),
@@ -794,12 +814,14 @@ describe('la creación', () => {
       [accepted.id],
     );
 
-    await expect(
-      actions.create(asCoordinator(), one(rows).id, {
-        assignee_person_id: supervisor.personId,
-        description: 'Install a fixed guard on the infeed of line 3',
-      }),
-    ).rejects.toMatchObject({ response: { code: 'finding_not_classified' } });
+    const action = await actions.create(asCoordinator(), one(rows).id, {
+      assignee_person_id: supervisor.personId,
+      description: 'Install a fixed guard on the infeed of line 3',
+      due_at: DUE_AT,
+    });
+
+    expect(action.finding_id).toBe(one(rows).id);
+    expect(action.investigation_id).toBeNull();
 
     const created = await inScope<{ count: string }>(
       db.app,
@@ -808,58 +830,57 @@ describe('la creación', () => {
       [one(rows).id],
     );
 
-    expect(Number(one(created).count)).toBe(0);
+    expect(Number(one(created).count)).toBe(1);
   });
 
-  it('el plazo sale de la severidad y no del caller', async () => {
-    const { findingId } = await classifiedFinding('catastrophic');
-    const before = Date.now();
+  it('el coordinador declara la fecha y queda congelada', async () => {
+    const { findingId } = await derivedFinding();
 
     const action = await actions.create(asCoordinator(), findingId, {
       assignee_person_id: supervisor.personId,
       description: 'Stop the line until the guard is fitted',
+      due_at: DUE_AT,
     });
 
-    const dueAt = new Date(action.due_at).getTime();
-
-    expect(action.severity).toBe('catastrophic');
-    expect(dueAt - before).toBeGreaterThan(2.9 * 24 * 60 * 60 * 1000);
-    expect(dueAt - before).toBeLessThan(3.1 * 24 * 60 * 60 * 1000);
-  });
-
-  /**
-   * D5 — el plazo se congela. Reclasificar el hallazgo NO mueve el vencimiento de una
-   * acción ya abierta, y esa es la propiedad que hace que el registro pueda decir qué
-   * se prometió el día que se prometió.
-   */
-  it('reclasificar el hallazgo no mueve el plazo de una acción abierta', async () => {
-    const { findingId } = await classifiedFinding('moderate');
-
-    const action = await actions.create(asCoordinator(), findingId, {
-      assignee_person_id: supervisor.personId,
-      description: 'Install a fixed guard on the infeed of line 3',
-    });
-
-    await findings.classify(asCoordinator(), findingId, {
-      probability: 'almost_certain',
-      severity: 'catastrophic',
-      control_level: 'engineering',
-      reason: 'a second visit showed the guard is removed every shift',
-    });
+    expect(action.due_at).toBe(DUE_AT);
 
     const reread = await actions.get(asCoordinator(), action.id);
 
-    expect(reread.due_at).toBe(action.due_at);
-    expect(reread.severity).toBe('moderate');
+    expect(reread.due_at).toBe(DUE_AT);
+  });
+
+  it('una fecha pasada se rechaza con invalid_due_at', async () => {
+    const { findingId } = await derivedFinding();
+
+    await expect(
+      actions.create(asCoordinator(), findingId, {
+        assignee_person_id: supervisor.personId,
+        description: 'Install a fixed guard on the infeed of line 3',
+        due_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+      }),
+    ).rejects.toMatchObject({ response: { code: 'invalid_due_at' } });
+
+    const rows = await inScope<{ count: string }>(
+      db.app,
+      [SITE_A],
+      'SELECT count(*)::text AS count FROM corrective_action WHERE finding_id = $1',
+      [findingId],
+    );
+
+    expect(Number(one(rows).count)).toBe(0);
   });
 
   it('varias acciones sobre el mismo hallazgo, cada una con su responsable', async () => {
-    const { findingId } = await classifiedFinding('major');
+    const { findingId } = await derivedFinding();
 
-    for (const assignee of [supervisor.personId, rosterPerson]) {
+    for (const [assignee, dueAt] of [
+      [supervisor.personId, DUE_AT],
+      [rosterPerson, LATER_DUE_AT],
+    ] as const) {
       await actions.create(asCoordinator(), findingId, {
         assignee_person_id: assignee,
         description: 'Install a fixed guard on the infeed of line 3',
+        due_at: dueAt,
       });
     }
 
@@ -874,27 +895,28 @@ describe('la creación', () => {
   });
 
   it('un responsable de la otra planta se rechaza', async () => {
-    const { findingId } = await classifiedFinding('major');
+    const { findingId } = await derivedFinding();
 
     await expect(
       actions.create(asCoordinator(), findingId, {
         assignee_person_id: rosterPersonB,
         description: 'Install a fixed guard on the infeed of line 3',
+        due_at: DUE_AT,
       }),
     ).rejects.toMatchObject({ response: { code: 'invalid_assignee' } });
   });
 
   it('una acción sin ningún evento no commitea (HS007)', async () => {
-    const { findingId } = await classifiedFinding('major');
+    const { findingId } = await derivedFinding();
 
     await expect(
       inScope(
         db.app,
         [SITE_A],
         `INSERT INTO corrective_action
-           (site_id, finding_id, assignee_person_id, description, severity, due_at, created_by)
-         VALUES ($1, $2, $3, 'Install a fixed guard on the infeed', 'major', now(), $4)`,
-        [SITE_A, findingId, supervisor.personId, coordinator.accountId],
+           (site_id, finding_id, assignee_person_id, description, due_at, created_by)
+         VALUES ($1, $2, $3, 'Install a fixed guard on the infeed', $4, $5)`,
+        [SITE_A, findingId, supervisor.personId, DUE_AT, coordinator.accountId],
       ),
     ).rejects.toSatisfy((error: unknown) => sqlstate(error) === 'HS007');
   });
@@ -903,19 +925,20 @@ describe('la creación', () => {
     const groupId = randomUUID();
     const created = [];
 
-    for (const severity of ['catastrophic', 'negligible']) {
-      const { findingId } = await classifiedFinding(severity);
+    for (const dueAt of [DUE_AT, LATER_DUE_AT]) {
+      const { findingId } = await derivedFinding();
 
       created.push(
         await actions.create(asCoordinator(), findingId, {
           assignee_person_id: supervisor.personId,
           description: 'Fit guards across every packaging line',
+          due_at: dueAt,
           remediation_group_id: groupId,
         }),
       );
     }
 
-    // Cada una con SU plazo, derivado de SU severidad: el grupo no los uniformó.
+    // Cada una conserva SU fecha declarada: el grupo no las uniformó.
     expect(created.every((action) => action.remediation_group_id === groupId)).toBe(true);
     expect(new Date(created[0]!.due_at).getTime()).toBeLessThan(
       new Date(created[1]!.due_at).getTime(),
@@ -932,12 +955,13 @@ describe('la creación', () => {
 
 describe('los permisos', () => {
   it('un supervisor no puede abrir una acción', async () => {
-    const { findingId } = await classifiedFinding('major');
+    const { findingId } = await derivedFinding();
 
     await expect(
       actions.create(asSupervisor(), findingId, {
         assignee_person_id: supervisor.personId,
         description: 'Install a fixed guard on the infeed of line 3',
+        due_at: DUE_AT,
       }),
     ).rejects.toMatchObject({ response: { code: 'forbidden' } });
   });
@@ -1184,7 +1208,6 @@ describe('la notificación de asignación', () => {
     );
 
     expect(one(rows).payload.due_at).toEqual(expect.any(String));
-    expect(one(rows).payload.severity).toBe('major');
   });
 
   /**
@@ -1232,12 +1255,13 @@ describe('el responsable', () => {
       retired,
     ]);
 
-    const { findingId } = await classifiedFinding('major');
+    const { findingId } = await derivedFinding();
 
     await expect(
       actions.create(asCoordinator(), findingId, {
         assignee_person_id: retired,
         description: 'Install a fixed guard on the infeed of line 3',
+        due_at: DUE_AT,
       }),
     ).rejects.toMatchObject({ response: { code: 'invalid_assignee' } });
   });
@@ -1249,11 +1273,12 @@ describe('el responsable', () => {
    */
   it('transferir a una persona no toca las acciones que la nombran', async () => {
     const traveller = await createPerson(db.app, SITE_A);
-    const { findingId } = await classifiedFinding('major');
+    const { findingId } = await derivedFinding();
 
     const action = await actions.create(asCoordinator(), findingId, {
       assignee_person_id: traveller,
       description: 'Install a fixed guard on the infeed of line 3',
+      due_at: DUE_AT,
     });
 
     await inScope(db.app, [SITE_A, SITE_B], 'UPDATE person SET site_id = $2 WHERE id = $1', [
@@ -1378,15 +1403,15 @@ describe('la inmutabilidad', () => {
   });
 
   it('una acción no puede nombrar la planta de otro hallazgo', async () => {
-    const { findingId } = await classifiedFinding('major', SITE_B);
+    const { findingId } = await derivedFinding(SITE_B);
 
     const error = await inScope(
       db.app,
       [SITE_A, SITE_B],
       `INSERT INTO corrective_action
-         (site_id, finding_id, assignee_person_id, description, severity, due_at, created_by)
-       VALUES ($1, $2, $3, 'Install a fixed guard on the infeed', 'major', now(), $4)`,
-      [SITE_A, findingId, supervisor.personId, coordinator.accountId],
+         (site_id, finding_id, assignee_person_id, description, due_at, created_by)
+       VALUES ($1, $2, $3, 'Install a fixed guard on the infeed', $4, $5)`,
+      [SITE_A, findingId, supervisor.personId, DUE_AT, coordinator.accountId],
     ).catch((caught: unknown) => caught);
 
     // La FK compuesta contra `finding (id, site_id)`: 23503, y no un 500 sin explicar.
@@ -1425,8 +1450,7 @@ describe('la cadena de auditoría', () => {
     const myTransitions = transitioned.filter((row) => row.payload.action_id === actionId);
 
     expect(mine).toHaveLength(1);
-    expect(one(mine).payload.severity).toBe('major');
-    expect(one(mine).payload.due_at).toEqual(expect.any(String));
+    expect(new Date(String(one(mine).payload.due_at)).toISOString()).toBe(DUE_AT);
 
     expect(myTransitions.map((row) => row.payload.to_state)).toEqual([
       'open',

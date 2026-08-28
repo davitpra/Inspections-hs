@@ -43,7 +43,6 @@ function action(overrides: Partial<ActionSummary> = {}): ActionSummary {
     assignee_person_id: '66666666-6666-4666-8666-666666666666',
     assignee_name: 'Dana Okafor',
     description: 'Install a fixed guard on line 3',
-    severity: 'major',
     due_at: '2026-08-28T16:00:00.000Z',
     state: 'open',
     overdue: true,

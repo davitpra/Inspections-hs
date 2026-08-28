@@ -1,9 +1,10 @@
 import type { InspectionSubmission, TemplateDocument } from '@hs/contracts';
-import { PROBABILITIES, SEVERITIES } from '@hs/contracts';
+import { RequestMethod } from '@nestjs/common';
+import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 
-import { riskLevel } from '../src/findings/risk';
+import { FindingsController } from '../src/findings/findings.controller';
 import { FindingsService } from '../src/findings/findings.service';
 import { SubmissionsService } from '../src/inspections/submissions.service';
 import { createLocation, registerSite } from './helpers/catalog';
@@ -14,7 +15,7 @@ import { createSchedulingStack, type SchedulingStack } from './helpers/schedulin
 import { createTemplate, publishVersion, registerItems } from './helpers/templates';
 
 /**
- * Requisitos §7 etapa 4 — El hallazgo y su clasificación.
+ * Requisitos §7 etapa 4 — El hallazgo.
  *
  * Lo que estos tests prueban no es que se guarden filas. Es que las propiedades que
  * hacen que R2 signifique algo se cumplan aunque el cliente se porte mal y aunque
@@ -23,8 +24,7 @@ import { createTemplate, publishVersion, registerItems } from './helpers/templat
  *   1. Una respuesta negativa produce un hallazgo, y ninguna otra respuesta lo hace.
  *   2. Un envío rechazado no deja ni un hallazgo.
  *   3. Un hallazgo sin foto no llega a existir, y no por una comprobación del servicio.
- *   4. El nivel de riesgo es el de la matriz, venga por donde venga.
- *   5. La historia de clasificación no se bifurca ni se edita.
+ *   4. La ruta de clasificación de riesgo no está expuesta.
  */
 
 const SITE_A = 'f1d00000-0000-4000-8000-000000000001';
@@ -514,16 +514,11 @@ describe('la entrada manual', () => {
         photo_object_keys: [`${SITE_A}/manual/${draftId}/${randomUUID()}`],
       },
       occurred_at: '2026-08-10T13:00:00.000Z',
-      classification: {
-        probability: 'possible' as const,
-        severity: 'moderate' as const,
-        control_level: 'engineering' as const,
-      },
       ...overrides,
     };
   }
 
-  it('un supervisor reporta un peligro, y nace clasificado y sin item_key', async () => {
+  it('un supervisor reporta un peligro, sin clasificación y sin item_key', async () => {
     const created = await findings.report(
       sessionFor(supervisor.accountId, [SITE_A], 'supervisor'),
       manual(),
@@ -533,7 +528,7 @@ describe('la entrada manual', () => {
     expect(created.inspection_id).toBeNull();
     expect(created.item_key).toBeNull();
     expect(created.template_version_item_id).toBeNull();
-    expect(created.assessment).toMatchObject({ risk_level: 'medium', control_level: 'engineering' });
+    expect(created).not.toHaveProperty('assessment');
   });
 
   it('queda fuera de la agrupación por item_key', async () => {
@@ -620,240 +615,29 @@ describe('la entrada manual', () => {
   });
 });
 
-describe('la clasificación', () => {
-  async function derivedFinding(): Promise<string> {
-    const scheduled = await freshInspection();
-    const accepted = await submissions.ingest(
-      sessionFor(inspector.accountId, [SITE_A]),
-      submissionFor(scheduled, SITE_A, versionV2, locationA),
-    );
+describe('las rutas de hallazgos', () => {
+  it('ya no registra POST /findings/:id/risk-assessments', () => {
+    const prototype = FindingsController.prototype as unknown as Record<string, unknown>;
+    const routes = Object.getOwnPropertyNames(prototype).flatMap((name) => {
+      const handler = prototype[name];
 
-    return one(await findingRows([SITE_A], accepted.id)).id;
-  }
+      if (typeof handler !== 'function') return [];
 
-  const coordinatorSession = () => sessionFor(coordinator.accountId, [SITE_A, SITE_B], 'hs_coordinator');
+      const path = Reflect.getMetadata(PATH_METADATA, handler);
+      const method = Reflect.getMetadata(METHOD_METADATA, handler);
 
-  it('un hallazgo derivado nace sin clasificar', async () => {
-    const id = await derivedFinding();
-    const read = await findings.get(coordinatorSession(), id);
-
-    // Sin clasificar es la AUSENCIA de fila, no un valor guardado (D10).
-    expect(read.assessment).toBeNull();
-  });
-
-  it('clasificar deja una fila; reclasificar deja dos y la vigente es la segunda', async () => {
-    const id = await derivedFinding();
-
-    await findings.classify(coordinatorSession(), id, {
-      probability: 'possible',
-      severity: 'moderate',
-      control_level: 'engineering',
+      return path === undefined || method === undefined
+        ? []
+        : [{ method, paths: Array.isArray(path) ? path : [path] }];
     });
 
-    const reclassified = await findings.classify(coordinatorSession(), id, {
-      probability: 'likely',
-      severity: 'major',
-      control_level: 'administrative',
-      reason: 'A second visit showed the guard is removed every shift',
-    });
-
-    expect(reclassified.assessment).toMatchObject({
-      probability: 'likely',
-      severity: 'major',
-      risk_level: 'critical',
-      control_level: 'administrative',
-    });
-    expect(reclassified.assessment?.supersedes_id).toEqual(expect.any(String));
-
-    const all = await inScope<{ count: string }>(
-      db.app,
-      [SITE_A],
-      'SELECT count(*)::text AS count FROM finding_risk_assessment WHERE finding_id = $1',
-      [id],
-    );
-
-    expect(Number(one(all).count)).toBe(2);
-  });
-
-  it('reclasificar sin motivo se rechaza, y clasificar por primera vez con motivo también', async () => {
-    const id = await derivedFinding();
-
-    await expect(
-      findings.classify(coordinatorSession(), id, {
-        probability: 'possible',
-        severity: 'moderate',
-        control_level: 'ppe',
-        reason: 'Un motivo que nadie pidió',
-      }),
-    ).rejects.toMatchObject({ response: { code: 'invalid_finding' } });
-
-    await findings.classify(coordinatorSession(), id, {
-      probability: 'possible',
-      severity: 'moderate',
-      control_level: 'ppe',
-    });
-
-    await expect(
-      findings.classify(coordinatorSession(), id, {
-        probability: 'likely',
-        severity: 'major',
-        control_level: 'ppe',
-      }),
-    ).rejects.toMatchObject({ response: { code: 'invalid_finding' } });
-  });
-
-  it('el CHECK del motor rechaza las mismas dos combinaciones', async () => {
-    const id = await derivedFinding();
-
-    const withReason = await inScope(
-      db.app,
-      [SITE_A],
-      `INSERT INTO finding_risk_assessment
-         (finding_id, site_id, probability, severity, control_level, reason, assessed_by)
-       VALUES ($1, $2, 'possible', 'moderate', 'ppe', 'motivo de la primera', $3)`,
-      [id, SITE_A, coordinator.accountId],
-    ).catch((caught: unknown) => caught);
-
-    expect(sqlstate(withReason)).toBe('23514');
-  });
-
-  it('dos reclasificaciones de la misma vigente no bifurcan la historia', async () => {
-    const id = await derivedFinding();
-
-    const first = await findings.classify(coordinatorSession(), id, {
-      probability: 'possible',
-      severity: 'moderate',
-      control_level: 'engineering',
-    });
-
-    const currentId = first.assessment?.id as string;
-
-    await findings.classify(coordinatorSession(), id, {
-      probability: 'likely',
-      severity: 'major',
-      control_level: 'engineering',
-      reason: 'A second visit showed the guard is removed every shift',
-    });
-
-    // La segunda supera a una fila que YA fue superada — que es lo que hace una
-    // reclasificación que leyó la vigente antes de que otra cometiera. La barrera no es
-    // un lock del servicio: es el único de `supersedes_id`, y por eso se prueba
-    // insertando a mano.
-    const error = await inScope(
-      db.app,
-      [SITE_A],
-      `INSERT INTO finding_risk_assessment
-         (finding_id, site_id, probability, severity, control_level, supersedes_id, reason,
-          assessed_by)
-       VALUES ($1, $2, 'almost_certain', 'catastrophic', 'ppe', $3,
-               'Reclassified from a stale read', $4)`,
-      [id, SITE_A, currentId, coordinator.accountId],
-    ).catch((caught: unknown) => caught);
-
-    // 23505: violación de único.
-    expect(sqlstate(error)).toBe('23505');
-
-    const current = await inScope<{ count: string }>(
-      db.app,
-      [SITE_A],
-      `SELECT count(*)::text AS count FROM finding_risk_assessment a
-        WHERE a.finding_id = $1
-          AND NOT EXISTS (SELECT 1 FROM finding_risk_assessment s WHERE s.supersedes_id = a.id)`,
-      [id],
-    );
-
-    expect(Number(one(current).count)).toBe(1);
-  });
-
-  it('el nivel es el de la matriz aunque el payload afirme otro', async () => {
-    const id = await derivedFinding();
-
-    const classified = await findings.classify(coordinatorSession(), id, {
-      probability: 'likely',
-      severity: 'major',
-      control_level: 'ppe',
-      // `risk_level` no existe en el request: el `strictObject` lo rechazaría antes.
-      // Lo que este test afirma es lo otro: que el valor guardado sale de la matriz.
-    });
-
-    expect(classified.assessment?.risk_level).toBe('critical');
-  });
-
-  /**
-   * LA COMPARACIÓN DE LAS DOS MATRICES (design D5). SQL no puede importar TypeScript,
-   * así que la duplicación es deliberada y esto es lo que la sostiene.
-   */
-  it('las 25 celdas de Postgres coinciden con las 25 de risk.ts', async () => {
-    const combinations = PROBABILITIES.flatMap((probability) =>
-      SEVERITIES.map((severity) => ({ probability, severity })),
-    );
-
-    const rows = await inScope<{ probability: string; severity: string; level: string }>(
-      db.app,
-      [SITE_A],
-      `SELECT p AS probability, s AS severity, hs_risk_level(p, s) AS level
-         FROM unnest($1::text[], $2::text[]) AS t(p, s)`,
-      [
-        combinations.map((combination) => combination.probability),
-        combinations.map((combination) => combination.severity),
-      ],
-    );
-
-    expect(rows).toHaveLength(25);
-
-    for (const row of rows) {
-      expect(row.level).toBe(
-        riskLevel(
-          row.probability as (typeof PROBABILITIES)[number],
-          row.severity as (typeof SEVERITIES)[number],
-        ),
-      );
-    }
-  });
-
-  it('las cuatro listas cerradas son las mismas que el CHECK de la migración', async () => {
-    const rows = await inScope<{ definition: string }>(
-      db.app,
-      [SITE_A],
-      `SELECT pg_get_constraintdef(oid) AS definition
-         FROM pg_constraint
-        WHERE conrelid = 'finding_risk_assessment'::regclass AND contype = 'c'`,
-    );
-
-    const definitions = rows.map((row) => row.definition).join(' ');
-
-    for (const probability of PROBABILITIES) expect(definitions).toContain(`'${probability}'`);
-    for (const severity of SEVERITIES) expect(definitions).toContain(`'${severity}'`);
-  });
-
-  it('solo el coordinador clasifica', async () => {
-    const id = await derivedFinding();
-
-    await expect(
-      findings.classify(sessionFor(inspector.accountId, [SITE_A]), id, {
-        probability: 'possible',
-        severity: 'moderate',
-        control_level: 'ppe',
-      }),
-    ).rejects.toMatchObject({ response: { code: 'forbidden' } });
-
-    const read = await findings.get(coordinatorSession(), id);
-
-    expect(read.assessment).toBeNull();
-  });
-
-  it('el clasificador sale de la sesión', async () => {
-    const id = await derivedFinding();
-
-    await findings.classify(coordinatorSession(), id, {
-      probability: 'rare',
-      severity: 'minor',
-      control_level: 'elimination',
-    });
-
-    const read = await findings.get(coordinatorSession(), id);
-
-    expect(read.assessment?.assessed_by).toBe(coordinator.accountId);
+    expect(
+      routes.some(
+        (route) =>
+          route.method === RequestMethod.POST &&
+          route.paths.includes('findings/:id/risk-assessments'),
+      ),
+    ).toBe(false);
   });
 });
 
@@ -949,24 +733,6 @@ describe('la inmutabilidad', () => {
     }
   });
 
-  it('una clasificación no se corrige en su lugar', async () => {
-    const id = await anyFinding();
-
-    await findings.classify(
-      sessionFor(coordinator.accountId, [SITE_A, SITE_B], 'hs_coordinator'),
-      id,
-      { probability: 'rare', severity: 'minor', control_level: 'ppe' },
-    ).catch(() => undefined);
-
-    const error = await inScope(
-      db.app,
-      [SITE_A],
-      `UPDATE finding_risk_assessment SET severity = 'minor' WHERE finding_id = $1`,
-      [id],
-    ).catch((caught: unknown) => caught);
-
-    expect(sqlstate(error)).toBe('42501');
-  });
 });
 
 describe('la cadena de auditoría', () => {
@@ -1018,12 +784,11 @@ describe('la cadena de auditoría', () => {
     expect(await chainLength(SITE_A)).toBe(after);
   });
 
-  it('reportar a mano y clasificar dejan su propio eslabón', async () => {
+  it('reportar a mano deja su propio eslabón, sin clasificación', async () => {
     const reportedBefore = (await events(SITE_A, 'finding.reported')).length;
-    const classifiedBefore = (await events(SITE_A, 'finding.classified')).length;
     const draftId = randomUUID();
 
-    const created = await findings.report(
+    await findings.report(
       sessionFor(supervisor.accountId, [SITE_A], 'supervisor'),
       {
         site_id: SITE_A,
@@ -1034,55 +799,13 @@ describe('la cadena de auditoría', () => {
           photo_object_keys: [`${SITE_A}/manual/${draftId}/${randomUUID()}`],
         },
         occurred_at: '2026-08-10T13:00:00.000Z',
-        classification: {
-          probability: 'possible',
-          severity: 'moderate',
-          control_level: 'engineering',
-        },
-      },
-    );
-
-    await findings.classify(
-      sessionFor(coordinator.accountId, [SITE_A, SITE_B], 'hs_coordinator'),
-      created.id,
-      {
-        probability: 'likely',
-        severity: 'major',
-        control_level: 'elimination',
-        reason: 'The dock layout was changed after the review',
       },
     );
 
     const reported = await events(SITE_A, 'finding.reported');
-    const classified = await events(SITE_A, 'finding.classified');
 
     expect(reported).toHaveLength(reportedBefore + 1);
     expect(reported[reported.length - 1]?.payload.item_key).toBeNull();
-
-    // Dos: la inicial del reporte manual y la reclasificación.
-    expect(classified).toHaveLength(classifiedBefore + 2);
-
-    const last = classified[classified.length - 1];
-
-    expect(last?.payload.risk_level).toBe('critical');
-    expect(last?.payload.reason).toContain('dock layout');
-    expect(last?.payload.supersedes_id).toEqual(expect.any(String));
-  });
-
-  it('una clasificación rechazada no agrega eslabón', async () => {
-    const before = await chainLength(SITE_A);
-    const rows = await findingRows([SITE_A]);
-    const id = one(rows.slice(0, 1)).id;
-
-    await expect(
-      findings.classify(sessionFor(inspector.accountId, [SITE_A]), id, {
-        probability: 'rare',
-        severity: 'minor',
-        control_level: 'ppe',
-      }),
-    ).rejects.toMatchObject({ response: { code: 'forbidden' } });
-
-    expect(await chainLength(SITE_A)).toBe(before);
   });
 });
 

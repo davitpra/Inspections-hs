@@ -183,8 +183,8 @@ the server SHALL refuse a deactivated location.
 ### Requirement: A finding can be entered by hand and then has no item key
 
 The system SHALL accept a manually entered finding — a hazard seen outside an inspection — from a
-supervisor, manager or the HS coordinator, carrying its site, description, location, photos and an
-initial classification. A manually entered finding SHALL have `inspection_id`,
+supervisor, manager or the HS coordinator, carrying its site, description, location and photos. A
+manually entered finding SHALL have `inspection_id`,
 `template_version_item_id` and `item_key` all null, and a derived finding SHALL have all three
 set; the engine SHALL enforce that exactly one of the two origins holds. A manually entered
 finding SHALL therefore be absent from any grouping by `item_key`, which is the accepted
@@ -192,11 +192,11 @@ consequence recorded in §4 and risk F.
 
 #### Scenario: A supervisor reports a hazard seen outside an inspection
 
-- **WHEN** a supervisor posts a finding with a site, a description, a `location_id`, one object
-  key and an initial classification
+- **WHEN** a supervisor posts a finding with a site, a description, a `location_id` and one object
+  key
 - **THEN** a `finding` row is created with `origin` `manual`
 - **AND** its `inspection_id`, `template_version_item_id` and `item_key` are null
-- **AND** one `finding_risk_assessment` row references it
+- **AND** no classification is stored for it
 
 #### Scenario: A half-derived finding cannot exist
 
@@ -217,140 +217,13 @@ consequence recorded in §4 and risk F.
   `site_id` and its draft identifier
 - **THEN** the request is rejected with the code `invalid_finding`
 
-### Requirement: Classification is an append-only chain, never an edit
-
-The system SHALL record every risk classification as a new `finding_risk_assessment` row and
-SHALL NEVER update one. The current classification of a finding SHALL be the row that no other
-row supersedes, and every other row SHALL be reachable from it through `supersedes_id`. A finding
-with no assessment row SHALL be reported as unclassified — a state derived from the absence of a
-row, not a default value stored anywhere. A row that supersedes another SHALL carry a `reason`,
-and the first classification of a finding SHALL NOT carry one.
-
-#### Scenario: A derived finding starts unclassified
-
-- **WHEN** a submission with a negative answer is accepted
-- **THEN** the created finding has no `finding_risk_assessment` row
-- **AND** it is reported as unclassified
-
-#### Scenario: Reclassifying leaves both rows
-
-- **GIVEN** a finding classified as `possible` × `moderate`
-- **WHEN** the coordinator reclassifies it as `likely` × `major` with the reason `second visit
-  showed the guard is removed daily`
-- **THEN** two `finding_risk_assessment` rows exist for that finding
-- **AND** the current one is the second, carrying that reason
-- **AND** the first row is unchanged and reachable through the second's `supersedes_id`
-
-#### Scenario: Reclassifying without a reason is refused
-
-- **WHEN** an assessment carrying a `supersedes_id` is inserted with a null `reason`
-- **THEN** the insert fails on the reason check constraint
-
-#### Scenario: A first classification cannot carry a reason
-
-- **WHEN** an assessment with a null `supersedes_id` is inserted with a `reason`
-- **THEN** the insert fails on the same check constraint
-
-#### Scenario: Two concurrent reclassifications do not fork the history
-
-- **GIVEN** a finding whose current assessment is `A`
-- **WHEN** two requests reclassify it at the same time, both superseding `A`
-- **THEN** one commits and the other fails with a unique violation on `supersedes_id`
-- **AND** the finding still has exactly one current assessment
-
-#### Scenario: A classification cannot be corrected in place
-
-- **WHEN** the application role updates any column of a `finding_risk_assessment` row
-- **THEN** the update is rejected
-
-### Requirement: The risk level is computed by the engine from probability and severity
-
-The system SHALL derive `risk_level` from `probability` and `severity` through a fixed
-5 × 5 matrix and SHALL ignore any value a caller supplies for it. `probability` SHALL be one of
-`rare`, `unlikely`, `possible`, `likely`, `almost_certain`; `severity` one of `negligible`,
-`minor`, `moderate`, `major`, `catastrophic`; and `risk_level` one of `low`, `medium`, `high`,
-`critical`. The matrix SHALL be the same whether the classification is written through the
-endpoint or inserted directly, and all 25 cells SHALL be covered by a case table.
-
-#### Scenario: The stored level is the matrix's, not the caller's
-
-- **WHEN** a classification of `likely` × `major` is posted claiming `risk_level` `low`
-- **THEN** the stored `risk_level` is `critical`
-
-#### Scenario: A direct insert gets the same level
-
-- **WHEN** a `finding_risk_assessment` row of `possible` × `moderate` is inserted directly,
-  bypassing the endpoint
-- **THEN** its `risk_level` is `medium`
-
-#### Scenario: The two implementations of the matrix agree
-
-- **WHEN** all 25 combinations of `probability` and `severity` are evaluated by the shared pure
-  function and by the database
-- **THEN** the 25 results are identical
-
-#### Scenario: A scale value outside the closed list is refused
-
-- **WHEN** a classification is posted with `severity` `fatal`
-- **THEN** the request is rejected and no assessment row is created
-
-### Requirement: A classification records the level of the control hierarchy proposed
-
-The system SHALL require every `finding_risk_assessment` to carry a `control_level`, one of
-`elimination`, `substitution`, `engineering`, `administrative`, `ppe`, naming where in the
-hierarchy of controls the proposed solution sits. The system SHALL NOT rank, score or reject a
-classification because of the level chosen: recording that the answer was personal protective
-equipment rather than elimination is the point, and judging it is a person's job.
-
-#### Scenario: The level is stored as given
-
-- **WHEN** a classification is posted with `control_level` `ppe`
-- **THEN** the stored assessment carries `ppe`
-- **AND** the request is accepted
-
-#### Scenario: A classification without a control level is refused
-
-- **WHEN** a classification is posted with no `control_level`
-- **THEN** the request is rejected and no assessment row is created
-
-#### Scenario: An unknown level is refused by the engine
-
-- **WHEN** a `finding_risk_assessment` row is inserted with `control_level` `training`
-- **THEN** the insert fails on the check constraint
-
-### Requirement: Only the HS coordinator classifies
-
-The system SHALL accept a classification or a reclassification only from an account whose role is
-`hs_coordinator`, and SHALL record that account as `assessed_by` from the session and never from
-the payload. A JHSC member, supervisor, manager or external auditor SHALL be refused with
-`forbidden`. Reporting a manual finding SHALL be available to supervisors, managers and the HS
-coordinator; a JHSC member reports findings by submitting an inspection.
-
-#### Scenario: A JHSC member cannot classify
-
-- **WHEN** a JHSC member posts a classification for a finding of their own site
-- **THEN** the request is rejected with the code `forbidden`
-- **AND** no assessment row is created
-
-#### Scenario: The assessor is taken from the session
-
-- **WHEN** the coordinator posts a classification
-- **THEN** `finding_risk_assessment.assessed_by` is the account of the authenticated session
-- **AND** no field of the payload can set it
-
-#### Scenario: An external auditor cannot report a finding
-
-- **WHEN** an external auditor posts a manual finding
-- **THEN** the request is rejected with the code `forbidden`
-
 ### Requirement: Findings are read within the reader's site scope
 
 The system SHALL return findings only for the sites in the session's scope, enforced by the row
-level security policy on `finding`, `finding_photo` and `finding_risk_assessment` and not by a
-`WHERE site_id` clause in the endpoint. A listing SHALL carry, for each finding, its origin, its
-description, its location, its photos and its current classification or the fact that it has none.
-A request for a finding outside the session's scope SHALL be answered exactly as one for a
-finding that does not exist.
+level security policy on `finding` and `finding_photo` and not by a `WHERE site_id` clause in the
+endpoint. A listing SHALL carry, for each finding, its origin, its description, its location and
+its photos. A request for a finding outside the session's scope SHALL be answered exactly as one
+for a finding that does not exist.
 
 #### Scenario: A JHSC member of one site does not see the other's findings
 
@@ -369,13 +242,11 @@ finding that does not exist.
 - **THEN** the response is `finding_not_found`
 - **AND** the body reveals nothing about its site, location or description
 
-#### Scenario: A listing reports the current classification
+#### Scenario: A listing carries no classification
 
-- **GIVEN** a finding classified twice
+- **GIVEN** a finding of the reader's site
 - **WHEN** it is listed
-- **THEN** the classification returned is the current one, with its `risk_level` and
-  `control_level`
-- **AND** a finding never classified is returned as unclassified
+- **THEN** the finding carries no `assessment`, `risk_level`, `probability` or `control_level`
 
 ### Requirement: A derived finding is marked with its recurrence at the moment it is created
 

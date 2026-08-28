@@ -18,8 +18,8 @@ import { DEFAULT_PASSWORD, INSPECTOR, ST_THOMAS, currentPeriodStart } from './de
  * levantado no tuvo. Esto los produce.
  *
  * TODO PASA POR LA API, CON SESIÓN, SALVO DOS EXCEPCIONES DECLARADAS (abajo). No es
- * purismo: la derivación de hallazgos, las marcas de recurrencia, los plazos por
- * severidad, las notificaciones y la máquina de estados viven en los servicios y en los
+ * purismo: la derivación de hallazgos, las marcas de recurrencia, las notificaciones y la
+ * máquina de estados viven en los servicios y en los
  * triggers. Un script que escribiera las filas a mano produciría un entorno que se ve
  * igual y se comporta distinto — y las diferencias aparecerían recién cuando alguien
  * intente reproducir un bug contra estos datos.
@@ -31,8 +31,8 @@ import { DEFAULT_PASSWORD, INSPECTOR, ST_THOMAS, currentPeriodStart } from './de
  *      período CORRIENTE (`inspections.open-period`); no existe forma de pedirle que
  *      abra marzo, y no tiene que existir. Se insertan por SQL, con los mismos GRANT de
  *      `hs_app` que usa `demo-data.mjs`.
- *   2. **Una acción correctiva ya vencida.** `due_at` lo calcula `dueAt()` sobre el
- *      reloj del servidor al crearla, así que por la API toda acción nace con plazo
+ *   2. **Una acción correctiva ya vencida.** `due_at` se declara al crearla, así que
+ *      por la API toda acción nace con plazo
  *      futuro y "vencida" y "escalada" serían dos estados que la UI tiene y nadie puede
  *      ver. Se inserta por SQL con su evento de apertura — que es lo que exige
  *      `hs_action_first_event_required` —, y el escalamiento lo produce solo el cron de
@@ -114,36 +114,10 @@ const HISTORY = [
   { monthsAgo: 1, outcome: 'missed' },
 ];
 
-/**
- * Con qué se clasifica cada concepto. El nivel de riesgo NO está acá porque no se puede
- * escribir: lo calcula el motor a partir de estos dos (design D5 de la etapa 4).
- *
- * La severidad además decide el plazo (`DUE_DAYS_BY_SEVERITY`), así que estos valores son
- * los que hacen que las acciones de demo tengan fechas distintas entre sí.
- */
-const CLASSIFICATION = {
-  'housekeeping.aisles-clear': {
-    probability: 'likely',
-    severity: 'moderate',
-    control_level: 'administrative',
-  },
-  'electrical.cords-undamaged': {
-    probability: 'possible',
-    severity: 'major',
-    control_level: 'engineering',
-  },
-  'guards.emergency-stops': {
-    probability: 'unlikely',
-    severity: 'catastrophic',
-    control_level: 'engineering',
-  },
-};
-
 /** El hallazgo de entrada manual: el peligro visto fuera de una inspección (§5 riesgo F). */
 const MANUAL_FINDING = {
   location: 'boiler-room',
   description: 'Steam line insulation torn open at chest height beside the boiler room door.',
-  classification: { probability: 'possible', severity: 'major', control_level: 'engineering' },
 };
 
 /**
@@ -196,7 +170,6 @@ const INCIDENTS = [
         },
       ],
       action: {
-        severity: 'major',
         description:
           'Add the chiller line floor to the daily line check and install a drip tray under it.',
       },
@@ -223,7 +196,6 @@ const INCIDENTS = [
  */
 const OVERDUE_ACTION = {
   description: 'Replace the damaged extension cord at the maintenance bench and tag the old one.',
-  severity: 'major',
   createdDaysAgo: 30,
   dueDaysAgo: 23,
 };
@@ -613,61 +585,7 @@ async function submitInspection(token, inspection, month, periodStart, reference
 }
 
 // ---------------------------------------------------------------------------
-// Clasificación, hallazgo manual, acciones
-
-/** Clasifica todo hallazgo sin clasificación vigente. Reclasificar es otro POST. */
-async function classifyFindings(token) {
-  const findings = await request('GET', '/findings', { token });
-  let classified = 0;
-
-  for (const finding of findings) {
-    if (finding.assessment !== null) continue;
-
-    const values = CLASSIFICATION[finding.item_key];
-
-    if (values === undefined) continue;
-
-    await request('POST', `/findings/${finding.id}/risk-assessments`, { token, body: values });
-    classified += 1;
-  }
-
-  return classified;
-}
-
-/**
- * La reclasificación del hallazgo más reciente de la serie recurrente.
- *
- * Existe para que la pantalla del hallazgo tenga una clasificación superada y no solo la
- * vigente: la historia de cómo cambió la lectura del riesgo es parte de lo que el
- * registro guarda, y con una sola fila no se ve.
- */
-async function reclassifyRecurrent(token) {
-  const findings = await request('GET', '/findings', { token });
-  const recurrent = findings
-    .filter((finding) => finding.item_key === 'housekeeping.aisles-clear')
-    .sort((left, right) => right.occurred_at.localeCompare(left.occurred_at))[0];
-
-  if (recurrent === undefined) return false;
-
-  // `superseded_by` no viaja en la lectura; lo que se ve es cuántas veces se clasificó.
-  // Dos POST con el mismo motivo dejarían dos reclasificaciones iguales, así que se
-  // pregunta por el motivo antes de escribir.
-  if (recurrent.assessment?.reason !== null && recurrent.assessment?.reason !== undefined) {
-    return false;
-  }
-
-  await request('POST', `/findings/${recurrent.id}/risk-assessments`, {
-    token,
-    body: {
-      probability: 'almost_certain',
-      severity: 'major',
-      control_level: 'engineering',
-      reason: 'Third occurrence in the same aisle: the administrative control is not holding.',
-    },
-  });
-
-  return true;
-}
+// Hallazgo manual y acciones
 
 /** El hallazgo de entrada manual, con su foto por el prefijo `manual/`. */
 async function ensureManualFinding(token, references) {
@@ -694,7 +612,6 @@ async function ensureManualFinding(token, references) {
         photo_object_keys: [objectKey],
       },
       occurred_at: daysAgo(6).toISOString(),
-      classification: MANUAL_FINDING.classification,
     },
   });
 
@@ -717,7 +634,7 @@ async function seedActions(tokens) {
   const withAction = new Set(actions.map((action) => action.finding_id));
 
   const candidates = findings
-    .filter((finding) => finding.assessment !== null && !withAction.has(finding.id))
+    .filter((finding) => !withAction.has(finding.id))
     .sort((left, right) => left.occurred_at.localeCompare(right.occurred_at));
 
   // La descripción es la que identifica cada paso entre corridas. Sin esto, la segunda
@@ -754,6 +671,7 @@ async function seedActions(tokens) {
       body: {
         assignee_person_id: INSPECTOR.personId,
         description: step.description,
+        due_at: daysAgo(-14).toISOString(),
       },
     });
 
@@ -824,18 +742,17 @@ async function ensureOverdueAction(pool, token) {
 
     const { rows } = await client.query(
       `INSERT INTO corrective_action
-         (site_id, finding_id, assignee_person_id, description, severity, due_at,
-          created_by, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         (site_id, finding_id, assignee_person_id, description, due_at,
+           created_by, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id`,
       [
         ST_THOMAS,
         finding.id,
         INSPECTOR.personId,
         OVERDUE_ACTION.description,
-        OVERDUE_ACTION.severity,
-        daysAgo(OVERDUE_ACTION.dueDaysAgo),
-        COORDINATOR_ID,
+         daysAgo(OVERDUE_ACTION.dueDaysAgo),
+         COORDINATOR_ID,
         daysAgo(OVERDUE_ACTION.createdDaysAgo),
       ],
     );
@@ -943,7 +860,7 @@ async function seedIncidents(token, references) {
         body: {
           assignee_person_id: INSPECTOR.personId,
           description: plan.investigation.action.description,
-          severity: plan.investigation.action.severity,
+           due_at: daysAgo(-14).toISOString(),
         },
       });
     }
@@ -1027,15 +944,10 @@ async function main() {
       );
     }
 
-    // 2. Clasificación y hallazgo manual.
-    const classified = await classifyFindings(tokens.coordinator);
-    const reclassified = await reclassifyRecurrent(tokens.coordinator);
+    // 2. Hallazgo manual.
     const manual = await ensureManualFinding(tokens.coordinator, references);
 
-    log(
-      `Hallazgos: ${classified} clasificados` +
-        `${reclassified ? ', 1 reclasificado' : ''}${manual ? ', 1 manual' : ''}.`,
-    );
+    log(`Hallazgos: ${manual ? '1 manual' : 'sin cambios'}.`);
 
     // 3. Acciones correctivas.
     const actions = await seedActions(tokens);

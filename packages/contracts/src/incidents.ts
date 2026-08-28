@@ -64,7 +64,7 @@ export type IncidentClassification = z.infer<typeof incidentClassificationSchema
  * confirmarse contra las obligaciones concretas del empleador bajo la OHSA antes
  * de salir a producción — el sistema la trata como configuración en código, no
  * como regla legal autoritativa"_. El mismo cartel que lleva
- * `DUE_DAYS_BY_SEVERITY` y que llevan los relojes de `regulatory-clocks.ts`.
+ * las reglas de investigación y los relojes de `regulatory-clocks.ts`.
  */
 export const INVESTIGATION_REQUIRED_CLASSIFICATIONS: readonly IncidentClassification[] = [
   'critical_injury',

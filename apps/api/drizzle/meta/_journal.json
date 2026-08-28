@@ -253,6 +253,13 @@
       "when": 1754524800035,
       "tag": "0036_scheduled_inspection_visible_early",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1754524800036,
+      "tag": "0037_retire_risk_classification",
+      "breakpoints": true
     }
   ]
 }

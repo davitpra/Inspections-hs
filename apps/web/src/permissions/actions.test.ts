@@ -14,7 +14,6 @@ function action(state: ActionState): Action {
     finding_id: '55555555-5555-4555-8555-555555555555',
     assignee_person_id: PERSON,
     description: 'Install a fixed guard on the infeed of line 3',
-    severity: 'major',
     due_at: '2026-08-17T13:00:00.000Z',
     remediation_group_id: null,
     created_by: '66666666-6666-4666-8666-666666666666',

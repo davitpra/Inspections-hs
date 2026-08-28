@@ -7,9 +7,9 @@ import type { IncidentClassification } from './incidents.js';
  * —qué obligación dispara cada clasificación, desde cuándo cuenta y cuánto dura—
  * hay que confirmarlas contra las obligaciones concretas del empleador bajo la
  * OHSA y la WSIA **antes de salir a producción**. Es el mismo cartel que §4 le
- * pone a la lista de clasificaciones que obligan investigación y que
- * `DUE_DAYS_BY_SEVERITY` lleva en `actions.ts`. El sistema muestra un plazo
- * calculado; el que responde ante el organismo es una persona.
+ * pone a la lista de clasificaciones que obligan investigación. Los plazos de
+ * acciones correctivas, en cambio, los declara el coordinador: el sistema muestra
+ * un plazo calculado; el que responde ante el organismo es una persona.
  *
  * **El sistema no envía nada** al MLITSD ni al WSIB (§3 R4). Acá se calcula qué
  * aplica y para cuándo; presentar es un acto de una persona en el portal del

@@ -6,7 +6,6 @@ import type {
   ActionSummary,
   EscalationLevel,
   EvidenceInput,
-  Severity,
 } from '@hs/contracts';
 
 /**
@@ -50,7 +49,6 @@ export interface InsertActionInput {
   investigationId: string | null;
   assigneePersonId: string;
   description: string;
-  severity: Severity;
   dueAt: Date;
   remediationGroupId: string | null;
   createdBy: string;
@@ -62,9 +60,9 @@ export async function insertAction(
 ): Promise<string> {
   const { rows } = await client.query<{ id: string }>(
     `INSERT INTO corrective_action
-       (site_id, finding_id, investigation_id, assignee_person_id, description, severity,
+       (site_id, finding_id, investigation_id, assignee_person_id, description,
         due_at, remediation_group_id, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING id`,
     [
       input.siteId,
@@ -72,7 +70,6 @@ export async function insertAction(
       input.investigationId,
       input.assigneePersonId,
       input.description,
-      input.severity,
       input.dueAt,
       input.remediationGroupId,
       input.createdBy,
@@ -207,8 +204,8 @@ export async function lastExecutor(
 /** El detalle conserva el stream completo; el listado usa una proyección aparte. */
 const ACTION_SELECT = `
   SELECT a.id, a.site_id, a.finding_id, a.investigation_id, a.assignee_person_id,
-         a.description, a.severity,
-         a.due_at, a.remediation_group_id, a.created_by, a.created_at,
+          a.description,
+          a.due_at, a.remediation_group_id, a.created_by, a.created_at,
          s.to_state AS state,
          (a.due_at < now()) AS overdue,
          COALESCE(ev.events, '[]'::jsonb) AS events,
@@ -263,7 +260,7 @@ const ACTION_SUMMARY_SELECT = `
          a.finding_id, a.investigation_id, a.assignee_person_id,
          CASE WHEN person.id IS NULL THEN NULL
               ELSE person.first_name || ' ' || person.last_name END AS assignee_name,
-         a.description, a.severity, a.due_at,
+          a.description, a.due_at,
          state.to_state AS state,
          (a.due_at < now()) AS overdue,
          COALESCE(esc.escalations, '[]'::jsonb) AS escalations,
@@ -335,7 +332,6 @@ interface ActionRow {
   investigation_id: string | null;
   assignee_person_id: string;
   description: string;
-  severity: Severity;
   due_at: Date;
   remediation_group_id: string | null;
   created_by: string;
@@ -355,7 +351,6 @@ interface ActionSummaryRow {
   assignee_person_id: string;
   assignee_name: string | null;
   description: string;
-  severity: Severity;
   due_at: Date;
   state: ActionState;
   overdue: boolean;
@@ -374,7 +369,6 @@ function toActionSummary(row: ActionSummaryRow): ActionSummary {
     assignee_person_id: row.assignee_person_id,
     assignee_name: row.assignee_name,
     description: row.description,
-    severity: row.severity,
     due_at: row.due_at.toISOString(),
     state: row.state,
     overdue: row.overdue,
@@ -430,7 +424,6 @@ function toAction(row: ActionRow): Action {
     investigation_id: row.investigation_id,
     assignee_person_id: row.assignee_person_id,
     description: row.description,
-    severity: row.severity,
     due_at: row.due_at.toISOString(),
     remediation_group_id: row.remediation_group_id,
     created_by: row.created_by,

@@ -1,25 +1,29 @@
 import { z } from 'zod';
 
 import type { Role } from './identity.js';
-import { severitySchema, type Severity } from './findings.js';
 
 /**
  * Requisitos §7 etapa 5 — La acción correctiva y su ciclo de vida.
  *
- * De un hallazgo clasificado sale una obligación con una persona nombrada y una
- * fecha límite (§3 R2). El responsable la ejecuta, carga evidencia, y **alguien
- * distinto** la verifica y la cierra (§3 R3). Si vence sin cerrarse, escala.
+ * De un hallazgo sale una obligación con una persona nombrada y una fecha límite
+ * (§3 R2). El responsable la ejecuta, carga evidencia, y **alguien distinto** la
+ * verifica y la cierra (§3 R3). Si vence sin cerrarse, escala.
  *
- * Las dos reglas de este archivo —qué transiciones existen y de dónde sale la
- * fecha límite— son **funciones puras sin base de datos** (ADR-008), y viven acá
- * y no en `packages/forms` por dos motivos: `forms` es el motor de formularios y
- * va dentro del service worker, y la tabla de transiciones es un dato del
- * contrato —el cliente necesita saber qué botón mostrar— no del motor.
+ * La regla de este archivo —qué transiciones existen— es una **función pura sin
+ * base de datos** (ADR-008), y vive acá y no en `packages/forms` por dos motivos:
+ * `forms` es el motor de formularios y va dentro del service worker, y la tabla
+ * de transiciones es un dato del contrato —el cliente necesita saber qué botón
+ * mostrar— no del motor.
+ *
+ * **La fecha límite ya no se calcula.** Salía de la severidad de la clasificación
+ * del hallazgo, retirada antes de producción (ADR-014); ahora la declara el
+ * coordinador al abrir la acción. Que esa fecha sea futura depende del reloj, así
+ * que no se comprueba acá: este archivo no lo lee (ADR-007).
  *
  * Lo que estos esquemas NO pueden validar es todo lo que depende del estado: que
- * el hallazgo esté clasificado, que la transición salga del estado vigente, que
- * quien verifica no sea quien ejecutó. Eso son triggers en
- * `apps/api/drizzle/0011_corrective_actions.sql`. Zod valida la forma.
+ * la transición salga del estado vigente, que quien verifica no sea quien
+ * ejecutó. Eso son triggers en `apps/api/drizzle/0011_corrective_actions.sql`.
+ * Zod valida la forma.
  */
 
 /** La misma forma que en `findings.ts`: una key del bucket, nunca bytes (ADR-001). */
@@ -141,50 +145,9 @@ export function transitionsFrom(from: ActionState | null): readonly ActionTransi
 }
 
 // ---------------------------------------------------------------------------
-// El plazo
-
-/**
- * La fecha límite por severidad, en días.
- *
- * **Configuración en código, no regla legal autoritativa.** Los requisitos fijan
- * el escalamiento en +3 y +7 días (§3 R3) pero no el plazo inicial; estos cinco
- * números los elegimos nosotros y hay que confirmarlos con el coordinador de HS
- * antes de producción. El mismo cartel que §4 le pone a la lista de
- * clasificaciones que obligan investigación.
- *
- * Cambiarlos después es barato y **no reescribe el pasado**: `due_at` queda
- * congelado en cada fila el día que la acción se crea (design D5).
- */
-export const DUE_DAYS_BY_SEVERITY: Readonly<Record<Severity, number>> = {
-  catastrophic: 3,
-  major: 7,
-  moderate: 14,
-  minor: 30,
-  negligible: 60,
-};
+// El escalamiento
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
-/**
- * La fecha límite de una acción.
- *
- * Deriva de la **severidad** y no del `risk_level`, porque §3 R2 dice
- * literalmente "una fecha límite derivada de la severidad". El nivel de riesgo
- * sirve para priorizar y para reportar; el plazo es de la severidad.
- *
- * **Se calcula acá y no en SQL**, a diferencia de la matriz de riesgo de 0010.
- * `timestamptz + interval 'N days'` de Postgres suma días de calendario según la
- * zona de la sesión, así que las dos implementaciones diferirían en una hora
- * cuatro veces al año y ningún test lo notaría hasta marzo. Con una sola
- * implementación no hay nada que comparar: el servidor calcula y el `INSERT`
- * lleva el valor ya resuelto.
- */
-export function dueAt(severity: Severity, from: Date): Date {
-  return new Date(from.getTime() + DUE_DAYS_BY_SEVERITY[severity] * MS_PER_DAY);
-}
-
-// ---------------------------------------------------------------------------
-// El escalamiento
 
 /**
  * Los dos escalones de §3 R3, y los días de atraso que los disparan.
@@ -228,12 +191,19 @@ export const ACTION_DESCRIPTION_MIN = 10;
 export const ACTION_DESCRIPTION_MAX = 2000;
 
 /**
- * Crear una acción.
+ * Crear una acción, cuelgue de un hallazgo o de una investigación.
  *
- * **`due_at` y `severity` no están, y esa ausencia es el requisito.** Los calcula
- * el servidor a partir de la clasificación vigente del hallazgo: un plazo que el
- * caller pudiera mandar sería un plazo negociable, y el registro dejaría de poder
- * decir qué se prometió el día que se prometió.
+ * **Es un solo esquema para los dos padres.** Hubo dos mientras la fecha límite
+ * salía de la severidad: un hallazgo la tenía en su clasificación y una
+ * investigación no, así que el segundo cuerpo pedía `severity`. Retirada la
+ * clasificación (ADR-014), los dos cuerpos son el mismo y el padre sigue donde
+ * siempre estuvo: en la RUTA, no en un campo. §4 fija que una acción pertenece a
+ * exactamente un padre, y un `investigation_id` opcional acá dejaría esa relación
+ * como un campo más.
+ *
+ * **`due_at` viaja y es obligatorio.** Ya no hay nada de donde derivarlo: la
+ * fecha es lo que el coordinador se compromete a cumplir. Que sea futura lo
+ * comprueba el servicio, que sí tiene reloj; acá solo se valida la forma.
  *
  * `remediation_group_id` es la remediación compartida de la pregunta cerrada 9:
  * **opcional y sin semántica**. Agrupa en la UI y en reportes; no altera plazos,
@@ -242,34 +212,11 @@ export const ACTION_DESCRIPTION_MAX = 2000;
 export const createActionRequestSchema = z.strictObject({
   assignee_person_id: z.uuid(),
   description: z.string().trim().min(ACTION_DESCRIPTION_MIN).max(ACTION_DESCRIPTION_MAX),
+  due_at: z.iso.datetime({ offset: true }),
   remediation_group_id: z.uuid().optional(),
 });
 
 export type CreateActionRequest = z.infer<typeof createActionRequestSchema>;
-
-/**
- * Crear una acción cuyo padre es una **investigación** (§4, etapa 6).
- *
- * **Acá `severity` SÍ viaja, y es la única diferencia con el request de arriba.** Un
- * hallazgo tiene clasificación vigente y de ahí sale la severidad; una investigación no
- * tiene ninguna. Las opciones eran inventar un default —"las acciones de investigación
- * son `major`"— o pedírsela al coordinador. Un default pondría un plazo legal en una
- * constante escondida, así que se la pide.
- *
- * `due_at` sigue sin viajar: lo calcula `dueAt()` en el servidor a partir de esta
- * severidad, con la misma tabla y la misma congelación en la fila.
- *
- * El padre va en la RUTA y no en el cuerpo, igual que el hallazgo: §4 fija que una
- * acción pertenece a exactamente un padre, y un `investigation_id` opcional en el cuerpo
- * dejaría esa relación como un campo más.
- */
-export const createInvestigationActionRequestSchema = createActionRequestSchema.extend({
-  severity: severitySchema,
-});
-
-export type CreateInvestigationActionRequest = z.infer<
-  typeof createInvestigationActionRequestSchema
->;
 
 /** De qué momento del trabajo es una evidencia. R3 pide antes/después. */
 export const EVIDENCE_KINDS = ['before', 'after'] as const;
@@ -401,7 +348,6 @@ export const actionSummarySchema = z.strictObject({
   assignee_person_id: z.uuid(),
   assignee_name: z.string().min(1).nullable(),
   description: z.string(),
-  severity: severitySchema,
   due_at: z.iso.datetime({ offset: true }),
   state: actionStateSchema,
   overdue: z.boolean(),
@@ -418,10 +364,9 @@ export type ActionSummary = z.infer<typeof actionSummarySchema>;
  * `corrective_action` no tiene dónde guardarlo. `overdue` se calcula comparando
  * `due_at` con el reloj del servidor al leer, por el mismo motivo.
  *
- * `severity` es la que tenía el hallazgo **el día que se creó la acción**, que es
- * de la que salió `due_at`. Reclasificar el hallazgo después no mueve ninguna de
- * las dos (design D5). Cuando el padre es una investigación no hay clasificación que
- * leer y la severidad la declaró el coordinador, pero queda congelada igual.
+ * `due_at` es la fecha que el coordinador declaró **el día que creó la acción**, y
+ * queda congelada en la fila: nada de lo que pase después con el hallazgo la mueve
+ * (design D5). Un plazo distinto se consigue abriendo otra acción.
  *
  * **`finding_id` e `investigation_id` son los dos nulables y exactamente uno es no
  * nulo** (§4, etapa 6): una acción cuelga de un hallazgo o de una investigación, nunca
@@ -435,7 +380,6 @@ export const actionSchema = z.strictObject({
   investigation_id: z.uuid().nullable(),
   assignee_person_id: z.uuid(),
   description: z.string(),
-  severity: severitySchema,
   due_at: z.iso.datetime({ offset: true }),
   remediation_group_id: z.uuid().nullable(),
   created_by: z.uuid(),

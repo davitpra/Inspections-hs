@@ -46,6 +46,7 @@ import { createSchedulingStack, type SchedulingStack } from './helpers/schedulin
 
 const SITE_A = '1c500000-0000-4000-8000-000000000001';
 const SITE_B = '1c500000-0000-4000-8000-000000000002';
+const INVESTIGATION_DUE_AT = '2050-01-01T17:00:00.000Z';
 
 let db: TestDatabase;
 let stack: SchedulingStack;
@@ -152,7 +153,7 @@ async function openActionOn(incidentId: string): Promise<string> {
   const action = await actions.createForInvestigation(asCoordinator(), one(rows).id, {
     assignee_person_id: supervisor.personId,
     description: 'Replace the bypassed interlock and retrain the changeover crew',
-    severity: 'major',
+    due_at: INVESTIGATION_DUE_AT,
   });
 
   return action.id;
@@ -1313,7 +1314,7 @@ describe('la auditoría', () => {
 // ---------------------------------------------------------------------------
 
 describe('el segundo padre de la acción correctiva', () => {
-  it('una acción de investigación se crea con la severidad que declara el coordinador', async () => {
+  it('una acción de investigación se crea con la fecha que declara el coordinador', async () => {
     const incidentId = await investigated();
     const rows = await inSession<{ id: string }>(
       db.app,
@@ -1325,12 +1326,12 @@ describe('el segundo padre de la acción correctiva', () => {
     const action = await actions.createForInvestigation(asCoordinator(), one(rows).id, {
       assignee_person_id: supervisor.personId,
       description: 'Replace the bypassed interlock on the changeover guard',
-      severity: 'catastrophic',
+      due_at: INVESTIGATION_DUE_AT,
     });
 
     expect(action.finding_id).toBeNull();
     expect(action.investigation_id).toBe(one(rows).id);
-    expect(action.severity).toBe('catastrophic');
+    expect(action.due_at).toBe(INVESTIGATION_DUE_AT);
 
     const listed = await actions.list(asCoordinator());
     expect(listed.find((item) => item.id === action.id)?.source).toEqual({
@@ -1338,12 +1339,6 @@ describe('el segundo padre de la acción correctiva', () => {
       investigation_id: one(rows).id,
     });
 
-    // `catastrophic` son 3 días en la misma tabla que usan las acciones de hallazgo.
-    const days =
-      (new Date(action.due_at).getTime() - new Date(action.created_at).getTime()) /
-      (24 * 60 * 60 * 1000);
-
-    expect(Math.round(days)).toBe(3);
   });
 
   it('la acción de una investigación recorre el mismo ciclo, con el mismo verificador distinto', async () => {
@@ -1386,10 +1381,10 @@ describe('el segundo padre de la acción correctiva', () => {
           db.app,
           { siteIds: [SITE_A], userId: coordinator.accountId, role: 'hs_coordinator' },
           `INSERT INTO corrective_action
-             (site_id, finding_id, investigation_id, assignee_person_id, description,
-              severity, due_at, created_by)
-           VALUES ($1, $2, $3, $4, 'a description long enough', 'major', now(), $5)`,
-          [SITE_A, findingId, investigation, supervisor.personId, coordinator.accountId],
+           (site_id, finding_id, investigation_id, assignee_person_id, description,
+               due_at, created_by)
+            VALUES ($1, $2, $3, $4, 'a description long enough', $5, $6)`,
+           [SITE_A, findingId, investigation, supervisor.personId, INVESTIGATION_DUE_AT, coordinator.accountId],
         ),
       ).rejects.toBeTruthy();
     }

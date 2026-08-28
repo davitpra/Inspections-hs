@@ -10,7 +10,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 
-import type { ActionState, EscalationLevel, EvidenceKind, Severity } from '@hs/contracts';
+import type { ActionState, EscalationLevel, EvidenceKind } from '@hs/contracts';
 
 import { site } from './catalog';
 import { finding } from './findings';
@@ -43,10 +43,7 @@ import { appUser, person } from './identity';
  * `correctiveActionEvent`; buscar acá un campo `status` es buscar lo que el diseño
  * decidió no tener.
  *
- * `severity` y `dueAt` quedan congelados el día que la acción se crea: reclasificar
- * el hallazgo después no mueve ninguno de los dos. Cuando el padre es una
- * investigación no hay clasificación que leer, así que la severidad la declara el
- * coordinador al crear la acción y se congela igual.
+ * `dueAt` queda congelado el día que la acción se crea.
  */
 export const correctiveAction = pgTable(
   'corrective_action',
@@ -61,7 +58,7 @@ export const correctiveAction = pgTable(
     // 0012). Las dos columnas son nulables y un `CHECK (num_nonnulls(...) = 1)` en el
     // motor exige que haya una y solo una: ni ninguna —una obligación sin padre no se
     // puede rastrear hasta el hecho que la originó— ni las dos, que dejaría sin
-    // respuesta de dónde salió la severidad del plazo.
+     // respuesta de qué padre originó la obligación.
     //
     // Uno a muchos hacia abajo: un padre puede tener varias acciones, una acción cubre
     // un solo padre (pregunta cerrada 9).
@@ -79,12 +76,7 @@ export const correctiveAction = pgTable(
 
     description: text('description').notNull(),
 
-    // La severidad de la que salió `dueAt`, copiada al crear.
-    severity: text('severity').$type<Severity>().notNull(),
-
-    // Calculada por `dueAt()` de `@hs/contracts`. No hay función SQL que la reproduzca:
-    // sumar días de calendario depende de la zona y las dos copias diferirían en una
-    // hora cuatro veces al año.
+    // Fecha declarada por el coordinador y congelada al crear.
     dueAt: timestamp('due_at', { withTimezone: true }).notNull(),
 
     // La remediación compartida de la pregunta cerrada 9: agrupa en la UI y en

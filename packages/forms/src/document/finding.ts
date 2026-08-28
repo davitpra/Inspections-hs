@@ -1,23 +1,14 @@
 import { z } from 'zod';
 
 /**
- * La jerarquía de controles, de la más efectiva a la menos. El sistema registra
- * el nivel de la solución propuesta al clasificar un hallazgo real y no lo juzga:
- * que la respuesta a un riesgo crítico haya sido un par de guantes es exactamente
- * el dato que hace falta ver.
+ * Lo que un ítem PRESCRIBE para cuando su respuesta falla: el texto de la acción
+ * correctiva que la organización decidió al publicar la plantilla, y el umbral
+ * que convierte un número en una falla.
+ *
+ * Acá vivía además la jerarquía de controles, retirada con la clasificación de
+ * riesgo (ADR-014). Lo prescrito se muestra y lo observado se escribe; este
+ * archivo es solo la mitad prescrita.
  */
-export const CONTROL_LEVELS = [
-  'elimination',
-  'substitution',
-  'engineering',
-  'administrative',
-  'ppe',
-] as const;
-
-export const controlLevelSchema = z.enum(CONTROL_LEVELS);
-
-export type ControlLevel = z.infer<typeof controlLevelSchema>;
-
 export const FAILURE_OPERATORS = ['lt', 'lte', 'gt', 'gte'] as const;
 
 export const failureOperatorSchema = z.enum(FAILURE_OPERATORS);

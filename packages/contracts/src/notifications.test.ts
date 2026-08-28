@@ -38,7 +38,6 @@ const ASSIGNED = {
   action_id: ACTION_ID,
   finding_id: FINDING_ID,
   description: 'Install a fixed guard on the infeed of line 3',
-  severity: 'major',
   due_at: '2026-08-17T13:00:00.000Z',
 };
 
@@ -92,12 +91,22 @@ describe('notificationSchema', () => {
     ).toBe(false);
   });
 
-  it('rechaza una severidad fuera de la escala', () => {
+  /** La severidad se retiró con la clasificación (ADR-014) y el payload es estricto. */
+  it('rechaza una severidad', () => {
     expect(
       notificationSchema.safeParse(
-        envelope('corrective_action_assigned', { ...ASSIGNED, severity: 'fatal' }),
+        envelope('corrective_action_assigned', { ...ASSIGNED, severity: 'major' }),
       ).success,
     ).toBe(false);
+  });
+
+  /** Una acción de investigación no tiene hallazgo del que colgar. */
+  it('acepta el aviso de una acción sin hallazgo', () => {
+    expect(
+      notificationSchema.safeParse(
+        envelope('corrective_action_assigned', { ...ASSIGNED, finding_id: null }),
+      ).success,
+    ).toBe(true);
   });
 
   /** Un `kind` que la base tenga y el contrato no: falla ruidoso, no se renderiza vacío. */

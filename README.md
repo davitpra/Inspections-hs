@@ -137,21 +137,21 @@ pnpm demo:content
 ```
 
 Siembra cinco meses de historial en St. Thomas —tres inspecciones enviadas, una cancelada
-y un período omitido—, y con eso: hallazgos derivados y clasificados, una serie recurrente
+y un período omitido—, y con eso: hallazgos derivados, una serie recurrente
 de tres ocurrencias, un hallazgo de entrada manual, acciones correctivas en los cuatro
 estados más una vencida, tres incidentes (cerrado, en investigación y recién reportado) y
 recurrencia y acciones correctivas en distintos estados.
 
 **Todo pasa por la API, con sesión**, salvo dos cosas que ningún endpoint puede hacer y no
 debería poder: las inspecciones programadas de los meses pasados —el planificador abre el
-período corriente y nada más— y una acción ya vencida, porque `due_at` lo calcula el
-servidor sobre su propio reloj. Esas dos van por SQL con los GRANT de `hs_app`, y están
+período corriente y nada más— y una acción ya vencida, porque `due_at` explícito permite
+sembrarla con una fecha pasada. Esas dos van por SQL con los GRANT de `hs_app`, y están
 declaradas en la cabecera del script.
 
 Necesita `pnpm demo:data` corrido antes, la API arriba y MinIO arriba (sube fotos de
 verdad). Es idempotente.
 
-Usa las dos cuentas y hacen falta las dos: el coordinador clasifica, abre acciones,
+Usa las dos cuentas y hacen falta las dos: el coordinador abre acciones,
 investiga y genera el reporte, y el `jhsc_member` es el único que ejecuta inspecciones.
 **No cambia ninguna contraseña.** La del inspector sale de `DEMO_PASSWORD` —es la cuenta
 que crea `demo:data`—; la del coordinador, de `DEMO_COORDINATOR_PASSWORD`, porque esa

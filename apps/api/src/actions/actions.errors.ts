@@ -12,7 +12,7 @@ import type { DatabaseError } from 'pg';
  */
 export type ActionErrorCode =
   | 'action_not_found'
-  | 'finding_not_classified'
+  | 'invalid_due_at'
   | 'invalid_assignee'
   | 'invalid_transition'
   | 'evidence_required'
@@ -40,17 +40,12 @@ export class ActionException extends HttpException {
 export const actionNotFound = (): ActionException =>
   new ActionException('action_not_found', 'No such action within your scope', HttpStatus.NOT_FOUND);
 
-/**
- * Un hallazgo sin clasificación vigente no puede recibir acciones.
- *
- * Sin severidad no hay fecha límite, y una acción sin fecha límite no vence nunca y por
- * lo tanto no escala nunca: sería una obligación que el sistema no puede hacer cumplir.
- */
-export const findingNotClassified = (): ActionException =>
+/** La fecha límite tiene que ser posterior al momento de creación. */
+export const invalidDueAt = (): ActionException =>
   new ActionException(
-    'finding_not_classified',
-    'Classify the finding before opening a corrective action for it',
-    HttpStatus.CONFLICT,
+    'invalid_due_at',
+    'The due date must be later than the moment the action is created',
+    HttpStatus.BAD_REQUEST,
   );
 
 /** La persona responsable no existe, no es de este sitio, o está dada de baja. */

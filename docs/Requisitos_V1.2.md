@@ -169,9 +169,8 @@ envía y **queda congelada**. El momento del envío es el punto de no retorno.
 ### R2 — Del hallazgo a la acción correctiva
 
 Una respuesta negativa en el checklist genera un hallazgo con foto y descripción obligatorias.
-El coordinador de HS lo clasifica por matriz de probabilidad × severidad y registra el nivel
-de la jerarquía de controles de la solución propuesta. De ahí sale una acción correctiva con
-**una persona nombrada** como responsable y una fecha límite derivada de la severidad.
+De ahí sale una acción correctiva con **una persona nombrada** como responsable y una fecha límite
+declarada por el coordinador de HS.
 
 ### R3 — Cierre verificado de la acción
 
@@ -252,8 +251,7 @@ Reglas que el builder debe garantizar:
 
 **Respuesta** — valor por ítem dentro de una inspección.
 
-**Hallazgo** — origen, descripción, foto obligatoria, ubicación, clasificación de riesgo,
-nivel de jerarquía de controles.
+**Hallazgo** — origen, descripción, foto obligatoria, ubicación.
 Cuando nace de un ítem de plantilla guarda **los dos identificadores**:
 `template_version_item_id` para el registro legal e `item_key` para la agrupación.
 Un hallazgo de entrada manual no tiene `item_key` y por lo tanto **queda fuera de la
@@ -459,7 +457,7 @@ volumen sale de la analítica.** Este módulo mide cumplimiento, no prevención.
 
 **Pero el evento sigue teniendo dónde vivir.** Un supervisor que presencia un casi-accidente
 lo carga como **hallazgo de entrada manual**, que ya existe en §4: descripción, foto,
-ubicación, clasificación de riesgo, y de ahí sale una acción correctiva con responsable y
+ubicación, y de ahí sale una acción correctiva con responsable y
 fecha. Es el camino correcto — la prevención vive en el módulo de hallazgos, que es donde
 tiene consecuencias.
 
@@ -605,14 +603,14 @@ de cada una vive en el riesgo correspondiente; acá queda la decisión.
 9. **¿Un hallazgo puede tener varias acciones correctivas, y una acción cubrir varios hallazgos?**
    **→ Uno a muchos. Un hallazgo, varias acciones. Una acción, un solo hallazgo.**
 
-   Con muchos-a-muchos hay que inventar una regla para saber qué severidad manda en la fecha
-   límite, y una sola verificación cerraría silenciosamente siete hallazgos. R3 pide lo
+   Con muchos-a-muchos hay que inventar una regla para coordinar una sola acción entre varios
+   hallazgos, y una sola verificación cerraría silenciosamente siete hallazgos. R3 pide lo
    contrario: cada hallazgo necesita su propio cierre verificado por alguien distinto del
    ejecutor.
 
    **El caso de la remediación compartida.** "Instalar guardas en las 7 líneas de empaque"
-   cubre siete hallazgos. Se crean siete acciones, cada una con su fecha derivada de su propia
-   severidad, y comparten un `remediation_group_id` **opcional y sin semántica** — sirve para
+   cubre siete hallazgos. Se crean siete acciones, cada una con la fecha límite declarada para
+   ese trabajo, y comparten un `remediation_group_id` **opcional y sin semántica** — sirve para
    agrupar en la UI y en reportes, no altera plazos, escalamientos ni verificación.
    El costo es cargar la evidencia siete veces. Se acepta: la alternativa es ambigüedad en un
    registro que puede terminar ante el MLITSD.
@@ -681,7 +679,7 @@ del proyecto antes de que la siguiente dependa de ella.
 | 1     | Plantilla, versión, sección, ítem con identidad dual, publicación congelada    | **Spike 3:** v1→v2→v3 devuelve una serie de 4     |
 | 2     | Sitio, Persona, Usuario, auth, importación CSV del roster                      | Permisos por sitio verificados con datos reales   |
 | 3     | Motor de formularios en `packages/forms`, PWA, outbox, ingesta idempotente     | **Spike 1:** inspección completa sin señal        |
-| 4     | Hallazgos, clasificación de riesgo, jerarquía de controles                     | R1 y R2 completos                                 |
+| 4     | Hallazgos                                                                      | R1 y R2 completos; clasificación de riesgo retirada antes de producción |
 | 5     | Acciones correctivas, eventos, escalamientos con pg-boss                       | R3 completo                                       |
 | 6     | Incidentes, campos guiados, estados, relojes regulatorios, pantalla del Form 7 | R4 completo                                       |
 | 7     | Recurrencia y consulta operativa de períodos                               | Recurrencia disponible; R5 retirado antes de producción |

@@ -1,7 +1,6 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
 import {
   createActionRequestSchema,
-  createInvestigationActionRequestSchema,
   transitionRequestSchema,
   type Action,
   type ActionSummary,
@@ -60,9 +59,7 @@ export class ActionsController {
    * Abrir una acción sobre una investigación (§4, etapa 6). El segundo padre de §4,
    * colgado de la ruta por lo mismo que el primero.
    *
-   * A diferencia de la de arriba, esta SÍ acepta `severity` en el cuerpo: una
-   * investigación no tiene clasificación vigente de la que derivarla, y un default
-   * escondido pondría un plazo legal en una constante (design D9).
+   * Usa el mismo contrato que la ruta de hallazgos: el coordinador declara `due_at`.
    */
   @Post('investigations/:id/actions')
   @HttpCode(HttpStatus.CREATED)
@@ -74,7 +71,7 @@ export class ActionsController {
     return this.actions.createForInvestigation(
       session,
       investigationId,
-      createInvestigationActionRequestSchema.parse(body),
+       createActionRequestSchema.parse(body),
     );
   }
 

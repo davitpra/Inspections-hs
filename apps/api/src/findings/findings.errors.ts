@@ -11,7 +11,7 @@ import { HttpException, HttpStatus } from '@nestjs/common';
  * de `submissions.errors.ts`, que sí están fijados por el dispositivo.
  */
 export type FindingErrorCode =
-  'finding_not_found' | 'invalid_finding' | 'forbidden' | 'already_reclassified';
+  'finding_not_found' | 'invalid_finding' | 'forbidden';
 
 export class FindingException extends HttpException {
   constructor(
@@ -43,19 +43,6 @@ export const findingNotFound = (): FindingException =>
 export const invalidFinding = (message: string): FindingException =>
   new FindingException('invalid_finding', message, HttpStatus.BAD_REQUEST);
 
-/** Clasificar es del coordinador; reportar a mano, de quien supervisa (§4 roles). */
+/** Reportar a mano es de quien supervisa (§4 roles). */
 export const findingForbidden = (message: string): FindingException =>
   new FindingException('forbidden', message, HttpStatus.FORBIDDEN);
-
-/**
- * Dos reclasificaciones concurrentes de la misma vigente: una comete y la otra viola
- * el único de `supersedes_id`. Se traduce a esto y no a un `HS002` sin traducir, para
- * que el coordinador entienda que alguien más clasificó mientras él escribía y que lo
- * que tiene que hacer es releer y decidir de nuevo.
- */
-export const alreadyReclassified = (): FindingException =>
-  new FindingException(
-    'already_reclassified',
-    'This finding was reclassified by someone else; reload it and try again',
-    HttpStatus.CONFLICT,
-  );

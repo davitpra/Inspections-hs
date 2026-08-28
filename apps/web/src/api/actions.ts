@@ -5,6 +5,7 @@ import {
   presignUploadResponseSchema,
   type Action,
   type ActionSummary,
+  type CreateActionRequest,
   type EvidenceInput,
   type Notification,
   type PresignUploadResponse,
@@ -37,7 +38,7 @@ export async function getAction(id: string): Promise<Action> {
 
 export async function createAction(
   findingId: string,
-  body: { assignee_person_id: string; description: string; remediation_group_id?: string },
+  body: CreateActionRequest,
 ): Promise<Action> {
   return post(`/findings/${findingId}/actions`, body, (value) => actionSchema.parse(value));
 }
