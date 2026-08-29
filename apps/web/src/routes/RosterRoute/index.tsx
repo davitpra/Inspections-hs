@@ -37,11 +37,9 @@ import { RosterTable } from "./RosterTable";
  * SÍ devuelve el perfil. Si alguien conecta el `PersonPicker` de los incidentes a
  * `GET /people`, rompe lo único que las mantiene separadas.
  *
- * No se corrige una persona fila por fila: nombres, planta y estado se aplican juntos desde
- * el CSV. La pantalla muestra el roster y ofrece esa importación completa al coordinador,
- * más el alta de UNA persona nueva (`add-person-to-roster-by-hand`) — un adelanto del
- * archivo, no una excepción a él: el próximo CSV con el mismo número la actualiza igual que
- * a cualquier otra fila.
+ * Nombres y planta se corrigen desde el CSV. La pantalla ofrece esa importación completa,
+ * el alta de UNA persona y la baja lógica estrecha de un worker sin cuenta. El CSV sigue
+ * mandando: una fila posterior con el mismo número puede actualizar o reactivar a la persona.
  *
  * ONLINE y fuera del precacheo: un roster servido desde caché es un roster viejo que no
  * dice que lo es (ADR-001).

@@ -8,7 +8,7 @@ import { createAccount, createPerson, selectablePeople } from './helpers/identit
 import { inScope, startTestDatabase, type TestDatabase } from './helpers/postgres';
 
 /**
- * La consola del roster: leer quién trabaja en cada planta. **Solo lectura.**
+ * La consola del roster: leer quién trabaja en cada planta y dar de baja un worker sin cuenta.
  *
  * LAS DOS PRUEBAS QUE JUSTIFICAN EL ARCHIVO son las dos mitades del aislamiento:
  *
@@ -185,6 +185,122 @@ describe('el filtro de estado', () => {
     const selectable = await selectablePeople(db.app, [SITE_A]);
 
     expect(selectable.map((row) => row.id)).not.toContain(retired);
+  });
+});
+
+describe('dar de baja un worker desde su fila', () => {
+  it('marca deactivated_at, lo saca del roster activo y deja que el motor audite', async () => {
+    const id = await createPerson(db.app, SITE_A, {
+      employeeNumber: 'RA-D1',
+      firstName: 'Worker',
+      lastName: 'Retirable',
+    });
+
+    const result = await roster.deactivate(asCoordinator(), id);
+
+    expect(result.id).toBe(id);
+    expect(result.deactivated_at).not.toBeNull();
+    expect(
+      (await roster.list(asCoordinator(), { site_id: SITE_A, status: 'active' })).map(
+        (person) => person.id,
+      ),
+    ).not.toContain(id);
+    expect(
+      (await roster.list(asCoordinator(), { site_id: SITE_A, status: 'inactive' })).map(
+        (person) => person.id,
+      ),
+    ).toContain(id);
+
+    const events = await inScope<{ event_type: string }>(
+      db.migrator,
+      [SITE_A],
+      `SELECT event_type FROM audit_log
+        WHERE payload->>'person_id' = $1
+        ORDER BY occurred_at, id`,
+      [id],
+    );
+    expect(events.map((event) => event.event_type)).toEqual([
+      'person.created',
+      'person.deactivated',
+    ]);
+  });
+
+  it('rechaza una persona cuya cuenta sigue activa', async () => {
+    const linked = await createAccount(db.app, {
+      role: 'jhsc_member',
+      siteIds: [SITE_A],
+      lastName: 'ConCuenta',
+    });
+
+    await expect(roster.deactivate(asCoordinator(), linked.personId)).rejects.toMatchObject({
+      response: { code: 'person_has_active_account' },
+    });
+  });
+
+  it('permite la baja si la cuenta asociada ya está inactiva y no la modifica', async () => {
+    const linked = await createAccount(db.app, {
+      role: 'jhsc_member',
+      siteIds: [SITE_A],
+      lastName: 'CuentaInactiva',
+    });
+    await inScope(db.app, [SITE_A], 'UPDATE app_user SET deactivated_at = now() WHERE id = $1', [
+      linked.accountId,
+    ]);
+    const [before] = await inScope<{ deactivated_at: Date }>(
+      db.migrator,
+      [SITE_A],
+      'SELECT deactivated_at FROM app_user WHERE id = $1',
+      [linked.accountId],
+    );
+
+    const result = await roster.deactivate(asCoordinator(), linked.personId);
+
+    const [after] = await inScope<{ deactivated_at: Date }>(
+      db.migrator,
+      [SITE_A],
+      'SELECT deactivated_at FROM app_user WHERE id = $1',
+      [linked.accountId],
+    );
+    expect(result.deactivated_at).not.toBeNull();
+    expect(after?.deactivated_at.toISOString()).toBe(before?.deactivated_at.toISOString());
+  });
+
+  it('rechaza una segunda baja y conserva el momento original', async () => {
+    const id = await createPerson(db.app, SITE_A, { lastName: 'DosVeces' });
+    const first = await roster.deactivate(asCoordinator(), id);
+
+    await expect(roster.deactivate(asCoordinator(), id)).rejects.toMatchObject({
+      response: { code: 'person_not_active' },
+    });
+
+    const [stored] = await inScope<{ deactivated_at: Date }>(
+      db.migrator,
+      [SITE_A],
+      'SELECT deactivated_at FROM person WHERE id = $1',
+      [id],
+    );
+    expect(stored?.deactivated_at.toISOString()).toBe(first.deactivated_at);
+  });
+
+  it('no distingue una persona fuera del alcance de una inexistente', async () => {
+    const outside = await createPerson(db.app, SITE_B, { lastName: 'Fuera' });
+    const missing = 'a5000000-0000-4000-8000-000000000099';
+
+    for (const id of [outside, missing]) {
+      await expect(roster.deactivate(asNarrowCoordinator(), id)).rejects.toMatchObject({
+        response: { code: 'person_not_found' },
+      });
+    }
+  });
+
+  it('lo niega a cualquier rol que no sea el coordinador', async () => {
+    const id = await createPerson(db.app, SITE_A, { lastName: 'Protegida' });
+
+    for (const role of ['supervisor', 'jhsc_member', 'management', 'external_auditor']) {
+      await expect(
+        roster.deactivate({ userId: supervisorId, role, siteIds: [SITE_A] }, id),
+      ).rejects.toMatchObject({ response: { code: 'roster_forbidden' } });
+    }
   });
 });
 

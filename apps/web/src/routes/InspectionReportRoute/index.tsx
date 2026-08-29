@@ -9,8 +9,8 @@ import { Link, useParams } from '@tanstack/react-router';
 import { getSubmittedInspection } from '../../api/inspections';
 import { queryKeys } from '../../api/query-keys';
 import { Fact, Facts } from '../../components/Facts';
+import { FindingReadout } from '../../components/FindingReadout';
 import {
-  AlertCircleIcon,
   CalendarIcon,
   ClockIcon,
   LockIcon,
@@ -18,8 +18,9 @@ import {
   PinIcon,
 } from '../../components/icons';
 import { TemplateSectionCard } from '../../components/TemplateSectionCard';
+import { answersLabel, answerText } from '../../presentation/answers';
 import { formatCivilDay, periodLabel } from '../../presentation/dates';
-import { answersLabel, answerText, findingsLabel, photoCountText } from './presentation';
+import { findingsLabel } from '../../presentation/findings';
 
 /**
  * Una inspección enviada, leída de vuelta.
@@ -216,19 +217,16 @@ export function InspectionReportRoute(): React.JSX.Element {
                     </div>
 
                     {/*
-                      El hallazgo se lee como se escribió: el mismo bloque `.finding` de la
-                      captura, con su filete y su título ámbar. No es un `notice` — un aviso
-                      es algo que el sistema dice, y esto es lo que el inspector observó.
+                      El mismo bloque que dibuja el recorte de hallazgos, y por eso vive en
+                      `components/`. Solo cuando hay hallazgo: la acción correctiva que la
+                      plantilla prescribe para una pregunta que salió limpia no es
+                      información, y en un reporte de cuarenta preguntas sería ruido.
                     */}
                     {finding ? (
-                      <div className="finding">
-                        <p className="finding__title">
-                          <AlertCircleIcon size={16} />
-                          Finding
-                        </p>
-                        <p className="report__finding-text">{finding.description}</p>
-                        <p className="note">{photoCountText(finding.photo_object_keys.length)}</p>
-                      </div>
+                      <FindingReadout
+                        correctiveAction={item.finding?.corrective_action}
+                        finding={finding}
+                      />
                     ) : null}
                   </div>
                 </li>

@@ -1,9 +1,9 @@
 ## Purpose
 
 Defines how inspection templates are modelled, versioned and frozen on publication, and
-guarantees that a question keeps one stable identity across successive template versions so
-that recurring findings for the same question form a single historical series instead of one
-series per edit. It also defines what a published version *means* when it is interpreted: the
+guarantees that a question keeps one stable identity across successive template versions while
+every published row remains separately resolvable. It also defines what a published version
+*means* when it is interpreted: the
 response types an item can use, how conditional visibility is resolved, and what makes a set of
 answers valid against that version — with the same verdict on the offline device and on the
 server.
@@ -328,7 +328,7 @@ distinct purposes:
   or a response points at for legal fidelity: which question was asked, with that exact
   wording, in that section, with that response type, on the day it was answered.
 - `item_key` — the identity of the concept, assigned once when the item is first created. It is
-  the grouping key for recurrence analytics.
+  what makes the same question recognisable across every version that edits it.
 
 The two SHALL NOT be conflated: `id` changes with every version that contains the item,
 `item_key` does not.
@@ -400,7 +400,7 @@ and a retired `item_key` SHALL NOT be reassigned to a different question.
 
 The system SHALL retire an item by setting `template_item.deactivated_at` rather than by
 deleting it. A deactivated item SHALL be absent from newly published versions but SHALL still
-resolve as a reference from historical records, so its recurrence series ends instead of
+resolve as a reference from historical records, so the history of that concept ends instead of
 breaking.
 
 #### Scenario: A deactivated item still resolves from history
@@ -408,7 +408,7 @@ breaking.
 - **WHEN** `deactivated_at` is set on the `template_item` row for `guards.packaging-lines`
 - **THEN** the `template_version_item` rows of already published versions still resolve that
   `item_key`
-- **AND** a query grouping historical findings by `item_key` still returns the series for
+- **AND** a query grouping historical findings by `item_key` still returns them under
   `guards.packaging-lines`
 
 #### Scenario: A deactivated item is rejected in a new version
@@ -421,31 +421,33 @@ breaking.
 
 The system SHALL provide `template_item.replaces_item_key` so that an item created by splitting
 or merging earlier items records which key it descends from. When set, it SHALL reference a
-registered `item_key`. The system SHALL NOT silently join the series of a replacing item to the
-series of the key it replaces: the lineage is a recorded trace, not an aliasing rule.
+registered `item_key`. The system SHALL NOT treat a replacing item as the same concept as the key
+it replaces: the lineage is a recorded trace, not an aliasing rule.
 
 #### Scenario: A split records its origin
 
 - **WHEN** `guards.line-3` is registered with `replaces_item_key` `guards.packaging-lines`
 - **THEN** the stored row carries that `replaces_item_key`
 - **AND** grouping findings by `item_key` reports `guards.line-3` and `guards.packaging-lines`
-  as two separate series
+  as two separate groups
 
 #### Scenario: Lineage cannot point at an unregistered key
 
 - **WHEN** a `template_item` row is inserted with `replaces_item_key` `guards.nonexistent`
 - **THEN** the insert fails with a foreign key violation
 
-### Requirement: Recurrence across three versions returns one series
+### Requirement: A question's identity survives three versions of edits
 
-The system SHALL keep a question's history contiguous across successive versions that edit it.
+The system SHALL keep a question's identity contiguous across successive versions that edit it.
 Grouping findings by `item_key` over a template whose item was rewritten, moved, reordered and
-had its response type changed SHALL return one series covering every finding, not one series
-per version.
+had its response type changed SHALL return one group covering every finding, not one group per
+version, while each finding SHALL still resolve the exact question that was asked.
 
-This is the acceptance test of risk A in `docs/Requisitos_V1.2.md` §5 and runs in CI.
+This is the acceptance test of risk A in `docs/Requisitos_V1.2.md` §5 and runs in CI. It asserts a
+property of the schema, not the behaviour of a product surface: the grouping is written by the
+test itself.
 
-#### Scenario: v1 to v3 yields a single series of four
+#### Scenario: v1 to v3 yields a single group of four
 
 - **WHEN** version 1 of a template declares item `guards.packaging-lines` in section `general`
   at `position` 4 with `response_type` `yes_no`, and 1 finding is recorded against it
@@ -946,7 +948,7 @@ question in the record.
 The system SHALL, when a revision omits a question the previous version declared, leave that
 question out of the new version and change nothing else. The `template_item` row SHALL keep its
 `deactivated_at` absent, the `template_version_item` rows of the versions that declared it SHALL
-still resolve it, and grouping findings by `item_key` SHALL still return its series, now ended.
+still resolve it, and grouping findings by `item_key` SHALL still return its historical group.
 
 Removing a question from the next version and retiring the concept are two different decisions.
 Deleting a row in the editor states the first, not the second.
@@ -958,7 +960,7 @@ Deleting a row in the editor states the first, not the second.
 - **WHEN** a revision that omits that question is published as version 2
 - **THEN** no version 2 `template_version_item` row carries `guards.packaging-lines`
 - **AND** the `template_item` row for it has `deactivated_at` absent
-- **AND** grouping findings by `item_key` still returns its series with a count of 1
+- **AND** grouping findings by `item_key` still returns its group with a count of 1
 
 ### Requirement: The builder names the version a publication will create
 

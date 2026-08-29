@@ -206,7 +206,7 @@ acceso al sistema a esa persona, y sin poder ver su perfil.
 ### Entidades
 
 **Sitio** — St. Thomas, Glencoe. Entidad de primer nivel: atraviesa calendario, permisos,
-hallazgos, incidentes y métricas. La programación y la recurrencia se consultan por sitio.
+hallazgos, incidentes y métricas. La programación se consulta por sitio.
 
 **Persona** — identificada por número de empleado de ADP (no por nombre). Estado activo/inactivo.
 Una persona inactiva **no se borra nunca** — queda referenciada en registros inmutables — pero
@@ -224,7 +224,7 @@ resuelve dos problemas distintos:
 | Identificador              | Qué es                                                      | Para qué sirve                                                                                                                     |
 | -------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | `template_version_item_id` | La fila concreta dentro de una versión publicada            | Fidelidad legal: qué pregunta se hizo, con esa redacción exacta, en esa sección, con ese tipo de respuesta, el día que se contestó |
-| `item_key`                 | El concepto estable, asignado una sola vez al crear el ítem | Analítica: es la clave de agrupación para la detección de hallazgos recurrentes                                                    |
+| `item_key`                 | El concepto estable, asignado una sola vez al crear el ítem | Identidad: es la misma pregunta a través de las versiones publicadas que la editaron                                              |
 
 Reglas que el builder debe garantizar:
 
@@ -235,14 +235,14 @@ Reglas que el builder debe garantizar:
 - **Linaje.** Si un ítem se divide en dos ("guardas en líneas de empaque" → "guardas línea 3" +
   "guardas línea 7") o dos se fusionan en uno, ninguno de los resultantes puede heredar
   limpiamente la key original. Se requiere un campo `replaces_item_key` para dejar rastro, o
-  aceptar explícitamente que la serie histórica arranca de cero en ese punto.
-- Cambiar el **tipo de respuesta** de un ítem (p. ej. sí/no → escala) conserva la key. Para la
-  recurrencia lo que cuenta es que se generó un hallazgo, no el valor de la respuesta. Queda
-  registrado como decisión, no como accidente.
+  aceptar explícitamente que la historia del concepto arranca de cero en ese punto.
+- Cambiar el **tipo de respuesta** de un ítem (p. ej. sí/no → escala) conserva la key. Lo que
+  identifica al ítem es el concepto que pregunta, no la forma de contestarlo. Queda registrado
+  como decisión, no como accidente.
 - **Los ítems se desactivan, nunca se borran.** Un ítem lleva `deactivated_at`; no existe
   `DELETE`. Un ítem desactivado desaparece de las versiones nuevas de la plantilla pero sigue
-  resolviendo como referencia desde los hallazgos históricos, y su serie de recurrencia
-  termina en lugar de romperse. Ver pregunta cerrada 2.
+  resolviendo como referencia desde los hallazgos históricos, así que la historia del
+  concepto termina en lugar de romperse. Ver pregunta cerrada 2.
 
 **InspecciónProgramada** — sitio, período, un asignado (miembro del JHSC).
 
@@ -253,9 +253,9 @@ Reglas que el builder debe garantizar:
 
 **Hallazgo** — origen, descripción, foto obligatoria, ubicación.
 Cuando nace de un ítem de plantilla guarda **los dos identificadores**:
-`template_version_item_id` para el registro legal e `item_key` para la agrupación.
-Un hallazgo de entrada manual no tiene `item_key` y por lo tanto **queda fuera de la
-detección de recurrencia** — consecuencia aceptada, o hay que decidir cómo asociarlo.
+`template_version_item_id` para el registro legal e `item_key` para la identidad del concepto.
+Un hallazgo de entrada manual no nace de una pregunta y por lo tanto **no tiene `item_key`**
+— consecuencia aceptada, o hay que decidir cómo asociarlo.
 
 **AcciónCorrectiva** — responsable (Persona nombrada), fecha límite, verificador.
 Estados: `abierta` → `en progreso` → `esperando verificación` → `cerrada`.
@@ -351,14 +351,14 @@ como rol, `inspector_id` como campo dentro de la inspección.
 
 **A. Identidad del ítem entre versiones de plantilla — resuelta por diseño, pendiente de verificar.**
 
-La feature más valiosa del sistema ("la misma guarda falta cuatro meses seguidos") agrupa
-hallazgos por ítem. Con builder visual, el coordinador va a editar, reordenar y mover ítems.
-Si el hallazgo apunta solo a la fila de la versión, cada edición parte la serie histórica.
+Un hallazgo se registra contra la pregunta que lo encontró. Con builder visual, el coordinador
+va a editar, reordenar y mover ítems. Si el hallazgo apunta solo a la fila de la versión, cada
+edición parte la historia del concepto y "la misma guarda que falló en julio" deja de poder
+afirmarse.
 
 **Por qué es el riesgo más peligroso del proyecto:** no produce ningún error. Los IDs existen,
-los joins funcionan, la consulta devuelve filas y el dashboard renderiza. Simplemente agrupa
-mal — y "agrupa mal" en una detección de patrones se ve idéntico a "no hay patrón". El sistema
-va a mostrar una pantalla que dice que no hay hallazgos recurrentes y nadie va a dudar de ella.
+los joins funcionan y la consulta devuelve filas. Simplemente agrupa mal — y "agrupa mal" se ve
+idéntico a "no hay nada que ver". Nadie duda de una lectura que no se queja.
 
 _Mitigación:_ identidad dual (`item_key` + `template_version_item_id`) — ver sección 4.
 
@@ -369,18 +369,22 @@ con ediciones realistas:
 2. **v2** — cambiar la redacción, moverlo a otra sección, reordenarlo. Generar dos hallazgos.
 3. **v3** — cambiar el tipo de respuesta de sí/no a escala. Generar un hallazgo.
 
-_Aserción:_ la consulta de recurrencia devuelve **una serie de 4**. Si devuelve 1 + 2 + 1, el
-esquema está mal y se descubrió antes de tener datos reales.
+_Aserción:_ agrupar los hallazgos por `item_key` devuelve **un grupo de 4**. Si devuelve
+1 + 2 + 1, el esquema está mal y se descubrió antes de tener datos reales.
 
 **Límite conocido:** `item_key` estable es condición necesaria pero no suficiente. Da "la misma
-pregunta", no "la misma pregunta en el mismo lugar". Con 48 acres, la clave de recurrencia útil
-es `item_key` + ubicación estructurada. La pregunta cerrada 1 resuelve la mitad: la ubicación
-es una lista cerrada, así que agrupa. Queda pendiente decidir si la clave de recurrencia es
-`item_key` sola o `item_key` + ubicación — ver §7.
+pregunta", no "la misma pregunta en el mismo lugar". Con 48 acres, agrupar por concepto solo
+sería grueso; la pregunta cerrada 1 resuelve la mitad, porque la ubicación es una lista cerrada
+y por lo tanto agrupa.
+
+**La detección de hallazgos recurrentes se retiró antes de producción (ADR-015).** La identidad
+dual sigue en pie y sigue siendo obligatoria: es lo que hace que un hallazgo resuelva la
+pregunta exacta que se le hizo, y que esa pregunta se reconozca a través de las versiones que
+la editaron. Lo que sale del alcance es el producto que leía esas series.
 
 **Hueco cerrado en v1.1.** El código garantiza que editar conserva la key, pero no podía
-impedir que el coordinador borrara un ítem y creara otro equivalente: key nueva, serie partida,
-sin error. La decisión de **desactivar en lugar de borrar** (pregunta cerrada 2) elimina esa
+impedir que el coordinador borrara un ítem y creara otro equivalente: key nueva, historia
+partida, sin error. La decisión de **desactivar en lugar de borrar** (pregunta cerrada 2) elimina esa
 tentación de raíz.
 
 **B. El builder visual es la pieza más cara para el usuario más pequeño.**
@@ -461,9 +465,9 @@ ubicación, y de ahí sale una acción correctiva con responsable y
 fecha. Es el camino correcto — la prevención vive en el módulo de hallazgos, que es donde
 tiene consecuencias.
 
-_Consecuencia aceptada:_ los hallazgos manuales no tienen `item_key` y quedan fuera de la
-detección de recurrencia (§4). Los casi-accidentes heredan ese punto ciego. Se revisa en v2
-si el volumen lo justifica.
+_Consecuencia aceptada:_ los hallazgos manuales no tienen `item_key` y quedan fuera de
+cualquier agrupación por concepto (§4). Los casi-accidentes heredan ese punto ciego. Se revisa
+en v2 si el volumen lo justifica.
 
 **G. Fidelidad del relato con la plataforma solo en inglés.**
 Un supervisor hispanohablante presencia el accidente y tiene que describirlo en inglés, en un
@@ -546,13 +550,13 @@ _(La pregunta sobre el detalle médico ya no aplica: no hay detalle médico en e
 2. **¿El builder puede borrar un ítem o solo desactivarlo?**
    Es dependencia directa de la decisión de identidad dual. El código puede garantizar que
    editar conserva la `item_key`, pero no puede impedir que el coordinador borre un ítem y
-   cree otro que significa lo mismo — key nueva, serie partida, y el sistema no se queja.
+   cree otro que significa lo mismo — key nueva, historia partida, y el sistema no se queja.
    **→ Solo desactivar. Nunca borrar.** _(Corregido en v1.1: v1 decía borrado real, que es
    incompatible con la inmutabilidad global de §4 — rompía el enlace
    `template_version_item_id` de los hallazgos históricos, justo la fidelidad legal que la
    identidad dual existe para proteger.)_
-   Implicación de esquema: el ítem lleva `deactivated_at`, no hay `DELETE`, y la serie de
-   recurrencia termina en lugar de romperse.
+   Implicación de esquema: el ítem lleva `deactivated_at`, no hay `DELETE`, y la historia del
+   concepto termina en lugar de romperse.
 
 3. **¿El roster es importación por archivo o sincronización con ADP?**
    Existe la lista en Excel y en ADP. Se pidió carga masiva.
@@ -633,7 +637,11 @@ de cada una vive en el riesgo correspondiente; acá queda la decisión.
 ### Analítica y cumplimiento
 
 11. **¿La clave de recurrencia es `item_key` sola o `item_key` + ubicación?**
-    **→ Las dos, como consultas distintas. `item_key` + `location_id` es la vista por defecto.**
+    **→ Sin efecto: la detección de hallazgos recurrentes salió de v1 (ADR-015).** La respuesta
+    original se conserva abajo porque explica por qué la ubicación es una lista cerrada y por
+    qué `item_key` es global, dos decisiones que siguen vigentes.
+
+    ~~Las dos, como consultas distintas. `item_key` + `location_id` es la vista por defecto.~~
 
     No es indecisión: significan cosas diferentes y ambas importan.
 
@@ -646,7 +654,7 @@ de cada una vive en el riesgo correspondiente; acá queda la decisión.
     `(item_key, location_id, occurred_at)` y un `GROUP BY` adicional — no es alcance nuevo.
 
     El punto ciego se mantiene: los hallazgos manuales no tienen `item_key` y quedan fuera de
-    ambas consultas.
+    cualquier agrupación por concepto.
 
 12. **¿Cuál timestamp manda para el período de cumplimiento?**
     **→ El de dispositivo al firmar, con validación de desfase.** Ver riesgo C.
@@ -676,13 +684,13 @@ del proyecto antes de que la siguiente dependa de ella.
 | Etapa | Qué se construye                                                               | Qué queda probado                                 |
 | ----- | ------------------------------------------------------------------------------ | ------------------------------------------------- |
 | 0     | Monorepo, CI, Postgres con roles y `REVOKE`, RLS por sitio                     | **Spike 2:** el `UPDATE` falla en el motor        |
-| 1     | Plantilla, versión, sección, ítem con identidad dual, publicación congelada    | **Spike 3:** v1→v2→v3 devuelve una serie de 4     |
+| 1     | Plantilla, versión, sección, ítem con identidad dual, publicación congelada    | **Spike 3:** v1→v2→v3 devuelve un grupo de 4      |
 | 2     | Sitio, Persona, Usuario, auth, importación CSV del roster                      | Permisos por sitio verificados con datos reales   |
 | 3     | Motor de formularios en `packages/forms`, PWA, outbox, ingesta idempotente     | **Spike 1:** inspección completa sin señal        |
 | 4     | Hallazgos                                                                      | R1 y R2 completos; clasificación de riesgo retirada antes de producción |
 | 5     | Acciones correctivas, eventos, escalamientos con pg-boss                       | R3 completo                                       |
 | 6     | Incidentes, campos guiados, estados, relojes regulatorios, pantalla del Form 7 | R4 completo                                       |
-| 7     | Recurrencia y consulta operativa de períodos                               | Recurrencia disponible; R5 retirado antes de producción |
+| 7     | Consulta operativa de períodos                                             | R5 y la recurrencia de hallazgos retirados antes de producción |
 | 8     | Builder visual                                                                 | El coordinador deja de depender del desarrollador |
 
 **El builder va último a propósito.** Es la pieza más cara (riesgo B) y el sistema es

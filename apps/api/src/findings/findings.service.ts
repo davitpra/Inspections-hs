@@ -172,19 +172,12 @@ const CAN_REPORT = new Set(['supervisor', 'management', 'hs_coordinator']);
 const FINDING_SELECT = `
   SELECT f.id, f.site_id, f.origin, f.inspection_id, f.template_version_item_id, f.item_key,
          f.location_id, f.description, f.reported_by, f.occurred_at, f.recorded_at,
-         COALESCE(p.keys, ARRAY[]::text[]) AS photo_object_keys,
-         rec.prior_count, rec.prior_count_site_wide, rec.window_months,
-         rec.first_prior_occurred_at, rec.is_recurrent
+         COALESCE(p.keys, ARRAY[]::text[]) AS photo_object_keys
     FROM finding f
     LEFT JOIN LATERAL (
       SELECT array_agg(fp.object_key ORDER BY fp.created_at, fp.id) AS keys
         FROM finding_photo fp WHERE fp.finding_id = f.id
-    ) p ON true
-     -- La marca de recurrencia (etapa 7). LEFT y no INNER porque hay dos clases de
-    -- hallazgo sin marca que igual tienen que aparecer en el listado: los manuales, que
-    -- no tienen item_key y por lo tanto no tienen serie, y los anteriores a la
-    -- migración 0013, que nacieron antes de que el mecanismo existiera.
-    LEFT JOIN finding_recurrence rec ON rec.finding_id = f.id`;
+    ) p ON true`;
 
 interface FindingRow {
   id: string;
@@ -199,12 +192,6 @@ interface FindingRow {
   occurred_at: Date;
   recorded_at: Date;
   photo_object_keys: string[];
-  // Los cinco son null juntos: o hay fila de marca o no la hay.
-  prior_count: number | null;
-  prior_count_site_wide: number | null;
-  window_months: number | null;
-  first_prior_occurred_at: Date | null;
-  is_recurrent: boolean | null;
 }
 
 function toFinding(row: FindingRow): Finding {
@@ -221,35 +208,19 @@ function toFinding(row: FindingRow): Finding {
     reported_by: row.reported_by,
     occurred_at: row.occurred_at.toISOString(),
     recorded_at: row.recorded_at.toISOString(),
-    // La ausencia de fila y `is_recurrent: false` dicen cosas distintas y el contrato
-    // las separa (design D8): `null` es "hallazgo manual, NUNCA se lo comparó con la
-    // historia", y `false` es "se lo comparó, y es la primera vez".
-    recurrence:
-      row.prior_count === null
-        ? null
-        : {
-            prior_count: row.prior_count,
-            prior_count_site_wide: row.prior_count_site_wide as number,
-            window_months: row.window_months as number,
-            first_prior_occurred_at:
-              row.first_prior_occurred_at?.toISOString() ?? null,
-            is_recurrent: row.is_recurrent as boolean,
-          },
   };
 }
 
 /**
  * Los hallazgos que abrió un envío, para leerlo de vuelta.
  *
- * Función libre y con `PoolClient`, igual que `insertRecurrenceMarks`: corre DENTRO de la
- * transacción de quien la llama —`inspections`, que es la dirección de dependencia que
- * declara ADR-008— y no abre una propia. Sin `WHERE site_id`: el recorte es la política
- * sobre esa transacción.
+ * Función libre y con `PoolClient`: corre DENTRO de la transacción de quien la llama
+ * —`inspections`, que es la dirección de dependencia que declara ADR-008— y no abre una
+ * propia. Sin `WHERE site_id`: el recorte es la política sobre esa transacción.
  *
  * Vive acá y no en un archivo aparte porque reusa `FINDING_SELECT` y `toFinding`, que son
  * privados de este módulo. Un segundo `SELECT` escrito afuera sería una segunda definición
- * de qué es un hallazgo, y la clasificación vigente y la marca de recurrencia —los dos
- * `LEFT JOIN LATERAL` de arriba— serían lo primero en desincronizarse.
+ * de qué es un hallazgo, y las fotos agregadas serían lo primero en desincronizarse.
  *
  * `f.inspection_id = $1` alcanza para excluir los manuales: el `CHECK` de la migración
  * impide que un hallazgo manual tenga inspección, así que filtrar por `origin` además

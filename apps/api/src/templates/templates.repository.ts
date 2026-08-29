@@ -274,8 +274,8 @@ export async function findLiveRevisionDraft(
  * otra plantilla o las desactivadas.
  *
  * Un `INSERT ... ON CONFLICT DO NOTHING` habría sido más corto y habría aceptado en silencio
- * un `item_key` de otra plantilla — el error más caro que hay acá, porque fundiría las series
- * de recurrencia de dos plantillas y no se puede deshacer.
+ * un `item_key` de otra plantilla — el error más caro que hay acá, porque fundiría las
+ * historias de dos preguntas distintas y no se puede deshacer.
  */
 export async function findRegisteredItems(
   client: PoolClient,

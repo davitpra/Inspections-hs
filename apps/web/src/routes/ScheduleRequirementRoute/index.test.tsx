@@ -127,8 +127,10 @@ describe('plan anual enfocado', () => {
     renderRoute();
     const current = new Date().getFullYear();
 
-    fireEvent.click(await screen.findByRole('button', { name: `${current + 1} →` }));
-    expect(await screen.findByText(`${current + 1}`)).toBeTruthy();
+    const next = current + 1;
+
+    fireEvent.click(await screen.findByRole('button', { name: `Go to ${next}` }));
+    expect(screen.getByRole('button', { name: String(next) }).getAttribute('aria-current')).toBe('true');
     expect(screen.getByRole('heading', { name: 'Quarterly workplace inspection' })).toBeTruthy();
   });
 
@@ -145,41 +147,48 @@ describe('operaciones por fila', () => {
   it('abre sin selector y nombra la versión congelada', async () => {
     renderRoute();
 
-    expect(await screen.findAllByText('Freezes version 2')).toHaveLength(4);
-    const open = screen.getAllByRole('button', { name: /^Open / })[0]!;
+    const open = (await screen.findAllByRole('button', { name: /^Open / }))[0]!;
     expect(screen.queryByRole('combobox', { name: /Assign inspector/ })).toBeNull();
+    await waitFor(() => expect(open.hasAttribute('disabled')).toBe(false));
     fireEvent.click(open);
-    await waitFor(() => expect(createScheduledInspection).toHaveBeenCalledWith({ site_id: SITE, template_id: TEMPLATE, period_start: '2026-02-01' }));
+
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText(/Version 2 will be frozen/)).toBeTruthy();
+    expect(createScheduledInspection).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Open period' }));
+
+    await waitFor(() => expect(createScheduledInspection).toHaveBeenCalledWith({ site_id: SITE, template_id: TEMPLATE, period_start: '2026-02-01', visible_early: false }));
   });
 
   it('no asigna hasta confirmar explícitamente', async () => {
     listScheduled.mockResolvedValue([inspection()]);
     renderRoute();
-    const row = (await screen.findByRole('combobox', { name: /Assign inspector for/ })).closest('tr');
-    if (!row) throw new Error('assignment row not found');
-    const select = within(row).getByRole('combobox', { name: /Assign inspector for/ });
+    fireEvent.click(await screen.findByRole('button', { name: /Assign inspector for/ }));
+    const dialog = screen.getByRole('dialog', { name: 'Assign inspector' });
+    const select = within(dialog).getByRole('combobox', { name: /Assign inspector for/ });
 
-    await within(row).findByRole('option', { name: 'Dana Okafor (E-1)' });
+    await within(dialog).findByRole('option', { name: 'Dana Okafor (E-1)' });
     fireEvent.change(select, { target: { value: CANDIDATE } });
     expect(assignInspector).not.toHaveBeenCalled();
-    fireEvent.click(within(row).getByRole('button', { name: 'Confirm assignment' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm assignment' }));
     await waitFor(() => expect(assignInspector).toHaveBeenCalledWith(INSPECTION, CANDIDATE));
   });
 
-  it('mantiene el error de asignación en la fila que lo produjo', async () => {
+  it('mantiene el error de asignación en el diálogo del período que lo produjo', async () => {
     listScheduled.mockResolvedValue([inspection(), inspection({ id: '99999999-9999-4999-8999-999999999999', period_start: '2026-05-01', period_end: '2026-07-31' })]);
     assignInspector.mockRejectedValue(new Error('Inspector is no longer eligible'));
     renderRoute();
-    const rows = await screen.findAllByRole('combobox', { name: /Assign inspector for/ });
-    const firstRow = rows[0]?.closest('tr');
-    if (!firstRow) throw new Error('assignment row not found');
-    const firstSelect = rows[0]!;
-    await within(firstRow).findByRole('option', { name: 'Dana Okafor (E-1)' });
-    fireEvent.change(firstSelect, { target: { value: CANDIDATE } });
-    fireEvent.click(within(firstRow).getByRole('button', { name: 'Confirm assignment' }));
+    const buttons = await screen.findAllByRole('button', { name: /Assign inspector for/ });
+    fireEvent.click(buttons[0]!);
 
-    expect((await within(firstRow).findByRole('alert')).textContent).toContain('Inspector is no longer eligible');
-    expect(within(rows[1]!.closest('tr')!).queryByRole('alert')).toBeNull();
+    const dialog = screen.getByRole('dialog', { name: 'Assign inspector' });
+    const select = within(dialog).getByRole('combobox', { name: /Assign inspector for/ });
+    await within(dialog).findByRole('option', { name: 'Dana Okafor (E-1)' });
+    fireEvent.change(select, { target: { value: CANDIDATE } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm assignment' }));
+
+    expect((await within(dialog).findByRole('alert')).textContent).toContain('Inspector is no longer eligible');
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
   });
 
   it('lee completados y cancelados sin controles', async () => {

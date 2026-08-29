@@ -243,8 +243,8 @@ export const inspection = pgTable(
  * Las respuestas, COMO FILAS y no como un documento (migración 0009).
  *
  * La identidad dual de §4 vive en dos columnas: `templateVersionItemId` es la fila
- * publicada que se contestó —fidelidad legal— e `itemKey` es el concepto estable por
- * el que agrupa la recurrencia de la etapa 7. Que la segunda no mienta sobre la
+ * publicada que se contestó —fidelidad legal— e `itemKey` es el concepto estable que
+ * la pregunta conserva a través de las versiones. Que la segunda no mienta sobre la
  * primera lo defiende la FK compuesta contra `template_version_item (id, item_key)`.
  *
  * `value` es jsonb porque UNA respuesta cambia de forma según el `response_type`:
@@ -287,7 +287,8 @@ export const inspectionAnswer = pgTable(
 
     uniqueIndex('inspection_answer_item_uq').on(table.inspectionId, table.itemKey),
 
-    // El índice del GROUP BY de recurrencia de la etapa 7.
+    // Agrupar por concepto las respuestas de una planta sin leer inspección por
+    // inspección. El nombre lo puso 0009 y se conserva: renombrarlo es una migración.
     index('inspection_answer_recurrence_idx').on(table.siteId, table.itemKey),
     index('inspection_answer_inspection_idx').on(table.inspectionId),
   ],

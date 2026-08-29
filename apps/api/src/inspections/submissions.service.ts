@@ -7,7 +7,6 @@ import type { PoolClient } from 'pg';
 import { DbService } from '../db/db.service';
 import type { SessionScope } from '../db/site-scope';
 import { deriveFindings, type DerivedFinding } from '../findings/derive';
-import { insertRecurrenceMarks } from '../findings/recurrence';
 import { foreignObjectKeys, mergePhotoAnswers, objectKeysOf } from './submission';
 import {
   alreadySubmitted,
@@ -127,15 +126,6 @@ export class SubmissionsService {
       );
       await this.insertFindings(client, created.row, resolvedFindings);
 
-      // LA MARCA DE RECURRENCIA (etapa 7). En la misma transacción y por el mismo motivo
-      // que la derivación: la marca dice qué se sabía cuando el hallazgo nació, y un
-      // trabajo posterior la calcularía con los datos de después — que ya no es lo que
-      // se sabía. Un envío que produce hallazgos produce sus marcas o no se comete.
-      //
-      // Después de `insertFindings` y no dentro: el conteo necesita que las filas de
-      // `finding` existan para poder mirarlas.
-      await insertRecurrenceMarks(client, created.row.id);
-
       return toAccepted(created.row, true);
     });
   }
@@ -204,8 +194,9 @@ export class SubmissionsService {
    * El documento congelado, de la columna `template_version.document` tal cual.
    *
    * No se reconstruye desde `template_version_item`: esas filas las proyecta un
-   * trigger DESDE el documento y existen para consultar la recurrencia. La fuente de
-   * verdad para validar es la columna. Mismo criterio que `templateVersionPackage`.
+   * trigger DESDE el documento y existen para poder consultar los ítems por separado.
+   * La fuente de verdad para validar es la columna. Mismo criterio que
+   * `templateVersionPackage`.
    */
   private async frozenDocument(
     client: PoolClient,

@@ -6,6 +6,7 @@ import {
   accessCellLabel,
   accountRoleLabel,
   canInvite,
+  canDeactivateWorker,
   dialogFor,
   rowActions,
   canReissueInvitation,
@@ -681,8 +682,29 @@ describe('rowActions', () => {
   const kinds = (row: PersonWithAccount): string[] =>
     rowActions(row, true).map((action) => action.kind);
 
-  it('sin acceso y activa: solo invitar', () => {
-    expect(kinds(withAccount())).toEqual(['invite']);
+  it('worker activa: permite invitarla o quitarla del roster', () => {
+    expect(kinds(withAccount())).toEqual(['invite', 'deactivate']);
+    expect(rowActions(withAccount(), true)[1]?.text).toBe('Remove worker');
+  });
+
+  it('Worker con una cuenta inactiva también permite quitarla del roster', () => {
+    const row = withAccount(
+      {},
+      { id: ACCOUNT_ID, role: 'jhsc_member', active: false, can_sign_in: false },
+    );
+
+    expect(canDeactivateWorker(row)).toBe(true);
+    expect(kinds(row)).toEqual(['invite', 'deactivate']);
+  });
+
+  it('una cuenta activa nunca permite quitar a la persona del roster', () => {
+    const row = withAccount(
+      {},
+      { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true },
+    );
+
+    expect(canDeactivateWorker(row)).toBe(false);
+    expect(kinds(row)).not.toContain('deactivate');
   });
 
   it('sin acceso y dada de baja: ningún acto', () => {
@@ -797,6 +819,17 @@ describe('dialogFor', () => {
     );
 
     expect(only(member)).toMatchObject({ kind: 'remove', canSignIn: true });
+  });
+
+  it('dar de baja un worker viaja con el id de la persona, no con una cuenta', () => {
+    const row = withAccount();
+    const deactivate = rowActions(row, true)[1]!;
+
+    expect(dialogFor(row, deactivate)).toEqual({
+      kind: 'deactivate',
+      personId: row.id,
+      label: personLabel(row),
+    });
   });
 
   it('el asiento copia la dirección que la fila ofrecía', () => {

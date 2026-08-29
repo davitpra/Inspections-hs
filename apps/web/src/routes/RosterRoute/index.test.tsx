@@ -23,6 +23,7 @@ const removeJhscAccess = vi.hoisted(() => vi.fn());
 const setJhscSeat = vi.hoisted(() => vi.fn());
 const importRoster = vi.hoisted(() => vi.fn());
 const createPerson = vi.hoisted(() => vi.fn());
+const deactivatePerson = vi.hoisted(() => vi.fn());
 const useAppSession = vi.hoisted(() => vi.fn());
 
 vi.mock('../../api/inspections', () => ({ listSites }));
@@ -35,6 +36,7 @@ vi.mock('../../api/roster', () => ({
   setJhscSeat,
   importRoster,
   createPerson,
+  deactivatePerson,
 }));
 vi.mock('../../app/session-context', () => ({ useAppSession }));
 
@@ -119,7 +121,67 @@ beforeEach(() => {
   setJhscSeat.mockReset();
   importRoster.mockReset();
   createPerson.mockReset();
+  deactivatePerson.mockReset();
   useAppSession.mockReset().mockReturnValue(session('hs_coordinator'));
+});
+
+describe('dar de baja un worker desde el roster', () => {
+  it('ofrece una acción destructiva solo para una persona activa sin cuenta', async () => {
+    listPeople.mockResolvedValue([
+      person({ id: ADA }),
+      person({
+        id: BRUNO,
+        first_name: 'Bruno',
+        last_name: 'Alvarez',
+        employee_number: '10473',
+        account: account(),
+      }),
+    ]);
+
+    renderRoute();
+    await screen.findByRole('rowheader', { name: 'Reid, Ada' });
+
+    expect(within(openRowMenu('Reid, Ada')).getByRole('menuitem', { name: 'Remove worker' }))
+      .toBeTruthy();
+    expect(
+      within(openRowMenu('Alvarez, Bruno')).queryByRole('menuitem', { name: 'Remove worker' }),
+    ).toBeNull();
+  });
+
+  it('confirma, da de baja por personId e invalida el roster', async () => {
+    deactivatePerson.mockResolvedValue(person({ deactivated_at: '2026-08-28T12:00:00.000Z' }));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+    renderRoute(client);
+    await screen.findByRole('rowheader', { name: 'Reid, Ada' });
+
+    clickRowAction('Reid, Ada', 'Remove worker');
+
+    expect(
+      screen.getByRole('heading', { name: 'Remove Reid, Ada (10472) from the roster?' }),
+    ).toBeTruthy();
+    expect(screen.getByText(/Historical records stay intact/i)).toBeTruthy();
+    expect(deactivatePerson).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove worker' }));
+
+    await waitFor(() => expect(deactivatePerson).toHaveBeenCalledWith({ personId: ADA }));
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['roster', SITE] });
+  });
+
+  it('retiene el diálogo y muestra el error del servidor', async () => {
+    deactivatePerson.mockRejectedValue(new Error('This worker now has an account'));
+    renderRoute();
+    await screen.findByRole('rowheader', { name: 'Reid, Ada' });
+
+    clickRowAction('Reid, Ada', 'Remove worker');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove worker' }));
+
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'This worker now has an account',
+    );
+    expect(screen.getByRole('dialog')).toBeTruthy();
+  });
 });
 
 afterEach(() => {
@@ -953,6 +1015,7 @@ describe('quitar el acceso (remove-jhsc-access-from-roster)', () => {
     expect(screen.getByText('Worker')).toBeTruthy();
     const menu = openRowMenu('Reid, Ada');
     expect(within(menu).getByRole('menuitem', { name: 'Invite to JHSC' })).toBeTruthy();
+    expect(within(menu).getByRole('menuitem', { name: 'Remove worker' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Restore/i })).toBeNull();
     expect(within(menu).queryByRole('menuitem', { name: 'New link' })).toBeNull();
     expect(within(menu).queryByRole('menuitem', { name: 'Cancel invitation' })).toBeNull();
@@ -1001,9 +1064,9 @@ describe('quitar el acceso (remove-jhsc-access-from-roster)', () => {
     expect(screen.queryByRole('button', { name: 'More actions for Reid, Ada' })).toBeNull();
   });
 
-  // El roster administra el acceso que el roster otorga: la cuenta inactiva de un
-  // supervisor no se revive apretando "invitar".
-  it('no ofrece invitar cuando la cuenta dada de baja no era de jhsc_member', async () => {
+  // La cuenta inactiva de supervisor no se revive, pero la fila sigue siendo un Worker que
+  // el coordinador puede quitar del roster.
+  it('solo ofrece quitar al Worker cuando la cuenta inactiva no era de jhsc_member', async () => {
     listPeople.mockResolvedValue([
       person({ id: ADA, account: { ...removed, role: 'supervisor' } }),
     ]);
@@ -1011,7 +1074,9 @@ describe('quitar el acceso (remove-jhsc-access-from-roster)', () => {
     renderRoute();
     await screen.findByRole('rowheader', { name: 'Reid, Ada' });
 
-    expect(screen.queryByRole('button', { name: 'More actions for Reid, Ada' })).toBeNull();
+    const menu = openRowMenu('Reid, Ada');
+    expect(within(menu).queryByRole('menuitem', { name: 'Invite to JHSC' })).toBeNull();
+    expect(within(menu).getByRole('menuitem', { name: 'Remove worker' })).toBeTruthy();
   });
 });
 

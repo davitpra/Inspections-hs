@@ -370,7 +370,6 @@ describe('submittedInspectionSchema', () => {
           reported_by: USER_ID,
           occurred_at: '2026-08-08T15:00:00.000Z',
           recorded_at: '2026-08-08T15:05:00.000Z',
-          recurrence: null,
         },
       ],
       submitted_by: USER_ID,

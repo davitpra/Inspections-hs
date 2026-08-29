@@ -13,14 +13,14 @@ import { DEFAULT_PASSWORD, INSPECTOR, ST_THOMAS, currentPeriodStart } from './de
  *
  * `demo:data` deja el entorno *usable* —una cuenta que entra y la inspección del período
  * corriente asignada— y ahí se detiene a propósito. Con eso `/` tiene una fila y el resto
- * de la aplicación está en blanco: acciones correctivas, incidentes, recurrencia y
-  * recurrencia son consecuencias de meses de trabajo que un entorno recién
- * levantado no tuvo. Esto los produce.
+ * de la aplicación está en blanco: hallazgos, acciones correctivas e incidentes son
+ * consecuencias de meses de trabajo que un entorno recién levantado no tuvo. Esto los
+ * produce.
  *
  * TODO PASA POR LA API, CON SESIÓN, SALVO DOS EXCEPCIONES DECLARADAS (abajo). No es
- * purismo: la derivación de hallazgos, las marcas de recurrencia, las notificaciones y la
- * máquina de estados viven en los servicios y en los
- * triggers. Un script que escribiera las filas a mano produciría un entorno que se ve
+ * purismo: la derivación de hallazgos, las notificaciones y la máquina de estados viven
+ * en los servicios y en los triggers. Un script que escribiera las filas a mano
+ * produciría un entorno que se ve
  * igual y se comporta distinto — y las diferencias aparecerían recién cuando alguien
  * intente reproducir un bug contra estos datos.
  *
@@ -53,8 +53,8 @@ const COORDINATOR_EMAIL = 'coordinator@example.com';
 /**
  * QUÉ PASÓ CADA MES, contado desde el corriente hacia atrás.
  *
- * Cinco meses hacia atrás y no más: alcanzan para que la recurrencia tenga una serie de
- * tres ocurrencias y cubren los estados operativos de la programación.
+ * Cinco meses hacia atrás y no más: alcanzan para que el historial de hallazgos tenga
+ * profundidad y cubren los estados operativos de la programación.
  *
  * `submitted` es un período cumplido, `cancelled` es uno cancelado con motivo y `missed`
  * es uno que nadie hizo y ya cerró. Así la consola de programación tiene estados variados.
@@ -63,8 +63,8 @@ const COORDINATOR_EMAIL = 'coordinator@example.com';
  * la ingesta los deriva sola (`deriveFindings`), no se crean acá.
  *
  * `housekeeping.aisles-clear` en `packaging-line-1` se repite en los tres envíos A
- * PROPÓSITO: es la serie que hace que `/recurrence` no esté vacía, y la que le pone
- * `prior_count` a las marcas que la ingesta congela.
+ * PROPÓSITO: un mismo peligro que vuelve es lo que hace realista el listado de hallazgos
+ * y el trabajo de acciones correctivas que sale de él.
  */
 const HISTORY = [
   {
@@ -540,8 +540,7 @@ async function cancelInspection(pool, inspectionId, reason) {
  * asignado y con las fotos ya en el bucket.
  *
  * De acá salen SOLOS —porque los deriva la ingesta, no este script— los hallazgos de
- * cada respuesta negativa y sus marcas de recurrencia. Ese es el motivo entero de que
- * esto vaya por la API.
+ * cada respuesta negativa. Ese es el motivo entero de que esto vaya por la API.
  */
 async function submitInspection(token, inspection, month, periodStart, references, itemKeys) {
   const negatives = new Map(month.negatives.map((entry) => [entry.itemKey, entry]));
@@ -974,7 +973,7 @@ async function main() {
         '',
         `  ${COORDINATOR_EMAIL} / ${coordinatorPassword}`,
         '    hs_coordinator. Ve las dos plantas y TODAS las pantallas salvo el pendiente:',
-         '    acciones, recurrencia, incidentes y la bandeja.',
+        '    hallazgos, acciones e incidentes.',
         '',
         `  ${INSPECTOR.email} / ${password}`,
         '    jhsc_member. Es el único rol que ejecuta inspecciones: `/` tiene la del mes',

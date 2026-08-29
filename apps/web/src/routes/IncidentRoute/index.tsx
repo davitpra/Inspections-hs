@@ -17,8 +17,8 @@ import { Investigation } from './Investigation';
  * El detalle de un incidente: qué pasó, qué relojes corren, y qué se puede hacer.
  *
  * El vocabulario de incidentes vive en `src/presentation/incidents.ts` y no en esta
- * carpeta: lo importan seis rutas —la lista, el Form 7, la bandeja, la recurrencia, el
- * reporte y ésta—, así que es compartido y no la lógica de esta pantalla.
+ * carpeta: lo importan cuatro rutas —la lista, el Form 7, el reporte y ésta—, así que es
+ * compartido y no la lógica de esta pantalla.
  *
  * **Los botones salen de `INCIDENT_TRANSITIONS`, no de un `if` escrito acá.** Es la
  * misma tabla que el servicio consulta y que la guarda de 0012 reproduce en SQL.

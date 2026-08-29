@@ -22,7 +22,7 @@ context: |
   Capabilities válidas para openspec/specs/. Usar exactamente estos nombres;
   no inventar variantes ni crear capabilities nuevas sin decisión explícita:
     identity · catalog · templates · inspections · findings · actions
-    incidents · audit · reporting · offline-capture · immutability
+    incidents · audit · offline-capture · immutability
 
   Fuera de alcance en v1 — no proponer aunque parezca una mejora obvia:
   i18n o traducción de cualquier tipo; reporte de incidentes en primera
@@ -30,7 +30,9 @@ context: |
   peligros; scoring ponderado; clasificación "casi-accidente"; diagnóstico,
   parte médico o restricción funcional; segunda firma; sincronización
   multi-dispositivo de una misma inspección; envío automático al MLITSD o
-  al WSIB; QR por estación; capacitación, SDS/WHMIS, permisos de trabajo, EPP.
+  al WSIB; QR por estación; capacitación, SDS/WHMIS, permisos de trabajo, EPP;
+  detección de hallazgos recurrentes —series, ventanas y agrupación por concepto—,
+  retirada por ADR-015 junto con la capability `reporting` que la alojaba.
 
   Referencias: docs/requisitos-v1.2.md, docs/adr/
 

@@ -15,9 +15,9 @@ import { z } from 'zod';
  * motor valida las referencias.
  *
  * **No hay, y no puede haber, un campo de texto libre de ubicación.** Si lo
- * hubiera, la lista dejaría de ser cerrada por la puerta de atrás y la agrupación
- * fina de la recurrencia (§5 riesgo A) volvería a ser imposible. Lo que se
- * referencia es un `location_id`.
+ * hubiera, la lista dejaría de ser cerrada por la puerta de atrás y un hallazgo
+ * no se podría ubicar contra el catálogo de la planta. Lo que se referencia es un
+ * `location_id`.
  */
 
 /**

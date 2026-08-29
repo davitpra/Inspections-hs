@@ -137,7 +137,7 @@ describe('locationSchema', () => {
 
   // El requisito central de la pregunta cerrada 1: la ubicación no es texto
   // libre. Si alguien agrega un campo suelto al contrato, `strictObject` lo
-  // rechaza acá y no en la primera consulta de recurrencia.
+  // rechaza acá y no en la primera lectura que intente resolver la ubicación.
   it('rechaza un campo de ubicación en texto libre', () => {
     const result = locationSchema.safeParse({
       ...validLocation(),

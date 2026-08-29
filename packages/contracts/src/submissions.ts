@@ -74,8 +74,8 @@ export type PresignUploadRequest = z.infer<typeof presignUploadRequestSchema>;
  * {uuid}` y el cliente sigue sin elegir dónde escribe: `draft_finding_id` lo
  * genera antes de subir la primera foto, igual que `client_submission_id`.
  *
- * Sin `item_key`: un hallazgo manual no tiene ítem, que es justamente lo que lo
- * deja fuera de la detección de recurrencia (§5 riesgo F).
+ * Sin `item_key`: un hallazgo manual no nace de una pregunta, así que no tiene
+ * un concepto estable al que referirse (§5 riesgo F).
  */
 export const presignFindingUploadRequestSchema = z.strictObject({
   site_id: z.uuid(),

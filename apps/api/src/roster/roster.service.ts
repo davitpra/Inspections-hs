@@ -13,20 +13,21 @@ import { applyRosterRows } from './apply-roster';
 import { parseRosterCsv, RosterFileError } from './parse-roster-csv';
 import {
   personEmployeeNumberTaken,
+  personHasActiveAccount,
+  personNotActive,
+  personNotFound,
   personSiteOutOfScope,
   rosterFileUnusable,
   rosterForbidden,
   rosterImportForbidden,
 } from './roster.errors';
-import { findRoster, insertPerson } from './roster.repository';
+import { deactivatePerson, findRoster, insertPerson } from './roster.repository';
 
 /**
  * La consola del roster: poder ver quién trabaja en cada planta sin abrir `psql`.
  *
- * Las únicas dos escrituras son la importación completa del CSV y el alta de UNA
- * persona (`add-person-to-roster-by-hand`). No hay baja, corrección de nombre ni
- * transferencia de una persona individual desde esta superficie: eso sigue siendo del
- * CSV, que es la fuente de verdad del roster.
+ * Además de importar y dar de alta, permite la baja estrecha de una persona sin cuenta.
+ * No corrige nombres, no transfiere y no reactiva: eso sigue siendo del CSV.
  *
  * **El CSV gana (design D1).** Un alta a mano es un adelanto del archivo — "esta persona
  * ya empezó, el export es el lunes" — no una excepción a él: cuando el próximo CSV traiga
@@ -88,6 +89,20 @@ export class RosterService {
     if (person === null) throw personEmployeeNumberTaken(input.employee_number);
 
     return person;
+  }
+
+  async deactivate(session: SessionScope, personId: string): Promise<Person> {
+    this.requireCoordinator(session, rosterForbidden);
+
+    const result = await this.db.withSessionClient(session, (client) =>
+      deactivatePerson(client, personId),
+    );
+
+    if (result.status === 'not_found') throw personNotFound();
+    if (result.status === 'has_active_account') throw personHasActiveAccount();
+    if (result.status === 'not_active') throw personNotActive();
+
+    return result.person;
   }
 
   async import(

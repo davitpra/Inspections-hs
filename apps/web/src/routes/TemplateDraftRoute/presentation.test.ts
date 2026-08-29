@@ -66,8 +66,8 @@ describe('prescripciones', () => {
   it('agrega umbral solo a los tipos medidos', () => {
     expect(defaultFinding('yes_no')).not.toHaveProperty('fails_when');
     expect(defaultFinding('number')).toHaveProperty('fails_when');
-    expect(findingButtonLabel(false)).toBe('Add finding');
-    expect(findingButtonLabel(true)).toBe('Edit finding');
+    expect(findingButtonLabel(false)).toBe('Add action');
+    expect(findingButtonLabel(true)).toBe('Edit action');
   });
 });
 

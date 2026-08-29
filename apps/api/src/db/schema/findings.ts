@@ -54,8 +54,8 @@ export const finding = pgTable(
     origin: text('origin').$type<FindingOrigin>().notNull(),
 
     // Los tres de la identidad dual: no nulos en un hallazgo derivado, nulos en uno
-    // manual. Un hallazgo manual queda por lo tanto fuera de la recurrencia (§5
-    // riesgo F), que es la consecuencia aceptada por escrito.
+    // manual. Un hallazgo manual no nace de una pregunta, así que no tiene concepto
+    // estable al que referirse (§5 riesgo F).
     inspectionId: uuid('inspection_id').references(() => inspection.id),
     templateVersionItemId: uuid('template_version_item_id').references(
       () => templateVersionItem.id,
@@ -100,13 +100,6 @@ export const finding = pgTable(
     // Destino de la FK compuesta de `findingPhoto`.
     unique('finding_id_site_uq').on(table.id, table.siteId),
 
-    // El índice de la recurrencia de la etapa 7. Parcial: un hallazgo manual no tiene
-    // `item_key` y no entra en ninguna serie. Lleva `location_id` porque la clave útil
-    // con 48 acres es concepto + lugar (§5 riesgo A), y cuál de las dos se use es una
-    // decisión de la etapa 7.
-    index('finding_recurrence_idx')
-      .on(table.siteId, table.itemKey, table.locationId)
-      .where(sql`${table.itemKey} IS NOT NULL`),
     index('finding_inspection_idx').on(table.inspectionId),
     index('finding_site_recorded_idx').on(table.siteId, table.recordedAt),
   ],

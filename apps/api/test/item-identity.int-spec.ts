@@ -22,14 +22,14 @@ import {
  * hallazgo; v2 lo reescribe, lo mueve de sección y lo reordena, y genera dos;
  * v3 le cambia el tipo de respuesta de sí/no a escala, y genera uno.
  *
- * La aserción: la consulta de recurrencia devuelve **una serie de 4**. Si
- * devuelve 1 + 2 + 1, el esquema está mal y se descubrió antes de tener datos
- * reales.
+ * La aserción: agrupar los hallazgos por `item_key` devuelve **un solo grupo de
+ * 4**. Si devuelve 1 + 2 + 1, el esquema está mal y se descubrió antes de tener
+ * datos reales.
  *
  * El riesgo A no falla ruidosamente: los IDs existen, los joins funcionan, la
- * consulta devuelve filas. Simplemente agrupa mal, y "agrupa mal" en una
- * detección de patrones se ve idéntico a "no hay patrón". Por eso el test afirma
- * también, explícitamente, que NO devuelve tres series.
+ * consulta devuelve filas. Simplemente agrupa mal, y "agrupa mal" se ve idéntico
+ * a "no hay nada que ver". Por eso el test afirma también, explícitamente, que NO
+ * devuelve tres grupos.
  */
 
 const ITEM_KEY = 'guards.packaging-lines';
@@ -84,14 +84,13 @@ async function recordFindings(row: VersionItemRow, count: number): Promise<void>
 }
 
 /**
- * La consulta de recurrencia, en su forma mínima: agrupar por `item_key`.
+ * La agrupación por concepto, en su forma mínima: `GROUP BY item_key`.
  *
- * Es deliberadamente la más simple posible. La de la etapa 7 agrega
- * `location_id`, ventana temporal y umbral; lo que se prueba acá es la única
- * parte de la que dependen todas las variantes — que la clave de agrupación
- * sobreviva a las ediciones de plantilla.
+ * La escribe el test y no la aplicación: lo que se prueba acá no es una consulta
+ * de producto sino la propiedad de la que dependería cualquiera que se escriba —
+ * que la clave de agrupación sobreviva a las ediciones de plantilla.
  */
-async function recurrenceSeries(): Promise<{ item_key: string; findings: number }[]> {
+async function groupsByItemKey(): Promise<{ item_key: string; findings: number }[]> {
   return inScope<{ item_key: string; findings: number }>(
     db.migrator,
     [],
@@ -225,25 +224,25 @@ describe('la item_key sobrevive a toda edición', () => {
   });
 });
 
-describe('spike 3: la consulta de recurrencia devuelve una serie de 4', () => {
-  it('una sola serie, con los cuatro hallazgos', async () => {
-    const series = await recurrenceSeries();
+describe('spike 3: agrupar por item_key devuelve un grupo de 4', () => {
+  it('un solo grupo, con los cuatro hallazgos', async () => {
+    const groups = await groupsByItemKey();
 
-    expect(series).toEqual([{ item_key: ITEM_KEY, findings: 4 }]);
+    expect(groups).toEqual([{ item_key: ITEM_KEY, findings: 4 }]);
   });
 
   // La aserción explícita del modo de fallo: 1 + 2 + 1 es exactamente lo que
   // devolvería un esquema que agrupa por la fila de la versión.
-  it('no devuelve tres series de 1, 2 y 1', async () => {
-    const series = await recurrenceSeries();
+  it('no devuelve tres grupos de 1, 2 y 1', async () => {
+    const groups = await groupsByItemKey();
 
-    expect(series).toHaveLength(1);
-    expect(series.map((row) => row.findings)).not.toEqual([1, 2, 1]);
+    expect(groups).toHaveLength(1);
+    expect(groups.map((row) => row.findings)).not.toEqual([1, 2, 1]);
   });
 
-  it('agrupar por la fila de la versión es justo lo que partiría la serie', async () => {
+  it('agrupar por la fila de la versión es justo lo que partiría el grupo', async () => {
     // No es una regresión: es la demostración de por qué la identidad es dual.
-    // Si el hallazgo apuntara solo a la fila, esto sería la serie histórica.
+    // Si el hallazgo apuntara solo a la fila, esto sería toda su historia.
     const byRow = await inScope<{ findings: number }>(
       db.migrator,
       [],
@@ -276,7 +275,6 @@ describe('fidelidad legal: cada hallazgo resuelve la pregunta que se hizo', () =
       section_key: 'general',
       position: 4,
       response_type: 'yes_no',
-      fails_on: 'no',
     });
   });
 
@@ -298,7 +296,7 @@ describe('fidelidad legal: cada hallazgo resuelve la pregunta que se hizo', () =
 });
 
 describe('linaje y punto ciego', () => {
-  it('un ítem que reemplaza a otro arranca su propia serie, no hereda la anterior', async () => {
+  it('un ítem que reemplaza a otro arranca su propio grupo, no hereda el anterior', async () => {
     await registerItems(db.migrator, templateId, ['guards.line-3'], {
       replacesItemKey: ITEM_KEY,
     });
@@ -330,10 +328,10 @@ describe('linaje y punto ciego', () => {
 
     await recordFindings(await itemRow(db.migrator, version, 'guards.line-3'), 1);
 
-    const series = await recurrenceSeries();
+    const groups = await groupsByItemKey();
 
-    // Dos series separadas: el linaje es rastro, no regla de agrupación.
-    expect(series).toEqual([
+    // Dos grupos separados: el linaje es rastro, no regla de agrupación.
+    expect(groups).toEqual([
       { item_key: 'guards.line-3', findings: 1 },
       { item_key: ITEM_KEY, findings: 4 },
     ]);
@@ -350,8 +348,8 @@ describe('linaje y punto ciego', () => {
   });
 
   // Consecuencia aceptada de §4: el hallazgo manual no tiene item_key y queda
-  // fuera de la recurrencia. Se ejerce en lugar de ignorarse.
-  it('un hallazgo manual no entra en ninguna serie', async () => {
+  // fuera de toda agrupación por concepto. Se ejerce en lugar de ignorarse.
+  it('un hallazgo manual no entra en ningún grupo', async () => {
     const row = await itemRow(db.migrator, versionIds[2]!, ITEM_KEY);
 
     await inScope(
@@ -362,9 +360,9 @@ describe('linaje y punto ciego', () => {
       [row.id, siteId, locationId],
     );
 
-    const series = await recurrenceSeries();
+    const groups = await groupsByItemKey();
 
-    expect(series.find((entry) => entry.item_key === ITEM_KEY)?.findings).toBe(4);
+    expect(groups.find((entry) => entry.item_key === ITEM_KEY)?.findings).toBe(4);
   });
 
   it('un hallazgo no puede apuntar a una item_key que no existe', async () => {

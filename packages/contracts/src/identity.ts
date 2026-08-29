@@ -110,11 +110,9 @@ export type PersonOption = z.infer<typeof personOptionSchema>;
 /**
  * Qué pedazo del roster de una planta pide la consola.
  *
- * **La consola es de solo lectura sobre una persona que ya existe**: no hay ningún
- * esquema para corregir un nombre, transferir de planta o dar de baja desde acá — eso
- * sigue siendo del CSV (`pnpm roster:import`), que es la fuente de verdad del roster. Lo
- * único que se puede escribir es el alta de una persona nueva, con `createPersonRequestSchema`
- * más abajo.
+ * La consola no corrige nombres ni transfiere personas. Sus escrituras individuales son el
+ * alta de una persona nueva y la baja estrecha de un worker sin cuenta; el CSV sigue siendo
+ * la fuente de verdad capaz de aplicar el resto de cambios.
  *
  * `site_id` es obligatorio y eso acota la respuesta al roster de UNA planta, que es lo
  * que sostiene la decisión de no paginar: doscientas filas entran en una pantalla de
@@ -150,6 +148,13 @@ export const createPersonRequestSchema = z.strictObject({
 });
 
 export type CreatePersonRequest = z.infer<typeof createPersonRequestSchema>;
+
+/** Desde una fila solo se puede dar de baja a la persona; reactivarla sigue siendo del CSV. */
+export const deactivatePersonRequestSchema = z.strictObject({
+  deactivated: z.literal(true),
+});
+
+export type DeactivatePersonRequest = z.infer<typeof deactivatePersonRequestSchema>;
 
 /**
  * La cuenta que referencia a una persona del roster, reducida a lo que decide si el

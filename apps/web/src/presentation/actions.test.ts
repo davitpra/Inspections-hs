@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { ACTION_STATES, type ActionState } from '@hs/contracts';
 
-import { STATE_LABELS, transitionLabel } from './actions';
+import {
+  actionDeadlineStatus,
+  ACTION_DEADLINE_LABEL,
+  escalationSummary,
+  STATE_LABELS,
+  transitionLabel,
+} from './actions';
 
 describe('cómo se nombran las acciones correctivas', () => {
   it('cubre los estados del contrato y ninguno de más', () => {
@@ -21,5 +27,22 @@ describe('cómo se nombran las acciones correctivas', () => {
 
   it('un par sin texto propio cae en la etiqueta del estado destino', () => {
     expect(transitionLabel('closed', 'open')).toBe(STATE_LABELS.open);
+  });
+
+  it('nombra un plazo vencido solo mientras la acción sigue abierta', () => {
+    expect(ACTION_DEADLINE_LABEL).toBe('Due date');
+    expect(actionDeadlineStatus(true, 'in_progress')).toBe('Overdue');
+    expect(actionDeadlineStatus(true, 'closed')).toBeNull();
+    expect(actionDeadlineStatus(false, 'open')).toBeNull();
+  });
+
+  it('resume los escalamientos en el orden registrado', () => {
+    expect(
+      escalationSummary([
+        { level: 'supervisor', days_overdue: 1, escalated_at: '2027-08-31T12:00:00Z' },
+        { level: 'management', days_overdue: 3, escalated_at: '2027-09-02T12:00:00Z' },
+      ]),
+    ).toBe('Sent to supervisor (1 days late), management (3 days late)');
+    expect(escalationSummary([])).toBeNull();
   });
 });

@@ -173,7 +173,7 @@ export function normalizeDraft(draft: TemplateDraftDocument): TemplateDocument {
  *
  * Existe para revisar una plantilla publicada: la versión N+1 se escribe editando
  * la N, y cada `item_key` tiene que llegar intacto porque es lo que mantiene una
- * sola serie de recurrencia a través de las versiones.
+ * sola identidad de la pregunta a través de las versiones.
  *
  * `draftFromDocument(normalizeDraft(d))` devuelve `d`. La otra vuelta no es una
  * identidad y no puede serlo: `normalizeDraft` inventa las `position` a partir del

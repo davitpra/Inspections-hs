@@ -155,7 +155,10 @@ export function RosterTable({
                               label={`More actions for ${personName(person)}`}
                               actions={actions.map((action) => ({
                                 label: action.text,
-                                tone: action.kind === 'remove' ? 'danger' : undefined,
+                                tone:
+                                  action.kind === 'remove' || action.kind === 'deactivate'
+                                    ? 'danger'
+                                    : undefined,
                                 onSelect: () => onAct(dialogFor(person, action)),
                               }))}
                             />

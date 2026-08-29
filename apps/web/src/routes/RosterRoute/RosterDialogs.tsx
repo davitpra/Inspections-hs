@@ -1,4 +1,5 @@
 import { InviteDialog } from './InviteDialog';
+import { DeactivateWorkerDialog } from './DeactivateWorkerDialog';
 import { JhscSeatDialog } from './JhscSeatDialog';
 import type { RosterDialog } from './presentation';
 import { ReissueDialog } from './ReissueDialog';
@@ -26,6 +27,15 @@ export function RosterDialogs({
     case 'invite':
       return (
         <InviteDialog
+          personId={dialog.personId}
+          personLabel={dialog.label}
+          siteId={siteId}
+          onClose={onClose}
+        />
+      );
+    case 'deactivate':
+      return (
+        <DeactivateWorkerDialog
           personId={dialog.personId}
           personLabel={dialog.label}
           siteId={siteId}

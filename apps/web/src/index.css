@@ -1696,6 +1696,102 @@ select:disabled {
   margin: 0;
 }
 
+/* Lo comprometido y el camino para comprometer más. Va debajo del hallazgo y separado por
+   una línea: es lo que se hizo con él, no parte de lo que se observó. */
+.finding__commitments {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px dashed var(--line);
+}
+
+.finding__actions {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.finding__actions li {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+}
+
+.finding__action-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.finding__action-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-6);
+  margin: 0;
+}
+
+.finding__action-facts div {
+  display: grid;
+  gap: var(--space-0-5);
+}
+
+.finding__action-facts dt {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.finding__action-facts dd,
+.finding__action-overdue,
+.finding__action-escalation {
+  margin: 0;
+}
+
+.finding__action-overdue,
+.finding__action-escalation {
+  color: var(--state-danger);
+  font-size: var(--text-sm);
+}
+
+.finding__update-button {
+  justify-self: start;
+}
+
+.finding__create-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  border-color: var(--brand);
+  color: var(--brand);
+  font-weight: var(--weight-strong);
+}
+
+@media (max-width: 40rem) {
+  .finding__commitments {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .finding__create-button {
+    width: 100%;
+  }
+
+  .finding__update-button {
+    width: 100%;
+  }
+}
+
 .choices {
   display: flex;
   flex-wrap: wrap;
@@ -2099,6 +2195,47 @@ select:disabled {
 
   .review .card {
     padding: var(--space-4);
+  }
+}
+
+.action-progress-dialog {
+  width: min(72rem, calc(100% - var(--space-6)));
+  max-height: calc(100% - var(--space-6));
+  overflow: auto;
+}
+
+.action-progress-dialog__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.action-progress-dialog__head h2,
+.action-progress-dialog__description {
+  margin: 0;
+}
+
+.action-progress-dialog__description {
+  margin-bottom: var(--space-4);
+  font-weight: var(--weight-strong);
+}
+
+.action-progress-dialog__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(18rem, 0.8fr);
+  align-items: start;
+  gap: var(--space-4);
+}
+
+.action-progress-dialog__layout > .card {
+  margin: 0;
+}
+
+@media (max-width: 48rem) {
+  .action-progress-dialog__layout {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -3114,16 +3251,6 @@ select:disabled {
   text-underline-offset: var(--space-1);
 }
 
-.actions-overview__source {
-  display: inline-flex;
-  padding: var(--space-0-5) var(--space-2);
-  border-radius: var(--radius-pill);
-  background: var(--tint-bg);
-  color: var(--brand);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-strong);
-}
-
 .actions-overview__number {
   font-weight: var(--weight-strong);
 }
@@ -3133,7 +3260,6 @@ select:disabled {
   white-space: nowrap;
 }
 
-.actions-overview__create-button,
 .actions-overview__view-link {
   display: inline-flex;
   align-items: center;
@@ -3141,10 +3267,6 @@ select:disabled {
   gap: var(--space-2);
   color: var(--brand);
   font-weight: var(--weight-strong);
-}
-
-.actions-overview__create-button {
-  border-color: var(--brand);
 }
 
 .actions-overview__view-link svg {
@@ -3186,6 +3308,17 @@ select:disabled {
   display: flex;
   align-items: center;
   gap: var(--space-3);
+}
+
+/* El diálogo se dibuja desde `/findings/$id`, así que no puede pedir prestado el
+   vocabulario de `/actions`: lleva su propio filete. */
+.actions-create-dialog__eyebrow {
+  margin: 0 0 var(--space-0-5);
+  color: var(--brand);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .actions-create-dialog__icon {
@@ -3293,7 +3426,6 @@ select:disabled {
   }
 
   .actions-overview__action-cell .table__actions,
-  .actions-overview__create-button,
   .actions-overview__view-link {
     width: 100%;
   }

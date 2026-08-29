@@ -91,6 +91,55 @@ export async function insertPerson(
   return row === undefined ? null : toPerson(row);
 }
 
+export type DeactivatePersonResult =
+  | { status: 'deactivated'; person: Person }
+  | { status: 'not_found' }
+  | { status: 'has_active_account' }
+  | { status: 'not_active' };
+
+/**
+ * Bloquea primero la persona y después la cuenta: crear o reactivar acceso no puede correr
+ * en paralelo con esta baja. Una cuenta histórica inactiva permanece intacta.
+ */
+export async function deactivatePerson(
+  client: PoolClient,
+  personId: string,
+): Promise<DeactivatePersonResult> {
+  const locked = await client.query<{ deactivated_at: Date | null }>(
+    `SELECT deactivated_at FROM person WHERE id = $1 FOR UPDATE`,
+    [personId],
+  );
+  const [current] = locked.rows;
+
+  if (current === undefined) return { status: 'not_found' };
+  if (current.deactivated_at !== null) return { status: 'not_active' };
+
+  const account = await client.query<{ id: string }>(
+    `SELECT id FROM app_user WHERE person_id = $1 FOR UPDATE`,
+    [personId],
+  );
+  const [linked] = account.rows;
+
+  if (linked !== undefined) {
+    const activity = await client.query<{ active: boolean }>(
+      `SELECT hs_account_is_active(app_user.*) AS active FROM app_user WHERE id = $1`,
+      [linked.id],
+    );
+
+    if (activity.rows[0]?.active) return { status: 'has_active_account' };
+  }
+
+  const { rows } = await client.query<PersonRow>(
+    `UPDATE person
+        SET deactivated_at = now()
+      WHERE id = $1
+      RETURNING id, site_id, employee_number, first_name, last_name, deactivated_at`,
+    [personId],
+  );
+
+  return { status: 'deactivated', person: toPerson(rows[0]!) };
+}
+
 interface PersonRow extends Record<string, unknown> {
   id: string;
   site_id: string;

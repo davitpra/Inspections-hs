@@ -55,8 +55,8 @@ export const templateItem = pgTable('template_item', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   deactivatedAt: timestamp('deactivated_at', { withTimezone: true }),
 
-  // Rastro de linaje (§4), no regla de agrupación: la recurrencia no une la
-  // serie del reemplazante con la del reemplazado.
+  // Rastro de linaje (§4), no regla de agrupación: el reemplazante no hereda la
+  // identidad del reemplazado.
   replacesItemKey: text('replaces_item_key'),
 });
 
@@ -87,7 +87,7 @@ export const templateVersion = pgTable(
  * La identidad dual, que es el punto entero de este esquema:
  *
  *   id        la fila de esta versión — fidelidad legal. Cambia en cada versión.
- *   itemKey   el concepto — clave de agrupación de la recurrencia. No cambia.
+ *   itemKey   el concepto — la identidad de la pregunta. No cambia.
  */
 export const templateVersionItem = pgTable(
   'template_version_item',
@@ -120,7 +120,7 @@ export const templateVersionItem = pgTable(
       table.sectionKey,
       table.position,
     ),
-    // El índice del GROUP BY de recurrencia de la etapa 7.
+    // Resolver un `item_key` a través de todas las versiones que lo contienen.
     index('template_version_item_key_idx').on(table.itemKey),
   ],
 );

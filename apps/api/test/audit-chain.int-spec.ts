@@ -189,6 +189,25 @@ describe('verificación de la cadena', () => {
     await expect(verify(db, SITE_TAMPERED)).resolves.toEqual([]);
   });
 
+  it('conserva verificable una lectura histórica del recurso retirado', async () => {
+    await insertEvent(db.app, SITE_B, {
+      eventType: 'data.read',
+      payload: { resource: 'finding_recurrence', row_count: 2 },
+    });
+
+    await expect(verify(db, SITE_B)).resolves.toEqual([]);
+
+    const rows = await inScope<{ payload: Record<string, unknown> }>(
+      db.app,
+      [SITE_B],
+      `SELECT payload FROM audit_log
+        WHERE site_id = $1 AND payload ->> 'resource' = 'finding_recurrence'`,
+      [SITE_B],
+    );
+
+    expect(one(rows).payload).toMatchObject({ resource: 'finding_recurrence', row_count: 2 });
+  });
+
   it('localiza el eslabón cuyo payload fue alterado fuera de banda', async () => {
     // Como superusuario: es exactamente el privilegio que la aplicación no tiene
     // — un backup restaurado a mano, o acceso directo a la base.
@@ -472,10 +491,10 @@ describe('el envío de una inspección en la cadena', () => {
     expect(entry.occurred_at.toISOString()).toBe(entry.recorded_at.toISOString());
   });
 
-  it('la agrupación por item_key cruza versiones: la serie de la etapa 7', async () => {
+  it('la agrupación por item_key cruza versiones', async () => {
     // El spike 3 visto desde el lado de las respuestas. Dos inspecciones contra dos
-    // versiones distintas contestan el MISMO concepto: la recurrencia las cuenta juntas
-    // y la fidelidad legal las distingue.
+    // versiones distintas contestan el MISMO concepto: `item_key` las une y la
+    // fidelidad legal las distingue.
     versionTwoId = await publishVersion(db.migrator, templateId, 2, {
       sections: [
         {

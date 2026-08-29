@@ -148,7 +148,7 @@ export const draftIssueSchema = z.strictObject({
  *
  * **No es `site_id` y no contradice la cabecera de este archivo.** Una plantilla sigue
  * sin pertenecer a una planta: sigue siendo UNA, con UN juego de `item_key`, y las dos
- * plantas siguen compartiendo la serie de recurrencia. Esto es otra pregunta —dónde se
+ * plantas siguen compartiendo la identidad de cada pregunta. Esto es otra pregunta —dónde se
  * piensa USAR—, y existe porque el catálogo de ubicaciones se mapea POR PLANTA: una
  * sección solo puede nombrar una ubicación compartida que la planta donde corre la
  * inspección tenga tickeada, y sin saber para qué plantas se escribe no hay forma de

@@ -12,9 +12,10 @@ import { ActionRoute } from '../routes/ActionRoute';
 import { ActionsForInspectionRoute } from '../routes/ActionsForInspectionRoute';
 import { ActionsRoute } from '../routes/ActionsRoute';
 import { CaptureRoute } from '../routes/CaptureRoute';
+import { FindingsRoute } from '../routes/FindingsRoute';
 import { Form7Route } from '../routes/Form7Route';
 import { HistoricalInspectionsRoute } from '../routes/HistoricalInspectionsRoute';
-import { InboxRoute } from '../routes/InboxRoute';
+import { InspectionFindingsRoute } from '../routes/InspectionFindingsRoute';
 import { InspectionReportRoute } from '../routes/InspectionReportRoute';
 import { InspectionAssignmentRoute } from '../routes/InspectionAssignmentRoute';
 import { InspectorHomeRoute } from '../routes/InspectorHomeRoute';
@@ -22,7 +23,6 @@ import { IncidentRoute } from '../routes/IncidentRoute';
 import { IncidentsRoute } from '../routes/IncidentsRoute';
 import { OfflineRoute } from '../routes/OfflineRoute';
 import { OutboxRoute } from '../routes/OutboxRoute';
-import { RecurrenceRoute } from '../routes/RecurrenceRoute';
 import { ReportIncidentRoute } from '../routes/ReportIncidentRoute';
 import { ReviewRoute } from '../routes/ReviewRoute';
 import { RosterRoute } from '../routes/RosterRoute';
@@ -208,6 +208,31 @@ const historicalInspectionsRoute = createRoute({
   component: HistoricalInspectionsRoute,
 });
 
+/**
+ * Lo que salió mal, y el envío en el que salió. Dos rutas, como `/actions`: la lista de lo
+ * cerrado con hallazgos, y UN envío leído solo por sus hallazgos.
+ *
+ * **`/findings` y no `/inspections/$id/findings`**, aunque el detalle sea una inspección.
+ * `CAPTURE_ROUTES` en `sw.ts` matchea `/^\/inspections\//`, así que colgarla de ese prefijo
+ * la metería sin querer en el shell precacheado y la haría "disponible" sin red, mostrando
+ * datos que no puede traer — `getSubmittedInspection` sale a la red siempre. Es la misma
+ * trampa que ya documentan `schedulingRoute`, `rosterRoute` y `templatesRoute`.
+ *
+ * El `$id` es el de la inspección PROGRAMADA, el mismo de la captura, la revisión y el
+ * reporte: las cinco pantallas de una inspección se direccionan igual.
+ */
+const findingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/findings',
+  component: FindingsRoute,
+});
+
+const inspectionFindingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/findings/$id',
+  component: InspectionFindingsRoute,
+});
+
 const actionsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/actions',
@@ -255,26 +280,10 @@ const form7Route = createRoute({
 });
 
 /**
- * La recurrencia (etapa 7). ONLINE y de solo lectura: no entra al precacheo del service
- * worker — se mira sentado, no en 48 acres sin cobertura.
- */
-const recurrenceRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/recurrence',
-  component: RecurrenceRoute,
-});
-
-/**
- * El cumplimiento (etapa 7, §3 R5). ONLINE y fuera del precacheo del service worker, por
- * lo mismo que la recurrencia: un reporte regulatorio se genera sentado y con conexión.
- * Guardarlo offline guardaría además una copia de un payload cuyo digest nadie recomputó.
- */
-/**
- * La consola de programación (§4). ONLINE y fuera del precacheo del service worker, por
-   * lo mismo que la recurrencia —se planifica sentado— y por una razón
- * propia y más fuerte: una asignación en cola sería un inspector que no sabe que fue
- * asignado. El offline existe para que no se pierda el trabajo de campo, no para diferir
- * decisiones de coordinación.
+ * La consola de programación (§4). ONLINE y fuera del precacheo del service worker: se
+ * planifica sentado y con conexión, y por una razón propia y más fuerte, una asignación
+ * en cola sería un inspector que no sabe que fue asignado. El offline existe para que no
+ * se pierda el trabajo de campo, no para diferir decisiones de coordinación.
  *
  * **`/scheduling` y no `/inspections/schedule`**: `CAPTURE_ROUTES` en `sw.ts` matchea
  * `/^\/inspections\//`, así que colgarla de ese prefijo la metería sin querer en el shell
@@ -363,12 +372,6 @@ const locationsRoute = createRoute({
   component: LocationsRoute,
 });
 
-const inboxRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/inbox',
-  component: InboxRoute,
-});
-
 const outboxRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/outbox',
@@ -382,6 +385,8 @@ const routeTree = rootRoute.addChildren([
   inspectionAssignmentRoute,
   inspectionReportRoute,
   reviewRoute,
+  findingsRoute,
+  inspectionFindingsRoute,
   outboxRoute,
   schedulingRoute,
   scheduleRequirementRoute,
@@ -397,8 +402,6 @@ const routeTree = rootRoute.addChildren([
   reportIncidentRoute,
   incidentRoute,
   form7Route,
-  recurrenceRoute,
-  inboxRoute,
   acceptInvitationRoute,
 ]);
 

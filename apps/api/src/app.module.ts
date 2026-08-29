@@ -12,7 +12,6 @@ import { FindingsModule } from './findings/findings.module';
 import { InspectionsModule } from './inspections/inspections.module';
 import { JobsModule } from './jobs/jobs.module';
 import { NotificationsModule } from './notifications/notifications.module';
-import { ReportingModule } from './reporting/reporting.module';
 import { RosterModule } from './roster/roster.module';
 import { TemplatesModule } from './templates/templates.module';
 import { UploadsModule } from './uploads/uploads.module';
@@ -23,12 +22,6 @@ import { UploadsModule } from './uploads/uploads.module';
     JobsModule,
     AuthModule,
     InspectionsModule,
-    // ANTES QUE `FindingsModule`, Y NO ES ESTILO. `ReportingController` declara
-    // `GET findings/recurrence` y `FindingsController` declara `GET findings/:id`:
-    // Nest resuelve por orden de registro, así que invertir estas dos líneas hace que
-    // el parámetro se coma el literal y que pedir la recurrencia termine buscando un
-    // hallazgo con id "recurrence". Un test de integración lo verifica.
-    ReportingModule,
     FindingsModule,
     ActionsModule,
     IncidentsModule,
@@ -36,7 +29,7 @@ import { UploadsModule } from './uploads/uploads.module';
     UploadsModule,
     // Los catálogos de solo lectura que la consola de programación necesita para
     // ofrecer nombres en vez de identificadores. Ninguno declara un `:param` a nivel
-    // raíz, así que no hay riesgo de orden como el de `findings/recurrence`.
+    // raíz, así que ninguna ruta literal puede quedar tapada por un parámetro.
     CatalogModule,
     TemplatesModule,
     // La consola del roster. Declara la lectura y la importación completa de `people`;

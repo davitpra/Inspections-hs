@@ -21,13 +21,24 @@ import { ExternalLinkIcon } from "./icons";
  * `—` cuando el período figura completado y la fecha no viene. No es decorativo: pasa
  * cuando el envío existe pero su fila no es visible para quien lee, y ahí lo honesto es
  * dejar el hueco en vez de inventar el día del período.
+ *
+ * **El destino es una prop y no un literal**: el historial abre el recorrido completo y
+ * `/findings` abre solo lo que salió mal, y son la misma fila leída con otra pregunta. La
+ * unión de literales y no `string` para que el `<Link>` de TanStack siga comprobando el
+ * path contra el árbol de rutas — un destino mal escrito no compila. Sin valor por
+ * defecto: dos pantallas que enlazan a sitios distintos no tienen que poder olvidarse de
+ * decir a cuál.
  */
 export function CompletedInspectionsTable({
   inspections,
   siteName,
+  to,
+  actionLabel,
 }: {
   inspections: readonly ScheduledInspection[];
   siteName: (id: string) => string;
+  to: "/inspections/$id/report" | "/findings/$id";
+  actionLabel: string;
 }): React.JSX.Element {
   return (
     <table
@@ -57,11 +68,7 @@ export function CompletedInspectionsTable({
                 el nombre se queda en texto en vez de prometer una pantalla vacía.
               */}
               {item.inspection_id ? (
-                <Link
-                  to="/inspections/$id/report"
-                  params={{ id: item.id }}
-                  className="table__link"
-                >
+                <Link to={to} params={{ id: item.id }} className="table__link">
                   {item.template_name}
                 </Link>
               ) : (
@@ -86,12 +93,8 @@ export function CompletedInspectionsTable({
               */}
               <div className="table__actions">
                 {item.inspection_id ? (
-                  <Link
-                    to="/inspections/$id/report"
-                    params={{ id: item.id }}
-                    className="list__action"
-                  >
-                    View report <ExternalLinkIcon size={16} />
+                  <Link to={to} params={{ id: item.id }} className="list__action">
+                    {actionLabel} <ExternalLinkIcon size={16} />
                   </Link>
                 ) : null}
               </div>

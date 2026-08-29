@@ -93,9 +93,10 @@ function opened(inspection: ScheduledInspection): YearEntry {
 
 describe('la nota de una fila abierta', () => {
   it('avisa cuando el coordinador la adelantó y el período todavía no llegó', () => {
-    expect(rowNote(opened(period('2026-12-01', true)), '2026-08-25')).toBe(
-      'Visible to the inspector ahead of its period',
-    );
+    expect(rowNote(opened(period('2026-12-01', true)), '2026-08-25')).toEqual({
+      text: 'Visible to the inspector ahead of its period',
+      tone: 'info',
+    });
   });
 
   it('no avisa una vez que el mes corriente alcanza al período, aunque siga marcada', () => {

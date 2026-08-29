@@ -75,13 +75,6 @@ describe('findingSchema', () => {
       reported_by: USER_ID,
       occurred_at: '2026-08-03T14:20:00.000Z',
       recorded_at: '2026-08-09T09:00:00.000Z',
-      recurrence: {
-        prior_count: 0,
-        prior_count_site_wide: 0,
-        window_months: 12,
-        first_prior_occurred_at: null,
-        is_recurrent: false,
-      },
     };
   }
 
@@ -103,27 +96,14 @@ describe('findingSchema', () => {
       inspection_id: null,
       template_version_item_id: null,
       item_key: null,
-      // Sin `item_key` no hay serie a la que pertenecer: la marca es una ausencia.
-      recurrence: null,
     });
 
     expect(result.success).toBe(true);
   });
 
-  /**
-   * D8 — las dos formas son válidas y dicen cosas distintas: `null` es "nunca se
-   * comparó con la historia" y `is_recurrent: false` es "se comparó, primera vez".
-   */
-  it('distingue la marca ausente de la marca que dice que no', () => {
-    expect(findingSchema.safeParse({ ...derived(), recurrence: null }).success).toBe(true);
-    expect(findingSchema.parse(derived()).recurrence?.is_recurrent).toBe(false);
-  });
-
-  it('no admite escribir `is_recurrent` sin `prior_count`', () => {
-    const result = findingSchema.safeParse({
-      ...derived(),
-      recurrence: { is_recurrent: true },
-    });
+  /** La marca de recurrencia se retiró (ADR-015) y el objeto es estricto. */
+  it('no admite una marca de recurrencia', () => {
+    const result = findingSchema.safeParse({ ...derived(), recurrence: null });
 
     expect(result.success).toBe(false);
   });

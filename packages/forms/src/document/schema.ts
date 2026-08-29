@@ -325,8 +325,8 @@ export const templateDocumentSchema = z
     });
 
     // Una `item_key` repetida dentro de un documento haría que la misma pregunta
-    // se conteste dos veces en la misma inspección y que la recurrencia contara
-    // doble. Es único a nivel documento, no a nivel sección.
+    // se conteste dos veces en la misma inspección bajo el mismo concepto. Es único
+    // a nivel documento, no a nivel sección.
     const itemKeys = document.sections.flatMap((section) =>
       section.items.map((item) => item.item_key),
     );

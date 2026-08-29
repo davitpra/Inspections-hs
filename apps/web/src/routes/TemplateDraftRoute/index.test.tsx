@@ -575,7 +575,7 @@ describe('la prescripción de un hallazgo', () => {
     renderRoute();
     await ready();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Add finding' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add action' }));
 
     const dialog = screen.getByRole('dialog');
     expect(dialog).toBeTruthy();
@@ -588,7 +588,7 @@ describe('la prescripción de un hallazgo', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save finding' }));
 
     expect(screen.queryByRole('dialog')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Edit finding' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Edit action' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Save draft' })).toBeTruthy();
   });
 
@@ -596,12 +596,12 @@ describe('la prescripción de un hallazgo', () => {
     renderRoute();
     await ready();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Add finding' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add action' }));
     const dialog = screen.getByRole('dialog');
     fireEvent(dialog, new Event('cancel', { bubbles: false, cancelable: true }));
 
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(screen.getByRole('button', { name: 'Add finding' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Add action' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Save draft' })).toBeNull();
   });
 
@@ -611,7 +611,7 @@ describe('la prescripción de un hallazgo', () => {
 
     expect(screen.queryByLabelText('Operator')).toBeNull();
     fireEvent.change(screen.getByLabelText('Answer type'), { target: { value: 'number' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Add finding' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add action' }));
 
     expect(screen.getByLabelText('Operator')).toBeTruthy();
     expect(screen.getByLabelText('Threshold value')).toBeTruthy();

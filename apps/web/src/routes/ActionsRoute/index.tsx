@@ -1,14 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { listActions } from '../../api/actions';
-import { listFindings } from '../../api/findings';
 import { queryKeys } from '../../api/query-keys';
-import { useAppSession } from '../../app/session-context';
 import { AlertCircleIcon, CheckCircleIcon, CheckIcon, ListIcon } from '../../components/icons';
-import { canCreateAction } from '../../permissions/actions';
-import { FindingsTable } from './FindingsTable';
 import { InspectionsTable } from './InspectionsTable';
-import { findingsWithActionCounts, groupActionsByInspection } from './presentation';
+import { groupActionsByInspection } from './presentation';
 
 /**
  * Las inspecciones de las plantas del alcance que tienen alguna acción correctiva
@@ -21,14 +17,13 @@ import { findingsWithActionCounts, groupActionsByInspection } from './presentati
  *
  * Las acciones que no cuelgan de ninguna inspección (manual finding, investigación)
  * se juntan en un solo grupo, "Other sources", en vez de perderse de esta pantalla.
+ *
+ * **ACÁ YA NO SE CREAN ACCIONES, Y ESA AUSENCIA ES EL DISEÑO.** Un compromiso se abre donde
+ * el hallazgo se lee —`/findings/$id`, junto a la pregunta que lo abrió y a lo que la
+ * plantilla prescribió—, no desde una fila de tabla que solo trae la descripción. Esta
+ * pantalla quedó dedicada a un solo recurso: las acciones que ya existen.
  */
 export function ActionsRoute(): React.JSX.Element {
-  const { account } = useAppSession();
-  const findings = useQuery({
-    queryKey: queryKeys.findings(),
-    queryFn: listFindings,
-    retry: false,
-  });
   const actions = useQuery({
     queryKey: queryKeys.actions(),
     queryFn: listActions,
@@ -37,7 +32,6 @@ export function ActionsRoute(): React.JSX.Element {
 
   const all = actions.data ?? [];
   const groups = groupActionsByInspection(all);
-  const findingRows = findingsWithActionCounts(findings.data ?? [], all);
   const activeCount = all.filter((action) => action.state !== 'closed').length;
   const overdueCount = all.filter(
     (action) => action.overdue && action.state !== 'closed',
@@ -57,7 +51,8 @@ export function ActionsRoute(): React.JSX.Element {
             </div>
           </div>
           <p className="actions-overview__subtitle">
-            Review findings, create commitments, and open an inspection to track its corrective actions.
+            Every commitment already opened, grouped by the inspection it came from. New ones
+            are opened from the finding that justifies them.
           </p>
         </div>
 
@@ -80,14 +75,6 @@ export function ActionsRoute(): React.JSX.Element {
           </div>
         </dl>
       </header>
-
-      <FindingsTable
-        rows={findingRows}
-        findingsLoading={findings.isLoading}
-        findingsError={findings.isError}
-        actionCountsAvailable={actions.isSuccess}
-        allowCreation={canCreateAction(account)}
-      />
 
       <section className="card actions-overview__section" aria-labelledby="existing-actions-heading">
         <div className="actions-overview__section-head">

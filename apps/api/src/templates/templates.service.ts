@@ -374,8 +374,8 @@ export class TemplatesService {
    * Revisar una plantilla publicada: un borrador sembrado con la última versión.
    *
    * **La versión N+1 se escribe editando la N.** Empezar de cero sería empezar con `item_key`
-   * nuevos, y ahí la serie de recurrencia se parte: «la misma guarda falta otra vez» dejaría de
-   * ser una pregunta que se puede hacer, que es lo único que el modelo de identidad dual existe
+   * nuevos, y ahí la historia de la pregunta se parte: «esta es la misma guarda de la versión
+   * anterior» dejaría de poder afirmarse, que es lo único que el modelo de identidad dual existe
    * para garantizar. Por eso se siembra, y por eso el editor no deja tocar la clave de un ítem.
    *
    * **La clave y el nombre se HEREDAN, no se derivan.** `templateKeyFromName` podría dar otra
@@ -659,12 +659,12 @@ async function createTemplate(
  *
  * Los que la revisión trae de la versión anterior ya tienen su fila y no se tocan: esa fila es
  * la identidad del concepto y su `created_at` dice cuándo la organización empezó a preguntar
- * eso. Reescribirla sería reescribir el origen de la serie.
+ * eso. Reescribirla sería reescribir el origen de la pregunta.
  *
  * Antes de escribir, lo ya registrado se parte en dos rechazos:
  *
- *   - DE OTRA PLANTILLA — `item_key` es global y write-once. Aceptarlo fundiría las series de
- *     recurrencia de dos plantillas, y eso no se deshace.
+ *   - DE OTRA PLANTILLA — `item_key` es global y write-once. Aceptarlo fundiría las historias
+ *     de dos preguntas distintas, y eso no se deshace.
  *   - DESACTIVADO — `deactivated_at` dice «esta pregunta no se vuelve a hacer»; una versión
  *     nueva que la declare la estaría haciendo.
  *

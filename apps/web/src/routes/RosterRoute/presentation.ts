@@ -30,9 +30,9 @@ export function addPersonButtonText(state: AddPersonState): string {
 /**
  * Cómo se lee la consola del roster: etiquetas, orden y búsqueda, sin marcado.
  *
- * La consola no corrige a una persona fila por fila. Además de cómo se muestra y encuentra
- * el roster, este archivo nombra los estados de las dos escrituras que sí tiene: importar
- * el CSV entero y agregar UNA persona (`add-person-to-roster-by-hand`).
+ * La consola no corrige nombres ni transfiere personas fila por fila. Además de cómo se
+ * muestra y encuentra el roster, este archivo decide qué acciones admite cada estado,
+ * incluida la baja lógica estrecha de un worker sin cuenta.
  *
  * Aparte del componente por la misma razón que `scheduling-presentation.ts`: lo que
  * importa es la decisión y el nombre de cada cosa, y eso se prueba sin renderizar nada.
@@ -276,6 +276,11 @@ export function showsAccountRole(person: PersonWithAccount): boolean {
   return person.account !== null && person.account.active;
 }
 
+/** La acción y la etiqueta Worker comparten exactamente la ausencia de una cuenta activa. */
+export function canDeactivateWorker(person: PersonWithAccount): boolean {
+  return person.deactivated_at === null && !showsAccountRole(person);
+}
+
 /**
  * Lo que dice la celda Role de una fila cualquiera.
  *
@@ -375,7 +380,7 @@ export function rosterCounts(people: readonly PersonWithAccount[]): {
   };
 }
 
-export type RosterActionKind = 'invite' | 'reissue' | 'remove' | 'seat';
+export type RosterActionKind = 'invite' | 'reissue' | 'remove' | 'deactivate' | 'seat';
 
 /** Un acto que una fila ofrece: cómo se dibuja el botón, sin decir cómo se ejecuta. */
 export interface RosterRowAction {
@@ -389,7 +394,8 @@ export interface RosterRowAction {
 /**
  * Los actos que esta fila ofrece, en orden, y NADA cuando no ofrece ninguno.
  *
- * Cada fila ofrece SOLO el acto que su estado admite: sin acceso y activa → invitar; con
+ * Cada fila ofrece SOLO los actos que su estado admite: sin cuenta y activa → invitar o dar
+ * de baja; con
  * cuenta que todavía no entra → reemitir el link y cancelar la invitación; con cuenta que
  * ya entra → quitar del JHSC. Nada para quien no tiene acceso y está dado de baja —
  * invitar a esa fila es exactamente lo que 4.5 no ofrece, y su celda queda vacía a
@@ -413,6 +419,15 @@ export function rowActions(person: PersonWithAccount, mayInvite: boolean): Roste
       text: 'Invite to JHSC',
       label: inviteButtonLabel(person),
       className: 'button--outline roster__action',
+    });
+  }
+
+  if (canDeactivateWorker(person)) {
+    actions.push({
+      kind: 'deactivate',
+      text: 'Remove worker',
+      label: `Remove ${personLabel(person)} from the roster`,
+      className: 'button--danger-quiet roster__action',
     });
   }
 
@@ -463,15 +478,17 @@ export function rowActions(person: PersonWithAccount, mayInvite: boolean): Roste
  */
 export type RosterDialog =
   | { kind: 'invite'; personId: string; label: string }
+  | { kind: 'deactivate'; personId: string; label: string }
   | { kind: 'reissue'; userId: string; label: string }
   | { kind: 'remove'; userId: string; label: string; canSignIn: boolean }
   | { kind: 'seat'; userId: string; label: string; action: 'grant' | 'withdraw' };
 
-/** Ver `RosterDialog`. Los tres últimos actos existen solo sobre una cuenta viva. */
+/** Ver `RosterDialog`. Los actos de cuenta se resuelven después de los dos de persona. */
 export function dialogFor(person: PersonWithAccount, action: RosterRowAction): RosterDialog {
   const label = personLabel(person);
 
   if (action.kind === 'invite') return { kind: 'invite', personId: person.id, label };
+  if (action.kind === 'deactivate') return { kind: 'deactivate', personId: person.id, label };
 
   const userId = person.account!.id;
 

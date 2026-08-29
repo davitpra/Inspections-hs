@@ -1,12 +1,11 @@
 import type { Session } from '@hs/contracts';
 
 import {
+  AlertCircleIcon,
   CalendarIcon,
   CheckIcon,
   ClipboardIcon,
-  ClockIcon,
   DocumentIcon,
-  InboxIcon,
   ListIcon,
   OutboxIcon,
   PersonIcon,
@@ -41,13 +40,12 @@ import {
 export type NavPath =
   | '/'
   | '/historical'
+  | '/findings'
   | '/actions'
-  | '/recurrence'
   | '/scheduling'
   | '/roster'
   | '/templates'
   | '/catalog/locations'
-  | '/inbox'
   | '/outbox';
 
 export type NavIcon = (props: { size?: number }) => React.JSX.Element;
@@ -88,8 +86,8 @@ export type NavItem = {
 export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/', label: 'Inspections', icon: ListIcon },
   { to: '/historical', label: 'Historical inspections', icon: ClipboardIcon },
+  { to: '/findings', label: 'Findings', icon: AlertCircleIcon },
   { to: '/actions', label: 'Corrective actions', icon: CheckIcon },
-  { to: '/recurrence', label: 'Recurring findings', icon: ClockIcon },
   {
     to: '/scheduling',
     label: 'Scheduling',
@@ -104,7 +102,6 @@ export const NAV_ITEMS: readonly NavItem[] = [
     icon: PinIcon,
     visible: canAdministerCatalog,
   },
-  { to: '/inbox', label: 'Inbox', icon: InboxIcon },
   { to: '/outbox', label: 'Waiting to be sent', icon: OutboxIcon },
 ];
 
@@ -115,7 +112,7 @@ export function visibleNavItems(account: Session): readonly NavItem[] {
 /**
  * Cómo se llama la pantalla que se está mirando, para el título de la barra del teléfono.
  *
- * Cubre TODAS las rutas y no solo las ocho del menú: en el teléfono el título es lo único
+ * Cubre TODAS las rutas y no solo las del menú: en el teléfono el título es lo único
  * que dice dónde se está —no hay una pestaña subrayada—, y las pantallas a las que se llega
  * desde otra (la captura, la revisión, un incidente) son justamente en las que uno se mete
  * dos niveles y necesita leerlo.
@@ -131,19 +128,19 @@ const TITLES: readonly (readonly [string, string])[] = [
   ['/inspections/*/review', 'Review'],
   ['/inspections/*/report', 'Inspection report'],
   ['/inspections/*', 'Inspection'],
+  ['/findings', 'Findings'],
+  ['/findings/*', 'Inspection findings'],
   ['/actions', 'Corrective actions'],
   ['/actions/*', 'Corrective action'],
   ['/incidents', 'Incidents'],
   ['/incidents/report', 'Report an incident'],
   ['/incidents/*/form7', 'Form 7'],
   ['/incidents/*', 'Incident'],
-  ['/recurrence', 'Recurring findings'],
   ['/scheduling', 'Scheduling'],
   ['/roster', 'People'],
   ['/templates', 'Templates'],
   ['/templates/drafts/*', 'Template'],
   ['/catalog/locations', 'Locations'],
-  ['/inbox', 'Inbox'],
   ['/outbox', 'Waiting to be sent'],
   ['/accept-invitation', 'Accept invitation'],
 ];

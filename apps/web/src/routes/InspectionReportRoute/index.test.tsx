@@ -43,6 +43,7 @@ function report(overrides: Record<string, unknown> = {}) {
               position: 1,
               required: true,
               response_type: 'yes_no',
+              finding: { corrective_action: 'Refit the guard before the line runs again.' },
             },
             {
               item_key: 'general.spill',
@@ -67,6 +68,7 @@ function report(overrides: Record<string, unknown> = {}) {
               response_type: 'photo',
               min_count: 1,
               max_count: 3,
+              finding: { corrective_action: 'Retake the dock photo from the far corner.' },
             },
           ],
         },
@@ -92,7 +94,6 @@ function report(overrides: Record<string, unknown> = {}) {
         occurred_at: '2027-07-29T18:00:00.000Z',
         recorded_at: '2027-07-29T18:05:00.000Z',
         assessment: null,
-        recurrence: null,
       },
     ],
     submitted_by: '88888888-8888-4888-8888-888888888888',
@@ -168,6 +169,22 @@ describe('InspectionReportRoute', () => {
       await screen.findByText('Guard missing on the infeed of packaging line 3'),
     ).toBeTruthy();
     expect(screen.getByText('1 photo')).toBeTruthy();
+  });
+
+  /**
+   * La acción correctiva prescrita se lee CON el hallazgo y solo con él. La pregunta de la
+   * foto también prescribe una en la plantilla, y no la muestra: salió limpia, y anunciar
+   * ahí lo que habría que corregir convertiría un reporte de cuarenta preguntas en una
+   * lista de trabajo que nadie abrió.
+   */
+  it('lee la acción correctiva prescrita solo donde quedó un hallazgo', async () => {
+    getSubmittedInspection.mockResolvedValue(report());
+
+    renderRoute();
+
+    expect(await screen.findByText('Corrective action')).toBeTruthy();
+    expect(screen.getByText('Refit the guard before the line runs again.')).toBeTruthy();
+    expect(screen.queryByText('Retake the dock photo from the far corner.')).toBeNull();
   });
 
   /**

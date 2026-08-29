@@ -26,10 +26,8 @@ import { get, post, send } from './request';
  * desde caché mostraría un roster viejo sin decir que lo es. El offline existe para que no
  * se pierda el trabajo de campo (ADR-001), y esto no es trabajo de campo.
  *
- * La única escritura sobre una persona es el alta (`createPerson`,
- * `add-person-to-roster-by-hand`): crea una fila y nada más. Corregir un nombre,
- * transferir de planta o dar de baja siguen aplicándose juntos mediante una importación
- * CSV. Las demás escrituras de este cliente administran la cuenta asociada.
+ * Las escrituras individuales sobre una persona son el alta y la baja lógica de un worker
+ * sin cuenta. Corregir, transferir o reactivar siguen aplicándose mediante el CSV.
  */
 
 /**
@@ -55,6 +53,13 @@ export async function listPeople(siteId: string): Promise<PersonWithAccount[]> {
  */
 export async function createPerson(input: CreatePersonRequest): Promise<Person> {
   return post('/people', input, (value) => personSchema.parse(value));
+}
+
+/** Da de baja a una persona sin cuenta; nunca elimina su fila ni sus referencias históricas. */
+export async function deactivatePerson(input: { personId: string }): Promise<Person> {
+  return send('PATCH', `/people/${input.personId}`, { deactivated: true }, (value) =>
+    personSchema.parse(value),
+  );
 }
 
 /** Importa el archivo completo; el navegador agrega el boundary multipart. */

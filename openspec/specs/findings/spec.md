@@ -89,10 +89,10 @@ what the server derives.
 
 The system SHALL store, on every finding derived from an inspection answer, both
 `template_version_item_id` — the published row that was answered, for legal fidelity — and
-`item_key` — the stable concept the recurrence report groups by. The engine SHALL guarantee that
-`item_key` is the key of the referenced `template_version_item`, and `item_key` SHALL be indexed
-together with `site_id` so that grouping a site's findings by concept does not require reading
-every finding of every inspection.
+`item_key` — the stable identity of the concept the question asks about. The engine SHALL
+guarantee that `item_key` is the key of the referenced `template_version_item`, and `item_key`
+SHALL be indexed together with `site_id` so that resolving a site's findings by concept does not
+require reading every finding of every inspection.
 
 #### Scenario: The same question failing in two template versions groups under one key
 
@@ -203,7 +203,7 @@ consequence recorded in §4 and risk F.
 - **WHEN** a `finding` row is inserted with an `inspection_id` but no `item_key`
 - **THEN** the insert fails on the origin check constraint
 
-#### Scenario: A manual finding is outside recurrence
+#### Scenario: A manual finding is outside every grouping by concept
 
 - **GIVEN** a site with two derived findings for `dock.guards` and one manual finding describing
   the same hazard
@@ -248,112 +248,175 @@ for a finding that does not exist.
 - **WHEN** it is listed
 - **THEN** the finding carries no `assessment`, `risk_level`, `probability` or `control_level`
 
-### Requirement: A derived finding is marked with its recurrence at the moment it is created
+### Requirement: A finding is read together with the corrective action its template item prescribed
 
-The system SHALL write, for every finding derived from an inspection answer, exactly one
-`finding_recurrence` row inside the same transaction that inserts the `finding`. The row SHALL
-record `prior_count` — how many earlier findings within the window share the finding's `item_key`
-and non-null `location_id` — `prior_count_site_wide` — how many share its `item_key` alone across the site
-— the `window_months` used, and `first_prior_occurred_at`, the `occurred_at` of the oldest of
-those earlier findings or null when there are none. `is_recurrent` SHALL be derived by the engine
-as `prior_count > 0` and SHALL NOT be writable by any caller. An accepted submission SHALL NOT be
-committed with a derived finding that has no `finding_recurrence` row.
+When a submitted inspection is read back, the system SHALL display, for every question that
+recorded a finding, the corrective action prescribed by that item in the template document frozen
+with the submission, alongside the description the inspector wrote and the count of photos attached
+to the finding. The prescribed text SHALL be taken from the frozen document and never from the
+template version published today. A question that recorded no finding SHALL NOT display a
+prescribed corrective action, and an item whose template prescribes none SHALL display no heading
+in its place. The full inspection report and the findings-only reading of the same submission SHALL
+present this identically.
 
-#### Scenario: The fourth failure of the same item at the same place knows it is the fourth
+#### Scenario: The prescribed corrective action is read next to the finding
 
-- **GIVEN** a site with three earlier findings for `dock.guards` at `pack-line-3` inside the
-  window
-- **WHEN** a submission producing a fourth finding for `dock.guards` at `pack-line-3` is accepted
-- **THEN** one `finding_recurrence` row references the created finding
-- **AND** its `prior_count` is `3`
-- **AND** its `is_recurrent` is true
-- **AND** its `first_prior_occurred_at` is the `occurred_at` of the oldest of the three
+- **GIVEN** a submitted inspection whose item `general.guards` prescribes "Refit the guard before the line runs again." and recorded a finding
+- **WHEN** the inspection is read at either the report or the findings-only screen
+- **THEN** the prescribed corrective action is displayed with the finding description and photo count
 
-#### Scenario: The first failure is marked as not recurrent, not left unmarked
+#### Scenario: A clean question does not announce what would have been corrected
 
-- **WHEN** a submission produces the first finding ever for `exit.signage` at `shipping-bay`
-- **THEN** one `finding_recurrence` row references it
-- **AND** its `prior_count` is `0` and its `is_recurrent` is false
+- **GIVEN** a submitted inspection whose item `general.photo` prescribes a corrective action and was answered without a finding
+- **WHEN** the full report is read
+- **THEN** that item's prescribed corrective action is not displayed
 
-#### Scenario: The same item at a new location is recurrent site-wide only
+#### Scenario: An item without a prescription says nothing
 
-- **GIVEN** three earlier findings for `dock.guards` at `pack-line-3` inside the window
-- **WHEN** a submission produces a finding for `dock.guards` at `shipping-bay`
-- **THEN** its `prior_count` is `0`
-- **AND** its `prior_count_site_wide` is `3`
+- **GIVEN** a submitted inspection whose item recorded a finding and whose template prescribes no corrective action
+- **WHEN** the finding is read
+- **THEN** no corrective action heading is displayed for that item
 
-#### Scenario: An unresolved location still has a site-wide recurrence mark
+### Requirement: Coordinators open a corrective action from the finding that justifies it
 
-- **GIVEN** two findings for the same `item_key` whose section has no active location mapping
-- **WHEN** the second finding is accepted
-- **THEN** its `finding_recurrence.location_id` is null
-- **AND** its `prior_count_site_wide` counts the first finding
+The system SHALL offer, on the findings-only reading of a submitted inspection, a control to
+create a corrective action for each recorded finding, to an authenticated `hs_coordinator` and to
+no other role. The assignee choices SHALL contain only active people of that finding's site. The
+system SHALL show, for every recorded finding and to every role, the corrective actions that
+already reference it, each identified by its description, the person responsible for it, the
+deadline it was created with, its current state, whether it is past that deadline, and the
+escalation levels it has reached, and each linked to that action's own screen. Showing the
+standing of a commitment SHALL NOT require reading anything beyond the corrective action listing
+the screen already reads. When the corrective actions cannot be read, the system SHALL say so and
+SHALL NOT report that a finding has none. A finding that already has corrective actions SHALL
+remain available for another one. This presentation rule SHALL NOT replace server authorization.
 
-#### Scenario: A submission with no mark does not commit
+#### Scenario: The coordinator is offered the creation control
 
-- **WHEN** a `finding` row with a non-null `item_key` is inserted and the transaction commits
-  without inserting its `finding_recurrence` row
-- **THEN** the commit fails
-- **AND** neither the finding nor the inspection exists
+- **GIVEN** a submitted inspection recorded a finding
+- **WHEN** an `hs_coordinator` reads the findings-only screen
+- **THEN** a control to create a corrective action is shown for that finding
 
-#### Scenario: The mark counts only the site's own findings
+#### Scenario: Another role reads the commitments without being offered creation
 
-- **GIVEN** three findings for `dock.guards` at a Glencoe location inside the window
-- **WHEN** a St. Thomas submission produces a finding for `dock.guards`
-- **THEN** its `prior_count` and `prior_count_site_wide` are both `0`
+- **GIVEN** a recorded finding already has one corrective action
+- **WHEN** a `jhsc_member` reads the findings-only screen
+- **THEN** that corrective action is shown with its description, responsible person, deadline and state
+- **AND** no control to create a corrective action is shown
 
-### Requirement: The recurrence mark is a fact of the moment and is never recomputed
+#### Scenario: A late commitment is read as late against its finding
 
-The system SHALL treat `finding_recurrence` as immutable: the mark records what was true when the
-finding was created and SHALL NOT be updated when later findings extend the series, when a
-template version is published, or when the window used by a report differs from the one stored.
-Reading a finding SHALL return its stored mark. A recurrence report SHALL compute its series from
-the findings themselves for the window requested, and SHALL NOT read `prior_count` to build them,
-so that a report over a window of 24 months is not limited by a mark computed over 12.
+- **GIVEN** a recorded finding has a corrective action in `in_progress` whose deadline has passed and which has escalated to the supervisor
+- **WHEN** the findings-only screen is read
+- **THEN** that corrective action is shown as past its deadline and as escalated to the supervisor
+- **AND** its responsible person and deadline are shown without any further request
 
-#### Scenario: A later finding does not change an earlier mark
+#### Scenario: Existing corrective actions are listed against their own finding
 
-- **GIVEN** a finding whose `prior_count` is `1`
-- **WHEN** two further findings of the same `item_key` and `location_id` are created afterwards
-- **THEN** the first finding's `prior_count` is still `1`
+- **GIVEN** two corrective actions reference the recorded finding and one references another finding
+- **WHEN** the findings-only screen is read
+- **THEN** only the two are shown under that finding, each linked to its own corrective action
 
-#### Scenario: A mark cannot be corrected in place
+#### Scenario: An unreadable list is not reported as no commitments
 
-- **WHEN** the application role updates any column of a `finding_recurrence` row
-- **THEN** the update is rejected
+- **GIVEN** the corrective actions cannot be read
+- **WHEN** the findings-only screen is read
+- **THEN** the screen reports that existing corrective actions need a connection
+- **AND** it does not state that the finding has no corrective action
 
-#### Scenario: A report over a wider window is not capped by the stored marks
+#### Scenario: Assignee choices come from the finding's site
 
-- **GIVEN** findings for `dock.guards` at `pack-line-3` occurring 3, 8 and 20 months ago, each
-  marked with `window_months` `12`
-- **WHEN** recurrence series are requested with `window_months` `24`
-- **THEN** the series for `dock.guards` at `pack-line-3` has `occurrence_count` `3`
+- **GIVEN** a finding belongs to St. Thomas and active people exist in St. Thomas and Glencoe
+- **WHEN** the coordinator opens the creation control for that finding
+- **THEN** `assignee_person_id` can be selected only from active people of St. Thomas
 
-#### Scenario: Reading a finding returns its mark
+### Requirement: A corrective action opened from a finding is a complete future commitment
 
-- **WHEN** a derived finding is read by id
-- **THEN** the response carries its `prior_count`, `prior_count_site_wide`, `window_months`,
-  `first_prior_occurred_at` and `is_recurrent`
+The system SHALL submit a corrective action only when `assignee_person_id` names one of the
+offered people, `description` satisfies the corrective action contract, and `due_at` is later
+than the current instant. While the creation is pending, the system SHALL prevent a duplicate
+submission. After a successful creation, the system SHALL close the form and show the created
+corrective action against its finding. If creation fails, the system SHALL keep the entered values
+available for correction and SHALL present the failure without claiming that the corrective action
+was created.
 
-### Requirement: A manually entered finding carries no recurrence mark
+#### Scenario: A coordinator creates a complete corrective action
 
-The system SHALL NOT create a `finding_recurrence` row for a finding whose `item_key` is null, and
-SHALL report such a finding's recurrence as absent rather than as false. Without a stable item
-concept there is no series to belong to, and reporting `is_recurrent` false would assert that the
-hazard was checked against the history when it was not.
+- **GIVEN** the coordinator has selected an active `assignee_person_id` of the finding's site, entered a valid `description`, and selected a future `due_at`
+- **WHEN** the coordinator submits the form
+- **THEN** one corrective action is created for that finding with those three values
+- **AND** the form closes and the created corrective action is shown against that finding
 
-#### Scenario: A manual finding has no mark
+#### Scenario: A past deadline is not submitted
 
-- **WHEN** a supervisor reports a manual finding
-- **THEN** no `finding_recurrence` row references it
-- **AND** reading it returns its recurrence as null, not as `is_recurrent` false
+- **WHEN** the coordinator enters a `due_at` that is not later than the current instant
+- **THEN** the form reports that the deadline must be in the future
+- **AND** no creation request is submitted
 
-#### Scenario: A mark cannot be attached to a finding without an item key
+#### Scenario: A pending creation cannot be submitted twice
 
-- **WHEN** a `finding_recurrence` row is inserted for a finding whose `item_key` is null
-- **THEN** the insert fails on the engine's constraint
+- **GIVEN** a creation request is pending
+- **WHEN** the coordinator attempts to submit the same form again
+- **THEN** no second creation request is submitted
 
-#### Scenario: A finding cannot carry two marks
+#### Scenario: A rejected creation preserves the draft
 
-- **WHEN** a second `finding_recurrence` row is inserted for a finding that already has one
-- **THEN** the insert fails with a unique violation on `finding_id`
+- **GIVEN** the coordinator has completed the creation form
+- **WHEN** the creation request fails
+- **THEN** the form remains open with `assignee_person_id`, `description` and `due_at` preserved
+- **AND** the failure is shown to the coordinator
+
+### Requirement: A corrective action is advanced from the finding that justifies it
+
+The system SHALL offer, for every corrective action shown against a recorded finding, a control
+that opens that action's complete event history and the work left to do on it, without leaving the
+findings-only reading of the inspection. The history SHALL be presented in the order the events
+were recorded, each event naming the state it moved to, when it occurred, and the reason, note and
+evidence counts it carried. The system SHALL offer exactly the transitions the state machine allows
+from the action's current state and that the reader's role and relationship to the action permit,
+and SHALL offer none otherwise, saying instead that the action is waiting on someone else. Before
+submitting a transition the system SHALL request the reason and the evidence that transition
+requires. A corrective action in the terminal state SHALL be offered no transition at all,
+including any form of reopening. The transitions offered SHALL be derived from the same state
+machine the server enforces, and offering one SHALL NOT replace the server's authorization, its
+verifier rule or its evidence rule.
+
+#### Scenario: The assignee advances their own action without leaving the finding
+
+- **GIVEN** a recorded finding has a corrective action in `open` assigned to the reader
+- **WHEN** the reader opens that action from the findings-only screen and records progress
+- **THEN** the action moves to `in_progress`
+- **AND** the findings-only reading of the inspection is still on screen, showing the action in its new state
+
+#### Scenario: A reader who may write nothing still reads the history
+
+- **GIVEN** a recorded finding has a corrective action with three recorded events
+- **WHEN** a `jhsc_member` opens that action from the findings-only screen
+- **THEN** the three events are shown in the order they were recorded
+- **AND** no transition is offered, and the screen says the action is waiting on someone else
+
+#### Scenario: Declaring the work done asks for the evidence it requires
+
+- **GIVEN** a corrective action in `in_progress` whose next transition requires after evidence
+- **WHEN** the assignee opens it from the findings-only screen
+- **THEN** the control to attach after evidence is presented before the transition can be submitted
+
+#### Scenario: A closed action is offered nothing
+
+- **GIVEN** a recorded finding has a corrective action in the terminal state
+- **WHEN** any role opens it from the findings-only screen
+- **THEN** its history is shown
+- **AND** no transition is offered, and no control to reopen it exists
+
+#### Scenario: A refused transition is not reported as done
+
+- **GIVEN** a verifier who is the same person that declared the work done opens the action from the findings-only screen
+- **WHEN** they submit the verification the state machine allows
+- **THEN** the server's refusal is shown against that action
+- **AND** the action is still shown in the state it was in
+
+#### Scenario: The corrective action keeps its own screen
+
+- **GIVEN** a corrective action reachable from an escalation notice or the corrective actions workspace
+- **WHEN** it is opened by its own identifier rather than from a finding
+- **THEN** its history and the transitions available to the reader are presented there as well

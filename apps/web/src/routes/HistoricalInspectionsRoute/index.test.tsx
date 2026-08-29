@@ -89,8 +89,8 @@ describe('HistoricalInspectionsRoute', () => {
 
     renderRoute();
 
-    expect(await screen.findByText('Completed on Jul 29, 2027')).toBeTruthy();
-    expect(screen.getByText('Completed on May 30, 2027')).toBeTruthy();
+    expect(await screen.findByText('Jul 29, 2027')).toBeTruthy();
+    expect(screen.getByText('May 30, 2027')).toBeTruthy();
 
     const months = screen.getAllByRole('rowheader').map((cell) => cell.textContent);
     expect(months).toEqual(['July 2027', 'May 2027']);

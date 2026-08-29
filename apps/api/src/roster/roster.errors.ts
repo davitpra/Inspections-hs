@@ -7,10 +7,6 @@ import { HttpException, HttpStatus } from '@nestjs/common';
  * CUERPO y no solo en el status, para que el cliente pueda decidir sin parsear un mensaje
  * en inglés.
  *
- * **No hay un `person_not_found`** y no es un olvido: no hay ninguna ruta que reciba el id
- * de una persona. Pedir el roster de una planta fuera del alcance devuelve una lista
- * vacía, que es lo que ya hace la política RLS por su cuenta.
- *
  * `person_employee_number_taken` y `person_site_out_of_scope` sí nombran a una persona
  * porque el alta (`add-person-to-roster-by-hand`) sí escribe. El primero no dice si la
  * persona que ya tiene ese número está en una planta que el llamador administra (design
@@ -22,7 +18,10 @@ export type RosterErrorCode =
   | 'roster_file_unusable'
   | 'roster_file_too_large'
   | 'person_employee_number_taken'
-  | 'person_site_out_of_scope';
+  | 'person_site_out_of_scope'
+  | 'person_not_found'
+  | 'person_has_active_account'
+  | 'person_not_active';
 
 export class RosterException extends HttpException {
   constructor(
@@ -92,3 +91,17 @@ export const personSiteOutOfScope = (): RosterException =>
     'site_id is outside of the session scope',
     HttpStatus.FORBIDDEN,
   );
+
+/** RLS hace indistinguibles una persona inexistente y una fuera del alcance. */
+export const personNotFound = (): RosterException =>
+  new RosterException('person_not_found', 'Person not found', HttpStatus.NOT_FOUND);
+
+export const personHasActiveAccount = (): RosterException =>
+  new RosterException(
+    'person_has_active_account',
+    'A person with an active account cannot be deactivated from the roster',
+    HttpStatus.CONFLICT,
+  );
+
+export const personNotActive = (): RosterException =>
+  new RosterException('person_not_active', 'This person is already inactive', HttpStatus.CONFLICT);

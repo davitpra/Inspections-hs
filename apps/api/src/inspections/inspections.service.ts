@@ -449,7 +449,7 @@ export class InspectionsService {
    *
    * El documento sale de la columna `template_version.document` tal cual. No se
    * reconstruye desde `template_version_item`: esas filas las proyecta un trigger DESDE
-   * el documento y existen para consultar la recurrencia de un ítem entre versiones. La
+   * el documento y existen para poder consultar un ítem entre versiones. La
    * fuente de verdad para validar es la columna, y reconstruirla sería una segunda
    * representación del mismo documento que puede divergir.
    */

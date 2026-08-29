@@ -616,9 +616,10 @@ describe('la entrada manual', () => {
 });
 
 describe('las rutas de hallazgos', () => {
-  it('ya no registra POST /findings/:id/risk-assessments', () => {
+  const registeredRoutes = () => {
     const prototype = FindingsController.prototype as unknown as Record<string, unknown>;
-    const routes = Object.getOwnPropertyNames(prototype).flatMap((name) => {
+
+    return Object.getOwnPropertyNames(prototype).flatMap((name) => {
       const handler = prototype[name];
 
       if (typeof handler !== 'function') return [];
@@ -630,6 +631,26 @@ describe('las rutas de hallazgos', () => {
         ? []
         : [{ method, paths: Array.isArray(path) ? path : [path] }];
     });
+  };
+
+  it('conserva GET /findings/:id y no registra GET /findings/recurrence', () => {
+    const routes = registeredRoutes();
+
+    expect(
+      routes.some(
+        (route) => route.method === RequestMethod.GET && route.paths.includes('findings/:id'),
+      ),
+    ).toBe(true);
+    expect(
+      routes.some(
+        (route) =>
+          route.method === RequestMethod.GET && route.paths.includes('findings/recurrence'),
+      ),
+    ).toBe(false);
+  });
+
+  it('ya no registra POST /findings/:id/risk-assessments', () => {
+    const routes = registeredRoutes();
 
     expect(
       routes.some(
@@ -638,6 +659,65 @@ describe('las rutas de hallazgos', () => {
           route.paths.includes('findings/:id/risk-assessments'),
       ),
     ).toBe(false);
+  });
+});
+
+describe('la retirada física de las marcas de recurrencia', () => {
+  it('0038 elimina solo los objetos que sostenían la marca', async () => {
+    const retired = await db.migrator.query<{ table_name: string | null; index_name: string | null; constraint_name: string | null }>(
+      `SELECT to_regclass('public.finding_recurrence')::text AS table_name,
+              to_regclass('public.finding_recurrence_idx')::text AS index_name,
+              (SELECT conname FROM pg_constraint
+                WHERE conrelid = 'finding'::regclass
+                  AND conname = 'finding_id_item_key_uq') AS constraint_name`,
+    );
+
+    expect(retired.rows).toEqual([
+      { table_name: null, index_name: null, constraint_name: null },
+    ]);
+
+    const survivingColumns = await db.migrator.query<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'finding' AND column_name = 'item_key'`,
+    );
+    const survivingIndexes = await db.migrator.query<{ indexname: string }>(
+      `SELECT indexname FROM pg_indexes
+        WHERE schemaname = 'public' AND indexname = ANY($1::text[])
+        ORDER BY indexname`,
+      [['finding_id_site_uq', 'finding_inspection_idx', 'finding_site_recorded_idx']],
+    );
+
+    expect(survivingColumns.rows).toEqual([{ column_name: 'item_key' }]);
+    expect(survivingIndexes.rows.map((row) => row.indexname)).toEqual([
+      'finding_id_site_uq',
+      'finding_inspection_idx',
+      'finding_site_recorded_idx',
+    ]);
+  });
+
+  it('conserva RLS forzada y sus políticas en las tablas supervivientes', async () => {
+    const tables = await db.migrator.query<{
+      relname: string;
+      relrowsecurity: boolean;
+      relforcerowsecurity: boolean;
+      policies: string;
+    }>(
+      `SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
+              count(p.policyname)::text AS policies
+         FROM pg_class c
+         LEFT JOIN pg_policies p ON p.schemaname = 'public' AND p.tablename = c.relname
+        WHERE c.oid = ANY($1::regclass[])
+        GROUP BY c.relname, c.relrowsecurity, c.relforcerowsecurity
+        ORDER BY c.relname`,
+      [['audit_log', 'finding', 'finding_photo']],
+    );
+
+    expect(tables.rows.map(({ policies: _policies, ...table }) => table)).toEqual([
+      { relname: 'audit_log', relrowsecurity: true, relforcerowsecurity: true },
+      { relname: 'finding', relrowsecurity: true, relforcerowsecurity: true },
+      { relname: 'finding_photo', relrowsecurity: true, relforcerowsecurity: true },
+    ]);
+    expect(tables.rows.every((table) => Number(table.policies) > 0)).toBe(true);
   });
 });
 
@@ -809,7 +889,7 @@ describe('la cadena de auditoría', () => {
   });
 });
 
-describe('la recurrencia (materia prima de la etapa 7)', () => {
+describe('la identidad del ítem a través de versiones', () => {
   it('el mismo ítem fallando en dos versiones cae en un solo grupo', async () => {
     const scheduledV1 = await scheduleInspection(db.app, {
       siteId: SITE_A,
@@ -838,8 +918,8 @@ describe('la recurrencia (materia prima de la etapa 7)', () => {
 
     const group = one(rows);
 
-    // Una sola serie, con filas de dos versiones publicadas distintas: la identidad
-    // dual haciendo lo que existe para hacer (§5 riesgo A).
+    // Un solo grupo, con filas de dos versiones publicadas distintas: la identidad
+    // dual haciendo lo que existe para hacer (§4).
     expect(Number(group.count)).toBeGreaterThan(1);
     expect(Number(group.versions)).toBe(2);
   });

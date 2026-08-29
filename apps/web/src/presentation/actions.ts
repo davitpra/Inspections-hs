@@ -1,4 +1,4 @@
-import type { ActionState } from '@hs/contracts';
+import type { ActionEscalation, ActionState } from '@hs/contracts';
 
 /**
  * Cómo se nombra cada cosa en las pantallas de acciones correctivas.
@@ -14,6 +14,8 @@ export const STATE_LABELS: Readonly<Record<ActionState, string>> = {
   awaiting_verification: 'Awaiting verification',
   closed: 'Closed',
 };
+
+export const ACTION_DEADLINE_LABEL = 'Due date';
 
 /**
  * El texto del botón por transición.
@@ -31,4 +33,16 @@ export const TRANSITION_LABELS: Readonly<Record<string, string>> = {
 
 export function transitionLabel(from: ActionState, to: ActionState): string {
   return TRANSITION_LABELS[`${from}->${to}`] ?? STATE_LABELS[to];
+}
+
+export function actionDeadlineStatus(overdue: boolean, state: ActionState): string | null {
+  return overdue && state !== 'closed' ? 'Overdue' : null;
+}
+
+export function escalationSummary(escalations: readonly ActionEscalation[]): string | null {
+  if (escalations.length === 0) return null;
+
+  return `Sent to ${escalations
+    .map((escalation) => `${escalation.level} (${escalation.days_overdue} days late)`)
+    .join(', ')}`;
 }

@@ -47,6 +47,7 @@ bloquea el recorrido crítico.
 | [012](012-css-tokens-not-tailwind.md)       | CSS con tokens semánticos, no Tailwind + shadcn   | Aceptada |
 | [013](013-retirada-reportes-cumplimiento.md) | Retirada preproducción del reporte de cumplimiento | Aceptada |
 | [014](014-retirada-clasificacion-riesgo.md)  | Retirada preproducción de la clasificación de riesgo | Aceptada |
+| [015](015-retirada-recurrencia-hallazgos.md) | Retirada preproducción de la recurrencia de hallazgos | Aceptada |
 
 Los ADR 001–008 conservan la numeración original citada en el encabezado de
 `docs/requisitos-v1.2.md`. Los 009–011 eran las "decisiones de contexto resueltas" S1, S2 y S3:

@@ -1,5 +1,3 @@
-import type { RecurrenceGrouping } from '@hs/contracts';
-
 /**
  * Las claves de caché de TanStack Query, en un solo lugar.
  *
@@ -118,11 +116,10 @@ export const queryKeys = {
   /** La cola es del dueño de sus borradores, y por eso la cuenta va en la clave. */
   outbox: (userId?: string) => key('outbox', userId),
 
-  // Acciones correctivas y bandeja.
+  // Acciones correctivas.
   findings: () => key('findings'),
   actions: () => key('actions'),
   action: (id?: string) => key('action', id),
-  notifications: () => key('notifications'),
 
   // Incidentes.
   incidents: () => key('incidents'),
@@ -132,9 +129,4 @@ export const queryKeys = {
   // Roster.
   roster: (siteId?: string) => key('roster', siteId),
   account: (userId?: string) => key('account', userId),
-
-  // Reportes.
-  recurrence: (windowMonths?: number, groupBy?: RecurrenceGrouping) =>
-    key('recurrence', windowMonths, groupBy),
-
 } as const;

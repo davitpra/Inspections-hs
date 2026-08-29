@@ -68,7 +68,12 @@ export function HistoricalInspectionsRoute(): React.JSX.Element {
       ) : null}
 
       {completed.length > 0 ? (
-        <CompletedInspectionsTable inspections={completed} siteName={siteName} />
+        <CompletedInspectionsTable
+          inspections={completed}
+          siteName={siteName}
+          to="/inspections/$id/report"
+          actionLabel="View report"
+        />
       ) : null}
     </>
   );

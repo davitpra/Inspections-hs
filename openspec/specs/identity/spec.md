@@ -160,9 +160,11 @@ The listing SHALL be available only to an account whose `role` is `hs_coordinato
 be able to include people whose `deactivated_at` is non-null, which is what distinguishes it
 from the subject selection list.
 
-The system SHALL NOT expose any way to modify or delete a single `person` through this listing
-or any companion route: a person that already exists is maintained by the CSV import, and
-reading the roster SHALL NOT become a way to rename, move or deactivate someone row by row.
+The system SHALL NOT expose any way to rename, transfer, reactivate or delete a single `person`
+through this listing or any companion route. It SHALL expose only the constrained deactivation of
+an active person with no account described separately below. Creating a person that does not exist
+yet SHALL be available as its own act, and loading the file itself SHALL remain available as a
+separate act that names no person and applies the whole file at once.
 Creating a person that does not exist yet SHALL be available as its own act, and loading the
 file itself SHALL remain available, as a separate act that names no person and applies the
 whole file at once.
@@ -232,11 +234,12 @@ whole file at once.
 - **THEN** that account is reported as unable to sign in
 - **AND** once the invitation is accepted, the same account is reported as able to sign in
 
-#### Scenario: The listing offers no way to change a single person
+#### Scenario: The listing offers only constrained single-person deactivation
 
 - **WHEN** the roster of a site is read
-- **THEN** no route accepts the `id` of one `person` to rename, move or deactivate them
-- **AND** the only writes available over the roster are the import of a whole CSV file and the
+- **THEN** no route accepts the `id` of one `person` to rename, transfer, reactivate or delete them
+- **AND** a companion route accepts the `id` only to deactivate an active person with no account
+- **AND** the other writes available over the roster remain the import of a whole CSV file and the
   creation of a person who does not exist yet
 
 ### Requirement: A person can be added to the roster one at a time
@@ -2028,3 +2031,66 @@ The system SHALL label the site people administration destination as â€œPeopleâ€
 
 - **WHEN** the people administration terminology is displayed
 - **THEN** the existing `/roster` route and roster API contracts remain unchanged
+
+### Requirement: An active worker can be deactivated from the roster
+
+The system SHALL allow an account whose `role` is `hs_coordinator` to deactivate an active
+`person` with no active associated `app_user` by naming that person's `id`. This includes a person
+with no account and one whose associated account is inactive. The operation SHALL set
+`person.deactivated_at` to the server time and SHALL return the deactivated person. It SHALL never
+delete the row.
+
+The target SHALL be resolved under the session's site scope through the row-level security policy.
+A person outside that scope SHALL be indistinguishable from a nonexistent person. The system
+SHALL refuse a person who is already inactive or who has an active associated account, without
+changing either row.
+
+The roster interface SHALL offer this action only for an active row presented as `Worker`, whose
+account is either `null` or inactive. It SHALL identify the action as destructive and SHALL require
+explicit confirmation. After success, the default active roster SHALL no longer include the
+person. The database SHALL record the existing `person.deactivated` audit event in the same
+transaction.
+
+#### Scenario: A coordinator deactivates an active worker in scope
+
+- **WHEN** an `hs_coordinator` confirms deactivation of an active `person` in scope whose account is `null` or inactive
+- **THEN** the person's `deactivated_at` is set to the server time
+- **AND** the person row is returned with a non-null `deactivated_at`
+- **AND** the default active roster no longer includes that person
+- **AND** a `person.deactivated` audit event is recorded for the person's site
+
+#### Scenario: A worker is never physically deleted
+
+- **WHEN** a worker is deactivated from the roster
+- **THEN** the `person` row remains present
+- **AND** historical records can still resolve that person
+
+#### Scenario: A person with an inactive account can be deactivated from the row
+
+- **WHEN** a coordinator deactivates an active person referenced by an inactive `app_user` row
+- **THEN** the person's `deactivated_at` is set
+- **AND** the inactive account remains unchanged
+
+#### Scenario: A person with an active account cannot be deactivated from the row
+
+- **WHEN** a coordinator attempts to deactivate a person referenced by an active `app_user` row
+- **THEN** the request is refused
+- **AND** both `person.deactivated_at` and the account remain unchanged
+
+#### Scenario: An inactive person cannot be deactivated again
+
+- **WHEN** a coordinator attempts to deactivate a person whose `deactivated_at` is already non-null
+- **THEN** the request is refused
+- **AND** the original `deactivated_at` remains unchanged
+
+#### Scenario: A person outside the site scope is not disclosed
+
+- **WHEN** a coordinator names a person outside the session's site scope
+- **THEN** the request returns the same not-found response used for a nonexistent person
+- **AND** no person row is changed
+
+#### Scenario: Other roles cannot deactivate a worker
+
+- **WHEN** an account whose `role` is `supervisor`, `jhsc_member`, `management` or `external_auditor` attempts to deactivate an active worker in its site scope
+- **THEN** the request is refused
+- **AND** the person remains active

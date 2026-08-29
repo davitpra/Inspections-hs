@@ -49,6 +49,16 @@ describe('sectionTitle', () => {
     expect(sectionTitle('/actions/abc-123')).toBe('Corrective action');
   });
 
+  /**
+   * Dos patrones y no uno: `matches` exige el mismo número de segmentos, así que
+   * `/findings` no cubre `/findings/abc-123` y el detalle caería al nombre de la
+   * aplicación — que en el teléfono es lo único que dice dónde se está.
+   */
+  it('nombra la lista de hallazgos y también el envío que se abre desde ella', () => {
+    expect(sectionTitle('/findings')).toBe('Findings');
+    expect(sectionTitle('/findings/abc-123')).toBe('Inspection findings');
+  });
+
   it('prefiere el patrón específico al comodín, en el orden en que están escritos', () => {
     expect(sectionTitle('/incidents/report')).toBe('Report an incident');
     expect(sectionTitle('/incidents/abc-123')).toBe('Incident');

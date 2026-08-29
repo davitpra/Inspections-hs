@@ -93,8 +93,8 @@ export interface ActionTransition {
  *
  * Cinco filas y ninguna más. Todo par que no esté acá se rechaza, y `closed` no
  * aparece nunca como `from`: es terminal (design D14). Que el trabajo cerrado se
- * haya deshecho es un hallazgo nuevo, con su fecha y su clasificación, que es
- * además lo único que la recurrencia de la etapa 7 puede contar.
+ * haya deshecho es un hallazgo nuevo, con su propia fecha, y no una reapertura
+ * del anterior.
  *
  * Ser un dato y no código es lo que permite que la UI derive los botones de acá
  * —`TRANSITIONS.filter(...)`— en vez de reimplementar la regla en un `if`, que es

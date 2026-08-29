@@ -160,16 +160,6 @@ export function CrossCircleIcon({ size = 18 }: { size?: number }): React.JSX.Ele
   );
 }
 
-/** La bandeja que recibe trabajo desde el servidor. */
-export function InboxIcon({ size = 18 }: { size?: number }): React.JSX.Element {
-  return (
-    <svg {...svgProps(size)}>
-      <path d="M4 5h16l1 10H3L4 5Z" />
-      <path d="M3 15h5l1.5 2h5L16 15h5M12 8v4M9.5 10.5 12 13l2.5-2.5" />
-    </svg>
-  );
-}
-
 /** La bandeja que espera trabajo para enviar al servidor. */
 export function OutboxIcon({ size = 18 }: { size?: number }): React.JSX.Element {
   return (

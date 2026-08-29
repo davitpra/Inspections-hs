@@ -5,6 +5,9 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Patch,
   Post,
   Query,
   UploadedFile,
@@ -14,6 +17,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
   createPersonRequestSchema,
+  deactivatePersonRequestSchema,
   rosterQuerySchema,
   type Person,
   type PersonWithAccount,
@@ -37,9 +41,8 @@ import { ROSTER_FILE_LIMIT, RosterUploadExceptionFilter } from './roster-upload.
  * comprueba en la lectura porque esta ruta SÍ devuelve el perfil. Conectar el selector de
  * incidentes a `/people` rompería lo único que las mantiene separadas.
  *
- * La única escritura por persona es el alta (`POST /people`, `add-person-to-roster-by-hand`).
- * Renombrar, transferir y desactivar siguen sin ruta: eso se hace solo al aplicar el archivo
- * entero, por HTTP o con `pnpm roster:import`.
+ * Las escrituras por persona son el alta y la baja estrecha de un worker sin cuenta.
+ * Renombrar, transferir y reactivar siguen sin ruta.
  */
 @Controller()
 export class RosterController {
@@ -62,6 +65,16 @@ export class RosterController {
     @Body() body: unknown,
   ): Promise<Person> {
     return this.roster.create(session, createPersonRequestSchema.parse(body));
+  }
+
+  @Patch('people/:personId')
+  async deactivate(
+    @CurrentSession() session: SessionContext,
+    @Param('personId', new ParseUUIDPipe()) personId: string,
+    @Body() body: unknown,
+  ): Promise<Person> {
+    deactivatePersonRequestSchema.parse(body);
+    return this.roster.deactivate(session, personId);
   }
 
   @Post('people/import')

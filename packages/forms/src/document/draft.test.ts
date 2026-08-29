@@ -675,7 +675,7 @@ describe('draftFromDocument devuelve el documento congelado a forma de borrador'
 
     expect(sembrado.sections[0]).not.toHaveProperty('position');
     expect(sembrado.sections[0]?.items[0]).not.toHaveProperty('position');
-    // El item_key es lo que hace que la versión N+1 conserve la serie de recurrencia.
+    // El item_key es lo que hace que la versión N+1 conserve la identidad del ítem.
     expect(sembrado.sections[0]?.items.map((item) => item.item_key)).toEqual([
       'guard.fitted',
       'guard.gap',

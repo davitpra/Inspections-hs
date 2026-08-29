@@ -353,7 +353,7 @@ describe('publicar la revisión', () => {
     );
 
     expect(rows.map((row) => row.item_key)).toEqual(['kept.alongside.dropped']);
-    // Su serie de recurrencia termina; no se borra ni se retira.
+    // Deja de ofrecerse en versiones nuevas; no se borra ni se retira.
     expect(await itemDeactivated('dropped.key')).toBe(false);
     expect(await itemTemplate('dropped.key')).toBe(version.template_id);
   });

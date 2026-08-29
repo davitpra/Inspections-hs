@@ -13,7 +13,7 @@
 --   template_version_item_id  fidelidad legal: qué pregunta se hizo, con esa
 --                             redacción, en esa sección, con ese tipo de
 --                             respuesta, el día que se contestó.
---   item_key                  agrupación: la clave de la detección de recurrencia.
+--   item_key                  el concepto: la identidad estable de la pregunta.
 --   (site_id, location_id)    dónde pasó, y la garantía de que el "dónde" es del
 --                             mismo sitio que el hallazgo.
 --
@@ -26,9 +26,9 @@ CREATE TABLE finding_stub (
 
   template_version_item_id uuid NOT NULL REFERENCES template_version_item (id),
 
-  -- Nullable a propósito: un hallazgo de entrada manual no tiene `item_key` y por
-  -- lo tanto queda fuera de la detección de recurrencia. Es la consecuencia
-  -- aceptada de §4, y el test la ejerce en lugar de ignorarla.
+  -- Nullable a propósito: un hallazgo de entrada manual no nace de una pregunta y
+  -- por lo tanto no tiene concepto estable. Es la consecuencia aceptada de §4, y el
+  -- test la ejerce en lugar de ignorarla.
   item_key text REFERENCES template_item (item_key),
 
   -- La FK COMPUESTA, que es la parte real de esto: con las dos columnas juntas

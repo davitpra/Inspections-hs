@@ -1,26 +1,22 @@
 import {
   actionListSchema,
   actionSchema,
-  notificationSchema,
   presignUploadResponseSchema,
   type Action,
   type ActionSummary,
   type CreateActionRequest,
   type EvidenceInput,
-  type Notification,
   type PresignUploadResponse,
   type TransitionRequest,
 } from '@hs/contracts';
-import { z } from 'zod';
-
 import { get, post } from './request';
 
 /**
  * El cliente de acciones correctivas (etapa 5).
  *
- * Lo que vuelve se parsea contra el contrato — la razón está en `request.ts`, y acá pesa
- * así: un `kind` de notificación que el servidor tenga y el cliente no —una migración a
- * medio desplegar— falla donde alguien lo ve, en vez de renderizar una tarjeta vacía (D11).
+ * Lo que vuelve se parsea contra el contrato — la razón está en `request.ts`: un campo que
+ * el servidor tenga y el cliente no —una migración a medio desplegar— falla donde alguien
+ * lo ve, en vez de dibujar una pantalla a medias.
  *
  * A diferencia de la captura de inspecciones, esto es ONLINE (design D15): no hay
  * Dexie, no hay outbox y no hay cola. Una acción correctiva se ejecuta con red; el
@@ -45,10 +41,6 @@ export async function createAction(
 
 export async function transitionAction(id: string, body: TransitionRequest): Promise<Action> {
   return post(`/actions/${id}/transitions`, body, (value) => actionSchema.parse(value));
-}
-
-export async function listNotifications(): Promise<Notification[]> {
-  return get('/notifications', (value) => z.array(notificationSchema).parse(value));
 }
 
 /**
@@ -83,4 +75,4 @@ export async function uploadEvidence(actionId: string, file: File): Promise<stri
   return presigned.object_key;
 }
 
-export type { Action, ActionSummary, EvidenceInput, Notification };
+export type { Action, ActionSummary, EvidenceInput };

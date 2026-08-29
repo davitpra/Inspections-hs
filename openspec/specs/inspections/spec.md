@@ -7,8 +7,8 @@ frozen at scheduling time and cannot be moved by a later publication, that a per
 exactly once per site and template no matter how many times the opening job runs, and that every
 inspector can see what they still owe. It further guarantees that a submission is recorded exactly
 once however many times a device retries it, that a rejected submission leaves no partial state,
-and that every answer is stored as its own row keyed by the stable concept the recurrence report
-groups by.
+and that every answer is stored as its own row keyed by the stable identity of the concept it
+answers.
 
 ## Requirements
 
@@ -1422,11 +1422,12 @@ audit entry: the whole ingestion is one transaction that either commits entirely
 The system SHALL store one row of `inspection_answer` per answered item, with `inspection_id`,
 `site_id`, `template_version_item_id`, `item_key` and `value`. It SHALL NOT store the answer set
 as a single document column. `template_version_item_id` SHALL record which published row was
-answered — the legal fidelity of §4 — and `item_key` SHALL record the stable concept the
-recurrence report groups by. The engine SHALL guarantee that `item_key` is the key of the
-referenced `template_version_item` and that the item belongs to the inspection's
-`template_version_id`. `item_key` SHALL be indexed so that grouping every answer of a site by
-concept does not require reading the answers of every inspection.
+answered — the legal fidelity of §4 — and `item_key` SHALL record the stable identity of the
+concept the question asks about, so that the same question stays recognisable across the versions
+that edited it. The engine SHALL guarantee that `item_key` is the key of the referenced
+`template_version_item` and that the item belongs to the inspection's `template_version_id`.
+`item_key` SHALL be indexed so that resolving every answer of a site by concept does not require
+reading the answers of every inspection.
 
 #### Scenario: One row per answered item
 

@@ -408,7 +408,7 @@ interface PersonRow {
 
 async function findPerson(client: PoolClient, personId: string): Promise<PersonRow | null> {
   const { rows } = await client.query<PersonRow>(
-    `SELECT id, deactivated_at FROM person WHERE id = $1`,
+    `SELECT id, deactivated_at FROM person WHERE id = $1 FOR KEY SHARE`,
     [personId],
   );
 
