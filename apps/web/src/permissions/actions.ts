@@ -22,6 +22,22 @@ export function canCreateAction(
 }
 
 /**
+ * Quién puede enmendar la asignación de una acción de ESTE hallazgo antes de empezar el
+ * trabajo (ADR-018).
+ *
+ * Se autoriza igual que abrir la acción (ADR-017): coordinador, más la cuenta que
+ * reportó el hallazgo. Corregir un error de responsable, trabajo o fecha es de la misma
+ * clase de decisión que la asignación original, no una nueva. La interfaz ofrece el
+ * control; el servidor vuelve a autorizarlo en `ActionsService.amendCommitment`.
+ */
+export function canAmendAssignment(
+  account: Session | null,
+  finding: Pick<Finding, 'reported_by'>,
+): boolean {
+  return canCreateAction(account, finding);
+}
+
+/**
  * Si esta cuenta puede intentar esta transición, según la MISMA tabla que el servidor.
  *
  * `assignee` no es un rol: es la cuenta de la persona responsable de ESTA acción, y por

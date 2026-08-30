@@ -303,8 +303,9 @@ The system SHALL make `corrective_action`, `corrective_action_event`,
 of the four tables SHALL be updatable by any role, and no row SHALL be deletable or truncatable.
 Both barriers of the mechanism SHALL apply — the revoked privilege for the application role and
 the guard trigger for every role including the table owner. Advancing an action SHALL be done by
-inserting an event, never by touching a row; reassigning an action or moving its deadline SHALL
-NOT be possible at all.
+inserting an event, never by touching a row; while the action is `open`, its assignee, description
+and deadline SHALL be corrected only by inserting an append-only
+`corrective_action_commitment_amendment` row, never by updating `corrective_action`.
 
 #### Scenario: The application role cannot move a deadline
 
@@ -389,6 +390,28 @@ that no two of these tables can disagree about which workplace a record belongs 
 
 - **WHEN** a `corrective_action` row is inserted whose `finding_id` belongs to another site
 - **THEN** the insert fails on the `(finding_id, site_id)` foreign key
+
+### Requirement: Corrective action commitment amendments are immutable
+
+The system SHALL store each correction of `assignee_person_id`, `description` and `due_at` as a new
+`corrective_action_commitment_amendment` row. The application role SHALL have `SELECT` and `INSERT`
+but SHALL NOT have `UPDATE`, `DELETE` or `TRUNCATE`. A guard trigger SHALL refuse those mutations
+for every role including the table owner. The system SHALL isolate amendments by `site_id` through
+row level security and SHALL include every insertion in the site's audit chain.
+
+#### Scenario: An amendment cannot be rewritten
+
+- **GIVEN** a `corrective_action_commitment_amendment` has committed
+- **WHEN** an application or owner connection attempts to update, delete or truncate it
+- **THEN** the database refuses the mutation
+- **AND** the recorded commitment remains unchanged
+
+#### Scenario: An amendment is site isolated and audited
+
+- **GIVEN** an amendment belongs to Glencoe
+- **WHEN** a session scoped only to St. Thomas reads amendments
+- **THEN** the Glencoe row is not visible
+- **AND** its insertion remains represented in the Glencoe audit chain
 
 ### Requirement: An incident, its events, its witnesses, its investigation and its causes cannot be modified or removed
 

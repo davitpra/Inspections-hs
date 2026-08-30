@@ -181,6 +181,32 @@ describe('los requests', () => {
     expect(result.success).toBe(false);
   });
 
+  it('una enmienda reemplaza los tres campos del compromiso', async () => {
+    const { amendActionCommitmentRequestSchema } = await import('./actions');
+    const result = amendActionCommitmentRequestSchema.safeParse({
+      assignee_person_id: PERSON_ID,
+      description: 'Install a fixed guard on the infeed of line 4',
+      due_at: '2027-02-01T00:00:00.000Z',
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('una enmienda no acepta campos parciales ni de creación', async () => {
+    const { amendActionCommitmentRequestSchema } = await import('./actions');
+
+    expect(amendActionCommitmentRequestSchema.safeParse({
+      assignee_person_id: PERSON_ID,
+      due_at: '2027-02-01T00:00:00.000Z',
+    }).success).toBe(false);
+    expect(amendActionCommitmentRequestSchema.safeParse({
+      assignee_person_id: PERSON_ID,
+      description: 'Install a fixed guard on the infeed of line 4',
+      due_at: '2027-02-01T00:00:00.000Z',
+      remediation_group_id: PERSON_ID,
+    }).success).toBe(false);
+  });
+
   it('declarar el trabajo hecho sin evidencia se acepta', () => {
     const result = transitionRequestSchema.safeParse({
       to: 'awaiting_verification',

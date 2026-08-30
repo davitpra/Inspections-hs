@@ -17,14 +17,16 @@ import {
 } from "../../components/icons";
 import { enclosingReportItem, ReportItem } from "../../components/ReportItem";
 import { TemplateSectionCard } from "../../components/TemplateSectionCard";
-import { civilToday, formatCivilDay, periodLabel } from "../../presentation/dates";
+import {
+  civilToday,
+  formatCivilDay,
+  periodLabel,
+} from "../../presentation/dates";
 import { findingsLabel } from "../../presentation/findings";
 import { CreateActionForm } from "./CreateActionForm";
-import { FindingNextStep } from "./FindingNextStep";
-import { FindingStepper } from "./FindingStepper";
+import { FindingLifecycle } from "./FindingLifecycle";
 import {
   actionsByFinding,
-  findingDeadline,
   nextStep,
   sectionsWithFindings,
 } from "./presentation";
@@ -219,7 +221,9 @@ export function InspectionFindingsRoute(): React.JSX.Element {
       )}
 
       {sections.length > 0 && actions.isError ? (
-        <p className="notice notice--warn">Existing corrective actions need a connection.</p>
+        <p className="notice notice--warn">
+          Existing corrective actions need a connection.
+        </p>
       ) : null}
 
       {/*
@@ -243,9 +247,10 @@ export function InspectionFindingsRoute(): React.JSX.Element {
             const step = actions.isError
               ? null
               : nextStep(existing, finding.state, account, finding);
-            const onAttempt = step?.control?.kind === "create"
-              ? openOverlay({ kind: "create", finding })
-              : undefined;
+            const onAttempt =
+              step?.control?.kind === "create"
+                ? openOverlay({ kind: "create", finding })
+                : undefined;
             return (
               <ReportItem
                 key={item.item_key}
@@ -259,15 +264,26 @@ export function InspectionFindingsRoute(): React.JSX.Element {
                     correctiveAction={item.finding?.corrective_action}
                     finding={finding}
                   />
-                  <FindingStepper
-                    current={finding.state}
-                    deadline={
-                      actions.isError ? null : findingDeadline(existing, finding.state, today)
-                    }
+                  {/*
+                    EL CICLO ES NAVEGABLE: la etapa vigente ofrece el próximo paso y cada
+                    etapa ya alcanzada abre, en ese mismo hueco, lo que se decidió en ella
+                    (ADR-018). La etapa elegida es estado por hallazgo, y por eso vive
+                    adentro de `FindingLifecycle` y no acá.
+                  */}
+                  <FindingLifecycle
+                    /*
+                      LA `key` ES EL ESTADO DEL HALLAZGO: avanzar reinicia la lectura del
+                      ciclo. Quedarse en la etapa que se estaba leyendo dejaría un registro
+                      viejo en pantalla justo después del acto que lo cambió.
+                    */
+                    key={finding.state}
+                    finding={finding}
+                    actions={actions.isError ? [] : existing}
+                    step={step}
+                    session={account}
+                    today={today}
+                    onCreate={onAttempt}
                   />
-                  {step ? (
-                    <FindingNextStep step={step} session={account} onAttempt={onAttempt} />
-                  ) : null}
                 </>
               </ReportItem>
             );

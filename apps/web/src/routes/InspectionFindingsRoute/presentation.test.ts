@@ -1,15 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import type { ActionSummary, Finding, Session } from '@hs/contracts';
+import type { ActionEvent, ActionSummary, Finding, Session } from '@hs/contracts';
 import type { TemplateDocument } from '@hs/forms';
 
 import {
   actionsByFinding,
   blockingActions,
+  commitmentLabel,
+  eventLabel,
+  eventsInStage,
   findingDeadline,
   futureDueAt,
   nextStep,
+  reachedStages,
   sectionsWithFindings,
   stageStatus,
+  toDateTimeLocal,
 } from './presentation';
 
 const SITE_A = '11111111-1111-4111-8111-111111111111';
@@ -296,6 +301,8 @@ describe('el próximo paso del hallazgo', () => {
       requirement: 'Assign a responsible person, describe the work, and set a deadline.',
       waitingOn: 'H&S coordinator or whoever raised the finding',
       control: { kind: 'create' },
+      writes: 'assigned',
+      amend: null,
     });
   });
 
@@ -366,6 +373,48 @@ describe('el próximo paso del hallazgo', () => {
       ),
     ).toBeNull();
   });
+
+  /** ADR-018: en `assigned`, el coordinador y quien reportó pueden enmendar la asignación. */
+  it('ofrece Edit assignment junto a Start work en assigned', () => {
+    const step = nextStep([action()], 'assigned', session('hs_coordinator'), itemFinding(GUARDS));
+
+    expect(step?.control).toEqual({ kind: 'progress', action: action() });
+    expect(step?.amend).toEqual(action());
+  });
+
+  it('no ofrece Edit assignment a quien no puede abrir la acción', () => {
+    const reportedByOther = itemFinding(GUARDS, {
+      reported_by: '99999999-9999-4999-8999-999999999999',
+    });
+
+    expect(
+      nextStep([action()], 'assigned', session('supervisor'), reportedByOther)?.amend,
+    ).toBeNull();
+  });
+
+  it('retira Edit assignment en cuanto el trabajo empezó', () => {
+    expect(
+      nextStep(
+        [action({ state: 'in_progress' })],
+        'in_progress',
+        session('hs_coordinator'),
+        itemFinding(GUARDS),
+      )?.amend,
+    ).toBeNull();
+  });
+});
+
+describe('el registro de la etapa Assigned', () => {
+  it('nombra el compromiso original y cada enmienda', () => {
+    expect(commitmentLabel(0)).toBe('Original commitment');
+    expect(commitmentLabel(1)).toBe('Amendment 1');
+    expect(commitmentLabel(2)).toBe('Amendment 2');
+  });
+
+  it('recorta el instante ISO a lo que espera datetime-local, sin mover el huso', () => {
+    expect(toDateTimeLocal('2050-01-01T17:00:00.000Z')).toBe('2050-01-01T17:00');
+    expect(toDateTimeLocal('2026-08-28T16:30:00-04:00')).toBe('2026-08-28T16:30');
+  });
 });
 
 describe('el plazo del formulario', () => {
@@ -392,5 +441,115 @@ describe('el plazo del formulario', () => {
       success: false,
       message: 'Deadline must be in the future.',
     });
+  });
+});
+
+/**
+ * Lo que hace navegable el ciclo: qué etapas se pueden abrir, qué guarda cada una y cómo se
+ * nombra lo que pasó ahí. Las tres son decisiones sobre un registro que se defiende ante un
+ * regulador, y por eso se prueban sin dibujar nada.
+ */
+describe('la lectura de una etapa', () => {
+  function event(overrides: Partial<ActionEvent> = {}): ActionEvent {
+    return {
+      id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+      position: 0,
+      from_state: null,
+      to_state: 'open',
+      actor_user_id: '44444444-4444-4444-8444-444444444444',
+      note: null,
+      reason: null,
+      occurred_at: '2026-08-01T12:00:00.000Z',
+      recorded_at: '2026-08-01T12:00:01.000Z',
+      evidence: [],
+      ...overrides,
+    };
+  }
+
+  it('solo se abren las etapas que ya ocurrieron', () => {
+    expect(reachedStages('in_progress')).toEqual(['raised', 'assigned', 'in_progress']);
+    expect(reachedStages('raised')).toEqual(['raised']);
+    expect(reachedStages('closed')).toEqual([
+      'raised',
+      'assigned',
+      'in_progress',
+      'verification',
+      'closed',
+    ]);
+  });
+
+  /** Las dos entradas a `in_progress` son de la misma etapa: empezar y volver a empezar. */
+  it('reparte los eventos con la misma tabla que decide la etapa vigente', () => {
+    const started = event({ position: 1, from_state: 'open', to_state: 'in_progress' });
+    const sentBack = event({
+      id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+      position: 3,
+      from_state: 'awaiting_verification',
+      to_state: 'in_progress',
+    });
+    const declared = event({
+      id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      position: 2,
+      from_state: 'in_progress',
+      to_state: 'awaiting_verification',
+    });
+
+    expect(eventsInStage([sentBack, declared, started], 'in_progress')).toEqual([
+      started,
+      sentBack,
+    ]);
+    expect(eventsInStage([sentBack, declared, started], 'verification')).toEqual([declared]);
+    expect(eventsInStage([sentBack, declared, started], 'closed')).toEqual([]);
+  });
+
+  it('ordena por la posición del stream y no por el reloj', () => {
+    const late = event({ position: 1, from_state: 'open', to_state: 'in_progress' });
+    const early = event({
+      id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+      position: 3,
+      from_state: 'awaiting_verification',
+      to_state: 'in_progress',
+      occurred_at: '2020-01-01T00:00:00.000Z',
+    });
+
+    expect(eventsInStage([early, late], 'in_progress').map((item) => item.position)).toEqual([
+      1, 3,
+    ]);
+  });
+
+  /** El PAR y no el destino: leer "Send it back" donde alguien pulsó "Send it back". */
+  it('nombra el evento con la etiqueta del botón que lo pidió', () => {
+    expect(eventLabel(event({ from_state: 'open', to_state: 'in_progress' }))).toBe('Start work');
+    expect(
+      eventLabel(event({ from_state: 'awaiting_verification', to_state: 'in_progress' })),
+    ).toBe('Send it back');
+    // La creación no la nombró ningún botón.
+    expect(eventLabel(event({ from_state: null, to_state: 'open' }))).toBe('Open');
+  });
+});
+
+describe('la etapa que el paso a la vista escribiría', () => {
+  it('la creación escribe assigned', () => {
+    expect(nextStep([], 'raised', session('hs_coordinator'), itemFinding(GUARDS))?.writes).toBe(
+      'assigned',
+    );
+  });
+
+  it('empezar el trabajo escribe in_progress', () => {
+    expect(
+      nextStep([action()], 'assigned', session('external_auditor'), itemFinding(GUARDS))?.writes,
+    ).toBe('in_progress');
+  });
+
+  /** Sin control no hay borrador: quien mira no escribe nada y no hay etapa que anticipar. */
+  it('no anticipa ninguna etapa cuando no hay nada que pulsar', () => {
+    expect(
+      nextStep(
+        [action({ state: 'awaiting_verification' })],
+        'verification',
+        session('external_auditor'),
+        itemFinding(GUARDS),
+      )?.writes,
+    ).toBeNull();
   });
 });

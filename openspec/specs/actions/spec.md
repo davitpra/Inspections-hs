@@ -8,6 +8,40 @@ unclosed.
 
 ## Requirements
 
+### Requirement: Corrective actions are not an independent application destination
+
+The system SHALL NOT expose an authenticated navigation entry, workspace, inspection-grouped
+listing, or independent detail route for corrective actions. Removing those application routes
+SHALL NOT remove the site-scoped action reads, event history, transitions, evidence, escalation,
+or audit behavior used by findings and server workflows. The immutable event history SHALL remain
+available through the action API as source data, but the findings-only reading SHALL present the
+business decisions represented by that data rather than an event timeline.
+
+#### Scenario: The application has no corrective actions navigation entry
+
+- **WHEN** an authenticated account reads the application navigation
+- **THEN** no corrective actions workspace entry is presented
+
+#### Scenario: A retired action URL does not resolve
+
+- **WHEN** an account requests `/actions`, `/actions/inspection/$inspectionId`, or `/actions/$id`
+- **THEN** the application returns its not-found experience
+- **AND** it does not redirect the account to another route
+
+#### Scenario: Non-inspection actions have no v1 application surface
+
+- **GIVEN** a corrective action belongs to a manual finding or an incident investigation
+- **WHEN** an authenticated account uses the v1 application
+- **THEN** the application offers no route that lists or opens that action
+- **AND** the action and its immutable records remain stored and available to server workflows
+
+#### Scenario: Removing the detail route does not remove the immutable record
+
+- **GIVEN** a corrective action has creation, completion and verification events
+- **WHEN** the independent action detail route is retired
+- **THEN** `GET /actions/:id` continues to return its complete event and evidence history
+- **AND** the findings-only reading translates applicable records into decisions instead of an event timeline
+
 ### Requirement: A corrective action belongs to exactly one parent, a finding or an investigation
 
 The system SHALL store every corrective action as a `corrective_action` row carrying `site_id`,
@@ -125,8 +159,9 @@ refuse a `due_at` that is not later than the moment of creation with the code `i
 because an action born overdue escalates before anyone can act on it. That comparison reads the
 current time, so it SHALL be enforced when the request is served and not by a database check. The
 system SHALL NOT derive the deadline from any property of the parent and SHALL NOT store a severity
-on the action. An action's `due_at` SHALL never move afterwards; a different deadline is obtained
-by opening a new action.
+on the action. The stored `due_at` column SHALL never move afterwards; while the action's derived
+state is `open` an accepted commitment amendment MAY supersede it for every reading, and once work
+has started a different deadline is obtained only by opening a new action.
 
 #### Scenario: The stored deadline is the one the coordinator stated
 
@@ -168,12 +203,28 @@ corrective_action_event ORDER BY action_id, position DESC`. The states SHALL be 
 event, with `position` `0`, a null `from_state` and `to_state` `open`, in the same transaction as
 the action row, so that no action can exist without a state.
 
+Creating an action SHALL write only that first event: naming a responsible person, the work and the
+deadline does not begin the work. The action SHALL stay in `open` until the assigned person or an
+`hs_coordinator` requests `open` → `in_progress`.
+
 #### Scenario: Creating an action writes its first event
 
 - **WHEN** an action is created
 - **THEN** one `corrective_action_event` row exists for it with `position` `0`, `from_state` null
   and `to_state` `open`
-- **AND** the derived state of the action is `open`
+- **AND** that row names the creating account
+
+#### Scenario: A created action waits for work to start
+
+- **WHEN** an action is created and its state is read
+- **THEN** the derived state is `open`
+- **AND** no `in_progress` event exists until an authorized account starts work
+
+#### Scenario: An action starts by hand
+
+- **GIVEN** an action whose only event is `to_state` `open`
+- **WHEN** the assigned person or an `hs_coordinator` requests `open` → `in_progress`
+- **THEN** the transition is accepted
 
 #### Scenario: The current state is the last event's
 
@@ -192,6 +243,66 @@ the action row, so that no action can exist without a state.
 - **WHEN** a `corrective_action` row is inserted and the transaction commits with no
   `corrective_action_event` row for it
 - **THEN** the commit fails with the dedicated SQLSTATE of the deferred first-event constraint
+
+### Requirement: A newly created action waits for work to start
+
+The system SHALL create a corrective action with exactly one initial `corrective_action_event` whose
+`to_state` is `open`. The system SHALL NOT append `open` to `in_progress` during creation. Starting
+work SHALL remain the existing explicit state transition available to the assigned person or an
+`hs_coordinator`.
+
+#### Scenario: Creation leaves the action assigned
+
+- **WHEN** an authorized account creates a corrective action
+- **THEN** its derived state is `open`
+- **AND** no `in_progress` event exists until an authorized account starts work
+
+#### Scenario: Starting work closes the amendment window
+
+- **GIVEN** an open action has its current commitment
+- **WHEN** the assigned person or an `hs_coordinator` moves it to `in_progress`
+- **THEN** the transition is accepted
+- **AND** later commitment amendments are refused
+
+### Requirement: An open action commitment can be amended without rewriting its past
+
+The system SHALL allow an authenticated `hs_coordinator`, or the account named by the parent
+finding's `reported_by`, to submit a complete replacement `assignee_person_id`, `description` and
+`due_at` while the corrective action's derived state is `open`. The system SHALL require the new
+assignee to be active and belong to the action's site, and SHALL require `due_at` to be later than
+the amendment instant. The system SHALL refuse every amendment after the action leaves `open`.
+
+The system SHALL append each accepted replacement with its actor and occurrence time and SHALL
+preserve the original commitment and every earlier amendment. Action summaries, action details,
+deadline processing and subsequent authorization SHALL use the latest accepted commitment.
+
+#### Scenario: A finding reporter corrects an assigned action
+
+- **GIVEN** a corrective action is `open` and belongs to a finding whose `reported_by` names the reader
+- **WHEN** the reader submits a valid `assignee_person_id`, `description` and future `due_at`
+- **THEN** an amendment is appended and the action remains `open`
+- **AND** subsequent reads expose those values as the current commitment
+
+#### Scenario: Work that has started cannot be reassigned
+
+- **GIVEN** a corrective action's current state is `in_progress`
+- **WHEN** an otherwise authorized account submits an amendment
+- **THEN** the request is rejected with the code `invalid_action_state`
+- **AND** no amendment is appended
+
+#### Scenario: The original and corrected commitments remain readable
+
+- **GIVEN** an open action has two accepted amendments
+- **WHEN** its detail is read
+- **THEN** the original commitment and both amendments are returned in recorded order
+- **AND** the second amendment supplies the current `assignee_person_id`, `description` and `due_at`
+
+#### Scenario: Concurrent amendments do not fork the history
+
+- **GIVEN** an open action whose latest commitment position is known
+- **WHEN** two amendments are submitted concurrently
+- **THEN** at most one occupies the next `(action_id, position)`
+- **AND** the action has one unambiguous current commitment
 
 ### Requirement: Only the transitions of the state machine are accepted
 
@@ -329,20 +440,52 @@ when it closes the action, a `reason` SHALL NOT be required.
 
 ### Requirement: Who may create, execute and verify an action
 
-The system SHALL accept the creation of an action only from an `hs_coordinator` account. The
+The system SHALL accept the creation of an action for a finding from an `hs_coordinator`
+account or from the account named by that finding's `reported_by`. The system SHALL accept
+the creation of an action for an investigation only from an `hs_coordinator` account. The
 system SHALL accept the transitions `open` → `in_progress` and `in_progress` →
-`awaiting_verification` only from the account of the assigned person or from an `hs_coordinator`
-account acting on their behalf. The system SHALL accept the verification transitions from an
-`hs_coordinator`, `supervisor` or `management` account of the action's site, subject to the
-verifier rule. An `external_auditor` SHALL be refused every write and a `jhsc_member` SHALL be
-refused every write, both with `forbidden`. The acting account SHALL be taken from the session and
-never from the payload.
+`awaiting_verification` only from the account of the assigned person or from an
+`hs_coordinator` account acting on their behalf. The system SHALL accept the verification
+transitions from an `hs_coordinator`, `supervisor` or `management` account of the action's
+site, subject to the verifier rule. An `external_auditor` SHALL be refused every write and a
+`jhsc_member` who neither raised the finding nor is the assigned person SHALL be refused
+every write, both with `forbidden`. The acting account SHALL be taken from the session and
+never from the payload. A finding outside the session's scope SHALL be refused with
+`action_not_found`, the same code as a finding that does not exist, evaluated before the
+permission itself so that the response never discloses which is the case.
 
-#### Scenario: A supervisor cannot create an action
+#### Scenario: The finding's reporter opens the action they raised
 
-- **WHEN** a supervisor creates an action for a finding of their own site
+- **GIVEN** a finding whose `reported_by` names a `jhsc_member` account
+- **WHEN** that account creates an action for that finding, with an `assignee_person_id`, a
+  `description` and a `due_at`
+- **THEN** a `corrective_action` row is created referencing that finding
+- **AND** its `created_by` is that account
+
+#### Scenario: A supervisor who did not raise the finding cannot create an action
+
+- **WHEN** a supervisor who is not the finding's `reported_by` and not an `hs_coordinator`
+  creates an action for that finding
 - **THEN** the request is rejected with the code `forbidden`
 - **AND** no `corrective_action` row is created
+
+#### Scenario: Another JHSC member cannot open an action on someone else's finding
+
+- **GIVEN** a finding whose `reported_by` names one `jhsc_member` account
+- **WHEN** a different `jhsc_member` account creates an action for that finding
+- **THEN** the request is rejected with the code `forbidden`
+
+#### Scenario: Raising the finding does not extend to an investigation
+
+- **GIVEN** an incident's investigation reported by a supervisor
+- **WHEN** that supervisor, who is not an `hs_coordinator`, creates an action for that
+  investigation
+- **THEN** the request is rejected with the code `forbidden`
+
+#### Scenario: A finding outside the scope answers not found, not forbidden
+
+- **WHEN** an account creates an action for a finding of a site outside its scope
+- **THEN** the request is rejected with the code `action_not_found`
 
 #### Scenario: Someone else's action cannot be advanced
 

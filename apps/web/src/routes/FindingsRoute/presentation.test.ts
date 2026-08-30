@@ -80,7 +80,7 @@ describe('inspectionsWithFindings', () => {
     expect(rows).toEqual([]);
   });
 
-  /** Un hallazgo manual no tiene recorrido que abrir: se reporta y se ve en `/actions`. */
+  /** Un hallazgo manual no tiene recorrido que abrir en la PWA. */
   it('ignora los hallazgos manuales, que no cuelgan de ninguna inspección', () => {
     const rows = inspectionsWithFindings(
       [scheduled()],

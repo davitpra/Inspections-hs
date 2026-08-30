@@ -8,9 +8,6 @@ import {
 import { z } from 'zod';
 
 import { AcceptInvitationRoute } from '../routes/AcceptInvitationRoute';
-import { ActionRoute } from '../routes/ActionRoute';
-import { ActionsForInspectionRoute } from '../routes/ActionsForInspectionRoute';
-import { ActionsRoute } from '../routes/ActionsRoute';
 import { CaptureRoute } from '../routes/CaptureRoute';
 import { FindingsRoute } from '../routes/FindingsRoute';
 import { Form7Route } from '../routes/Form7Route';
@@ -43,10 +40,6 @@ import { Sidebar } from './Sidebar';
  * El árbol explícito es también la lista de lo que el service worker tiene que poder
  * servir sin red: un router por convención de archivos escondería esa lista en la
  * estructura de un directorio.
- *
- * Las rutas de la etapa 5 —acciones correctivas y bandeja— son ONLINE (design D15) y no
- * dependen del precacheo para funcionar: una acción se ejecuta con red. Están en el
- * mismo shell porque son la misma aplicación, no porque necesiten estar sin señal.
  *
  * Las de la etapa 6 —incidentes— también son online, y por un motivo propio (design D14):
  * un accidente se reporta desde una oficina o un teléfono con señal, y un reporte
@@ -209,8 +202,8 @@ const historicalInspectionsRoute = createRoute({
 });
 
 /**
- * Lo que salió mal, y el envío en el que salió. Dos rutas, como `/actions`: la lista de lo
- * cerrado con hallazgos, y UN envío leído solo por sus hallazgos.
+ * Lo que salió mal, y el envío en el que salió: la lista de lo cerrado con hallazgos, y UN
+ * envío leído solo por sus hallazgos.
  *
  * **`/findings` y no `/inspections/$id/findings`**, aunque el detalle sea una inspección.
  * `CAPTURE_ROUTES` en `sw.ts` matchea `/^\/inspections\//`, así que colgarla de ese prefijo
@@ -231,27 +224,6 @@ const inspectionFindingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/findings/$id',
   component: InspectionFindingsRoute,
-});
-
-const actionsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/actions',
-  component: ActionsRoute,
-});
-
-// Tres segmentos, no dos, así que no compite con `/actions/$id` (el detalle de una
-// acción): el router los distingue por la cantidad de segmentos, sin depender del
-// orden de declaración.
-const actionsForInspectionRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/actions/inspection/$inspectionId',
-  component: ActionsForInspectionRoute,
-});
-
-const actionRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/actions/$id',
-  component: ActionRoute,
 });
 
 const incidentsRoute = createRoute({
@@ -395,9 +367,6 @@ const routeTree = rootRoute.addChildren([
   templateDraftRoute,
   publishedTemplateRoute,
   locationsRoute,
-  actionsRoute,
-  actionsForInspectionRoute,
-  actionRoute,
   incidentsRoute,
   reportIncidentRoute,
   incidentRoute,

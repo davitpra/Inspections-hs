@@ -1361,6 +1361,30 @@ describe('el segundo padre de la acción correctiva', () => {
     ).resolves.toMatchObject({ state: 'closed' });
   });
 
+  it('la asignación de una acción de investigación solo la enmienda el coordinador (ADR-018)', async () => {
+    const incidentId = await investigated();
+    const actionId = await openActionOn(incidentId);
+
+    // Una investigación no tiene reportante al que extenderle el permiso: es del coordinador.
+    await expect(
+      actions.amendCommitment(asSupervisor(), actionId, {
+        assignee_person_id: witness,
+        description: 'Reassign the interlock work while the action is still open',
+        due_at: INVESTIGATION_DUE_AT,
+      }),
+    ).rejects.toMatchObject({ response: { code: 'forbidden' } });
+
+    const amended = await actions.amendCommitment(asCoordinator(), actionId, {
+      assignee_person_id: witness,
+      description: 'Reassign the interlock work while the action is still open',
+      due_at: INVESTIGATION_DUE_AT,
+    });
+
+    expect(amended.state).toBe('open');
+    expect(amended.assignee_person_id).toBe(witness);
+    expect(amended.commitments).toHaveLength(2);
+  });
+
   it('una acción con dos padres o sin ninguno se rechaza', async () => {
     const incidentId = await investigated();
     const rows = await inSession<{ id: string }>(

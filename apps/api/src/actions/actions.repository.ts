@@ -1,6 +1,7 @@
 import type { PoolClient } from 'pg';
 import type {
   Action,
+  ActionCommitment,
   ActionEvent,
   ActionState,
   ActionSummary,
@@ -132,6 +133,57 @@ export async function insertEvent(client: PoolClient, input: InsertEventInput): 
   return id;
 }
 
+export interface InsertAmendmentInput {
+  actionId: string;
+  siteId: string;
+  assigneePersonId: string;
+  description: string;
+  dueAt: Date;
+  actorUserId: string;
+  occurredAt: Date;
+}
+
+/**
+ * Agrega una enmienda al historial del compromiso.
+ *
+ * `position` se calcula en la misma sentencia como "la última de esta acción + 1", con
+ * la primera en 1 —la fila original de `corrective_action` es la cero conceptual—. Entre
+ * la lectura y la escritura cabe otra enmienda; **la carrera no se cierra acá** sino en
+ * el único `corrective_action_commitment_amendment_position_uq`, que hace fallar a la
+ * segunda en vez de bifurcar el historial. Esta subconsulta solo evita el viaje de más.
+ */
+export async function insertAmendment(
+  client: PoolClient,
+  input: InsertAmendmentInput,
+): Promise<string> {
+  const { rows } = await client.query<{ id: string }>(
+    `INSERT INTO corrective_action_commitment_amendment
+       (action_id, site_id, position, assignee_person_id, description, due_at,
+        actor_user_id, occurred_at)
+     SELECT $1, $2,
+            coalesce((SELECT max(a.position) + 1
+                        FROM corrective_action_commitment_amendment a
+                       WHERE a.action_id = $1), 1),
+            $3, $4, $5, $6, $7
+     RETURNING id`,
+    [
+      input.actionId,
+      input.siteId,
+      input.assigneePersonId,
+      input.description,
+      input.dueAt,
+      input.actorUserId,
+      input.occurredAt,
+    ],
+  );
+
+  const id = rows[0]?.id;
+
+  if (!id) throw new Error('corrective_action_commitment_amendment insert returned no id');
+
+  return id;
+}
+
 export async function insertEvidence(
   client: PoolClient,
   eventId: string,
@@ -160,6 +212,8 @@ export interface ActionHeader {
   id: string;
   siteId: string;
   findingId: string | null;
+  investigationId: string | null;
+  /** El responsable VIGENTE: la última enmienda o, si no hay ninguna, la fila original. */
   assigneePersonId: string;
 }
 
@@ -170,9 +224,22 @@ export async function findActionHeader(
   const { rows } = await client.query<{
     site_id: string;
     finding_id: string | null;
+    investigation_id: string | null;
     assignee_person_id: string;
   }>(
-    `SELECT site_id, finding_id, assignee_person_id FROM corrective_action WHERE id = $1`,
+    // El responsable con el que se autoriza una transición es el vigente (ADR-018): si
+    // una enmienda cambió a quién le toca, es esa persona la que puede empezar el trabajo.
+    `SELECT a.site_id, a.finding_id, a.investigation_id,
+            COALESCE(eff.assignee_person_id, a.assignee_person_id) AS assignee_person_id
+       FROM corrective_action a
+       LEFT JOIN LATERAL (
+         SELECT m.assignee_person_id
+           FROM corrective_action_commitment_amendment m
+          WHERE m.action_id = a.id
+          ORDER BY m.position DESC
+          LIMIT 1
+       ) eff ON true
+      WHERE a.id = $1`,
     [actionId],
   );
 
@@ -183,6 +250,7 @@ export async function findActionHeader(
         id: actionId,
         siteId: row.site_id,
         findingId: row.finding_id,
+        investigationId: row.investigation_id,
         assigneePersonId: row.assignee_person_id,
       }
     : null;
@@ -213,11 +281,14 @@ export async function lastExecutor(
 
 /** El detalle conserva el stream completo; el listado usa una proyección aparte. */
 const ACTION_SELECT = `
-  SELECT a.id, a.site_id, a.finding_id, a.investigation_id, a.assignee_person_id,
-          a.description,
-          a.due_at, a.remediation_group_id, a.created_by, a.created_at,
+  SELECT a.id, a.site_id, a.finding_id, a.investigation_id,
+         COALESCE(eff.assignee_person_id, a.assignee_person_id) AS assignee_person_id,
+         COALESCE(eff.description, a.description) AS description,
+         COALESCE(eff.due_at, a.due_at) AS due_at,
+         a.remediation_group_id, a.created_by, a.created_at,
          s.to_state AS state,
-         (a.due_at < now()) AS overdue,
+         (COALESCE(eff.due_at, a.due_at) < now()) AS overdue,
+         COALESCE(com.commitments, '[]'::jsonb) AS commitments,
          COALESCE(ev.events, '[]'::jsonb) AS events,
          COALESCE(esc.escalations, '[]'::jsonb) AS escalations
     FROM corrective_action a
@@ -227,6 +298,44 @@ const ACTION_SELECT = `
        ORDER BY e.position DESC
        LIMIT 1
     ) s ON true
+    LEFT JOIN LATERAL (
+      -- El compromiso VIGENTE: la última enmienda o, si no hay ninguna, la fila original.
+      SELECT m.assignee_person_id, m.description, m.due_at
+        FROM corrective_action_commitment_amendment m
+       WHERE m.action_id = a.id
+       ORDER BY m.position DESC
+       LIMIT 1
+    ) eff ON true
+    LEFT JOIN LATERAL (
+      -- El historial completo: la fila original en la posición cero, después cada enmienda
+      -- en orden. Ordenado por la posición NUMÉRICA, no por el texto del jsonb.
+      SELECT jsonb_agg(rows.row ORDER BY rows.pos) AS commitments
+        FROM (
+          SELECT 0 AS pos, jsonb_build_object(
+                   'id', a.id,
+                   'position', 0,
+                   'assignee_person_id', a.assignee_person_id,
+                   'assignee_name', (SELECT p.first_name || ' ' || p.last_name
+                                       FROM person p WHERE p.id = a.assignee_person_id),
+                   'description', a.description,
+                   'due_at', a.due_at,
+                   'actor_user_id', a.created_by,
+                   'occurred_at', a.created_at) AS row
+          UNION ALL
+          SELECT m.position AS pos, jsonb_build_object(
+                   'id', m.id,
+                   'position', m.position,
+                   'assignee_person_id', m.assignee_person_id,
+                   'assignee_name', (SELECT p.first_name || ' ' || p.last_name
+                                       FROM person p WHERE p.id = m.assignee_person_id),
+                   'description', m.description,
+                   'due_at', m.due_at,
+                   'actor_user_id', m.actor_user_id,
+                   'occurred_at', m.occurred_at) AS row
+            FROM corrective_action_commitment_amendment m
+           WHERE m.action_id = a.id
+        ) rows
+    ) com ON true
     LEFT JOIN LATERAL (
       -- Ordenado por la posición NUMÉRICA. Ordenar por el texto del jsonb pondría la
       -- transición 10 antes de la 2, y el stream de una acción con historia larga se
@@ -267,12 +376,14 @@ const ACTION_SELECT = `
  */
 const ACTION_SUMMARY_SELECT = `
   SELECT a.id, a.site_id, site.name AS site_name,
-         a.finding_id, a.investigation_id, a.assignee_person_id,
+         a.finding_id, a.investigation_id,
+         COALESCE(eff.assignee_person_id, a.assignee_person_id) AS assignee_person_id,
          CASE WHEN person.id IS NULL THEN NULL
               ELSE person.first_name || ' ' || person.last_name END AS assignee_name,
-          a.description, a.due_at,
+         COALESCE(eff.description, a.description) AS description,
+         COALESCE(eff.due_at, a.due_at) AS due_at,
          state.to_state AS state,
-         (a.due_at < now()) AS overdue,
+         (COALESCE(eff.due_at, a.due_at) < now()) AS overdue,
          COALESCE(esc.escalations, '[]'::jsonb) AS escalations,
          finding.inspection_id,
          inspection.scheduled_inspection_id,
@@ -280,7 +391,15 @@ const ACTION_SUMMARY_SELECT = `
          template.name AS template_name
     FROM corrective_action a
     JOIN site ON site.id = a.site_id
-    LEFT JOIN person ON person.id = a.assignee_person_id
+    LEFT JOIN LATERAL (
+      -- El compromiso vigente (ADR-018): el listado muestra a quién le toca HOY.
+      SELECT m.assignee_person_id, m.description, m.due_at
+        FROM corrective_action_commitment_amendment m
+       WHERE m.action_id = a.id
+       ORDER BY m.position DESC
+       LIMIT 1
+    ) eff ON true
+    LEFT JOIN person ON person.id = COALESCE(eff.assignee_person_id, a.assignee_person_id)
     LEFT JOIN finding ON finding.id = a.finding_id
     LEFT JOIN inspection ON inspection.id = finding.inspection_id
     LEFT JOIN scheduled_inspection scheduled ON scheduled.id = inspection.scheduled_inspection_id
@@ -335,6 +454,17 @@ interface RawEscalation {
   escalated_at: string;
 }
 
+interface RawCommitment {
+  id: string;
+  position: number;
+  assignee_person_id: string;
+  assignee_name: string | null;
+  description: string;
+  due_at: string;
+  actor_user_id: string;
+  occurred_at: string;
+}
+
 interface ActionRow {
   id: string;
   site_id: string;
@@ -348,6 +478,7 @@ interface ActionRow {
   created_at: Date;
   state: ActionState;
   overdue: boolean;
+  commitments: RawCommitment[];
   events: RawEvent[];
   escalations: RawEscalation[];
 }
@@ -441,12 +572,26 @@ function toAction(row: ActionRow): Action {
     // Derivado del último evento. La restricción diferida de 0011 garantiza que hay uno.
     state: row.state,
     overdue: row.overdue,
+    commitments: row.commitments.map(toCommitment),
     events: row.events.map(toEvent),
     escalations: row.escalations.map((item) => ({
       level: item.level,
       days_overdue: item.days_overdue,
       escalated_at: new Date(item.escalated_at).toISOString(),
     })),
+  };
+}
+
+function toCommitment(raw: RawCommitment): ActionCommitment {
+  return {
+    id: raw.id,
+    position: raw.position,
+    assignee_person_id: raw.assignee_person_id,
+    assignee_name: raw.assignee_name,
+    description: raw.description,
+    due_at: new Date(raw.due_at).toISOString(),
+    actor_user_id: raw.actor_user_id,
+    occurred_at: new Date(raw.occurred_at).toISOString(),
   };
 }
 

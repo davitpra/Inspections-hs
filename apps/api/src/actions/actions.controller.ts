@@ -1,5 +1,6 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
 import {
+  amendActionCommitmentRequestSchema,
   createActionRequestSchema,
   transitionRequestSchema,
   type Action,
@@ -13,10 +14,10 @@ import { ActionsService } from './actions.service';
 /**
  * Requisitos §3 R3 — El cierre verificado de la acción.
  *
- * **No hay `PATCH` ni `DELETE`, y no hay ruta para reasignar ni para correr un plazo.**
- * Las cuatro tablas son inmutables: avanzar una acción es un `POST` que agrega un
- * evento. Una obligación que se puede reasignar o posponer en silencio no es un
- * registro de nada.
+ * **No hay `PATCH` ni `DELETE`.** Las tablas son inmutables: avanzar una acción es un
+ * `POST` que agrega un evento, y corregir la asignación antes de empezar es un `POST`
+ * que agrega una enmienda (ADR-018). Ninguna reescribe la fila original: una obligación
+ * que se puede reasignar o posponer en silencio no es un registro de nada.
  *
  * **Tampoco hay ruta para escalar.** El escalamiento es del planificador y no de una
  * persona: si existiera un `POST /actions/:id/escalate`, existiría la posibilidad de
@@ -72,6 +73,29 @@ export class ActionsController {
       session,
       investigationId,
        createActionRequestSchema.parse(body),
+    );
+  }
+
+  /**
+   * Enmendar el compromiso mientras la acción sigue en `open` (ADR-018).
+   *
+   * `commitment-amendments` nombra el hecho append-only y lleva los tres campos juntos:
+   * no se puede confundir con reescribir `corrective_action`. La autorización espeja la
+   * de crear: coordinador, más quien reportó el hallazgo cuando el padre es un hallazgo.
+   *
+   * `201`: se agregó una enmienda al historial.
+   */
+  @Post('actions/:id/commitment-amendments')
+  @HttpCode(HttpStatus.CREATED)
+  async amendCommitment(
+    @CurrentSession() session: SessionContext,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ): Promise<Action> {
+    return this.actions.amendCommitment(
+      session,
+      id,
+      amendActionCommitmentRequestSchema.parse(body),
     );
   }
 

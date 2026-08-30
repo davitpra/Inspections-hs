@@ -2,11 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { ACTION_STATES, type ActionState } from '@hs/contracts';
 
 import {
-  actionDeadlineStatus,
-  ACTION_DEADLINE_LABEL,
-  escalationSummary,
   STATE_LABELS,
   transitionLabel,
+  transitionTakesNote,
 } from './actions';
 
 describe('cómo se nombran las acciones correctivas', () => {
@@ -29,20 +27,14 @@ describe('cómo se nombran las acciones correctivas', () => {
     expect(transitionLabel('closed', 'open')).toBe(STATE_LABELS.open);
   });
 
-  it('nombra un plazo vencido solo mientras la acción sigue abierta', () => {
-    expect(ACTION_DEADLINE_LABEL).toBe('Due date');
-    expect(actionDeadlineStatus(true, 'in_progress')).toBe('Overdue');
-    expect(actionDeadlineStatus(true, 'closed')).toBeNull();
-    expect(actionDeadlineStatus(false, 'open')).toBeNull();
-  });
-
-  it('resume los escalamientos en el orden registrado', () => {
-    expect(
-      escalationSummary([
-        { level: 'supervisor', days_overdue: 1, escalated_at: '2027-08-31T12:00:00Z' },
-        { level: 'management', days_overdue: 3, escalated_at: '2027-09-02T12:00:00Z' },
-      ]),
-    ).toBe('Sent to supervisor (1 days late), management (3 days late)');
-    expect(escalationSummary([])).toBeNull();
+  /**
+   * Empezar el trabajo no pide nada: la persona, la descripción y el plazo ya se escribieron
+   * al crear la acción, y el paso se anuncia como "No additional information is required".
+   */
+  it('solo empezar el trabajo no admite nota', () => {
+    expect(transitionTakesNote('open', 'in_progress')).toBe(false);
+    expect(transitionTakesNote('in_progress', 'awaiting_verification')).toBe(true);
+    expect(transitionTakesNote('awaiting_verification', 'closed')).toBe(true);
+    expect(transitionTakesNote('awaiting_verification', 'in_progress')).toBe(true);
   });
 });

@@ -281,6 +281,13 @@
       "when": 1754524800039,
       "tag": "0040_finding_state_events",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1754524800040,
+      "tag": "0041_assignment_amendments",
+      "breakpoints": true
     }
   ]
 }

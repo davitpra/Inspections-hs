@@ -49,11 +49,13 @@ SHALL reference the causal corrective action event. When the derived value is un
 system SHALL NOT append a duplicate state event. The system SHALL allow later action events to
 move a finding backward as well as forward.
 
-#### Scenario: The first action assigns a raised finding
+#### Scenario: The first action assigns a raised finding and starts it
 
 - **GIVEN** a finding's latest state event is `raised`
-- **WHEN** a corrective action is created with its initial event to `open`
+- **WHEN** a corrective action is created, which appends its `open` and `in_progress` events
 - **THEN** the same transaction appends a finding state event from `raised` to `assigned`
+- **AND** it then appends one from `assigned` to `in_progress`
+- **AND** the finding's current state is `in_progress`
 
 #### Scenario: The least advanced action determines state
 
@@ -79,15 +81,16 @@ move a finding backward as well as forward.
 
 - **GIVEN** a finding's latest state event is `closed` and all its existing actions are closed
 - **WHEN** an authorized account creates another corrective action for that finding
-- **THEN** the same transaction appends a finding state event from `closed` to `assigned`
+- **THEN** the same transaction appends a finding state event from `closed` to `assigned` and then
+  one from `assigned` to `in_progress`
 - **AND** the new action remains valid
 
 #### Scenario: An unchanged aggregate creates no noise
 
-- **GIVEN** one action in `open` already keeps a finding in `assigned`
-- **WHEN** another action moves from `in_progress` to `verification`
+- **GIVEN** one action in `in_progress` already keeps a finding in `in_progress`
+- **WHEN** another action of that finding moves to `awaiting_verification`
 - **THEN** no additional finding state event is appended
-- **AND** the finding remains `assigned`
+- **AND** the finding remains `in_progress`
 
 #### Scenario: A causal failure rolls back both streams
 
@@ -129,7 +132,13 @@ SHALL NOT rely on colour alone. The system SHALL use corrective actions only to 
 blocking commitment, its nearest deadline and the permitted next transition; it SHALL NOT
 recalculate the finding state from those actions. For a raised finding, the system SHALL offer
 creation of a corrective action to an authenticated `hs_coordinator` or to the account named by
-`reported_by`, and to no other account (ADR-017). For a later non-closed state, the system SHALL
+`reported_by`, and to no other account (ADR-017). The system SHALL accept that composition within
+the finding's next step itself, without leaving the findings-only reading or opening a separate
+view, and SHALL NOT present the control that begins the composition alongside the composition it
+began. While such an account is composing a corrective
+action that has not been submitted, the system MAY indicate the lifecycle state that composition
+would reach, and SHALL then mark that state in words as not yet recorded and SHALL present no
+deadline for it. Abandoning the composition SHALL return the indicator to the persisted state. For a later non-closed state, the system SHALL
 offer at most one primary transition permitted by the action state machine and the reader's role
 or relationship. When the reader may attempt no transition, the system SHALL name who the finding
 is waiting on. The system SHALL offer a closed finding no action transition, while still allowing
@@ -137,12 +146,57 @@ an authorized account to create another corrective action. After a successful ac
 transition, the system SHALL refresh cached action, finding and submitted-inspection readings that
 can contain the changed state.
 
+The system SHALL let the reader open any lifecycle state the finding has already reached and read
+what was recorded there, without leaving the findings-only reading. Reading a reached state SHALL
+be read-only: it SHALL NOT offer any transition and SHALL NOT change the state the finding is
+reported to be in. The system SHALL NOT offer a state the finding has not reached, and SHALL NOT
+offer this navigation while a corrective action is being composed. When the record of a reached
+state cannot be read, the system SHALL say so and SHALL NOT report that nothing was recorded
+there.
+
 #### Scenario: The persisted state drives the lifecycle indicator
 
 - **GIVEN** `finding.state` is `verification`
 - **WHEN** the findings-only screen is read
 - **THEN** Verification is named as the current lifecycle state
 - **AND** the screen does not derive another state from cached actions
+
+#### Scenario: A reached state can be read without moving the finding
+
+- **GIVEN** `finding.state` is `in_progress`
+- **WHEN** the reader opens the Assigned state
+- **THEN** what was recorded in that state is presented
+- **AND** In progress is still named as the current lifecycle state
+- **AND** no transition is offered for the state being read
+
+#### Scenario: A state the finding has not reached is not offered
+
+- **GIVEN** `finding.state` is `in_progress`
+- **WHEN** the findings-only screen is read
+- **THEN** Verification is named as a lifecycle state
+- **AND** Verification cannot be opened
+
+#### Scenario: An unreadable record is not reported as an empty one
+
+- **GIVEN** a reader opens a reached state and its corrective action cannot be read
+- **WHEN** the record is presented
+- **THEN** the screen says the record needs a connection
+- **AND** it does not report that nothing was recorded in that state
+
+#### Scenario: An unsubmitted composition is marked as not recorded
+
+- **GIVEN** `finding.state` is `raised` and an authorized reader has begun composing a corrective action
+- **WHEN** the findings-only screen is read
+- **THEN** Assigned is indicated as the state that composition would reach
+- **AND** that state is named in words as not yet recorded
+- **AND** no deadline is presented for it
+
+#### Scenario: Abandoning the composition restores the persisted state
+
+- **GIVEN** an authorized reader has begun composing a corrective action for a raised finding
+- **WHEN** that reader abandons the composition without submitting it
+- **THEN** Raised is again indicated as the current lifecycle state
+- **AND** no corrective action was created
 
 #### Scenario: The reporter can assign a raised finding
 
@@ -152,9 +206,10 @@ can contain the changed state.
 
 #### Scenario: The assignee is offered the blocking action's next step
 
-- **GIVEN** a finding has `state` `assigned` and its least advanced action is `open` and assigned to the reader
+- **GIVEN** a finding has `state` `in_progress` and its least advanced action is `in_progress` and
+  assigned to the reader
 - **WHEN** the reader opens the findings-only screen
-- **THEN** the one primary next step names the move from `open` to `in_progress`
+- **THEN** the one primary next step names the move from `in_progress` to `awaiting_verification`
 
 #### Scenario: A reader who cannot act is told who owes the step
 
@@ -172,11 +227,11 @@ can contain the changed state.
 
 #### Scenario: A successful transition refreshes every affected reading
 
-- **GIVEN** an action transition changes a finding from `assigned` to `in_progress`
+- **GIVEN** an action transition changes a finding from `in_progress` to `verification`
 - **WHEN** the transition succeeds from the findings-only screen
 - **THEN** the action list and detail are refreshed as applicable
 - **AND** cached finding lists and submitted-inspection readings are refreshed
-- **AND** the screen remains on the inspection and shows `finding.state` `in_progress`
+- **AND** the screen remains on the inspection and shows `finding.state` `verification`
 
 ## MODIFIED Requirements
 
@@ -190,7 +245,9 @@ the step takes one interaction to submit. When the reader may attempt no transit
 system SHALL offer none and SHALL say that the action is waiting on someone else. Before a
 transition that requires a reason, the system SHALL request it. When work can be declared done,
 the system SHALL present the control to attach evidence without making evidence a condition of
-submission. The system SHALL offer a corrective action in its terminal state no transition.
+submission. The system SHALL NOT present a note field for a transition that takes no note, so
+that starting the work assigned by a corrective action is submitted by its control alone. The
+system SHALL offer a corrective action in its terminal state no transition.
 
 The findings-only reading SHALL NOT present the action's event history; that history is read from
 the action's own screen. The system SHALL derive offered transitions from the same state machine
@@ -203,6 +260,13 @@ the action and every cached Finding reading whose persisted state may have chang
 - **WHEN** the reader submits the next step, which was presented with nothing to reveal first
 - **THEN** the action moves to `in_progress`
 - **AND** the findings-only reading remains on screen with `finding.state` `in_progress`
+
+#### Scenario: Starting the work asks for nothing
+
+- **GIVEN** a finding has `state` `assigned` and an action in `open` assigned to the reader
+- **WHEN** the reader opens the findings-only screen
+- **THEN** the next step presents no note field
+- **AND** the move from `open` to `in_progress` is submitted by its control alone
 
 #### Scenario: A reader who may write nothing is offered no next step
 

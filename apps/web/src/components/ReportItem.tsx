@@ -33,10 +33,10 @@ export function ReportItem({
   index: number;
   value: AnswerValue | undefined;
   /**
-   * Un diálogo abierto desde adentro devuelve el foco a la ficha al cerrarse, y para
-   * recibirlo la ficha tiene que ser enfocable. Solo donde hace falta: las cuarenta fichas
-   * de un reporte que no abre nada agregarían paradas de tabulación que no llevan a ningún
-   * lado.
+   * Un paso ejecutado desde adentro devuelve el foco a la ficha al terminar —el control que
+   * lo tenía no sobrevive al cambio—, y para recibirlo la ficha tiene que ser enfocable. Solo
+   * donde hace falta: las cuarenta fichas de un reporte que no ofrece ningún paso agregarían
+   * paradas de tabulación que no llevan a ningún lado.
    */
   focusable?: boolean;
   children?: React.ReactNode;

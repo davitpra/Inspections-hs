@@ -98,10 +98,70 @@ la lista y cualquier reporte o recorte de inspección que contenga `Finding.stat
 deliberada: el formulario compartido no siempre conoce el identificador de la inspección.
 
 La composición, accesibilidad y tokens de ADR-012 de la implementación anterior permanecen. El
-próximo paso no se despliega: `ActionTransitionForm` se dibuja dentro del bloque, así que el único
-acto principal de la pantalla se envía con una sola pulsación y los botones del formulario son sus
-únicos controles. La historia completa de la acción tampoco está en la ficha: se lee en
+próximo paso no se despliega ni abre nada: los DOS actos principales —avanzar una acción que existe
+y crear la primera— se escriben dentro del bloque, y los botones de su formulario son los únicos
+controles del paso. La historia completa de la acción tampoco está en la ficha: se lee en
 `/actions/$id`, la pantalla propia de la acción, y la ficha se queda con el próximo paso.
+
+La única asimetría es que crear se pide: `raised` dibuja primero el botón, porque el borrador tiene
+tres campos que nadie pidió todavía y un recorte de cuarenta hallazgos abriría cuarenta
+formularios. Avanzar no tiene nada que pedir —sus campos SON el paso—. Por eso el bloque dibuja el
+botón o el borrador, nunca los dos: el botón repite el nombre que el `h3` ya dice, que es lo mismo
+que hizo caer el disclosure.
+
+### Asignar es arrancar: la creación escribe los dos eventos
+
+`open` era una parada con un solo salida posible y ninguna decisión que tomar. Quien creaba la
+acción ya había dicho la persona, el trabajo y la fecha; el botón «Start work» que venía después
+no agregaba nada al registro y sí una espera —a veces de días, si el responsable no entraba— entre
+el compromiso y el trabajo. Así que la creación escribe DOS eventos en su transacción, `null →
+open` y `open → in_progress`, con el mismo actor y el mismo `occurred_at`.
+
+**Dos eventos y no uno.** Escribir directo `null → in_progress` habría hecho falta agregar una
+fila a `TRANSITIONS` y a la guarda de la migración `0011`, y habría dejado `open` inalcanzable —un
+estado del contrato y del `CHECK` que ya no significa nada—. Con dos, la máquina de estados no se
+toca, `open` sigue siendo el estado en el que una acción nace, y las acciones abiertas antes de
+este cambio siguen teniendo su paso a mano, que la UI sigue ofreciendo.
+
+**La autorización es la de crear.** `open → in_progress` está en `TRANSITIONS` para el responsable
+y el coordinador; acá lo escribe también quien reportó el hallazgo (ADR-017), porque es el mismo
+acto que ya se le permitió. La distinción que esa fila protege —quién declara que el trabajo
+arrancó— no se pierde, se resuelve al crear.
+
+El hallazgo atraviesa `assigned` en la misma transacción: el trigger de `0040` recalcula el
+agregado evento a evento, así que el stream dice `raised → assigned → in_progress` con un solo
+instante. La etapa no se falsea ni se saltea; queda registrado quién asignó, a quién, y que el
+trabajo empezó ahí mismo.
+
+### El borrador adelanta la etapa, y lo declara
+
+Mientras el borrador está abierto el indicador señala `assigned`, la etapa que ese borrador está
+escribiendo. Adelanta una sola: crear la acción termina dejando el hallazgo en `in_progress`, pero
+señalar esa etapa dibujaría Assigned como cumplida —verde, sin marca de borrador— y eso es afirmar
+una asignación que todavía no existe. Que el trabajo arranque en el mismo acto lo dice la copia del
+paso, que es donde se puede decir con palabras.
+
+No es una proyección del estado —no deriva de las acciones, que es justo lo que la sección 11
+retiró—: es el borrador local, y por eso se marca como tal, con el filete punteado y con
+palabras en el encabezado del bloque («Draft — no action created yet»). El plazo se sigue leyendo
+del estado GUARDADO, no del adelantado: sale de las acciones que retienen el hallazgo, y mientras
+el borrador está abierto no hay ninguna. Cancelar devuelve el indicador a `raised`.
+
+La regla que esto respeta es la de siempre: la pantalla no afirma lo que la tabla no dice. Un
+indicador que se adelantara sin decirlo sería una transición inventada; uno que no se moviera
+dejaría al usuario escribiendo un compromiso sin ver hacia dónde lleva.
+
+El borrador abierto vive en la ruta y no en la fila, por id de hallazgo y uno a la vez: lo miran
+dos hermanos —el indicador y el próximo paso— y ninguno es padre del otro.
+
+### El paso que no pide nada no dibuja campos
+
+`ActionTransitionForm` dibujaba el textarea «Note (Optional)» en toda transición. Debajo de una
+copia que dice «No additional information is required», y delante del único botón que importa, eso
+es un campo que desmiente al paso. Qué transición admite nota es ahora una tabla por PAR de estados
+en `presentation/actions.ts`, al lado de las etiquetas y por el mismo motivo: el par es la unidad
+de decisión. Solo `open → in_progress` no la admite; el default es admitirla, para que una
+transición nueva no se quede muda por olvido.
 
 ### La migración `0040` establece un baseline antes de habilitar escrituras
 
@@ -124,6 +184,9 @@ corrección se entrega hacia adelante.
   vigente al migrar y deja explícito que el stream histórico comienza allí.
 - **Una consulta olvida unir el último evento.** → El contrato hace `state` obligatorio y las
   pruebas cubren lista, detalle y lectura de inspección.
+- **La etapa `assigned` deja de ser un lugar donde un hallazgo descansa.** → Sigue en el ciclo y
+  se sigue registrando: es el instante en que se nombró al responsable, y el stream lo conserva
+  con su actor. Lo que desaparece es la espera, no el hecho.
 - **La caché muestra el estado anterior después de una mutación exitosa.** → Las mutaciones
   invalidan acciones, hallazgos e inspecciones, con pruebas sobre las claves compartidas.
 - **Un writer intenta alterar o borrar el stream.** → REVOKE, triggers de inmutabilidad y pruebas

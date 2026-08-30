@@ -23,8 +23,13 @@ stream inmutable y el valor actual es su último evento.
   `awaiting_verification` a `verification`, y solo todas las acciones en `closed` producen
   `closed`.
 - Rechazar una verificación devuelve el hallazgo a `in_progress` cuando esa acción determina el
-  agregado. Crear una acción nueva puede hacer regresar incluso un hallazgo `closed` a
-  `assigned`; cerrar una acción no hace terminal al hallazgo para futuras acciones.
+  agregado. Crear una acción nueva puede hacer regresar incluso un hallazgo `closed`; cerrar una
+  acción no hace terminal al hallazgo para futuras acciones.
+- Crear una acción escribe DOS eventos en la misma transacción —`open` y `open → in_progress`—,
+  con el mismo actor y el mismo instante: nombrar al responsable es poner el trabajo en marcha.
+  El hallazgo atraviesa `assigned` y queda en `in_progress`, y la interfaz deja de ofrecer un
+  paso intermedio que no decidía nada. `open` sigue en la máquina para las acciones abiertas
+  antes de este change, que se siguen empezando a mano.
 - El contrato `Finding` y todas las lecturas de hallazgos incluyen `state`, obtenido del último
   `finding_state_event`. La API no acepta que el cliente escriba ese estado.
 - La interfaz conserva el indicador de cinco etapas y el próximo paso único, pero lee
@@ -50,14 +55,16 @@ Ninguna.
   de eventos propio, inmutable y auditable; las lecturas exponen el estado vigente y la interfaz
   lo consume sin reconstruirlo.
 
-`actions` no cambia su máquina de estados ni sus permisos. Sus eventos son la causa que la base
-de datos usa para derivar el estado del hallazgo.
+- `actions`: la máquina de estados y los permisos no cambian, pero la CREACIÓN pasa a escribir
+  también el arranque del trabajo, cubierto por la misma autorización. Sus eventos siguen siendo
+  la causa que la base de datos usa para derivar el estado del hallazgo.
 
 ## Impact
 
 - `packages/contracts`: estados de hallazgo y campo `Finding.state`.
-- `apps/api`: esquema Drizzle, migración `0040`, repositorios y respuestas de hallazgos e
-  inspecciones, triggers de auditoría y pruebas de integración.
+- `apps/api`: esquema Drizzle, migración `0040`, `ActionsService.createForParent`, repositorios y
+  respuestas de hallazgos e inspecciones, triggers de auditoría, datos de demo y pruebas de
+  integración.
 - `apps/web`: `InspectionFindingsRoute`, lista de hallazgos, presentación y estrategia de
   invalidación de TanStack Query.
 - Base de datos: nueva tabla inmutable `finding_state_event`, RLS por sitio, backfill y triggers

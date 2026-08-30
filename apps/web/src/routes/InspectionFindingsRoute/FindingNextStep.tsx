@@ -1,8 +1,9 @@
 import type { Session } from "@hs/contracts";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { ActionTransitionForm } from "../../components/ActionTransitionForm";
 import { enclosingReportItem } from "../../components/ReportItem";
+import { EditAssignmentForm } from "./EditAssignmentForm";
 import type { FindingNextStep as NextStep } from "./presentation";
 
 /**
@@ -17,24 +18,39 @@ import type { FindingNextStep as NextStep } from "./presentation";
  * formulario y otra para enviarlo, con un botón que además repetía el nombre que ya está en
  * el encabezado del bloque. Los botones del formulario son los únicos controles del paso, y
  * por eso `awaiting_verification` puede ofrecer sus dos salidas sin competir con un tercero.
+ *
+ * **Corregir la asignación sí está plegado, y esa asimetría es la regla.** El acto principal
+ * de la etapa Assigned es empezar el trabajo; enmendar el compromiso es la excepción
+ * (ADR-018), y a la vista competiría con él tres campos contra un botón. Mientras está
+ * abierto hay algo escrito, y el ciclo se avisa —`onDraftChange`— para que elegir otra etapa
+ * no se lleve el borrador puesto.
+ *
+ * Vive dentro del panel de la etapa vigente del ciclo, debajo del registro de esa misma
+ * etapa: primero lo que ya se decidió, después lo que sigue.
  */
 export function FindingNextStep({
   step,
   session,
+  findingId,
   onAttempt,
+  onDraftChange,
 }: {
   step: NextStep;
   session: Session | null;
+  findingId: string;
   onAttempt?: React.MouseEventHandler<HTMLButtonElement>;
+  onDraftChange?: (drafting: boolean) => void;
 }): React.JSX.Element {
   const sectionRef = useRef<HTMLElement>(null);
   const itemRef = useRef<HTMLElement | null>(null);
+  const [amending, setAmending] = useState(false);
 
   // La ficha que contiene este bloque, capturada una vez al montar: sigue en el documento
   // aunque este componente se desmonte porque el paso desapareció (la acción se cerró y no
   // queda nada que ofrecer), y es a donde vuelve el foco.
   useEffect(() => {
-    if (sectionRef.current) itemRef.current = enclosingReportItem(sectionRef.current);
+    if (sectionRef.current)
+      itemRef.current = enclosingReportItem(sectionRef.current);
   }, []);
 
   /*
@@ -49,19 +65,33 @@ export function FindingNextStep({
     window.setTimeout(() => itemRef.current?.focus(), 0);
   };
 
+  const amend = (open: boolean): void => {
+    setAmending(open);
+    onDraftChange?.(open);
+  };
+
   return (
-    <section className="finding__next-step" aria-label="Next step" ref={sectionRef}>
+    <section
+      className="finding__next-step"
+      aria-label="Next step"
+      ref={sectionRef}
+    >
       <div className="finding__next-step-head">
         <div className="finding__next-step-copy">
           <p className="finding__next-step-eyebrow">Next step</p>
           <h3>{step.label}</h3>
           <p>{step.requirement}</p>
           <p className="finding__next-step-owner">
-            {step.control ? 'Responsible' : 'Waiting on'}: <strong>{step.waitingOn}</strong>
+            {step.control ? "Responsible" : "Waiting on"}:{" "}
+            <strong>{step.waitingOn}</strong>
           </p>
         </div>
         {step.control?.kind === "create" && onAttempt ? (
-          <button type="button" className="button--primary finding__next-step-button" onClick={onAttempt}>
+          <button
+            type="button"
+            className="button--primary finding__next-step-button"
+            onClick={onAttempt}
+          >
             {step.label}
           </button>
         ) : null}
@@ -74,6 +104,26 @@ export function FindingNextStep({
             session={session}
             onDone={returnFocus}
           />
+        </div>
+      ) : null}
+
+      {step.amend ? (
+        <div className="finding__amend">
+          <button
+            type="button"
+            className="button--outline finding__amend-toggle"
+            aria-expanded={amending}
+            onClick={() => amend(!amending)}
+          >
+            {amending ? "Cancel" : "Edit assignment"}
+          </button>
+          {amending ? (
+            <EditAssignmentForm
+              action={step.amend}
+              findingId={findingId}
+              onAmended={() => amend(false)}
+            />
+          ) : null}
         </div>
       ) : null}
     </section>

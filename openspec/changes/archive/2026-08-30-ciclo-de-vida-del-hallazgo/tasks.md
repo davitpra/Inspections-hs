@@ -230,3 +230,146 @@ siendo un diálogo; avanzar deja de ser algo que abrir y se dibuja.
   sección. Las casillas de la sección 7 no se reescriben: describen lo que se hizo entonces.
 - [ ] 14.7 `pnpm -r build`, `pnpm typecheck`, `pnpm lint`, `pnpm test`,
   `openspec validate ciclo-de-vida-del-hallazgo --strict`.
+
+## 15. Crear tampoco es un diálogo
+
+Revisión de las secciones 7 y 14, cuyas cabeceras decían «Crear sigue siendo un diálogo». Deja de
+serlo, y por el mismo motivo por el que dejó de serlo avanzar: el modal tapaba la pregunta, lo
+prescrito y lo observado justo cuando había que comprometerse sobre ellos. Ahora el botón de
+`raised` no abre nada — escribe el borrador en el mismo bloque, y el indicador adelanta la etapa a
+la que ese borrador llegaría, marcada como no registrada.
+
+- [x] 15.1 Reescribir `CreateActionForm.tsx` como formulario a la vista: se van el `<dialog>`, el
+  `showModal`, `returnFocusTo`, el encabezado «New commitment» con `CheckIcon` y el recuadro que
+  repetía el hallazgo —todo eso ya está en la ficha—. Se conservan sin tocar la consulta del
+  roster, la validación con `futureDueAt` y `createActionRequestSchema`, los `aria-invalid`, el
+  guardado contra doble envío y las tres invalidaciones del `onSuccess`. Firma nueva: `finding`
+  recortado a `Pick<Finding, 'id'>`, `onCancel` y `onCreated`.
+- [x] 15.2 El foco entra al `<select>` de Assignee al montar: el botón que abrió el borrador no
+  sobrevive, y sin esto el foco cae al `body`.
+- [x] 15.3 `FindingNextStep.tsx` recibe `finding`, `drafting`, `onDraft` y `onDraftEnd` en lugar de
+  `onAttempt`, y dibuja el botón O el borrador, nunca los dos. Cancelar y crear cierran el borrador
+  y devuelven el foco a la ficha con el `returnFocus()` que ya existía para el paso de avance.
+- [x] 15.4 `FindingStepper.tsx` gana `draft?: boolean`: el segmento vigente suma
+  `finding__stage--draft` conservando `aria-current="step"`, y el encabezado del bloque escribe
+  «Draft — no action created yet» en el lugar donde iría el plazo, que en `raised` siempre está
+  vacío. La distinción no queda en la forma sola (ADR-012).
+- [x] 15.5 En `index.tsx`, `drafting: string | null` —el id del hallazgo con borrador abierto, uno
+  a la vez— reemplaza a `Overlay`, `overlay`, `openOverlay` y `returnFocusTo`; el render del
+  diálogo fuera del bucle desaparece con ellos. El indicador recibe `current={isDrafting ?
+  'assigned' : finding.state}`, y `findingDeadline` sigue leyendo `finding.state`: un plazo bajo
+  una etapa que no ocurrió sería una fecha inventada.
+- [x] 15.6 Estilos: borrar el bloque `.actions-create-dialog*` entero, que se queda sin usos, y
+  agregar `.finding__create-field`, `.finding__create-actions` y `.finding__stage--draft` con
+  tokens semánticos existentes. Vocabulario propio y no `action-detail__*`, por lo mismo que ya
+  decía el comentario del diálogo borrado. En el corte de 68rem el filete punteado del borrador
+  pasa a la izquierda y las dos salidas toman el ancho del renglón (ADR-010).
+- [x] 15.7 El docblock de `focusable` en `components/ReportItem.tsx` deja de hablar de un diálogo:
+  el foco vuelve a la ficha porque el control que lo tenía no sobrevive al paso.
+- [x] 15.8 En `index.test.tsx`, `openCreation` devuelve la región «Next step» en vez de un
+  `dialog`, y el `describe('el compromiso')` gana las pruebas del invariante nuevo: la etapa se
+  adelanta a Assigned marcada como borrador, `Cancel` la devuelve a Raised sin crear nada, y el
+  botón que abre el borrador no convive con el borrador.
+- [x] 15.9 Actualizar `design.md`, el requisito de `specs/findings/spec.md` de este change —la
+  composición se acepta dentro del paso, y el adelanto del indicador debe declararse no
+  registrado— y esta sección. Las casillas de 7 y 14 no se reescriben.
+- [ ] 15.10 `pnpm -r build`, `pnpm typecheck`, `pnpm lint`, `pnpm test`,
+  `openspec validate ciclo-de-vida-del-hallazgo --strict`.
+
+## 16. Empezar el trabajo no pide nota
+
+`ActionTransitionForm` dibujaba el textarea «Note (Optional)» en toda transición, incluida
+`open → in_progress`. En la etapa Assigned eso deja un campo de texto justo debajo de la copia
+que dice «No additional information is required», y delante del único botón que importa: la
+persona, la descripción y el plazo ya se escribieron al crear la acción, y la nota es la
+oportunidad de escribir lo mismo otra vez. En las otras tres transiciones —declarar el trabajo
+hecho, verificar y devolver— sí hay algo que decir, así que el campo no se borra: se condiciona.
+
+- [x] 16.1 `presentation/actions.ts` gana `TRANSITION_TAKES_NOTE` y `transitionTakesNote`, tabla
+  por PAR de estados al lado de `TRANSITION_LABELS` y con el mismo argumento: el par es la
+  unidad de decisión, no el destino. Solo `open->in_progress` es `false`; el default es admitir
+  la nota, para que una transición nueva no se quede muda por olvido. Su prueba en
+  `actions.test.ts` cubre los cuatro pares de `TRANSITIONS`.
+- [x] 16.2 `components/ActionTransitionForm.tsx` envuelve el `<label>` de Note en la misma forma
+  condicional que ya usan `EvidencePicker` y `Reason`: se dibuja si alguna transición disponible
+  lo admite. El estado `note` y su limpieza no se tocan —oculto vale `''` y el `mutationFn` ya lo
+  manda como `undefined`—, y el contrato tampoco: `note` es opcional en `transitionRequestSchema`.
+- [x] 16.3 En `index.test.tsx`, la prueba del paso sin desplegar afirma ahora que en Assigned no
+  hay campo de nota y que el botón «Start work» es todo el paso.
+- [x] 16.4 El requisito de `specs/findings/spec.md` declara que no se presenta campo de nota en
+  una transición que no la admite, con su escenario.
+
+## 17. Asignar es arrancar
+
+`open` era una parada con una sola salida y ninguna decisión: quien creaba la acción ya había
+dicho la persona, el trabajo y la fecha, y el botón «Start work» que venía después solo agregaba
+una espera entre el compromiso y el trabajo. La creación pasa a escribir los dos eventos.
+
+- [x] 17.1 `ActionsService.createForParent` escribe, en la misma transacción y con el mismo actor
+  e instante, `null → open` y `open → in_progress`. La autorización de crear cubre los dos: es un
+  acto, no dos decisiones. Vale para el hallazgo y para la investigación —el mismo motor para los
+  dos padres, que es lo que hace cierto que el incidente use el motor de la acción correctiva—.
+- [x] 17.2 `TRANSITIONS`, la guarda de `0011` y `ACTION_STATES` NO se tocan: `open` sigue siendo
+  el estado en el que una acción nace y el de las abiertas antes de este cambio, que se siguen
+  empezando a mano desde la UI. Sin migración nueva.
+- [x] 17.3 En `apps/web`, el borrador sigue adelantando el indicador a `assigned` —la etapa que
+  escribe; adelantarlo hasta `in_progress` dibujaría Assigned cumplida sin marca de borrador— y que
+  el trabajo arranque en el mismo acto lo dice la copia del paso `raised`: «The work is under way
+  as soon as the action is created». `STAGE_BY_ACTION_STATE` conserva `open → assigned` y anota
+  por qué.
+- [x] 17.4 `corrective-actions.int-spec.ts` e `incidents.int-spec.ts`: `awaitingVerification` deja
+  de arrancar el trabajo, el recorrido de R3 empieza en `in_progress`, y las pruebas del motor que
+  necesitaban un par prohibido o una posición con hueco lo toman del estado vigente. La auditoría
+  del origen del hallazgo pasa de dos eslabones a tres.
+- [x] 17.5 `demo-content.mjs`: ningún paso del plan arranca en `open`, y la acción vencida que se
+  escribe a mano suma su evento de arranque para tener la forma que la API produce.
+- [x] 17.6 Delta de specs de `actions` en este change —la creación escribe el arranque, `open`
+  sigue existiendo para lo abierto antes— y los escenarios de `findings` que enumeraban el
+  agregado evento a evento.
+- [ ] 17.7 `pnpm -r build`, `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm --filter api test:int`,
+  `openspec validate ciclo-de-vida-del-hallazgo --strict`.
+
+## 17. Las etapas alcanzadas se pueden leer
+
+El indicador de etapas era decorativo y la ficha solo contaba el presente: quién asignó, con qué
+nota se declaró el trabajo hecho o por qué lo devolvieron no se podía leer sin salir a
+`/actions/$id`. Ese es justamente el registro que se defiende ante un regulador, y estaba a dos
+clics de la pregunta que lo abrió. Elegir una etapa ya alcanzada abre acá mismo lo que quedó
+registrado en ella; volver a la vigente devuelve el próximo paso intacto. Es navegación de
+LECTURA: no agrega ninguna transición ni cambia quién puede ejecutar qué.
+
+- [x] 17.1 `presentation.ts` gana lo decidible sin renderizar, con su prueba en
+  `presentation.test.ts`: `readableStages` (las alcanzadas, que son las únicas con registro),
+  `resolveStage` (la elegida si todavía se puede leer, y si no la vigente — se defiende del único
+  retroceso que existe, `awaiting_verification → in_progress`), `stepThroughStages` (flechas, sin
+  envolver en los extremos) y `eventsInStage` (los eventos de una acción mapeados a etapa con la
+  MISMA tabla que usa `blockingActions`; un trabajo devuelto deja dos vueltas por In progress y
+  las dos se leen).
+- [x] 17.2 `FindingStepper` deja de ser decorativo: el `<ol>` es un `tablist`, cada etapa
+  alcanzada es un `role="tab"` con roving tabindex y flechas/Home/End, y las futuras siguen siendo
+  texto plano. `aria-current="step"` se conserva sobre la etapa vigente y no lo reemplaza
+  `aria-selected`: en qué etapa está el hallazgo y cuál se está leyendo son dos cosas distintas.
+- [x] 17.3 `FindingStageRecord.tsx` dibuja el panel. `raised` sale del propio hallazgo —observado,
+  registrado y cuántas fotos— sin consultar nada; el resto pide `GET /actions/:id` con
+  `queryKeys.action(id)` —la misma clave que `/actions/$id`, así que abrir el detalle después no
+  cuesta una llamada— y **reutiliza `ActionEventList`**, que se exporta desde `ActionTimeline.tsx`:
+  un evento tiene que leerse igual en las dos pantallas. Con la lectura caída lo dice, en vez de
+  afirmar que la etapa no registró nada.
+- [x] 17.4 `FindingLifecycle.tsx` es dueño de la selección y compone el indicador con el panel.
+  `null` es «la vigente», así que avanzar el hallazgo no deja una selección obsoleta. **Nada se
+  abre solo**: el panel se dibuja cuando hay paso que ofrecer o cuando alguien eligió una etapa —un
+  recorte con cuarenta hallazgos cerrados no puede gastar cuarenta detalles para contestar una
+  pregunta que nadie hizo—. Con un borrador abierto no se navega: el formulario se perdería al
+  cambiar de panel y el indicador ya está adelantado a una etapa que no ocurrió.
+- [x] 17.5 `index.css` gana `.finding__stage-tab` —el botón es todo el segmento, hereda color y
+  peso del `li` y solo agrega la rejilla— y `.finding__stage-record`, con el filete neutro: el paso
+  se queda con el azul porque es el único llamado a la acción de la ficha, y lo que ya ocurrió es
+  lectura.
+- [x] 17.6 En `index.test.tsx`, `aria-current` se busca donde ahora vive y se agrega la navegación:
+  abrir una etapa alcanzada muestra su nota y retira el paso, el ciclo no se mueve, volver devuelve
+  el paso, las flechas recorren, una etapa futura no es un control, `Raised` no consulta ninguna
+  acción, sin red se dice, una etapa que nadie abrió no gasta consulta y con el borrador abierto
+  los tabs están deshabilitados.
+- [x] 17.7 El requisito de `specs/findings/spec.md` declara la lectura de una etapa alcanzada, que
+  es de solo lectura, que una etapa no alcanzada no se ofrece y que un registro ilegible no se
+  informa como vacío, con sus tres escenarios.

@@ -13,10 +13,9 @@ import type { Finding, ScheduledInspection } from '@hs/contracts';
  * (`inspection_id` nulo, y por el CHECK de identidad también sin `item_key`), así que no
  * hay recorrido que abrirles.
  *
- * **Y HOY NO TIENEN NINGUNA OTRA PANTALLA.** `/actions` los listaba y les ofrecía crear una
- * acción; al dedicarse esa ruta a las acciones que ya existen, un hallazgo manual quedó sin
- * camino de creación en la PWA. `POST /findings/:id/actions` lo sigue aceptando: lo que
- * falta es interfaz, y es una decisión declarada, no un olvido.
+ * **Y NO TIENEN NINGUNA OTRA PANTALLA.** Un hallazgo manual queda sin camino de creación en
+ * la PWA. `POST /findings/:id/actions` lo sigue aceptando: lo que falta es interfaz, y es una
+ * decisión declarada, no un olvido.
  *
  * No reordena: recibe lo que ya ordenó `completedInspections` —lo más reciente primero— y
  * solo recorta. Volver a ordenar acá sería una segunda opinión sobre el mismo criterio.

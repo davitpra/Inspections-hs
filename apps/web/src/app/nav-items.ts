@@ -3,7 +3,6 @@ import type { Session } from '@hs/contracts';
 import {
   AlertCircleIcon,
   CalendarIcon,
-  CheckIcon,
   ClipboardIcon,
   DocumentIcon,
   ListIcon,
@@ -27,7 +26,7 @@ import {
  * exactamente el dispositivo desde el que se usa la aplicación en la planta.
  *
  * No es el árbol de rutas. Acá están las que se OFRECEN; `router.tsx` tiene las que se
- * pueden alcanzar, que son más (la captura, el reporte, una acción, un incidente) y a las
+ * pueden alcanzar, que son más (la captura, el reporte o un incidente) y a las
  * que se llega desde la pantalla que las nombra.
  */
 
@@ -41,7 +40,6 @@ export type NavPath =
   | '/'
   | '/historical'
   | '/findings'
-  | '/actions'
   | '/scheduling'
   | '/roster'
   | '/templates'
@@ -87,7 +85,6 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/', label: 'Inspections', icon: ListIcon },
   { to: '/historical', label: 'Historical inspections', icon: ClipboardIcon },
   { to: '/findings', label: 'Findings', icon: AlertCircleIcon },
-  { to: '/actions', label: 'Corrective actions', icon: CheckIcon },
   {
     to: '/scheduling',
     label: 'Scheduling',
@@ -130,8 +127,6 @@ const TITLES: readonly (readonly [string, string])[] = [
   ['/inspections/*', 'Inspection'],
   ['/findings', 'Findings'],
   ['/findings/*', 'Inspection findings'],
-  ['/actions', 'Corrective actions'],
-  ['/actions/*', 'Corrective action'],
   ['/incidents', 'Incidents'],
   ['/incidents/report', 'Report an incident'],
   ['/incidents/*/form7', 'Form 7'],

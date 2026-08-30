@@ -102,6 +102,13 @@ export interface ActionTransition {
  *
  * **La misma tabla está escrita como guarda en la migración 0011** y un test de
  * integración evalúa los 20 pares ordenados por los dos caminos y los compara.
+ *
+ * **Las dos primeras filas las escribe la misma creación**, en una transacción: nombrar
+ * al responsable es poner el trabajo en marcha, así que ninguna acción nueva se queda en
+ * `open` esperando que alguien la empiece. `open` no sobra por eso —es el estado en el que
+ * la acción nace, y el de las que se abrieron antes de esa decisión, que todavía se
+ * empiezan a mano—. Quién puede pedir cada transición no cambia; quién escribe la segunda
+ * al crear lo decide `ActionsService`, que es donde vive esa autorización.
  */
 export const TRANSITIONS: readonly ActionTransition[] = [
   { from: null, to: 'open', roles: ['hs_coordinator'], requires: [] },
@@ -218,6 +225,13 @@ export const createActionRequestSchema = z.strictObject({
 
 export type CreateActionRequest = z.infer<typeof createActionRequestSchema>;
 
+/** Reemplazo completo del compromiso vigente; nunca un PATCH de la fila original (ADR-018). */
+export const amendActionCommitmentRequestSchema = createActionRequestSchema.omit({
+  remediation_group_id: true,
+});
+
+export type AmendActionCommitmentRequest = z.infer<typeof amendActionCommitmentRequestSchema>;
+
 /** De qué momento del trabajo es una evidencia. R3 pide y conserva antes/después (ADR-016). */
 export const EVIDENCE_KINDS = ['before', 'after'] as const;
 
@@ -291,6 +305,20 @@ export const actionEventSchema = z.strictObject({
 
 export type ActionEvent = z.infer<typeof actionEventSchema>;
 
+/** Una versión inmutable del compromiso, incluida la original en posición cero. */
+export const actionCommitmentSchema = z.strictObject({
+  id: z.uuid(),
+  position: z.number().int().min(0),
+  assignee_person_id: z.uuid(),
+  assignee_name: z.string().min(1).nullable(),
+  description: z.string(),
+  due_at: z.iso.datetime({ offset: true }),
+  actor_user_id: z.uuid(),
+  occurred_at: z.iso.datetime({ offset: true }),
+});
+
+export type ActionCommitment = z.infer<typeof actionCommitmentSchema>;
+
 /** Un escalamiento ya ocurrido. Un hecho sobre la acción, no un paso de su ciclo. */
 export const actionEscalationSchema = z.strictObject({
   level: escalationLevelSchema,
@@ -352,9 +380,9 @@ export type ActionSummary = z.infer<typeof actionSummarySchema>;
  * `corrective_action` no tiene dónde guardarlo. `overdue` se calcula comparando
  * `due_at` con el reloj del servidor al leer, por el mismo motivo.
  *
- * `due_at` es la fecha que el coordinador declaró **el día que creó la acción**, y
- * queda congelada en la fila: nada de lo que pase después con el hallazgo la mueve
- * (design D5). Un plazo distinto se consigue abriendo otra acción.
+ * Los tres campos del compromiso son los valores efectivos: la última enmienda o, si
+ * no existe ninguna, la fila original. `commitments` conserva ambas fuentes en orden
+ * y ninguna de ellas se reescribe (ADR-018).
  *
  * **`finding_id` e `investigation_id` son los dos nulables y exactamente uno es no
  * nulo** (§4, etapa 6): una acción cuelga de un hallazgo o de una investigación, nunca
@@ -376,6 +404,7 @@ export const actionSchema = z.strictObject({
   state: actionStateSchema,
   /** Derivado de `due_at` y del reloj. Tampoco existe como columna. */
   overdue: z.boolean(),
+  commitments: z.array(actionCommitmentSchema).min(1),
   events: z.array(actionEventSchema),
   escalations: z.array(actionEscalationSchema),
 });

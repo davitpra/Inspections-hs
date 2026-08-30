@@ -3,6 +3,7 @@ import {
   FINDING_STATES,
   ROLE_LABELS,
   transitionsFrom,
+  type ActionEvent,
   type ActionState,
   type ActionSummary,
   type Finding,
@@ -19,8 +20,8 @@ import {
   type TemplateSection,
 } from '@hs/forms';
 
-import { canAttempt, canCreateAction } from '../../permissions/actions';
-import { transitionLabel } from '../../presentation/actions';
+import { canAmendAssignment, canAttempt, canCreateAction } from '../../permissions/actions';
+import { STATE_LABELS, transitionLabel } from '../../presentation/actions';
 import { formatDay } from '../../presentation/dates';
 import { dueIn } from '../../presentation/inspections';
 
@@ -125,7 +126,15 @@ export const STAGE_LABELS: Readonly<Record<FindingStage, string>> = {
   closed: 'Closed',
 };
 
-const STAGE_BY_ACTION_STATE: Readonly<Record<ActionState, FindingStage>> = {
+/**
+ * En qué etapa del hallazgo cae cada estado de una acción.
+ *
+ * Exportada porque el registro de una etapa reparte los eventos con ESTA tabla, la misma con
+ * la que `blockingActions` decide cuál acción retiene la etapa vigente. Dos tablas —una para
+ * decidir y otra para leer— es la forma en que el ciclo dibujado y el ciclo aplicado
+ * empiezan a discrepar.
+ */
+export const STAGE_BY_ACTION_STATE: Readonly<Record<ActionState, FindingStage>> = {
   open: 'assigned',
   in_progress: 'in_progress',
   awaiting_verification: 'verification',
@@ -152,6 +161,45 @@ export function stageStatus(stage: FindingStage, current: FindingStage): StageSt
   return distance === 0 ? 'current' : 'todo';
 }
 
+/**
+ * Las etapas que el hallazgo ya alcanzó, y por eso las únicas que se pueden abrir.
+ *
+ * Una etapa por delante no tiene registro que mostrar: no es que esté vacía, es que todavía
+ * no ocurrió, y ofrecerla como control prometería una lectura que no existe.
+ */
+export function reachedStages(current: FindingStage): FindingStage[] {
+  return FINDING_STAGES.filter((stage) => stageStatus(stage, current) !== 'todo');
+}
+
+/**
+ * Los eventos que escribieron ESTA etapa, en el orden del stream.
+ *
+ * Se ordena por `position` y no por `occurred_at`: el orden dentro de la acción es el que el
+ * servidor conserva (design D1), y dos eventos del mismo segundo no pueden quedar dados
+ * vuelta por el reloj.
+ */
+export function eventsInStage(
+  events: readonly ActionEvent[],
+  stage: FindingStage,
+): ActionEvent[] {
+  return events
+    .filter((event) => STAGE_BY_ACTION_STATE[event.to_state] === stage)
+    .toSorted((left, right) => left.position - right.position);
+}
+
+/**
+ * Cómo se nombra un evento ya registrado: por el PAR, con la misma tabla que nombró el botón
+ * que lo pidió. Leer "Send it back" donde alguien pulsó "Send it back" es lo que hace que el
+ * registro y la pantalla que lo produjo se puedan comparar.
+ *
+ * Sin `from_state` es la creación de la acción, que ningún botón nombró: ahí sirve el estado.
+ */
+export function eventLabel(event: Pick<ActionEvent, 'from_state' | 'to_state'>): string {
+  return event.from_state
+    ? transitionLabel(event.from_state, event.to_state)
+    : STATE_LABELS[event.to_state];
+}
+
 /** El plazo más cercano entre las acciones que retienen el hallazgo en su etapa. */
 export function findingDeadline(
   actions: readonly ActionSummary[],
@@ -168,6 +216,18 @@ export type FindingNextStep = {
   requirement: string;
   waitingOn: string;
   control: { kind: 'create' } | { kind: 'progress'; action: ActionSummary } | null;
+  /**
+   * La etapa que el control a la vista escribiría, y que todavía no ocurrió. El stepper la
+   * dibuja como borrador: el formulario que está abajo lleva ahí, y decirlo con el segmento
+   * evita que avanzar parezca un salto sin destino. `null` cuando no hay nada que pulsar.
+   */
+  writes: FindingStage | null;
+  /**
+   * La acción cuyo compromiso todavía se puede corregir (ADR-018): presente solo mientras
+   * el hallazgo está en `assigned` y quien lee puede enmendar. Iniciar el trabajo la
+   * retira. Es comodidad: el servidor vuelve a exigirlo.
+   */
+  amend: ActionSummary | null;
 };
 
 const REQUIREMENT_LABELS: Readonly<Record<TransitionRequirement, string>> = {
@@ -212,6 +272,8 @@ export function nextStep(
       requirement: 'Assign a responsible person, describe the work, and set a deadline.',
       waitingOn: `${ROLE_LABELS.hs_coordinator} or whoever raised the finding`,
       control: canCreateAction(session, finding) ? { kind: 'create' } : null,
+      writes: canCreateAction(session, finding) ? 'assigned' : null,
+      amend: null,
     };
   }
 
@@ -229,7 +291,25 @@ export function nextStep(
     requirement: transitionRequirement(transition.requires),
     waitingOn: transitionOwner(action),
     control: allowed ? { kind: 'progress', action } : null,
+    writes: allowed ? STAGE_BY_ACTION_STATE[transition.to] : null,
+    // Solo en `assigned` —la acción en `open`— y antes de que nadie pulse `Start work`.
+    amend: state === 'assigned' && canAmendAssignment(session, finding) ? action : null,
   };
+}
+
+/** El nombre de una versión del compromiso en el registro de la etapa Assigned (ADR-018). */
+export function commitmentLabel(position: number): string {
+  return position === 0 ? 'Original commitment' : `Amendment ${position}`;
+}
+
+/**
+ * El valor ISO guardado, recortado a lo que espera un `<input type="datetime-local">`.
+ *
+ * Se recorta la cadena, no se convierte el huso: un plazo se lee y se vuelve a
+ * comprometer en la zona en que se guardó, igual que `formatDay` y `formatInstant`.
+ */
+export function toDateTimeLocal(iso: string): string {
+  return iso.slice(0, 16);
 }
 
 export type DueAtResult =

@@ -4,6 +4,7 @@ import {
   presignUploadResponseSchema,
   type Action,
   type ActionSummary,
+  type AmendActionCommitmentRequest,
   type CreateActionRequest,
   type EvidenceInput,
   type PresignUploadResponse,
@@ -41,6 +42,20 @@ export async function createAction(
 
 export async function transitionAction(id: string, body: TransitionRequest): Promise<Action> {
   return post(`/actions/${id}/transitions`, body, (value) => actionSchema.parse(value));
+}
+
+/**
+ * Enmienda el compromiso mientras la acción sigue en `open` (ADR-018).
+ *
+ * `commitment-amendments` es un hecho append-only, no un PATCH: el servidor conserva la
+ * fila original y cada enmienda anterior, y `actionSchema` devuelve el historial completo
+ * en `commitments` junto con los valores vigentes.
+ */
+export async function amendAssignment(
+  id: string,
+  body: AmendActionCommitmentRequest,
+): Promise<Action> {
+  return post(`/actions/${id}/commitment-amendments`, body, (value) => actionSchema.parse(value));
 }
 
 /**

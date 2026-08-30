@@ -15,6 +15,7 @@ export type ActionErrorCode =
   | 'invalid_due_at'
   | 'invalid_assignee'
   | 'invalid_transition'
+  | 'invalid_action_state'
   | 'invalid_evidence'
   | 'verifier_is_executor'
   | 'action_changed'
@@ -54,6 +55,17 @@ export const invalidAssignee = (message: string): ActionException =>
 /** El par (estado actual, destino) no está en la máquina de estados. */
 export const invalidTransition = (message: string): ActionException =>
   new ActionException('invalid_transition', message, HttpStatus.CONFLICT);
+
+/**
+ * Una enmienda del compromiso sobre una acción que ya dejó `open` (ADR-018): iniciar el
+ * trabajo cierra la ventana de corrección. El motor lo rechaza otra vez con `HS014`.
+ */
+export const invalidActionState = (): ActionException =>
+  new ActionException(
+    'invalid_action_state',
+    'The assignment can only be amended before the work starts',
+    HttpStatus.CONFLICT,
+  );
 
 /** Una object key que no pertenece al prefijo de esta acción. */
 export const invalidEvidence = (message: string): ActionException =>
@@ -109,9 +121,14 @@ export function translatePgError(error: unknown): ActionException | undefined {
       return invalidTransition('An action must be created with its first event');
     case 'HS008':
       return actionChanged();
+    case 'HS014':
+      // El servicio ya comprobó el estado bajo el lock; esto cubre la carrera con
+      // `Start work` que gane el motor, y cualquier otro camino a la tabla.
+      return invalidActionState();
     case '23505':
       return candidate.constraint === 'corrective_action_event_position_uq' ||
-        candidate.constraint === 'finding_state_event_position_uq'
+        candidate.constraint === 'finding_state_event_position_uq' ||
+        candidate.constraint === 'corrective_action_commitment_amendment_position_uq'
         ? actionChanged()
         : undefined;
     default:

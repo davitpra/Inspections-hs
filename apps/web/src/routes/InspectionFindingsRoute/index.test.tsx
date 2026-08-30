@@ -7,8 +7,10 @@ import { InspectionFindingsRoute } from './index';
 
 const getSubmittedInspection = vi.hoisted(() => vi.fn());
 const listActions = vi.hoisted(() => vi.fn());
+const getAction = vi.hoisted(() => vi.fn());
 const createAction = vi.hoisted(() => vi.fn());
 const transitionAction = vi.hoisted(() => vi.fn());
+const amendAssignment = vi.hoisted(() => vi.fn());
 const uploadEvidence = vi.hoisted(() => vi.fn());
 const listFindingRoster = vi.hoisted(() => vi.fn());
 const useAppSession = vi.hoisted(() => vi.fn());
@@ -16,8 +18,10 @@ const useAppSession = vi.hoisted(() => vi.fn());
 vi.mock('../../api/inspections', () => ({ getSubmittedInspection }));
 vi.mock('../../api/actions', () => ({
   listActions,
+  getAction,
   createAction,
   transitionAction,
+  amendAssignment,
   uploadEvidence,
 }));
 vi.mock('../../api/findings', () => ({ listFindingRoster }));
@@ -102,6 +106,21 @@ function actionDetail(overrides: Partial<Action> = {}): Action {
       },
     ],
     escalations: [],
+    ...overrides,
+  };
+}
+
+/** Una enmienda del compromiso, como versión del historial (ADR-018). */
+function commitment(position: number, overrides: Record<string, unknown> = {}) {
+  return {
+    id: `cccccccc-cccc-4ccc-8ccc-00000000000${position}`,
+    position,
+    assignee_person_id: PERSON,
+    assignee_name: 'Ada Reid',
+    description: 'Refit the guard on packaging line 3',
+    due_at: '2027-08-30T16:00:00.000Z',
+    actor_user_id: '88888888-8888-4888-8888-888888888888',
+    occurred_at: '2027-08-05T09:00:00.000Z',
     ...overrides,
   };
 }
@@ -235,9 +254,11 @@ afterEach(() => {
 
 beforeEach(() => {
   listActions.mockResolvedValue([]);
+  getAction.mockResolvedValue(actionDetail());
   listFindingRoster.mockResolvedValue([person()]);
   createAction.mockResolvedValue({});
   transitionAction.mockResolvedValue(actionDetail({ state: 'in_progress' }));
+  amendAssignment.mockResolvedValue(actionDetail());
   uploadEvidence.mockResolvedValue('actions/evidence.jpg');
   useAppSession.mockReturnValue({ account: session('hs_coordinator') });
 });
@@ -264,9 +285,15 @@ function submit(dialog: HTMLElement): void {
   );
 }
 
+/**
+ * DÓNDE ESTÁ EL HALLAZGO, que no es lo mismo que qué etapa se está leyendo: `aria-current`
+ * vive en la pestaña de la etapa vigente y no se mueve al abrir una pasada (`aria-selected`).
+ */
 function expectCurrentStage(name: string): void {
   const lifecycle = screen.getByRole('region', { name: 'Finding lifecycle' });
-  expect(within(lifecycle).getByText(name).closest('li')?.getAttribute('aria-current')).toBe('step');
+  expect(
+    within(lifecycle).getByText(name).closest('[role="tab"]')?.getAttribute('aria-current'),
+  ).toBe('step');
 }
 
 describe('InspectionFindingsRoute', () => {
@@ -723,5 +750,360 @@ describe('InspectionFindingsRoute — avance de la acción', () => {
     // El estado anterior se conserva: la etapa no avanzó y el paso ofrecido es el mismo.
     expectCurrentStage('Assigned');
     expect(screen.getByRole('button', { name: 'Start work' })).toBeTruthy();
+  });
+});
+
+describe('InspectionFindingsRoute — Edit assignment (ADR-018)', () => {
+  beforeEach(() => {
+    getSubmittedInspection.mockResolvedValue(
+      report({ findings: [finding({ state: 'assigned' })] }),
+    );
+    listActions.mockResolvedValue([action()]);
+  });
+
+  it('el coordinador corrige responsable, trabajo y plazo sin salir de la ficha', async () => {
+    renderRoute();
+
+    const next = await screen.findByRole('region', { name: 'Next step' });
+    fireEvent.click(within(next).getByRole('button', { name: 'Edit assignment' }));
+
+    const form = within(next).getByRole('form', { name: 'Edit assignment' });
+    await within(form).findByRole('option', { name: /\([0-9]+\)$/ });
+
+    // Precargado con el compromiso vigente.
+    expect((within(form).getByLabelText('Description') as HTMLTextAreaElement).value).toBe(
+      'Refit the guard on packaging line 3',
+    );
+
+    fireEvent.change(within(form).getByLabelText('Description'), {
+      target: { value: 'Install an interlocked guard and update the lockout procedure' },
+    });
+    fireEvent.change(within(form).getByLabelText('Deadline'), {
+      target: { value: '2099-09-01T12:00' },
+    });
+    fireEvent.submit(form);
+
+    await waitFor(() =>
+      expect(amendAssignment).toHaveBeenCalledWith(action().id, {
+        assignee_person_id: PERSON,
+        description: 'Install an interlocked guard and update the lockout procedure',
+        due_at: new Date('2099-09-01T12:00').toISOString(),
+      }),
+    );
+    // El hallazgo sigue en Assigned y Start work sigue ofreciéndose.
+    expectCurrentStage('Assigned');
+    expect(screen.getByRole('button', { name: 'Start work' })).toBeTruthy();
+  });
+
+  it('conserva lo escrito cuando el servidor rechaza la enmienda', async () => {
+    amendAssignment.mockRejectedValue(new Error('The assignment can only be amended before the work starts'));
+
+    renderRoute();
+    const next = await screen.findByRole('region', { name: 'Next step' });
+    fireEvent.click(within(next).getByRole('button', { name: 'Edit assignment' }));
+    const form = within(next).getByRole('form', { name: 'Edit assignment' });
+    await within(form).findByRole('option', { name: /\([0-9]+\)$/ });
+
+    fireEvent.change(within(form).getByLabelText('Description'), {
+      target: { value: 'A corrected description that the server will reject here' },
+    });
+    fireEvent.submit(form);
+
+    expect((await within(form).findByRole('alert')).textContent).toContain('can only be amended');
+    expect((within(form).getByLabelText('Description') as HTMLTextAreaElement).value).toBe(
+      'A corrected description that the server will reject here',
+    );
+  });
+
+  it('no ofrece Edit assignment a quien no reportó el hallazgo ni es coordinador', async () => {
+    useAppSession.mockReturnValue({ account: session('supervisor') });
+    getSubmittedInspection.mockResolvedValue(
+      report({
+        findings: [
+          finding({ state: 'assigned', reported_by: '11111111-1111-4111-8111-111111111111' }),
+        ],
+      }),
+    );
+
+    renderRoute();
+
+    await screen.findByRole('region', { name: 'Next step' });
+    expect(screen.queryByRole('button', { name: 'Edit assignment' })).toBeNull();
+  });
+
+  it('retira Edit assignment en cuanto el trabajo empezó', async () => {
+    getSubmittedInspection.mockResolvedValue(
+      report({ findings: [finding({ state: 'in_progress' })] }),
+    );
+    listActions.mockResolvedValue([action({ state: 'in_progress' })]);
+
+    renderRoute();
+
+    await screen.findByRole('region', { name: 'Next step' });
+    expect(screen.queryByRole('button', { name: 'Edit assignment' })).toBeNull();
+  });
+
+  it('presenta el compromiso original y la enmienda en el registro de la etapa', async () => {
+    getAction.mockResolvedValue(
+      actionDetail({
+        commitments: [
+          commitment(0, { description: 'Refit the guard on packaging line 3' }),
+          commitment(1, { description: 'Install an interlocked guard instead' }),
+        ],
+      }),
+    );
+
+    renderRoute();
+
+    const record = await screen.findByRole('region', { name: 'Assigned record' });
+    const versions = within(record).getAllByRole('listitem');
+    expect(versions[0]?.textContent).toContain('Original commitment');
+    expect(versions[0]?.textContent).toContain('Refit the guard on packaging line 3');
+    expect(versions[1]?.textContent).toContain('Amendment 1');
+    expect(versions[1]?.textContent).toContain('Install an interlocked guard instead');
+  });
+
+  /**
+   * El registro contesta una pregunta que alguien hizo —abrir la etapa—, así que contesta
+   * también cuando la respuesta es "se prometió esto y nada más". Antes se callaba sin
+   * enmiendas, cuando aparecía solo y sin que nadie lo pidiera.
+   */
+  it('muestra el compromiso original aunque no haya habido enmiendas', async () => {
+    renderRoute();
+
+    const record = await screen.findByRole('region', { name: 'Assigned record' });
+    expect(within(record).getByText('Original commitment')).toBeTruthy();
+    expect(within(record).queryByText('Amendment 1')).toBeNull();
+  });
+});
+
+/**
+ * LA ETAPA ALCANZADA ES EL CONTROL. Leer qué pasó en una etapa anterior no es irse a otra
+ * pantalla ni mover el hallazgo: la ficha se queda, `aria-current` se queda, y lo único que
+ * cambia es qué contesta el panel.
+ */
+describe('InspectionFindingsRoute — navegación entre etapas', () => {
+  /** El stream completo de una acción que fue devuelta una vez y terminó cerrada. */
+  function history(): Action {
+    return actionDetail({
+      state: 'closed',
+      events: [
+        {
+          id: 'dddddddd-dddd-4ddd-8ddd-000000000000',
+          position: 0,
+          from_state: null,
+          to_state: 'open',
+          actor_user_id: '88888888-8888-4888-8888-888888888888',
+          note: null,
+          reason: null,
+          occurred_at: '2027-08-01T12:00:00.000Z',
+          recorded_at: '2027-08-01T12:00:01.000Z',
+          evidence: [],
+        },
+        {
+          id: 'dddddddd-dddd-4ddd-8ddd-000000000001',
+          position: 1,
+          from_state: 'open',
+          to_state: 'in_progress',
+          actor_user_id: PERSON,
+          note: null,
+          reason: null,
+          occurred_at: '2027-08-02T12:00:00.000Z',
+          recorded_at: '2027-08-02T12:00:01.000Z',
+          evidence: [],
+        },
+        {
+          id: 'dddddddd-dddd-4ddd-8ddd-000000000002',
+          position: 2,
+          from_state: 'in_progress',
+          to_state: 'awaiting_verification',
+          actor_user_id: PERSON,
+          note: 'Guard refitted on the infeed.',
+          reason: null,
+          occurred_at: '2027-08-03T12:00:00.000Z',
+          recorded_at: '2027-08-03T12:00:01.000Z',
+          evidence: [
+            {
+              id: 'eeeeeeee-eeee-4eee-8eee-000000000000',
+              kind: 'before',
+              object_key: 'actions/before.jpg',
+              created_at: '2027-08-03T12:00:00.000Z',
+            },
+            {
+              id: 'eeeeeeee-eeee-4eee-8eee-000000000001',
+              kind: 'after',
+              object_key: 'actions/after.jpg',
+              created_at: '2027-08-03T12:00:00.000Z',
+            },
+          ],
+        },
+        {
+          id: 'dddddddd-dddd-4ddd-8ddd-000000000003',
+          position: 3,
+          from_state: 'awaiting_verification',
+          to_state: 'in_progress',
+          actor_user_id: '88888888-8888-4888-8888-888888888888',
+          note: null,
+          reason: 'The guard is not interlocked yet.',
+          occurred_at: '2027-08-04T12:00:00.000Z',
+          recorded_at: '2027-08-04T12:00:01.000Z',
+          evidence: [],
+        },
+        {
+          id: 'dddddddd-dddd-4ddd-8ddd-000000000004',
+          position: 4,
+          from_state: 'awaiting_verification',
+          to_state: 'closed',
+          actor_user_id: '88888888-8888-4888-8888-888888888888',
+          note: 'Verified on the floor.',
+          reason: null,
+          occurred_at: '2027-08-05T12:00:00.000Z',
+          recorded_at: '2027-08-05T12:00:01.000Z',
+          evidence: [],
+        },
+      ],
+    });
+  }
+
+  beforeEach(() => {
+    getSubmittedInspection.mockResolvedValue(
+      report({ findings: [finding({ state: 'closed' })] }),
+    );
+    listActions.mockResolvedValue([action({ state: 'closed' })]);
+    getAction.mockResolvedValue(history());
+  });
+
+  /** Una etapa por delante no está vacía: no ocurrió, y ofrecerla prometería una lectura. */
+  it('no ofrece como pestaña la etapa que el hallazgo todavía no alcanzó', async () => {
+    getSubmittedInspection.mockResolvedValue(
+      report({ findings: [finding({ state: 'assigned' })] }),
+    );
+    listActions.mockResolvedValue([action()]);
+
+    renderRoute();
+
+    expect(await screen.findByRole('tab', { name: 'Raised' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Assigned' })).toBeTruthy();
+    expect(screen.queryByRole('tab', { name: 'Verification' })).toBeNull();
+    // Sigue escrita: el ciclo entero, no el recorrido hecho.
+    expect(screen.getByText('Verification')).toBeTruthy();
+  });
+
+  it('abre el registro de una etapa pasada sin mover el hallazgo', async () => {
+    renderRoute();
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'Assigned' }));
+
+    const record = await screen.findByRole('region', { name: 'Assigned record' });
+    expect(within(record).getByText('Original commitment')).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Assigned' }).getAttribute('aria-selected')).toBe(
+      'true',
+    );
+    // Dónde está el hallazgo no cambió por leer otra etapa.
+    expectCurrentStage('Closed');
+  });
+
+  /** El PAR y no el destino: "Send it back" y "Start work" llegan al mismo estado. */
+  it('nombra cada evento por la transición que alguien pulsó', async () => {
+    renderRoute();
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'In progress' }));
+
+    const record = await screen.findByRole('region', { name: 'In progress record' });
+    expect(within(record).getByText('Start work')).toBeTruthy();
+    expect(within(record).getByText('Send it back')).toBeTruthy();
+    expect(within(record).getByText('The guard is not interlocked yet.')).toBeTruthy();
+  });
+
+  it('cuenta la evidencia y conserva la nota de la etapa de verificación', async () => {
+    renderRoute();
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'Verification' }));
+
+    const record = await screen.findByRole('region', { name: 'Verification record' });
+    expect(within(record).getByText('Guard refitted on the infeed.')).toBeTruthy();
+    expect(within(record).getByText(/1 before, 1 after/)).toBeTruthy();
+    // El cierre es otra etapa y no se cuela en esta.
+    expect(within(record).queryByText('Verified on the floor.')).toBeNull();
+  });
+
+  it('la etapa levantada se lee sin consultar ninguna acción', async () => {
+    renderRoute();
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'Raised' }));
+
+    const record = await screen.findByRole('region', { name: 'Raised record' });
+    expect(within(record).getByText('Reported')).toBeTruthy();
+    expect(within(record).getByText('Photos')).toBeTruthy();
+  });
+
+  it('las flechas recorren las etapas alcanzadas', async () => {
+    renderRoute();
+
+    const tabs = await screen.findByRole('tablist');
+    fireEvent.keyDown(tabs, { key: 'Home' });
+
+    expect(await screen.findByRole('region', { name: 'Raised record' })).toBeTruthy();
+
+    fireEvent.keyDown(tabs, { key: 'ArrowRight' });
+    expect(await screen.findByRole('region', { name: 'Assigned record' })).toBeTruthy();
+  });
+
+  /** Con un borrador abierto, cambiar de panel se llevaría puesto lo escrito. */
+  it('no deja elegir otra etapa mientras la enmienda está abierta', async () => {
+    getSubmittedInspection.mockResolvedValue(
+      report({ findings: [finding({ state: 'assigned' })] }),
+    );
+    listActions.mockResolvedValue([action()]);
+    getAction.mockResolvedValue(actionDetail());
+
+    renderRoute();
+
+    const next = await screen.findByRole('region', { name: 'Next step' });
+    expect((screen.getByRole('tab', { name: 'Raised' }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
+
+    fireEvent.click(within(next).getByRole('button', { name: 'Edit assignment' }));
+    expect((screen.getByRole('tab', { name: 'Raised' }) as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.click(within(next).getByRole('button', { name: 'Cancel' }));
+    expect((screen.getByRole('tab', { name: 'Raised' }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
+  });
+
+  /**
+   * Avanzar mueve la lectura con el hallazgo: sin eso, la etapa elegida se quedaría en la
+   * que acaba de terminar y la ficha mostraría un registro viejo —y ningún paso— justo en el
+   * momento en que hay que ver qué sigue.
+   */
+  it('vuelve a la etapa vigente cuando el hallazgo avanza', async () => {
+    let findingReads = 0;
+    getSubmittedInspection.mockImplementation(() => {
+      findingReads += 1;
+      return Promise.resolve(
+        report({
+          findings: [finding({ state: findingReads === 1 ? 'assigned' : 'in_progress' })],
+        }),
+      );
+    });
+    let reads = 0;
+    listActions.mockImplementation(() => {
+      reads += 1;
+      return Promise.resolve([action(reads === 1 ? {} : { state: 'in_progress' })]);
+    });
+    getAction.mockResolvedValue(actionDetail());
+    useAppSession.mockReturnValue({ account: session('external_auditor') });
+
+    renderRoute();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Start work' }));
+
+    await waitFor(() => expectCurrentStage('In progress'));
+    expect(
+      screen.getByRole('tab', { name: 'In progress' }).getAttribute('aria-selected'),
+    ).toBe('true');
+    expect(await screen.findByRole('region', { name: 'Next step' })).toBeTruthy();
   });
 });

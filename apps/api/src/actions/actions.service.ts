@@ -5,6 +5,7 @@ import {
   type Action,
   type ActionState,
   type ActionSummary,
+  type AmendActionCommitmentRequest,
   type CreateActionRequest,
   type TransitionRequest,
 } from '@hs/contracts';
@@ -15,6 +16,7 @@ import type { SessionScope } from '../db/site-scope';
 import {
   actionForbidden,
   actionNotFound,
+  invalidActionState,
   invalidAssignee,
   invalidDueAt,
   invalidEvidence,
@@ -26,6 +28,7 @@ import {
   currentState,
   findActionHeader,
   insertAction,
+  insertAmendment,
   insertEvent,
   insertEvidence,
   lastExecutor,
@@ -103,6 +106,79 @@ export class ActionsService {
   }
 
   /**
+   * Enmendar el compromiso mientras la acción sigue en `open` (ADR-018).
+   *
+   * Una instantánea completa de responsable, trabajo y plazo entra en el stream
+   * append-only; la fila original y las enmiendas anteriores no se tocan. A partir de
+   * ahí las lecturas, los plazos y las notificaciones usan la última.
+   *
+   * **Quién puede enmendar es quién podía abrir la acción (ADR-017):** el coordinador
+   * para cualquiera, más la cuenta que reportó el hallazgo cuando el padre es un
+   * hallazgo. Una acción de investigación es solo del coordinador.
+   *
+   * El lock sobre la acción es el mismo que toma `transition`: si alguien pulsa
+   * `Start work` a la vez, uno de los dos espera y relee el estado. Después del lock, si
+   * la acción ya dejó `open`, la enmienda se rechaza con `invalid_action_state`.
+   */
+  async amendCommitment(
+    session: SessionScope,
+    actionId: string,
+    payload: AmendActionCommitmentRequest,
+  ): Promise<Action> {
+    return this.db.withSessionClient(session, async (client) => {
+      const header = await findActionHeader(client, actionId);
+
+      if (!header) throw actionNotFound();
+
+      await this.lockAction(client, actionId);
+      if (header.findingId) await this.lockFinding(client, header.findingId);
+
+      if (session.role !== 'hs_coordinator') {
+        const reportedBy = header.findingId
+          ? await this.findingReporter(client, header.findingId)
+          : null;
+
+        if (session.userId !== reportedBy) {
+          throw actionForbidden(
+            'Only the HS coordinator or the person who raised the finding amends the assignment',
+          );
+        }
+      }
+
+      const current = await currentState(client, actionId);
+
+      if (current?.state !== 'open') {
+        throw invalidActionState();
+      }
+
+      const now = new Date();
+      const dueAt = new Date(payload.due_at);
+
+      if (dueAt <= now) throw invalidDueAt();
+
+      await this.requireAssignablePerson(client, payload.assignee_person_id, header.siteId);
+
+      const amendmentId = await this.guarded(() =>
+        insertAmendment(client, {
+          actionId,
+          siteId: header.siteId,
+          assigneePersonId: payload.assignee_person_id,
+          description: payload.description,
+          dueAt,
+          actorUserId: session.userId,
+          occurredAt: now,
+        }),
+      );
+
+      // El responsable vigente cambió: se avisa al nuevo. El `dedupe_key` es el id de la
+      // enmienda, así que una reasignación no choca con el aviso de la asignación previa.
+      await this.notifyAssignee(client, actionId, amendmentId);
+
+      return this.readOne(client, actionId);
+    });
+  }
+
+  /**
    * Avanzar una acción: un evento nuevo, nunca la corrección de una fila.
    *
    * El orden de las comprobaciones es el que produce el mejor error: primero que la
@@ -120,6 +196,11 @@ export class ActionsService {
       // La de otra planta no devuelve fila porque la transacción no la ve, no porque
       // este método la filtre. Por eso responde igual que una que no existe.
       if (!header) throw actionNotFound();
+
+      // `Start work` y `Edit assignment` toman el mismo lock sobre la acción (ADR-018):
+      // así, quien empieza el trabajo y quien corrige la asignación no confirman los dos
+      // contra el mismo estado `open`.
+      await this.lockAction(client, actionId);
 
       // Dos acciones distintas del mismo hallazgo también pueden avanzar a la vez. El
       // lock solo serializa sus eventos para que el segundo lea el agregado que dejó el
@@ -257,6 +338,25 @@ export class ActionsService {
     await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [findingId]);
   }
 
+  /**
+   * Serializa las decisiones sobre UNA acción: `Start work` y `Edit assignment`. Distinto
+   * salto de hash que `lockFinding` para que un id de acción y uno de hallazgo no
+   * compartan cerrojo.
+   */
+  private async lockAction(client: PoolClient, actionId: string): Promise<void> {
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 1))', [actionId]);
+  }
+
+  /** La cuenta que reportó el hallazgo. Existe por FK; una fila faltante es un bug. */
+  private async findingReporter(client: PoolClient, findingId: string): Promise<string | null> {
+    const { rows } = await client.query<{ reported_by: string }>(
+      `SELECT reported_by FROM finding WHERE id = $1`,
+      [findingId],
+    );
+
+    return rows[0]?.reported_by ?? null;
+  }
+
   private async createForParent(
     client: PoolClient,
     session: SessionScope,
@@ -296,7 +396,16 @@ export class ActionsService {
       }),
     );
 
-    await this.notifyAssignee(client, actionId);
+    /*
+      LA ACCIÓN NACE EN `open` Y AHÍ SE QUEDA (ADR-018). La creación escribe un solo
+      evento; declarar el inicio del trabajo es la transición explícita `open → in_progress`
+      —`Start work`— que también cierra la ventana de enmiendas. Mientras tanto `assigned`
+      es una etapa vigente: responsable, trabajo y plazo se pueden corregir sin abrir otra
+      acción ni perder la cadena de auditoría.
+
+      El hallazgo deriva un solo evento de éste, por el trigger de 0040: `raised → assigned`.
+    */
+    await this.notifyAssignee(client, actionId, actionId);
 
     return this.readOne(client, actionId);
   }
@@ -388,27 +497,42 @@ export class ActionsService {
    * consecuencia directa de Persona ≠ Usuario, y la red que la cubre es el escalamiento
    * a los +3 días, que llega al supervisor.
    *
-   * `dedupe_key` es el id de la acción: crear una acción es un hecho único, pero el
-   * único de `notification` es lo que hace que un reintento no duplique el aviso.
+   * `dedupe_key` lo elige el llamador: el id de la acción al crearla, el id de la
+   * enmienda al reasignar. Así una reasignación avisa al nuevo responsable sin chocar
+   * con el aviso anterior, y un reintento de cualquiera de los dos no duplica nada.
+   *
+   * El responsable, el trabajo y el plazo salen del compromiso VIGENTE (ADR-018): la
+   * última enmienda o, si no hay ninguna, la fila original.
    */
-  private async notifyAssignee(client: PoolClient, actionId: string): Promise<void> {
+  private async notifyAssignee(
+    client: PoolClient,
+    actionId: string,
+    dedupeKey: string,
+  ): Promise<void> {
     await client.query(
       `INSERT INTO notification (user_id, site_id, kind, dedupe_key, payload)
-       SELECT u.id, a.site_id, 'corrective_action_assigned', a.id::text,
+       SELECT u.id, a.site_id, 'corrective_action_assigned', $2,
               jsonb_build_object(
                 'action_id', a.id,
                 'finding_id', a.finding_id,
-                'description', a.description,
-                 'due_at', a.due_at)
+                'description', COALESCE(eff.description, a.description),
+                'due_at', COALESCE(eff.due_at, a.due_at))
          FROM corrective_action a
-         JOIN app_user u ON u.person_id = a.assignee_person_id
+         LEFT JOIN LATERAL (
+           SELECT m.assignee_person_id, m.description, m.due_at
+             FROM corrective_action_commitment_amendment m
+            WHERE m.action_id = a.id
+            ORDER BY m.position DESC
+            LIMIT 1
+         ) eff ON true
+         JOIN app_user u ON u.person_id = COALESCE(eff.assignee_person_id, a.assignee_person_id)
                         AND u.deactivated_at IS NULL
          JOIN user_site_scope s ON s.user_id = u.id
                                AND s.site_id = a.site_id
                                AND s.revoked_at IS NULL
         WHERE a.id = $1
        ON CONFLICT (user_id, kind, dedupe_key) DO NOTHING`,
-      [actionId],
+      [actionId, dedupeKey],
     );
   }
 

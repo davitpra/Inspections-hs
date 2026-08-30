@@ -11,17 +11,15 @@ import { useState } from 'react';
 import { transitionAction, uploadEvidence } from '../api/actions';
 import { queryKeys } from '../api/query-keys';
 import { canAttempt } from '../permissions/actions';
-import { transitionLabel } from '../presentation/actions';
+import { transitionLabel, transitionTakesNote } from '../presentation/actions';
 import { EvidencePicker } from './EvidencePicker';
 
 /**
  * Los campos y los botones de una transición, sin el marco que la envuelve.
  *
- * Es el formulario que `ActionProgressPanel` dibuja dentro de su `.card` en `/actions/$id`, y
- * el mismo que `FindingNextStep` dibuja, a la vista, dentro de la ficha del hallazgo: la
- * mutación, los campos que cada transición exige y el rechazo del servidor son una sola
- * decisión, y una segunda copia sería la forma en que las dos pantallas terminan pidiendo
- * cosas distintas para el mismo paso.
+ * `FindingNextStep` lo dibuja, a la vista, dentro de la ficha del hallazgo: la mutación, los
+ * campos que cada transición exige y el rechazo del servidor quedan juntos para que el paso no
+ * tenga dos implementaciones.
  *
  * `action` pide solo lo que `canAttempt` y `transitionsFrom` necesitan —el mismo recorte que
  * ya usa `canAttempt`—, así que entra tanto un `Action` completo como el `ActionSummary` sin
@@ -101,12 +99,14 @@ export function ActionTransitionForm({
         </label>
       ) : null}
 
-      <label className="action-detail__field">
-        <span>
-          Note <span className="action-detail__optional">Optional</span>
-        </span>
-        <textarea value={note} onChange={(event) => setNote(event.target.value)} />
-      </label>
+      {available.some((transition) => transitionTakesNote(action.state, transition.to)) ? (
+        <label className="action-detail__field">
+          <span>
+            Note <span className="action-detail__optional">Optional</span>
+          </span>
+          <textarea value={note} onChange={(event) => setNote(event.target.value)} />
+        </label>
+      ) : null}
 
       <div className="action-detail__actions">
         {available.map((transition, index) => (

@@ -19,6 +19,10 @@ describe('visibleNavItems', () => {
     expect(NAV_ITEMS.every((item) => typeof item.icon === 'function')).toBe(true);
   });
 
+  it('no ofrece un workspace independiente de acciones correctivas', () => {
+    expect(NAV_ITEMS.some((item) => item.label === 'Corrective actions')).toBe(false);
+  });
+
   it('ofrece programación y roster solo al coordinador', () => {
     const labels = visibleNavItems(account('hs_coordinator')).map((item) => item.label);
 
@@ -46,7 +50,6 @@ describe('sectionTitle', () => {
   it('nombra las pantallas con id, que son a las que se llega desde otra', () => {
     expect(sectionTitle('/inspections/abc-123/capture')).toBe('Inspection');
     expect(sectionTitle('/inspections/abc-123/review')).toBe('Review');
-    expect(sectionTitle('/actions/abc-123')).toBe('Corrective action');
   });
 
   /**
