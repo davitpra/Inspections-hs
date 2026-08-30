@@ -267,6 +267,20 @@
       "when": 1754524800037,
       "tag": "0038_retire_finding_recurrence",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1754524800038,
+      "tag": "0039_optional_completion_evidence",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1754524800039,
+      "tag": "0040_finding_state_events",
+      "breakpoints": true
     }
   ]
 }

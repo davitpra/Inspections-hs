@@ -34,6 +34,19 @@ export const findingOriginSchema = z.enum(FINDING_ORIGINS);
 
 export type FindingOrigin = z.infer<typeof findingOriginSchema>;
 
+/** El ciclo propio del hallazgo, persistido como eventos inmutables. */
+export const FINDING_STATES = [
+  'raised',
+  'assigned',
+  'in_progress',
+  'verification',
+  'closed',
+] as const;
+
+export const findingStateSchema = z.enum(FINDING_STATES);
+
+export type FindingState = z.infer<typeof findingStateSchema>;
+
 // ---------------------------------------------------------------------------
 // Lo que el campo aporta
 
@@ -105,9 +118,8 @@ export type ManualFindingRequest = z.infer<typeof manualFindingRequestSchema>;
 /**
  * Un hallazgo tal como lo devuelve la API.
  *
- * No hay campo `status` y esa ausencia es deliberada: un hallazgo no tiene
- * estado propio. Lo que se hizo con él son sus acciones correctivas, que se leen
- * por su cuenta.
+ * `state` es el último evento de su stream propio. El cliente nunca lo escribe:
+ * el motor lo mantiene en la misma transacción que las acciones correctivas.
  *
  * Los tres campos de la identidad dual son nulables juntos: los tres tienen
  * valor en un hallazgo derivado y los tres son `null` en uno manual. El `CHECK`
@@ -122,6 +134,7 @@ export const findingSchema = z.strictObject({
   item_key: itemKeySchema.nullable(),
   location_id: z.uuid().nullable(),
   description: z.string(),
+  state: findingStateSchema,
   photo_object_keys: z.array(objectKeySchema),
   reported_by: z.uuid(),
   occurred_at: z.iso.datetime({ offset: true }),

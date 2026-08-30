@@ -159,6 +159,7 @@ export async function insertEvidence(
 export interface ActionHeader {
   id: string;
   siteId: string;
+  findingId: string | null;
   assigneePersonId: string;
 }
 
@@ -166,15 +167,24 @@ export async function findActionHeader(
   client: PoolClient,
   actionId: string,
 ): Promise<ActionHeader | null> {
-  const { rows } = await client.query<{ site_id: string; assignee_person_id: string }>(
-    `SELECT site_id, assignee_person_id FROM corrective_action WHERE id = $1`,
+  const { rows } = await client.query<{
+    site_id: string;
+    finding_id: string | null;
+    assignee_person_id: string;
+  }>(
+    `SELECT site_id, finding_id, assignee_person_id FROM corrective_action WHERE id = $1`,
     [actionId],
   );
 
   const row = rows[0];
 
   return row
-    ? { id: actionId, siteId: row.site_id, assigneePersonId: row.assignee_person_id }
+    ? {
+        id: actionId,
+        siteId: row.site_id,
+        findingId: row.finding_id,
+        assigneePersonId: row.assignee_person_id,
+      }
     : null;
 }
 

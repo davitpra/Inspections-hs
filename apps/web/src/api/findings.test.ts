@@ -15,6 +15,7 @@ const FINDING = {
   item_key: null,
   location_id: null,
   description: 'Unguarded pinch point beside the packing line',
+  state: 'raised',
   photo_object_keys: ['findings/photo.jpg'],
   reported_by: '33333333-3333-4333-8333-333333333333',
   occurred_at: '2026-08-27T14:00:00.000Z',

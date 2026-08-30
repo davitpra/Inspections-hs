@@ -15,7 +15,6 @@ import type { SessionScope } from '../db/site-scope';
 import {
   actionForbidden,
   actionNotFound,
-  evidenceRequired,
   invalidAssignee,
   invalidDueAt,
   invalidEvidence,
@@ -43,19 +42,18 @@ import { foreignEvidenceKeys } from './object-key';
  *   - Que la transición esté en la máquina de estados   → guarda `HS004`.
  *   - Que el stream no se bifurque bajo concurrencia    → único `(action_id, position)`.
  *   - Que quien verifica no sea quien ejecutó           → guarda `HS005`.
- *   - Que declarar el trabajo hecho lleve evidencia     → restricción diferida `HS006`.
  *   - Que una acción tenga al menos un evento           → restricción diferida `HS007`.
  *   - Que rechazar una verificación lleve motivo        → CHECK de motivo.
  *   - Que la acción sea del sitio de su hallazgo        → FK compuesta.
  *   - Que una planta no vea la otra                     → política RLS. No hay `WHERE
  *     site_id` en ninguna consulta de este módulo.
  *
- * Lo que sí comprueba: los roles y la relación "esta acción es mía" —que el motor no
- * conoce—, que el padre exista dentro del alcance, que el plazo sea futuro, que el
- * responsable sea una persona activa de la planta, y las object keys de la evidencia.
- * La garantía de que el plazo sea futuro NO la duplica el motor: depende del reloj y por
- * eso vive solamente acá. Las comprobaciones que duplican una
- * barrera del motor existen para devolver un código legible; si el servicio se
+ * Lo que sí comprueba: los roles, la relación "esta acción es mía" y la relación "este
+ * hallazgo es mío" —que el motor no conoce—, que el padre exista dentro del alcance, que
+ * el plazo sea futuro, que el responsable sea una persona activa de la planta, y las
+ * object keys de la evidencia. La garantía de que el plazo sea futuro NO la duplica el
+ * motor: depende del reloj y por eso vive solamente acá. Las comprobaciones que duplican
+ * una barrera del motor existen para devolver un código legible; si el servicio se
  * equivoca, el motor rechaza igual y `translatePgError` traduce.
  */
 @Injectable()
@@ -68,21 +66,36 @@ export class ActionsService {
    * La acción y su primer evento se escriben en la MISMA transacción, y no por prolijidad:
    * la restricción diferida de 0011 hace que una acción sin evento no llegue a existir,
    * porque su estado se deriva del stream y una acción sin stream no tendría ninguno.
+   *
+   * **Quién puede abrirla no es solo el coordinador (ADR-017).** También puede la cuenta
+   * que reportó el hallazgo —`finding.reported_by`—, que en un hallazgo derivado es quien
+   * firmó el envío y en uno manual quien lo cargó. Es la misma clase de regla que
+   * `requireActor` aplica sobre una transición: una RELACIÓN con este registro puntual, no
+   * un rol ancho. Un `jhsc_member` que no reportó este hallazgo sigue sin poder abrir nada.
+   *
+   * El hallazgo se resuelve ANTES de comprobar el permiso: uno fuera del alcance tiene que
+   * responder "no existe" y no "no podés", para no convertir el endpoint en un oráculo de
+   * qué se está arreglando en la planta donde el solicitante no tiene alcance (§6
+   * pregunta 5, mismo criterio que `actionNotFound`).
    */
   async create(
     session: SessionScope,
     findingId: string,
     payload: CreateActionRequest,
   ): Promise<Action> {
-    if (session.role !== 'hs_coordinator') {
-      throw actionForbidden('Only the HS coordinator opens a corrective action');
-    }
-
     return this.db.withSessionClient(session, async (client) => {
-      const siteId = await this.requireFindingSite(client, findingId);
+      const finding = await this.requireFinding(client, findingId);
+
+      if (session.role !== 'hs_coordinator' && session.userId !== finding.reportedBy) {
+        throw actionForbidden(
+          'Only the HS coordinator or the person who raised the finding opens a corrective action',
+        );
+      }
+
+      await this.lockFinding(client, findingId);
 
       return this.createForParent(client, session, payload, {
-        siteId,
+        siteId: finding.siteId,
         findingId,
         investigationId: null,
       });
@@ -108,6 +121,11 @@ export class ActionsService {
       // este método la filtre. Por eso responde igual que una que no existe.
       if (!header) throw actionNotFound();
 
+      // Dos acciones distintas del mismo hallazgo también pueden avanzar a la vez. El
+      // lock solo serializa sus eventos para que el segundo lea el agregado que dejó el
+      // primero antes de derivar el próximo estado del hallazgo.
+      if (header.findingId) await this.lockFinding(client, header.findingId);
+
       const current = await currentState(client, actionId);
       const from: ActionState | null = current?.state ?? null;
 
@@ -123,12 +141,6 @@ export class ActionsService {
 
       if (transition.requires.includes('reason') && payload.reason === undefined) {
         throw invalidTransition('Refusing a verification requires a reason');
-      }
-
-      if (transition.requires.includes('after_evidence')) {
-        if (!payload.evidence.some((item) => item.kind === 'after')) {
-          throw evidenceRequired();
-        }
       }
 
       if (transition.requires.includes('not_executor')) {
@@ -183,6 +195,11 @@ export class ActionsService {
    * Que el resto del ciclo de vida no distinga el padre no es una coincidencia: es lo
    * que hace que "el incidente usa el mismo motor que la acción correctiva" (§4) sea
    * cierto en el código y no solo en el documento.
+   *
+   * **Esta sigue siendo solo del coordinador, y ADR-017 no la toca.** El permiso que se
+   * abrió en `create` es la relación "yo reporté este hallazgo"; una investigación no
+   * tiene ese reportante —la reporta un supervisor y la investiga el coordinador—, así
+   * que no hay cuenta a la que extenderle el permiso.
    */
   async createForInvestigation(
     session: SessionScope,
@@ -214,12 +231,12 @@ export class ActionsService {
 
   // -------------------------------------------------------------------------
 
-  private async requireFindingSite(
+  private async requireFinding(
     client: PoolClient,
     findingId: string,
-  ): Promise<string> {
-    const { rows } = await client.query<{ site_id: string }>(
-      `SELECT site_id FROM finding WHERE id = $1`,
+  ): Promise<{ siteId: string; reportedBy: string }> {
+    const { rows } = await client.query<{ site_id: string; reported_by: string }>(
+      `SELECT site_id, reported_by FROM finding WHERE id = $1`,
       [findingId],
     );
 
@@ -230,7 +247,14 @@ export class ActionsService {
     // hallazgo, no de la acción.
     if (!row) throw actionNotFound();
 
-    return row.site_id;
+    return { siteId: row.site_id, reportedBy: row.reported_by };
+  }
+
+  private async lockFinding(client: PoolClient, findingId: string): Promise<void> {
+    // `finding` no concede UPDATE y por eso tampoco admite `FOR UPDATE` (ADR-002).
+    // El advisory lock transaccional conserva la fila intacta y, al ser una sentencia
+    // separada del INSERT posterior, el que esperó toma un snapshot nuevo al continuar.
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [findingId]);
   }
 
   private async createForParent(

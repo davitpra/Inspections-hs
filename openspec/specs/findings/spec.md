@@ -375,11 +375,12 @@ were recorded, each event naming the state it moved to, when it occurred, and th
 evidence counts it carried. The system SHALL offer exactly the transitions the state machine allows
 from the action's current state and that the reader's role and relationship to the action permit,
 and SHALL offer none otherwise, saying instead that the action is waiting on someone else. Before
-submitting a transition the system SHALL request the reason and the evidence that transition
-requires. A corrective action in the terminal state SHALL be offered no transition at all,
-including any form of reopening. The transitions offered SHALL be derived from the same state
-machine the server enforces, and offering one SHALL NOT replace the server's authorization, its
-verifier rule or its evidence rule.
+submitting a transition the system SHALL request the reason that transition requires, and SHALL
+present the control to attach evidence whenever the work can be declared done, without making the
+evidence a condition of submitting. A corrective action in the terminal state SHALL be offered no
+transition at all, including any form of reopening. The transitions offered SHALL be derived from
+the same state machine the server enforces, and offering one SHALL NOT replace the server's
+authorization or its verifier rule.
 
 #### Scenario: The assignee advances their own action without leaving the finding
 
@@ -395,11 +396,12 @@ verifier rule or its evidence rule.
 - **THEN** the three events are shown in the order they were recorded
 - **AND** no transition is offered, and the screen says the action is waiting on someone else
 
-#### Scenario: Declaring the work done asks for the evidence it requires
+#### Scenario: Declaring the work done offers the evidence control without demanding it
 
-- **GIVEN** a corrective action in `in_progress` whose next transition requires after evidence
+- **GIVEN** a corrective action in `in_progress` whose next transition is `awaiting_verification`
 - **WHEN** the assignee opens it from the findings-only screen
-- **THEN** the control to attach after evidence is presented before the transition can be submitted
+- **THEN** the control to attach after evidence is presented
+- **AND** the transition can be submitted with no evidence attached
 
 #### Scenario: A closed action is offered nothing
 

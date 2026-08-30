@@ -170,12 +170,13 @@ envía y **queda congelada**. El momento del envío es el punto de no retorno.
 
 Una respuesta negativa en el checklist genera un hallazgo con foto y descripción obligatorias.
 De ahí sale una acción correctiva con **una persona nombrada** como responsable y una fecha límite
-declarada por el coordinador de HS.
+declarada por el coordinador de HS **o por quien reportó el hallazgo** (ADR-017).
 
 ### R3 — Cierre verificado de la acción
 
-El responsable ejecuta la acción y carga evidencia antes/después. La acción pasa a _esperando
-verificación_. **Una persona distinta del ejecutor** la verifica y la cierra. Si vence sin
+El responsable ejecuta la acción; el sistema pide y conserva evidencia antes/después, pero no
+la exige para pasar a _esperando verificación_ (ADR-016). **Una persona distinta del ejecutor**
+la verifica y la cierra. Si vence sin
 cerrarse: +3 días escala al supervisor, +7 días a gerencia. Cada transición es un evento
 append-only, no un campo que se sobrescribe.
 
@@ -688,7 +689,7 @@ del proyecto antes de que la siguiente dependa de ella.
 | 2     | Sitio, Persona, Usuario, auth, importación CSV del roster                      | Permisos por sitio verificados con datos reales   |
 | 3     | Motor de formularios en `packages/forms`, PWA, outbox, ingesta idempotente     | **Spike 1:** inspección completa sin señal        |
 | 4     | Hallazgos                                                                      | R1 y R2 completos; clasificación de riesgo retirada antes de producción |
-| 5     | Acciones correctivas, eventos, escalamientos con pg-boss                       | R3 completo                                       |
+| 5     | Acciones correctivas, eventos, escalamientos con pg-boss                       | R3 completo, con evidencia de cierre opcional (ADR-016) |
 | 6     | Incidentes, campos guiados, estados, relojes regulatorios, pantalla del Form 7 | R4 completo                                       |
 | 7     | Consulta operativa de períodos                                             | R5 y la recurrencia de hallazgos retirados antes de producción |
 | 8     | Builder visual                                                                 | El coordinador deja de depender del desarrollador |

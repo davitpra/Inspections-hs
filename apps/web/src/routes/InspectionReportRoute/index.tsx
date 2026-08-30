@@ -17,8 +17,9 @@ import {
   PersonIcon,
   PinIcon,
 } from '../../components/icons';
+import { ReportItem } from '../../components/ReportItem';
 import { TemplateSectionCard } from '../../components/TemplateSectionCard';
-import { answersLabel, answerText } from '../../presentation/answers';
+import { answersLabel } from '../../presentation/answers';
 import { formatCivilDay, periodLabel } from '../../presentation/dates';
 import { findingsLabel } from '../../presentation/findings';
 
@@ -186,50 +187,33 @@ export function InspectionReportRoute(): React.JSX.Element {
               </>
             }
           >
+            {/*
+              La misma ficha que dibuja el recorte de hallazgos, y por eso vive en
+              `components/`: las dos pantallas leen el mismo envío y tienen que escribir
+              cada pregunta igual.
+            */}
             {answered.map((item, itemIndex) => {
               const finding = findingsByItem.get(item.item_key);
-              const value = report.answers[item.item_key];
 
               return (
-                <li key={item.item_key} className="report__item">
-                  <span className="report__item-number" aria-hidden>
-                    {itemIndex + 1}
-                  </span>
-
-                  <div className="report__item-body">
-                    {/*
-                      La pregunta a la izquierda y el valor contra el borde derecho, en la
-                      misma columna en la que estuvo el control durante la recorrida. Sobre
-                      cuarenta preguntas seguidas es lo que deja leer la columna de
-                      respuestas de un vistazo en vez de cazarla al final de cada enunciado.
-                    */}
-                    <div className="report__item-line">
-                      <p className="report__item-prompt">{item.prompt}</p>
-                      <p
-                        className={
-                          value === undefined
-                            ? 'report__answer report__answer--empty'
-                            : 'report__answer'
-                        }
-                      >
-                        {answerText(item, value)}
-                      </p>
-                    </div>
-
-                    {/*
-                      El mismo bloque que dibuja el recorte de hallazgos, y por eso vive en
-                      `components/`. Solo cuando hay hallazgo: la acción correctiva que la
-                      plantilla prescribe para una pregunta que salió limpia no es
-                      información, y en un reporte de cuarenta preguntas sería ruido.
-                    */}
-                    {finding ? (
-                      <FindingReadout
-                        correctiveAction={item.finding?.corrective_action}
-                        finding={finding}
-                      />
-                    ) : null}
-                  </div>
-                </li>
+                <ReportItem
+                  key={item.item_key}
+                  index={itemIndex}
+                  item={item}
+                  value={report.answers[item.item_key]}
+                >
+                  {/*
+                    El hallazgo solo cuando lo hay: la acción correctiva que la plantilla
+                    prescribe para una pregunta que salió limpia no es información, y en un
+                    reporte de cuarenta preguntas sería ruido.
+                  */}
+                  {finding ? (
+                    <FindingReadout
+                      correctiveAction={item.finding?.corrective_action}
+                      finding={finding}
+                    />
+                  ) : null}
+                </ReportItem>
               );
             })}
           </TemplateSectionCard>

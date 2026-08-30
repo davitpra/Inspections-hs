@@ -9,8 +9,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useId, useRef, useState, type RefObject } from 'react';
 
 import { createAction } from '../../api/actions';
+import { listFindingRoster } from '../../api/findings';
 import { queryKeys } from '../../api/query-keys';
-import { listPeople } from '../../api/roster';
 import { CheckIcon } from '../../components/icons';
 import { futureDueAt } from './presentation';
 
@@ -35,8 +35,8 @@ export function CreateActionForm({
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const roster = useQuery({
-    queryKey: queryKeys.roster(finding.site_id),
-    queryFn: () => listPeople(finding.site_id),
+    queryKey: queryKeys.findingRoster(finding.id),
+    queryFn: () => listFindingRoster(finding.id),
     retry: false,
   });
 
@@ -50,7 +50,11 @@ export function CreateActionForm({
   const creation = useMutation({
     mutationFn: (request: CreateActionRequest) => createAction(finding.id, request),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.actions() });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.actions() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.findings() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.submittedInspection() }),
+      ]);
       dialogRef.current?.close();
     },
   });

@@ -8,21 +8,19 @@ import { InspectionFindingsRoute } from './index';
 const getSubmittedInspection = vi.hoisted(() => vi.fn());
 const listActions = vi.hoisted(() => vi.fn());
 const createAction = vi.hoisted(() => vi.fn());
-const getAction = vi.hoisted(() => vi.fn());
 const transitionAction = vi.hoisted(() => vi.fn());
 const uploadEvidence = vi.hoisted(() => vi.fn());
-const listPeople = vi.hoisted(() => vi.fn());
+const listFindingRoster = vi.hoisted(() => vi.fn());
 const useAppSession = vi.hoisted(() => vi.fn());
 
 vi.mock('../../api/inspections', () => ({ getSubmittedInspection }));
 vi.mock('../../api/actions', () => ({
   listActions,
   createAction,
-  getAction,
   transitionAction,
   uploadEvidence,
 }));
-vi.mock('../../api/roster', () => ({ listPeople }));
+vi.mock('../../api/findings', () => ({ listFindingRoster }));
 vi.mock('../../app/session-context', () => ({ useAppSession }));
 
 vi.mock('@tanstack/react-router', () => ({
@@ -142,6 +140,7 @@ function finding(overrides: Record<string, unknown> = {}) {
     item_key: 'general.guards',
     location_id: null,
     description: 'Guard missing on the infeed of packaging line 3',
+    state: 'raised',
     photo_object_keys: ['site/finding.jpg'],
     reported_by: '88888888-8888-4888-8888-888888888888',
     occurred_at: '2027-07-29T18:00:00.000Z',
@@ -236,9 +235,8 @@ afterEach(() => {
 
 beforeEach(() => {
   listActions.mockResolvedValue([]);
-  listPeople.mockResolvedValue([person()]);
+  listFindingRoster.mockResolvedValue([person()]);
   createAction.mockResolvedValue({});
-  getAction.mockResolvedValue(actionDetail());
   transitionAction.mockResolvedValue(actionDetail({ state: 'in_progress' }));
   uploadEvidence.mockResolvedValue('actions/evidence.jpg');
   useAppSession.mockReturnValue({ account: session('hs_coordinator') });
@@ -264,6 +262,11 @@ function submit(dialog: HTMLElement): void {
   fireEvent.submit(
     within(dialog).getByRole('button', { name: 'Create action' }).closest('form')!,
   );
+}
+
+function expectCurrentStage(name: string): void {
+  const lifecycle = screen.getByRole('region', { name: 'Finding lifecycle' });
+  expect(within(lifecycle).getByText(name).closest('li')?.getAttribute('aria-current')).toBe('step');
 }
 
 describe('InspectionFindingsRoute', () => {
@@ -353,6 +356,123 @@ describe('InspectionFindingsRoute', () => {
   });
 });
 
+describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
+  beforeEach(() => {
+    getSubmittedInspection.mockResolvedValue(report());
+  });
+
+  it('presenta raised y sin plazo cuando todavía no hay acciones', async () => {
+    renderRoute();
+
+    await screen.findByRole('region', { name: 'Finding lifecycle' });
+    expectCurrentStage('Raised');
+    expect(screen.queryByText(/day(?:s)? overdue|in \d+ day/)).toBeNull();
+  });
+
+  it('deja que la acción menos avanzada mande aunque otra esté cerrada', async () => {
+    getSubmittedInspection.mockResolvedValue(
+      report({ findings: [finding({ state: 'assigned' })] }),
+    );
+    listActions.mockResolvedValue([
+      action({ state: 'closed' }),
+      action({ id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', state: 'open' }),
+    ]);
+
+    renderRoute();
+
+    await screen.findByRole('region', { name: 'Finding lifecycle' });
+    expectCurrentStage('Assigned');
+  });
+
+  it('presenta closed solo cuando todas las acciones están cerradas', async () => {
+    getSubmittedInspection.mockResolvedValue(
+      report({ findings: [finding({ state: 'closed' })] }),
+    );
+    listActions.mockResolvedValue([
+      action({ state: 'closed' }),
+      action({ id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', state: 'closed' }),
+    ]);
+
+    renderRoute();
+
+    await screen.findByRole('region', { name: 'Finding lifecycle' });
+    expectCurrentStage('Closed');
+    expect(screen.queryByRole('region', { name: 'Next step' })).toBeNull();
+  });
+
+  it('ofrece al coordinador asignar el hallazgo levantado', async () => {
+    renderRoute();
+
+    const next = await screen.findByRole('region', { name: 'Next step' });
+    expect(within(next).getByRole('button', { name: 'Create corrective action' })).toBeTruthy();
+    expect(within(next).getByText(/Assign a responsible person/)).toBeTruthy();
+  });
+
+  /** ADR-017: quien reportó el hallazgo lo abre, aunque no sea el coordinador. */
+  it('ofrece también a quien reportó el hallazgo, sin ser coordinador', async () => {
+    useAppSession.mockReturnValue({ account: session('jhsc_member') });
+
+    renderRoute();
+
+    const next = await screen.findByRole('region', { name: 'Next step' });
+    expect(within(next).getByRole('button', { name: 'Create corrective action' })).toBeTruthy();
+  });
+
+  it('no ofrece la creación a un jhsc_member que no reportó el hallazgo', async () => {
+    getSubmittedInspection.mockResolvedValue(
+      report({ findings: [finding({ reported_by: '77777777-7777-4777-8777-777777777777' })] }),
+    );
+    useAppSession.mockReturnValue({ account: session('jhsc_member') });
+
+    renderRoute();
+
+    const next = await screen.findByRole('region', { name: 'Next step' });
+    expect(within(next).queryByRole('button', { name: 'Create corrective action' })).toBeNull();
+  });
+
+  it('ofrece al responsable empezar el trabajo', async () => {
+    getSubmittedInspection.mockResolvedValue(
+      report({ findings: [finding({ state: 'assigned' })] }),
+    );
+    listActions.mockResolvedValue([action()]);
+    useAppSession.mockReturnValue({ account: session('external_auditor') });
+
+    renderRoute();
+
+    const next = await screen.findByRole('region', { name: 'Next step' });
+    expect(within(next).getByRole('button', { name: 'Start work' })).toBeTruthy();
+  });
+
+  it('ofrece la verificación al supervisor', async () => {
+    getSubmittedInspection.mockResolvedValue(
+      report({ findings: [finding({ state: 'verification' })] }),
+    );
+    listActions.mockResolvedValue([action({ state: 'awaiting_verification' })]);
+    useAppSession.mockReturnValue({ account: session('supervisor') });
+
+    renderRoute();
+
+    const next = await screen.findByRole('region', { name: 'Next step' });
+    expect(within(next).getByRole('button', { name: 'Verify and close' })).toBeTruthy();
+  });
+
+  it('el lector sin permiso ve a quién espera y ningún control principal', async () => {
+    getSubmittedInspection.mockResolvedValue(
+      report({ findings: [finding({ state: 'in_progress' })] }),
+    );
+    listActions.mockResolvedValue([action({ state: 'in_progress' })]);
+    useAppSession.mockReturnValue({
+      account: { ...session('jhsc_member'), personId: '77777777-7777-4777-8777-777777777777' },
+    });
+
+    renderRoute();
+
+    const next = await screen.findByRole('region', { name: 'Next step' });
+    expect(within(next).getByText('Ada Reid')).toBeTruthy();
+    expect(within(next).queryByRole('button')).toBeNull();
+  });
+});
+
 /**
  * El camino del hallazgo a la obligación, que antes vivía en `/actions`.
  *
@@ -360,78 +480,6 @@ describe('InspectionFindingsRoute', () => {
  * la plantilla prescribió y lo que el inspector observó, y recién entonces se compromete.
  */
 describe('InspectionFindingsRoute — el compromiso', () => {
-  it('ofrece crear una acción al coordinador y no al resto', async () => {
-    getSubmittedInspection.mockResolvedValue(report());
-
-    renderRoute();
-    expect(await screen.findByRole('button', { name: 'Create corrective action' })).toBeTruthy();
-
-    cleanup();
-    useAppSession.mockReturnValue({ account: session('jhsc_member') });
-    listActions.mockResolvedValue([action()]);
-
-    renderRoute();
-    expect(await screen.findByText('Refit the guard on packaging line 3')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Create corrective action' })).toBeNull();
-  });
-
-  /** Leer qué se comprometió no es privilegio de nadie, y sin eso se abren duplicados a ciegas. */
-  it('lee las acciones que el hallazgo ya tiene, con su estado y su enlace', async () => {
-    getSubmittedInspection.mockResolvedValue(report());
-    listActions.mockResolvedValue([
-      action(),
-      action({
-        id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-        description: 'Retrain the line crew on guard checks',
-        state: 'closed',
-      }),
-    ]);
-
-    renderRoute();
-
-    const link = await screen.findByRole('link', { name: 'Refit the guard on packaging line 3' });
-    expect(link.getAttribute('href')).toBe('/actions/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
-    expect(screen.getByText('Open')).toBeTruthy();
-    expect(screen.getByText('Closed')).toBeTruthy();
-    expect(screen.queryByText('No corrective action yet.')).toBeNull();
-  });
-
-  it('lee responsable, plazo, atraso y escalamiento sin pedir el detalle', async () => {
-    getSubmittedInspection.mockResolvedValue(report());
-    listActions.mockResolvedValue([
-      action({
-        state: 'in_progress',
-        overdue: true,
-        escalations: [
-          {
-            level: 'supervisor',
-            days_overdue: 1,
-            escalated_at: '2027-08-31T12:00:00.000Z',
-          },
-        ],
-      }),
-    ]);
-
-    renderRoute();
-
-    expect(await screen.findByText('Ada Reid')).toBeTruthy();
-    expect(screen.getByText('2027-08-30')).toBeTruthy();
-    expect(screen.getByText('Overdue')).toBeTruthy();
-    expect(screen.getByText(/Sent to supervisor \(1 days late\)/)).toBeTruthy();
-    expect(getAction).not.toHaveBeenCalled();
-  });
-
-  it('deja de lado la acción de otro hallazgo', async () => {
-    getSubmittedInspection.mockResolvedValue(report());
-    listActions.mockResolvedValue([
-      action({ source: { kind: 'manual_finding', finding_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' } }),
-    ]);
-
-    renderRoute();
-
-    expect(await screen.findByText('No corrective action yet.')).toBeTruthy();
-  });
-
   /**
    * CERO NO SE AFIRMA SIN HABER LEÍDO. Con la lista de acciones caída, "no corrective action
    * yet" tendría la misma cara que la verdad y el coordinador abriría un duplicado.
@@ -445,11 +493,12 @@ describe('InspectionFindingsRoute — el compromiso', () => {
     expect(
       await screen.findByText('Existing corrective actions need a connection.'),
     ).toBeTruthy();
-    expect(screen.queryByText('No corrective action yet.')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Create corrective action' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Finding lifecycle' })).toBeTruthy();
+    expectCurrentStage('Raised');
+    expect(screen.queryByRole('region', { name: 'Next step' })).toBeNull();
   });
 
-  it('crea la acción sobre el hallazgo de esa pregunta y con el roster de su sitio', async () => {
+  it('crea la acción sobre el hallazgo de esa pregunta y con el roster de ese hallazgo', async () => {
     getSubmittedInspection.mockResolvedValue(report());
 
     renderRoute();
@@ -459,7 +508,7 @@ describe('InspectionFindingsRoute — el compromiso', () => {
     submit(dialog);
 
     await waitFor(() => expect(createAction).toHaveBeenCalledTimes(1));
-    expect(listPeople).toHaveBeenCalledWith(SITE);
+    expect(listFindingRoster).toHaveBeenCalledWith(FINDING);
     expect(createAction).toHaveBeenCalledWith(FINDING, {
       assignee_person_id: PERSON,
       description: 'Install a fixed guard before restarting the line',
@@ -469,7 +518,13 @@ describe('InspectionFindingsRoute — el compromiso', () => {
 
   it('cierra el diálogo y muestra la acción recién creada', async () => {
     let reads = 0;
-    getSubmittedInspection.mockResolvedValue(report());
+    let findingReads = 0;
+    getSubmittedInspection.mockImplementation(() => {
+      findingReads += 1;
+      return Promise.resolve(
+        report({ findings: [finding({ state: findingReads === 1 ? 'raised' : 'assigned' })] }),
+      );
+    });
     listActions.mockImplementation(() => {
       reads += 1;
       return Promise.resolve(reads === 1 ? [] : [action()]);
@@ -482,9 +537,7 @@ describe('InspectionFindingsRoute — el compromiso', () => {
     submit(dialog);
 
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(
-      await screen.findByRole('link', { name: 'Refit the guard on packaging line 3' }),
-    ).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Start work' })).toBeTruthy();
   });
 
   it('no envía un plazo que no es futuro', async () => {
@@ -551,7 +604,7 @@ describe('InspectionFindingsRoute — el compromiso', () => {
 
   it('limita un fallo del roster al formulario abierto', async () => {
     getSubmittedInspection.mockResolvedValue(report());
-    listPeople.mockRejectedValue(new Error('offline'));
+    listFindingRoster.mockRejectedValue(new Error('offline'));
 
     renderRoute();
 
@@ -568,19 +621,28 @@ describe('InspectionFindingsRoute — el compromiso', () => {
 
 describe('InspectionFindingsRoute — avance de la acción', () => {
   beforeEach(() => {
-    getSubmittedInspection.mockResolvedValue(report());
+    getSubmittedInspection.mockResolvedValue(
+      report({ findings: [finding({ state: 'assigned' })] }),
+    );
     listActions.mockResolvedValue([action()]);
   });
 
-  async function openProgress(): Promise<HTMLElement> {
-    fireEvent.click(await screen.findByRole('button', { name: 'Update' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Update corrective action' });
-    await within(dialog).findByText('History');
-    return dialog;
+  /** El paso se ejecuta en la ficha; no hay diálogo que esperar ni nada que desplegar. */
+  async function submitStep(name: string): Promise<void> {
+    fireEvent.click(await screen.findByRole('button', { name }));
   }
 
   it('el responsable registra progreso sin salir de la lectura del hallazgo', async () => {
     let reads = 0;
+    let findingReads = 0;
+    getSubmittedInspection.mockImplementation(() => {
+      findingReads += 1;
+      return Promise.resolve(
+        report({
+          findings: [finding({ state: findingReads === 1 ? 'assigned' : 'in_progress' })],
+        }),
+      );
+    });
     listActions.mockImplementation(() => {
       reads += 1;
       return Promise.resolve([action(reads === 1 ? {} : { state: 'in_progress' })]);
@@ -588,8 +650,7 @@ describe('InspectionFindingsRoute — avance de la acción', () => {
     useAppSession.mockReturnValue({ account: session('external_auditor') });
 
     renderRoute();
-    const dialog = await openProgress();
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Start work' }));
+    await submitStep('Start work');
 
     await waitFor(() => expect(transitionAction).toHaveBeenCalledWith(action().id, {
       to: 'in_progress',
@@ -597,86 +658,70 @@ describe('InspectionFindingsRoute — avance de la acción', () => {
       reason: undefined,
       evidence: [],
     }));
+    // La lectura del hallazgo sigue en pantalla: la pregunta que lo abrió no se fue.
     expect(screen.getByText('Machine guards in place')).toBeTruthy();
-    await waitFor(() => expect(screen.getByText('In progress')).toBeTruthy());
+    await waitFor(() => expectCurrentStage('In progress'));
+    expect(await screen.findByRole('button', { name: 'Declare the work done' })).toBeTruthy();
   });
 
-  it('un miembro de JHSC lee los eventos en orden y espera a otra persona', async () => {
-    useAppSession.mockReturnValue({
-      account: {
-        ...session('jhsc_member'),
-        personId: '77777777-7777-4777-8777-777777777777',
-      },
-    });
-    getAction.mockResolvedValue(actionDetail({
-      events: [
-        actionDetail().events[0]!,
-        {
-          ...actionDetail().events[0]!,
-          id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
-          position: 1,
-          from_state: 'open',
-          to_state: 'in_progress',
-          note: 'Work started.',
-          occurred_at: '2027-08-02T13:30:00.000Z',
-        },
-        {
-          ...actionDetail().events[0]!,
-          id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
-          position: 2,
-          from_state: 'in_progress',
-          to_state: 'awaiting_verification',
-          note: 'Ready to inspect.',
-          occurred_at: '2027-08-03T14:45:00.000Z',
-        },
-      ],
+  it('ofrece evidencia posterior sin exigirla para declarar el trabajo terminado', async () => {
+    getSubmittedInspection.mockResolvedValue(
+      report({ findings: [finding({ state: 'in_progress' })] }),
+    );
+    listActions.mockResolvedValue([action({ state: 'in_progress' })]);
+
+    renderRoute();
+
+    expect(await screen.findByText('Add after photos')).toBeTruthy();
+    await submitStep('Declare the work done');
+
+    await waitFor(() => expect(transitionAction).toHaveBeenCalledWith(action().id, {
+      to: 'awaiting_verification',
+      note: undefined,
+      reason: undefined,
+      evidence: [],
     }));
-
-    renderRoute();
-    const dialog = await openProgress();
-
-    expect(within(dialog).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
-      expect.stringContaining('Guard replacement approved.'),
-      expect.stringContaining('Work started.'),
-      expect.stringContaining('Ready to inspect.'),
-    ]);
-    expect(within(dialog).getByText(/someone else has to move this one along/)).toBeTruthy();
-    expect(within(dialog).queryByRole('button', { name: 'Start work' })).toBeNull();
   });
 
-  it('pide evidencia posterior antes de declarar el trabajo terminado', async () => {
-    getAction.mockResolvedValue(actionDetail({ state: 'in_progress' }));
-
+  /**
+   * El paso se ejecuta con una sola pulsación: los campos y el botón de la transición están
+   * dibujados desde que se lee el hallazgo. Nada revela el formulario, así que tampoco hay
+   * nada que replegar.
+   */
+  it('dibuja los campos del paso sin pulsar nada, y no ofrece un control que lo pliegue', async () => {
     renderRoute();
-    const dialog = await openProgress();
 
-    expect(within(dialog).getByText('Add after photos')).toBeTruthy();
-    expect(within(dialog).getByRole('button', { name: 'Declare the work done' })).toBeTruthy();
+    const next = await screen.findByRole('region', { name: 'Next step' });
+    expect(within(next).getByLabelText(/Note/)).toBeTruthy();
+    expect(within(next).getByRole('button', { name: 'Start work' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Collapse' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    expect(transitionAction).not.toHaveBeenCalled();
   });
 
-  it('una acción cerrada conserva la historia y no ofrece reapertura', async () => {
-    getAction.mockResolvedValue(actionDetail({ state: 'closed' }));
+  it('una acción cerrada no ofrece ningún paso', async () => {
+    getSubmittedInspection.mockResolvedValue(
+      report({ findings: [finding({ state: 'closed' })] }),
+    );
+    listActions.mockResolvedValue([action({ state: 'closed' })]);
 
     renderRoute();
-    const dialog = await openProgress();
 
-    expect(within(dialog).getByText('Guard replacement approved.')).toBeTruthy();
-    expect(within(dialog).getByText('Action closed')).toBeTruthy();
-    expect(within(dialog).queryByText('What now')).toBeNull();
-    expect(within(dialog).queryByRole('button', { name: /reopen/i })).toBeNull();
+    await screen.findByText('Machine guards in place');
+    expect(screen.queryByRole('region', { name: 'Next step' })).toBeNull();
   });
 
   it('muestra el rechazo del servidor y conserva el estado anterior', async () => {
     transitionAction.mockRejectedValue(new Error('The verifier cannot be the executor.'));
 
     renderRoute();
-    const dialog = await openProgress();
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Start work' }));
+    await submitStep('Start work');
 
-    expect((await within(dialog).findByRole('alert')).textContent).toContain(
+    expect((await screen.findByRole('alert')).textContent).toContain(
       'The verifier cannot be the executor.',
     );
-    expect(screen.getAllByText('Open')).toHaveLength(2);
-    expect(screen.queryByText('In progress')).toBeNull();
+    // El estado anterior se conserva: la etapa no avanzó y el paso ofrecido es el mismo.
+    expectCurrentStage('Assigned');
+    expect(screen.getByRole('button', { name: 'Start work' })).toBeTruthy();
   });
 });

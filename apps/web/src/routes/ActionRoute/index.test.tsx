@@ -1,16 +1,17 @@
 import type { Action, Session } from '@hs/contracts';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ActionRoute } from './index';
 
 const getAction = vi.hoisted(() => vi.fn());
+const transitionAction = vi.hoisted(() => vi.fn());
 const useAppSession = vi.hoisted(() => vi.fn());
 
 vi.mock('../../api/actions', () => ({
   getAction,
-  transitionAction: vi.fn(),
+  transitionAction,
   uploadEvidence: vi.fn(),
 }));
 vi.mock('../../app/session-context', () => ({ useAppSession }));
@@ -55,6 +56,8 @@ function action(): Action {
 }
 
 describe('ActionRoute', () => {
+  afterEach(() => vi.clearAllMocks());
+
   it('mantiene el permalink con la historia y el próximo paso compartidos', async () => {
     const account: Session = {
       userId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
@@ -76,5 +79,35 @@ describe('ActionRoute', () => {
     expect(await screen.findByRole('heading', { name: 'Replace the damaged machine guard' })).toBeTruthy();
     expect(screen.getByText('Approved after inspection.')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Start work' })).toBeTruthy();
+  });
+
+  it('ofrece evidencia al completar sin exigir archivos', async () => {
+    const account: Session = {
+      userId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+      personId: PERSON_ID,
+      role: 'external_auditor',
+      siteScope: ['cccccccc-cccc-4ccc-8ccc-cccccccccccc'],
+      recordsFrom: null,
+      recordsTo: null,
+    };
+    getAction.mockResolvedValue({ ...action(), state: 'in_progress' });
+    transitionAction.mockResolvedValue({ ...action(), state: 'awaiting_verification' });
+    useAppSession.mockReturnValue({ account });
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ActionRoute />
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText('Add after photos')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Declare the work done' }));
+
+    await waitFor(() => expect(transitionAction).toHaveBeenCalledWith(ACTION_ID, {
+      to: 'awaiting_verification',
+      note: undefined,
+      reason: undefined,
+      evidence: [],
+    }));
   });
 });

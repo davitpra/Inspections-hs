@@ -1696,13 +1696,188 @@ select:disabled {
   margin: 0;
 }
 
-/* Lo comprometido y el camino para comprometer más. Va debajo del hallazgo y separado por
-   una línea: es lo que se hizo con él, no parte de lo que se observó. */
-.finding__commitments {
+/* El ciclo es una lectura de las acciones, no otro dato del hallazgo. Cada segmento lleva
+   su nombre y su forma además del color: el filete lleno quedó atrás, el doble anillo es el
+   vigente y el punto con línea tenue todavía está por delante. */
+.finding__lifecycle {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--line);
+}
+
+.finding__lifecycle-head {
   display: flex;
   flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.finding__lifecycle-head h3,
+.finding__lifecycle-head p {
+  margin: 0;
+}
+
+/*
+ * LOS DOS h3 DE ESTE BLOQUE SE MIDEN, no se dejan en el default del navegador. Sin regla
+ * propia salían a 18.72px/700 —el `1.17em` del user agent—, por encima del enunciado de la
+ * pregunta del que cuelgan (16px/600) y casi a la par del `h2` de la sección (20px/700).
+ * Dos encabezados subordinados gritando más fuerte que su propio padre es lo que hacía leer
+ * la ficha como un amontonamiento.
+ *
+ * "Finding lifecycle" es una etiqueta de bloque, no un título: toma el mismo tratamiento
+ * que `.finding__prescription-title`, que es la otra etiqueta de bloque de esta ficha.
+ */
+.finding__lifecycle-head h3 {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
+  color: var(--muted);
+}
+
+.finding__lifecycle-head p {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.finding__stepper {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.finding__stage {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: var(--space-1) solid var(--line);
+  color: var(--state-neutral);
+  font-size: var(--text-sm);
+}
+
+.finding__stage-mark {
+  width: var(--space-3);
+  height: var(--space-3);
+  box-sizing: border-box;
+  border: var(--space-0-5) solid currentcolor;
+  border-radius: var(--radius-pill);
+}
+
+.finding__stage--done {
+  border-color: var(--state-ok);
+  color: var(--state-ok);
+}
+
+.finding__stage--done .finding__stage-mark {
+  background: var(--state-ok);
+}
+
+.finding__stage--current {
+  border-color: var(--state-info);
+  color: var(--state-info);
+  font-weight: var(--weight-strong);
+}
+
+.finding__stage--current .finding__stage-mark {
+  outline: var(--space-0-5) solid currentcolor;
+  outline-offset: var(--space-0-5);
+}
+
+/*
+ * El único camino principal dentro de la ficha. APILA y no es un renglón: el segundo
+ * renglón es el formulario del paso, y `finding__next-step-head` es lo que ANTES era este
+ * bloque entero, cuando avanzar una acción abría un diálogo en vez de resolverse acá.
+ */
+.finding__next-step {
+  display: grid;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-left: var(--space-1) solid var(--state-info);
+  border-radius: var(--radius);
+  background: var(--info-bg);
+}
+
+.finding__next-step-head {
+  display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.finding__next-step-copy,
+.finding__next-step-copy h3,
+.finding__next-step-copy p {
+  margin: 0;
+}
+
+.finding__next-step-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+
+/* El nombre del acto que sigue. A la par del enunciado de la pregunta y no por encima: es
+   lo que hay que hacer con esa pregunta, no un encabezado que la contenga. */
+.finding__next-step-copy h3 {
+  font-size: var(--text-base);
+  font-weight: var(--weight-strong);
+}
+
+.finding__next-step-eyebrow,
+.finding__next-step-owner {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+/*
+ * El único `button--primary` que no toma el ancho: comparte renglón con la copia del paso,
+ * y el `width: 100%` del modificador la dejaba en una columna de dos palabras. Se mide por
+ * su contenido, como `.scheduling__header-add`, y no parte la etiqueta en dos líneas: es el
+ * mismo texto del encabezado del bloque, y leerlo distinto haría dudar de que sea lo mismo.
+ */
+.finding__next-step-button {
+  flex: none;
+  padding-inline: var(--space-6);
+  white-space: nowrap;
+}
+
+/*
+ * EL ANCHO VA CALIFICADO POR EL BLOQUE, y no en la regla de arriba. `button--primary` y
+ * `button--outline` se declaran más abajo en este archivo con la misma especificidad, así
+ * que un `width: auto` por clase sola pierde por orden y el botón vuelve a comerse el
+ * renglón. Es lo mismo que hacen `.manage-sites__actions .button--primary` y
+ * `.builder__aside-actions .button--primary`.
+ */
+.finding__next-step .button--primary {
+  width: auto;
+}
+
+/* El formulario del paso, siempre a la vista. La línea punteada lo separa de la copia que
+   lo nombra, igual que `.finding__commitments` separa el compromiso del hallazgo: es otro
+   nivel de detalle, no una continuación del mismo texto. */
+.finding__next-step-form {
+  padding-top: var(--space-4);
+  border-top: 1px dashed var(--line);
+}
+
+/* La historia plegada. `<summary>` hereda el tipo de letra del cuerpo a propósito: no es
+   un encabezado de sección, es el nombre de un disclosure. */
+/* Lo comprometido y el camino para comprometer más. Va debajo del hallazgo y separado por
+   una línea: es lo que se hizo con él, no parte de lo que se observó.
+
+   APILA, no es un renglón. Con acciones existentes, una lista de tarjetas al lado de un
+   botón dejaba las tarjetas comprimidas contra un costado y el botón flotando a media
+   altura de la lista. */
+.finding__commitments {
+  display: grid;
   gap: var(--space-3);
   margin-top: var(--space-3);
   padding-top: var(--space-3);
@@ -1726,12 +1901,46 @@ select:disabled {
   background: var(--paper);
 }
 
+/*
+ * La descripción a la izquierda y el estado contra el borde, igual que `.report__item-line`
+ * y por la misma razón: sobre una lista de acciones la columna de estados se lee de un
+ * vistazo en vez de cazarse al final de cada descripción.
+ *
+ * EL `flex` DE LA DESCRIPCIÓN ES LO QUE FIJA LA COLUMNA. Sin él, una descripción larga
+ * medía su `max-content`, no entraba con el badge y lo empujaba a un segundo renglón donde
+ * `space-between` lo dejaba a la IZQUIERDA: dos tarjetas de la misma lista con el estado en
+ * dos lugares distintos, y no por el ancho de la pantalla sino por el largo del texto.
+ * Con la base declarada, el texto envuelve dentro de su columna y el badge se queda. El
+ * `wrap` sigue siendo el orden del teléfono: por debajo de la base, el estado baja entero.
+ */
 .finding__action-head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
+}
+
+.finding__action-head a {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.finding__action-head .badge {
+  flex: none;
+}
+
+/*
+ * La misma acción correctiva que lista `/actions`, leída desde el hallazgo que la abrió, y
+ * por eso el mismo link: `.actions-overview__primary-cell a`. Sin esto quedaba en el azul
+ * por default del navegador —`#0000EE` subrayado— porque `index.css` no tiene regla `a`
+ * global: cada bloque declara `--brand` por su cuenta. `check-tokens.mjs` no lo puede ver,
+ * porque no es un color literal sino la AUSENCIA de una declaración.
+ */
+.finding__action-head a {
+  color: var(--brand);
+  text-decoration-thickness: 1px;
+  text-underline-offset: var(--space-1);
 }
 
 .finding__action-facts {
@@ -1763,31 +1972,69 @@ select:disabled {
   font-size: var(--text-sm);
 }
 
+/*
+ * "Update" vive en una grilla de una columna, así que sin esto se estira de punta a punta
+ * y se lee como el paso siguiente del hallazgo. El paso siguiente ya está escrito arriba.
+ */
 .finding__update-button {
   justify-self: start;
 }
 
-.finding__create-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  border-color: var(--brand);
-  color: var(--brand);
-  font-weight: var(--weight-strong);
+.finding__action .button--outline {
+  width: auto;
 }
 
-@media (max-width: 40rem) {
-  .finding__commitments {
+/*
+ * EL CORTE DEL CICLO ESTÁ EN 68rem Y NO EN EL 40rem HABITUAL DE TELÉFONO, porque la
+ * ventana no dice cuánto mide esta tarjeta: en escritorio el `.sidebar` se lleva 18rem y,
+ * entre eso y los rellenos del shell, la tarjeta y la ficha, al ciclo le quedan unos 490px
+ * MENOS que a la ventana. A 1024px —una pantalla de trabajo corriente— las cinco columnas
+ * caían a 99px, "In progress" se partía en dos renglones y "Verification" se salía de la
+ * suya por encima de la marca siguiente.
+ *
+ * Debajo de 48rem el sidebar se apaga y el ancho vuelve, pero para entonces la ventana ya
+ * es angosta por su cuenta: los dos regímenes piden lo mismo, y por eso alcanza un corte y
+ * no dos.
+ */
+@media (max-width: 68rem) {
+  .finding__stepper {
+    grid-template-columns: 1fr;
+  }
+
+  .finding__stage {
+    padding: 0 0 0 var(--space-3);
+    border-top: 0;
+    border-left: var(--space-1) solid var(--line);
+  }
+
+  .finding__stage--done {
+    border-color: var(--state-ok);
+  }
+
+  .finding__stage--current {
+    border-color: var(--state-info);
+  }
+
+  /* La copia deja de compartir renglón antes de volverse una columna de dos palabras, y el
+     botón pasa a ser el pie del bloque en vez de disputarle el ancho. */
+  .finding__next-step-head {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .finding__create-button {
+  .finding__next-step .button--primary {
     width: 100%;
   }
+}
 
+/* Los objetivos de toque del teléfono (ADR-010): lo que en escritorio se mide por su
+   contenido, acá toma el renglón entero. Califica por el bloque por lo mismo que arriba. */
+@media (max-width: 40rem) {
   .finding__update-button {
+    justify-self: stretch;
+  }
+
+  .finding__action .button--outline {
     width: 100%;
   }
 }

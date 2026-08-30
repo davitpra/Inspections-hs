@@ -5,6 +5,7 @@ import {
   transitionsFrom,
   type Action,
   type ActionState,
+  type Finding,
   type Session,
 } from '@hs/contracts';
 
@@ -12,6 +13,8 @@ import { canAttempt, canCreateAction } from './actions';
 
 const PERSON = '11111111-1111-4111-8111-111111111111';
 const OTHER_PERSON = '22222222-2222-4222-8222-222222222222';
+const DEFAULT_ACCOUNT = '77777777-7777-4777-8777-777777777777';
+const REPORTER_ACCOUNT = '88888888-8888-4888-8888-888888888888';
 
 function action(state: ActionState): Action {
   return {
@@ -32,9 +35,9 @@ function action(state: ActionState): Action {
   };
 }
 
-function session(role: Session['role'], personId = PERSON): Session {
+function session(role: Session['role'], personId = PERSON, userId = DEFAULT_ACCOUNT): Session {
   return {
-    userId: '77777777-7777-4777-8777-777777777777',
+    userId,
     personId,
     role,
     siteScope: ['44444444-4444-4444-8444-444444444444'],
@@ -43,15 +46,33 @@ function session(role: Session['role'], personId = PERSON): Session {
   };
 }
 
-describe('la creación de acciones', () => {
-  it('se ofrece solo al coordinador', () => {
+function finding(reportedBy = REPORTER_ACCOUNT): Pick<Finding, 'reported_by'> {
+  return { reported_by: reportedBy };
+}
+
+describe('la creación de acciones (ADR-017)', () => {
+  it('se ofrece al coordinador aunque no haya reportado el hallazgo', () => {
     for (const role of ROLES) {
-      expect(canCreateAction(session(role))).toBe(role === 'hs_coordinator');
+      expect(canCreateAction(session(role), finding())).toBe(role === 'hs_coordinator');
     }
   });
 
+  it('se ofrece a quien reportó el hallazgo, sea cual sea su rol', () => {
+    for (const role of ROLES) {
+      const reporter = session(role, PERSON, REPORTER_ACCOUNT);
+
+      expect(canCreateAction(reporter, finding(REPORTER_ACCOUNT))).toBe(true);
+    }
+  });
+
+  it('no se ofrece a un jhsc_member que no reportó este hallazgo', () => {
+    const otherJhsc = session('jhsc_member', PERSON, DEFAULT_ACCOUNT);
+
+    expect(canCreateAction(otherJhsc, finding(REPORTER_ACCOUNT))).toBe(false);
+  });
+
   it('no se ofrece sin sesión', () => {
-    expect(canCreateAction(null)).toBe(false);
+    expect(canCreateAction(null, finding())).toBe(false);
   });
 });
 

@@ -71,6 +71,7 @@ describe('findingSchema', () => {
       item_key: 'guarding.installed',
       location_id: LOCATION_ID,
       description: 'Guard missing on the infeed of packaging line 3',
+      state: 'raised',
       photo_object_keys: ['site/inspection/aaa.jpg'],
       reported_by: USER_ID,
       occurred_at: '2026-08-03T14:20:00.000Z',
@@ -108,8 +109,21 @@ describe('findingSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('no admite un campo status', () => {
-    const result = findingSchema.safeParse({ ...derived(), status: 'open' });
+  it.each(['raised', 'assigned', 'in_progress', 'verification', 'closed'])(
+    'acepta el estado propio %s',
+    (state) => {
+      expect(findingSchema.safeParse({ ...derived(), state }).success).toBe(true);
+    },
+  );
+
+  it('exige el estado propio', () => {
+    const { state: _state, ...withoutState } = derived();
+
+    expect(findingSchema.safeParse(withoutState).success).toBe(false);
+  });
+
+  it('no admite un estado ajeno al ciclo', () => {
+    const result = findingSchema.safeParse({ ...derived(), state: 'open' });
 
     expect(result.success).toBe(false);
   });

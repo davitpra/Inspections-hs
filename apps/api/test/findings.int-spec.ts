@@ -8,7 +8,7 @@ import { FindingsController } from '../src/findings/findings.controller';
 import { FindingsService } from '../src/findings/findings.service';
 import { SubmissionsService } from '../src/inspections/submissions.service';
 import { createLocation, registerSite } from './helpers/catalog';
-import { createAccount } from './helpers/identity';
+import { createAccount, createPerson } from './helpers/identity';
 import { scheduleInspection } from './helpers/inspections';
 import { inScope, one, sqlstate, startTestDatabase, type TestDatabase } from './helpers/postgres';
 import { createSchedulingStack, type SchedulingStack } from './helpers/scheduling';
@@ -528,6 +528,7 @@ describe('la entrada manual', () => {
     expect(created.inspection_id).toBeNull();
     expect(created.item_key).toBeNull();
     expect(created.template_version_item_id).toBeNull();
+    expect(created.state).toBe('raised');
     expect(created).not.toHaveProperty('assessment');
   });
 
@@ -763,6 +764,90 @@ describe('el aislamiento por sitio', () => {
   });
 });
 
+describe('el roster del hallazgo (ADR-017)', () => {
+  function manualAt(siteId: string, locationId: string) {
+    const draftId = randomUUID();
+
+    return {
+      site_id: siteId,
+      draft_finding_id: draftId,
+      details: {
+        description: 'Forklift near miss at the loading dock',
+        location_id: locationId,
+        photo_object_keys: [`${siteId}/manual/${draftId}/${randomUUID()}`],
+      },
+      occurred_at: '2026-08-10T13:00:00.000Z',
+    };
+  }
+
+  it('trae solo cuatro columnas, y ninguna es el perfil', async () => {
+    const finding = await findings.report(
+      sessionFor(supervisor.accountId, [SITE_A], 'supervisor'),
+      manualAt(SITE_A, locationA),
+    );
+
+    const roster = await findings.rosterPackage(
+      sessionFor(inspector.accountId, [SITE_A]),
+      finding.id,
+    );
+
+    expect(roster.length).toBeGreaterThan(0);
+    expect(Object.keys(roster[0]!).sort()).toEqual(
+      ['employee_number', 'first_name', 'id', 'last_name'].sort(),
+    );
+  });
+
+  it('no ofrece a una persona desactivada', async () => {
+    const finding = await findings.report(
+      sessionFor(supervisor.accountId, [SITE_A], 'supervisor'),
+      manualAt(SITE_A, locationA),
+    );
+    const departed = await createPerson(db.app, SITE_A, { firstName: 'Gone', lastName: 'Zulu' });
+
+    expect(
+      (await findings.rosterPackage(sessionFor(inspector.accountId, [SITE_A]), finding.id)).map(
+        (row) => row.last_name,
+      ),
+    ).toContain('Zulu');
+
+    await inScope(db.app, [SITE_A], 'UPDATE person SET deactivated_at = now() WHERE id = $1', [
+      departed,
+    ]);
+
+    expect(
+      (await findings.rosterPackage(sessionFor(inspector.accountId, [SITE_A]), finding.id)).map(
+        (row) => row.last_name,
+      ),
+    ).not.toContain('Zulu');
+  });
+
+  it('solo trae personas del sitio del hallazgo, no de la otra planta', async () => {
+    const finding = await findings.report(
+      sessionFor(supervisor.accountId, [SITE_A], 'supervisor'),
+      manualAt(SITE_A, locationA),
+    );
+    await createPerson(db.app, SITE_B, { firstName: 'Other', lastName: 'Site' });
+
+    const roster = await findings.rosterPackage(
+      sessionFor(inspector.accountId, [SITE_A]),
+      finding.id,
+    );
+
+    expect(roster.some((row) => row.last_name === 'Site')).toBe(false);
+  });
+
+  it('un hallazgo fuera de alcance responde que no existe', async () => {
+    const finding = await findings.report(
+      sessionFor(coordinator.accountId, [SITE_A, SITE_B], 'hs_coordinator'),
+      manualAt(SITE_B, locationB),
+    );
+
+    await expect(
+      findings.rosterPackage(sessionFor(inspector.accountId, [SITE_A]), finding.id),
+    ).rejects.toMatchObject({ response: { code: 'finding_not_found' } });
+  });
+});
+
 describe('la inmutabilidad', () => {
   async function anyFinding(): Promise<string> {
     const rows = await findingRows([SITE_A]);
@@ -846,8 +931,8 @@ describe('la cadena de auditoría', () => {
       }),
     );
 
-    // Dos eslabones: `inspection.submitted` y `finding.derived`. Ninguno por foto.
-    expect(await chainLength(SITE_A)).toBe(before + 2);
+    // Tres eslabones: envío, hallazgo y su estado inicial. Ninguno por foto.
+    expect(await chainLength(SITE_A)).toBe(before + 3);
   });
 
   it('un reenvío no agrega ningún eslabón', async () => {

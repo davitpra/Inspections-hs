@@ -33,7 +33,7 @@ export function EvidencePicker({
           </span>
           <span>
             <strong>{kind === 'after' ? 'Add after photos' : 'Add before photos'}</strong>
-            <small>{kind === 'after' ? 'Required to complete the work' : 'Optional context'}</small>
+            <small>{kind === 'after' ? 'Add context for verification' : 'Optional context'}</small>
           </span>
         </label>
       ))}

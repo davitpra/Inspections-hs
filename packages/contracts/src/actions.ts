@@ -6,8 +6,9 @@ import type { Role } from './identity.js';
  * Requisitos §7 etapa 5 — La acción correctiva y su ciclo de vida.
  *
  * De un hallazgo sale una obligación con una persona nombrada y una fecha límite
- * (§3 R2). El responsable la ejecuta, carga evidencia, y **alguien distinto** la
- * verifica y la cierra (§3 R3). Si vence sin cerrarse, escala.
+ * (§3 R2). El responsable la ejecuta, el sistema pide y conserva evidencia opcional,
+ * y **alguien distinto** la verifica y la cierra (§3 R3, ADR-016). Si vence sin
+ * cerrarse, escala.
  *
  * La regla de este archivo —qué transiciones existen— es una **función pura sin
  * base de datos** (ADR-008), y vive acá y no en `packages/forms` por dos motivos:
@@ -71,12 +72,11 @@ export type TransitionActor = Role | typeof ASSIGNEE;
 /**
  * Lo que una transición exige además del estado de origen.
  *
- * - `after_evidence`: al menos una evidencia `after`. R3, "carga evidencia".
  * - `not_executor`: el actor no puede ser quien declaró el trabajo hecho. R3,
  *   "una persona distinta del ejecutor".
  * - `reason`: hay que decir por qué. Solo al rechazar una verificación.
  */
-export const TRANSITION_REQUIREMENTS = ['after_evidence', 'not_executor', 'reason'] as const;
+export const TRANSITION_REQUIREMENTS = ['not_executor', 'reason'] as const;
 
 export type TransitionRequirement = (typeof TRANSITION_REQUIREMENTS)[number];
 
@@ -110,7 +110,7 @@ export const TRANSITIONS: readonly ActionTransition[] = [
     from: 'in_progress',
     to: 'awaiting_verification',
     roles: [ASSIGNEE, 'hs_coordinator'],
-    requires: ['after_evidence'],
+    requires: [],
   },
   {
     from: 'awaiting_verification',
@@ -218,7 +218,7 @@ export const createActionRequestSchema = z.strictObject({
 
 export type CreateActionRequest = z.infer<typeof createActionRequestSchema>;
 
-/** De qué momento del trabajo es una evidencia. R3 pide antes/después. */
+/** De qué momento del trabajo es una evidencia. R3 pide y conserva antes/después (ADR-016). */
 export const EVIDENCE_KINDS = ['before', 'after'] as const;
 
 export const evidenceKindSchema = z.enum(EVIDENCE_KINDS);
@@ -236,30 +236,18 @@ export type EvidenceInput = z.infer<typeof evidenceInputSchema>;
 /**
  * Pedir una transición.
  *
- * Los dos `refine` reproducen las dos filas de `TRANSITIONS` que exigen algo:
- * `after_evidence` al declarar el trabajo hecho, y `reason` al rechazar una
- * verificación. Son la primera barrera y la más barata —el cliente ni siquiera
- * manda el request—; la segunda es el servicio y la tercera son los `CHECK` y
- * los triggers de 0011.
+ * La evidencia es opcional en toda transición (ADR-016). El objeto sigue siendo
+ * estricto y limita la cantidad de keys que el cliente puede mandar.
  *
  * `from` no viaja: el servidor ya sabe cuál es el estado vigente, y aceptarlo del
  * caller sería dejarle elegir contra qué se valida.
  */
-export const transitionRequestSchema = z
-  .strictObject({
-    to: actionStateSchema,
-    note: z.string().trim().min(1).max(2000).optional(),
-    reason: z.string().trim().min(10).max(2000).optional(),
-    evidence: z.array(evidenceInputSchema).max(10).default([]),
-  })
-  .refine(
-    (value) =>
-      value.to !== 'awaiting_verification' || value.evidence.some((item) => item.kind === 'after'),
-    {
-      message: 'Declarar el trabajo hecho exige al menos una evidencia `after`.',
-      path: ['evidence'],
-    },
-  );
+export const transitionRequestSchema = z.strictObject({
+  to: actionStateSchema,
+  note: z.string().trim().min(1).max(2000).optional(),
+  reason: z.string().trim().min(10).max(2000).optional(),
+  evidence: z.array(evidenceInputSchema).max(10).default([]),
+});
 
 // El `reason` obligatorio del rechazo de una verificación NO se puede exigir acá:
 // `awaiting_verification → in_progress` lo necesita y `open → in_progress` no, y

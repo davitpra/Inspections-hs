@@ -22,9 +22,9 @@ import { appUser, person } from './identity';
  * `apps/api/drizzle/0011_corrective_actions.sql`, no este archivo.
  *
  * Acá solo viven los tipos con los que el repositorio consulta. El SQL lleva además
- * la guarda de la máquina de estados, la del verificador, las dos restricciones
- * diferidas —"una acción sin eventos no existe" y "declarar el trabajo hecho exige
- * evidencia"—, los triggers de prohibición de UPDATE/DELETE/TRUNCATE, los de
+ * la guarda de la máquina de estados, la del verificador, la restricción diferida
+ * —"una acción sin eventos no existe"—, los triggers de prohibición de
+ * UPDATE/DELETE/TRUNCATE, los de
  * auditoría, `hs_apply_site_isolation` y los GRANT. Nada de eso lo sabe expresar un
  * esquema de ORM. Por eso `drizzle-kit generate` está prohibido: regeneraría el
  * `.sql` a partir de esto y se llevaría puesto el mecanismo. Si el SQL cambia, este
@@ -175,10 +175,8 @@ export const correctiveActionEvent = pgTable(
  * La evidencia antes/después de R3 (migración 0011).
  *
  * **Cuelga del EVENTO y no de la acción**: sin eso, las fotos de un cierre y las de un
- * cierre anterior rechazado quedarían mezcladas en una sola bolsa. Que exista al menos
- * una de `kind` `after` en el evento que declara el trabajo hecho lo verifica una
- * restricción diferida al commit, no un `CHECK` —un `CHECK` no puede contar filas de
- * otra tabla.
+ * cierre anterior rechazado quedarían mezcladas en una sola bolsa. La evidencia es
+ * opcional en toda transición (ADR-016).
  */
 export const correctiveActionEvidence = pgTable(
   'corrective_action_evidence',

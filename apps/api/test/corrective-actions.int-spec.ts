@@ -25,7 +25,7 @@ import { createTemplate, publishVersion, registerItems } from './helpers/templat
  *   2. Solo las cinco transiciones existen, por el endpoint y por `INSERT` directo.
  *   3. Dos transiciones concurrentes no bifurcan el stream.
  *   4. Quien ejecutó no puede verificar, ni siquiera insertando a mano.
- *   5. Declarar el trabajo hecho sin evidencia no llega a commitear.
+ *   5. Declarar el trabajo hecho sin evidencia commitea y conserva evidencia opcional.
  *   6. El plazo declarado queda congelado desde la creación.
  *   7. Treinta corridas del cron escalan una vez por nivel.
  */
@@ -106,7 +106,9 @@ function nextPeriod(): string {
 }
 
 /** Un hallazgo derivado de un envío real, todavía sin ninguna clasificación. */
-async function derivedFinding(siteId = SITE_A): Promise<{ findingId: string }> {
+async function derivedFinding(
+  siteId = SITE_A,
+): Promise<{ findingId: string; reporterAccountId: string }> {
   const isB = siteId === SITE_B;
   const location = isB ? locationB : locationA;
   const account = isB ? inspectorB : inspector;
@@ -148,7 +150,7 @@ async function derivedFinding(siteId = SITE_A): Promise<{ findingId: string }> {
 
   const findingId = one(rows).id;
 
-  return { findingId };
+  return { findingId, reporterAccountId: account.accountId };
 }
 
 /** Una acción abierta sobre un hallazgo nuevo, con el responsable pedido. */
@@ -242,6 +244,40 @@ async function eventRows(actionId: string, siteIds = [SITE_A]) {
   );
 }
 
+async function findingStateOf(findingId: string, siteIds = [SITE_A]): Promise<string> {
+  const rows = await inScope<{ to_state: string }>(
+    db.app,
+    siteIds,
+    `SELECT to_state
+       FROM finding_state_event
+      WHERE finding_id = $1
+      ORDER BY position DESC
+      LIMIT 1`,
+    [findingId],
+  );
+
+  return one(rows).to_state;
+}
+
+async function findingStateRows(findingId: string, siteIds = [SITE_A]) {
+  return inScope<{
+    id: string;
+    position: number;
+    from_state: string | null;
+    to_state: string;
+    source_action_event_id: string | null;
+    actor_user_id: string | null;
+  }>(
+    db.app,
+    siteIds,
+    `SELECT id, position, from_state, to_state, source_action_event_id, actor_user_id
+       FROM finding_state_event
+      WHERE finding_id = $1
+      ORDER BY position`,
+    [findingId],
+  );
+}
+
 async function auditEvents(siteId: string, type: string) {
   return inScope<{ seq: string; payload: Record<string, unknown>; actor_user_id: string | null }>(
     db.app,
@@ -315,6 +351,190 @@ afterAll(async () => {
   await db.stop();
 });
 
+describe('el estado propio del hallazgo', () => {
+  it('nace raised y recorre automáticamente las cinco etapas con su acción', async () => {
+    const { findingId, reporterAccountId } = await derivedFinding();
+
+    expect((await findings.get(asCoordinator(), findingId)).state).toBe('raised');
+
+    const created = await actions.create(asCoordinator(), findingId, {
+      assignee_person_id: supervisor.personId,
+      description: 'Install a fixed guard on the infeed of line 3',
+      due_at: DUE_AT,
+    });
+
+    expect(await findingStateOf(findingId)).toBe('assigned');
+
+    await actions.transition(asSupervisor(), created.id, { to: 'in_progress', evidence: [] });
+    expect(await findingStateOf(findingId)).toBe('in_progress');
+
+    await actions.transition(asSupervisor(), created.id, {
+      to: 'awaiting_verification',
+      evidence: [],
+    });
+    expect(await findingStateOf(findingId)).toBe('verification');
+
+    await actions.transition(asCoordinator(), created.id, { to: 'closed', evidence: [] });
+    expect((await findings.get(asCoordinator(), findingId)).state).toBe('closed');
+
+    const stream = await findingStateRows(findingId);
+    expect(stream.map(({ from_state, to_state }) => [from_state, to_state])).toEqual([
+      [null, 'raised'],
+      ['raised', 'assigned'],
+      ['assigned', 'in_progress'],
+      ['in_progress', 'verification'],
+      ['verification', 'closed'],
+    ]);
+    expect(stream[0]?.actor_user_id).toBe(reporterAccountId);
+    expect(stream.slice(1).every((event) => event.source_action_event_id !== null)).toBe(true);
+  });
+
+  it('regresa a in_progress si se rechaza la verificación', async () => {
+    const { findingId } = await derivedFinding();
+    const created = await actions.create(asCoordinator(), findingId, {
+      assignee_person_id: supervisor.personId,
+      description: 'Install a fixed guard on the infeed of line 3',
+      due_at: DUE_AT,
+    });
+    await awaitingVerification(created.id);
+
+    await actions.transition(asOtherSupervisor(), created.id, {
+      to: 'in_progress',
+      reason: 'The guard was installed on the wrong line',
+      evidence: [],
+    });
+
+    expect(await findingStateOf(findingId)).toBe('in_progress');
+  });
+
+  it('una acción nueva devuelve un hallazgo cerrado a assigned', async () => {
+    const { findingId } = await derivedFinding();
+    const first = await actions.create(asCoordinator(), findingId, {
+      assignee_person_id: supervisor.personId,
+      description: 'Install a fixed guard on the infeed of line 3',
+      due_at: DUE_AT,
+    });
+    await awaitingVerification(first.id);
+    await actions.transition(asCoordinator(), first.id, { to: 'closed', evidence: [] });
+
+    await actions.create(asCoordinator(), findingId, {
+      assignee_person_id: supervisor.personId,
+      description: 'Add a documented pre-start inspection of the new guard',
+      due_at: LATER_DUE_AT,
+    });
+
+    expect(await findingStateOf(findingId)).toBe('assigned');
+  });
+
+  it('no duplica eventos mientras otra acción menos avanzada retiene el estado', async () => {
+    const { findingId } = await derivedFinding();
+    const first = await actions.create(asCoordinator(), findingId, {
+      assignee_person_id: supervisor.personId,
+      description: 'Install a fixed guard on the infeed of line 3',
+      due_at: DUE_AT,
+    });
+    await actions.create(asCoordinator(), findingId, {
+      assignee_person_id: supervisor.personId,
+      description: 'Document the guard inspection procedure for the line',
+      due_at: LATER_DUE_AT,
+    });
+
+    await actions.transition(asSupervisor(), first.id, { to: 'in_progress', evidence: [] });
+
+    expect(await findingStateOf(findingId)).toBe('assigned');
+    expect(await findingStateRows(findingId)).toHaveLength(2);
+  });
+
+  it('serializa el avance concurrente de dos acciones del mismo hallazgo', async () => {
+    const { findingId } = await derivedFinding();
+    const first = await actions.create(asCoordinator(), findingId, {
+      assignee_person_id: supervisor.personId,
+      description: 'Install a fixed guard on the infeed of line 3',
+      due_at: DUE_AT,
+    });
+    const second = await actions.create(asCoordinator(), findingId, {
+      assignee_person_id: supervisor.personId,
+      description: 'Document the guard inspection procedure for the line',
+      due_at: LATER_DUE_AT,
+    });
+
+    await Promise.all([
+      actions.transition(asSupervisor(), first.id, { to: 'in_progress', evidence: [] }),
+      actions.transition(asSupervisor(), second.id, { to: 'in_progress', evidence: [] }),
+    ]);
+
+    expect(await findingStateOf(findingId)).toBe('in_progress');
+    expect((await findingStateRows(findingId)).map((event) => event.to_state)).toEqual([
+      'raised',
+      'assigned',
+      'in_progress',
+    ]);
+  });
+
+  it('audita el origen y cada cambio con el evento de acción que lo causó', async () => {
+    const before = (await auditEvents(SITE_A, 'finding.state_changed')).length;
+    const { findingId } = await derivedFinding();
+    await actions.create(asCoordinator(), findingId, {
+      assignee_person_id: supervisor.personId,
+      description: 'Install a fixed guard on the infeed of line 3',
+      due_at: DUE_AT,
+    });
+
+    const recorded = (await auditEvents(SITE_A, 'finding.state_changed')).slice(before);
+
+    expect(recorded).toHaveLength(2);
+    expect(recorded.map((event) => event.payload.to_state)).toEqual(['raised', 'assigned']);
+    expect(recorded[0]?.payload.source_action_event_id).toBeNull();
+    expect(recorded[1]?.payload.source_action_event_id).toEqual(expect.any(String));
+  });
+
+  it('aísla el stream por sitio y rechaza cualquier mutación', async () => {
+    const { findingId } = await derivedFinding(SITE_B);
+    const visible = await findingStateRows(findingId, [SITE_B]);
+
+    expect(visible).toHaveLength(1);
+    expect(await findingStateRows(findingId, [SITE_A])).toEqual([]);
+
+    await expect(
+      inScope(db.app, [SITE_B], `UPDATE finding_state_event SET to_state = 'closed' WHERE id = $1`, [
+        visible[0]?.id,
+      ]),
+    ).rejects.toSatisfy((error) => sqlstate(error) === '42501');
+
+    await expect(
+      inScope(db.migrator, [SITE_B], 'DELETE FROM finding_state_event WHERE id = $1', [
+        visible[0]?.id,
+      ]),
+    ).rejects.toSatisfy((error) => sqlstate(error) === 'HS001');
+  });
+
+  it('el motor rechaza un estado fabricado que no coincide con las acciones', async () => {
+    const { findingId } = await derivedFinding();
+    const created = await actions.create(asCoordinator(), findingId, {
+      assignee_person_id: supervisor.personId,
+      description: 'Install a fixed guard on the infeed of line 3',
+      due_at: DUE_AT,
+    });
+
+    await expect(
+      inScope(
+        db.app,
+        [SITE_A],
+        `INSERT INTO finding_state_event
+           (finding_id, site_id, position, from_state, to_state, source_action_event_id,
+            actor_user_id, occurred_at, recorded_at)
+         SELECT $1, event.site_id, 2, 'assigned', 'closed', event.id,
+                event.actor_user_id, event.occurred_at, event.recorded_at
+           FROM corrective_action_event event
+          WHERE event.action_id = $2 AND event.position = 0`,
+        [findingId, created.id],
+      ),
+    ).rejects.toSatisfy((error) => sqlstate(error) === 'HS008');
+
+    expect(await findingStateOf(findingId)).toBe('assigned');
+  });
+});
+
 describe('el esquema después de retirar la clasificación', () => {
   it('elimina la tabla, las funciones y la columna sin abrir la acción', async () => {
     const table = await db.migrator.query<{ table_name: string | null }>(
@@ -349,6 +569,55 @@ describe('el esquema después de retirar la clasificación', () => {
     expect(columns.rows).toHaveLength(0);
     expect(privileges.rows[0]).toEqual({ can_update: false, can_delete: false });
     expect(Number(policies.rows[0]?.count)).toBeGreaterThan(0);
+  });
+});
+
+describe('el esquema con evidencia de cierre opcional', () => {
+  it('retira solo la compuerta y conserva índices, auditoría y aislamiento', async () => {
+    const functions = await db.migrator.query<{ name: string }>(
+      `SELECT p.proname AS name
+         FROM pg_proc p
+        WHERE p.proname IN ('hs_action_evidence_required', 'hs_action_verifier_guard')
+        ORDER BY p.proname`,
+    );
+    const triggers = await db.migrator.query<{ name: string }>(
+      `SELECT tgname AS name
+         FROM pg_trigger
+        WHERE NOT tgisinternal
+          AND tgname IN ('corrective_action_evidence_required',
+                         'corrective_action_evidence_audit',
+                         'corrective_action_event_verifier_guard')
+        ORDER BY tgname`,
+    );
+    const indexes = await db.migrator.query<{ name: string }>(
+      `SELECT indexname AS name
+         FROM pg_indexes
+        WHERE schemaname = 'public'
+          AND indexname IN ('corrective_action_evidence_key_uq',
+                            'corrective_action_evidence_event_idx')
+        ORDER BY indexname`,
+    );
+    const policies = await db.migrator.query<{ table_name: string; count: string }>(
+      `SELECT tablename AS table_name, count(*)::text AS count
+         FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename IN ('corrective_action', 'corrective_action_event',
+                            'corrective_action_evidence')
+        GROUP BY tablename
+        ORDER BY tablename`,
+    );
+
+    expect(functions.rows).toEqual([{ name: 'hs_action_verifier_guard' }]);
+    expect(triggers.rows).toEqual([
+      { name: 'corrective_action_event_verifier_guard' },
+      { name: 'corrective_action_evidence_audit' },
+    ]);
+    expect(indexes.rows).toEqual([
+      { name: 'corrective_action_evidence_event_idx' },
+      { name: 'corrective_action_evidence_key_uq' },
+    ]);
+    expect(policies.rows).toHaveLength(3);
+    expect(policies.rows.every((row) => Number(row.count) > 0)).toBe(true);
   });
 });
 
@@ -704,42 +973,36 @@ describe('el verificador', () => {
 });
 
 describe('la evidencia', () => {
-  it('declarar el trabajo hecho sin evidencia se rechaza', async () => {
+  it('declarar el trabajo hecho sin evidencia llega a esperando verificación', async () => {
     const actionId = await openAction();
 
     await actions.transition(asSupervisor(), actionId, { to: 'in_progress', evidence: [] });
 
-    await expect(
-      actions.transition(asSupervisor(), actionId, {
-        to: 'awaiting_verification',
-        evidence: [{ kind: 'before', object_key: evidenceKey(actionId) }],
-      }),
-    ).rejects.toBeDefined();
+    const action = await actions.transition(asSupervisor(), actionId, {
+      to: 'awaiting_verification',
+      evidence: [],
+    });
+    const completion = action.events.find((event) => event.to_state === 'awaiting_verification');
 
-    expect(await stateOf(actionId)).toBe('in_progress');
+    expect(action.state).toBe('awaiting_verification');
+    expect(completion?.evidence).toEqual([]);
   });
 
-  /**
-   * La barrera que no depende del servicio: un `INSERT` directo del evento, sin
-   * evidencia, no llega a commitear. Es la restricción diferida `HS006`.
-   */
-  it('un evento de completado sin evidencia no commitea (HS006)', async () => {
+  it('un evento directo de completado sin evidencia commitea', async () => {
     const actionId = await openAction();
 
     await actions.transition(asSupervisor(), actionId, { to: 'in_progress', evidence: [] });
 
-    await expect(
-      inScope(
-        db.app,
-        [SITE_A],
-        `INSERT INTO corrective_action_event
-           (action_id, site_id, position, from_state, to_state, actor_user_id, occurred_at)
-         VALUES ($1, $2, 2, 'in_progress', 'awaiting_verification', $3, now())`,
-        [actionId, SITE_A, supervisor.accountId],
-      ),
-    ).rejects.toSatisfy((error: unknown) => sqlstate(error) === 'HS006');
+    await inScope(
+      db.app,
+      [SITE_A],
+      `INSERT INTO corrective_action_event
+         (action_id, site_id, position, from_state, to_state, actor_user_id, occurred_at)
+       VALUES ($1, $2, 2, 'in_progress', 'awaiting_verification', $3, now())`,
+      [actionId, SITE_A, supervisor.accountId],
+    );
 
-    expect(await stateOf(actionId)).toBe('in_progress');
+    expect(await stateOf(actionId)).toBe('awaiting_verification');
   });
 
   it('guarda el antes y el después con su tipo', async () => {
@@ -964,6 +1227,68 @@ describe('los permisos', () => {
         due_at: DUE_AT,
       }),
     ).rejects.toMatchObject({ response: { code: 'forbidden' } });
+  });
+
+  it('quien reportó el hallazgo lo abre, aunque no sea el coordinador (ADR-017)', async () => {
+    const { findingId, reporterAccountId } = await derivedFinding();
+
+    const action = await actions.create(
+      sessionFor(reporterAccountId, 'jhsc_member', [SITE_A]),
+      findingId,
+      {
+        assignee_person_id: supervisor.personId,
+        description: 'Install a fixed guard on the infeed of line 3',
+        due_at: DUE_AT,
+      },
+    );
+
+    expect(action.created_by).toBe(reporterAccountId);
+  });
+
+  it('el supervisor que reportó un hallazgo manual abre su propia acción', async () => {
+    const draftId = randomUUID();
+    const finding = await findings.report(asSupervisor(), {
+      site_id: SITE_A,
+      draft_finding_id: draftId,
+      details: {
+        description: 'Damaged dock barrier found outside the inspection route',
+        location_id: locationA,
+        photo_object_keys: [`${SITE_A}/manual/${draftId}/${randomUUID()}`],
+      },
+      occurred_at: '2026-08-04T10:00:00-04:00',
+    });
+
+    const action = await actions.create(asSupervisor(), finding.id, {
+      assignee_person_id: supervisor.personId,
+      description: 'Replace the damaged barrier at the loading dock',
+      due_at: DUE_AT,
+    });
+
+    expect(action.created_by).toBe(supervisor.accountId);
+  });
+
+  it('otro miembro del JHSC que no reportó el hallazgo no puede abrir la acción', async () => {
+    const { findingId } = await derivedFinding();
+
+    await expect(
+      actions.create(sessionFor(jhsc.accountId, 'jhsc_member', [SITE_A]), findingId, {
+        assignee_person_id: supervisor.personId,
+        description: 'Install a fixed guard on the infeed of line 3',
+        due_at: DUE_AT,
+      }),
+    ).rejects.toMatchObject({ response: { code: 'forbidden' } });
+  });
+
+  it('un hallazgo fuera de alcance responde que no existe, no que está prohibido', async () => {
+    const { findingId, reporterAccountId } = await derivedFinding(SITE_B);
+
+    await expect(
+      actions.create(sessionFor(reporterAccountId, 'jhsc_member', [SITE_A]), findingId, {
+        assignee_person_id: supervisor.personId,
+        description: 'Install a fixed guard on the infeed of line 3',
+        due_at: DUE_AT,
+      }),
+    ).rejects.toMatchObject({ response: { code: 'action_not_found' } });
   });
 
   it('un supervisor que no es el responsable no puede avanzarla', async () => {

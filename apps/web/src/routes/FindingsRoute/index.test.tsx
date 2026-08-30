@@ -67,6 +67,7 @@ function finding(overrides: Record<string, unknown> = {}) {
     id: 'f-1',
     site_id: SITE,
     origin: 'inspection',
+    state: 'raised',
     inspection_id: 'insp-1',
     template_version_item_id: 'tvi-1',
     item_key: 'exits.clear',

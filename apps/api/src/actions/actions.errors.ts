@@ -15,7 +15,6 @@ export type ActionErrorCode =
   | 'invalid_due_at'
   | 'invalid_assignee'
   | 'invalid_transition'
-  | 'evidence_required'
   | 'invalid_evidence'
   | 'verifier_is_executor'
   | 'action_changed'
@@ -55,14 +54,6 @@ export const invalidAssignee = (message: string): ActionException =>
 /** El par (estado actual, destino) no está en la máquina de estados. */
 export const invalidTransition = (message: string): ActionException =>
   new ActionException('invalid_transition', message, HttpStatus.CONFLICT);
-
-/** Declarar el trabajo hecho sin nada que verificar. */
-export const evidenceRequired = (): ActionException =>
-  new ActionException(
-    'evidence_required',
-    'Declaring the work done requires at least one `after` evidence',
-    HttpStatus.BAD_REQUEST,
-  );
 
 /** Una object key que no pertenece al prefijo de esta acción. */
 export const invalidEvidence = (message: string): ActionException =>
@@ -111,15 +102,16 @@ export function translatePgError(error: unknown): ActionException | undefined {
       return invalidTransition(candidate.message);
     case 'HS005':
       return verifierIsExecutor();
-    case 'HS006':
-      return evidenceRequired();
     case 'HS007':
       // No hay camino por el que un request llegue acá: el servicio escribe la acción y
       // su primer evento en la misma transacción. Se traduce igual porque un 500 mudo
       // en un registro regulatorio es peor que un 409 que sobra.
       return invalidTransition('An action must be created with its first event');
+    case 'HS008':
+      return actionChanged();
     case '23505':
-      return candidate.constraint === 'corrective_action_event_position_uq'
+      return candidate.constraint === 'corrective_action_event_position_uq' ||
+        candidate.constraint === 'finding_state_event_position_uq'
         ? actionChanged()
         : undefined;
     default:

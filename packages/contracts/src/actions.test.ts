@@ -84,13 +84,8 @@ describe('la máquina de estados', () => {
     expect(needsReason[0]?.to).toBe('in_progress');
   });
 
-  it('solo declarar el trabajo hecho exige evidencia `after`', () => {
-    const needsEvidence = TRANSITIONS.filter((transition) =>
-      transition.requires.includes('after_evidence'),
-    );
-
-    expect(needsEvidence).toHaveLength(1);
-    expect(needsEvidence[0]?.to).toBe('awaiting_verification');
+  it('ninguna transición exige evidencia', () => {
+    expect(TRANSITIONS.flatMap((transition) => transition.requires)).not.toContain('after_evidence');
   });
 
   it('el responsable solo puede ejecutar, nunca verificar', () => {
@@ -186,13 +181,13 @@ describe('los requests', () => {
     expect(result.success).toBe(false);
   });
 
-  it('declarar el trabajo hecho sin evidencia `after` se rechaza', () => {
+  it('declarar el trabajo hecho sin evidencia se acepta', () => {
     const result = transitionRequestSchema.safeParse({
       to: 'awaiting_verification',
-      evidence: [{ kind: 'before', object_key: 'site/actions/id/a.jpg' }],
     });
 
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.evidence).toEqual([]);
   });
 
   it('declarar el trabajo hecho con evidencia `after` se acepta', () => {

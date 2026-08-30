@@ -1,8 +1,24 @@
-import { ASSIGNEE, type Action, type ActionTransition, type Session } from '@hs/contracts';
+import { ASSIGNEE, type Action, type ActionTransition, type Finding, type Session } from '@hs/contracts';
 
-/** La interfaz ofrece la creación únicamente al coordinador; el servidor vuelve a autorizarla. */
-export function canCreateAction(account: Session | null): boolean {
-  return account?.role === 'hs_coordinator';
+/**
+ * Quién puede abrir una acción sobre ESTE hallazgo (ADR-017).
+ *
+ * No es solo el coordinador: también la cuenta que reportó el hallazgo —`reported_by`—,
+ * que en uno derivado es quien firmó el envío y en uno manual quien lo cargó. Es la misma
+ * clase de regla que `canAttempt` aplica sobre una transición: una RELACIÓN con este
+ * registro puntual, resuelta contra `session.userId` porque `reported_by` es una CUENTA
+ * y no una persona del roster. Un `jhsc_member` que no reportó este hallazgo sigue sin
+ * poder abrir nada.
+ *
+ * La interfaz ofrece el control; el servidor vuelve a autorizarlo en `ActionsService.create`.
+ */
+export function canCreateAction(
+  account: Session | null,
+  finding: Pick<Finding, 'reported_by'>,
+): boolean {
+  if (account === null) return false;
+
+  return account.role === 'hs_coordinator' || account.userId === finding.reported_by;
 }
 
 /**
@@ -10,6 +26,8 @@ export function canCreateAction(account: Session | null): boolean {
  *
  * `assignee` no es un rol: es la cuenta de la persona responsable de ESTA acción, y por
  * eso se resuelve contra `session.personId` y no contra `session.role`.
+ * Solo pide esa relación: el listado trae `ActionSummary`, sin el stream de `events`, y
+ * alcanza para tomar esta decisión.
  *
  * Lo que esto **no** decide es la regla del verificador —quien ejecutó no cierra—,
  * porque necesita saber quién declaró el trabajo hecho y eso depende del stream, no del
@@ -18,7 +36,7 @@ export function canCreateAction(account: Session | null): boolean {
  */
 export function canAttempt(
   transition: ActionTransition,
-  action: Action,
+  action: Pick<Action, 'assignee_person_id'>,
   session: Session | null,
 ): boolean {
   if (session === null) return false;

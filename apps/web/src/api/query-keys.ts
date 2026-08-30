@@ -118,6 +118,8 @@ export const queryKeys = {
 
   // Acciones correctivas.
   findings: () => key('findings'),
+  /** El roster activo de la planta de ESE hallazgo (ADR-017), no el de `roster()`. */
+  findingRoster: (findingId?: string) => key('finding-roster', findingId),
   actions: () => key('actions'),
   action: (id?: string) => key('action', id),
 

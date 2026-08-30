@@ -8,6 +8,7 @@ const FINDING = {
   id: '11111111-1111-4111-8111-111111111111',
   site_id: '22222222-2222-4222-8222-222222222222',
   origin: 'inspection',
+  state: 'raised',
   inspection_id: '33333333-3333-4333-8333-333333333333',
   template_version_item_id: '44444444-4444-4444-8444-444444444444',
   item_key: 'guard-in-place',

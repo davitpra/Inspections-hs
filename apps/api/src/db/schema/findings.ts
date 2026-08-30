@@ -3,6 +3,7 @@ import {
   check,
   foreignKey,
   index,
+  integer,
   pgTable,
   text,
   timestamp,
@@ -11,16 +12,17 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 
-import type { FindingOrigin } from '@hs/contracts';
+import type { FindingOrigin, FindingState } from '@hs/contracts';
 
 import { location, site } from './catalog';
+import { correctiveActionEvent } from './actions';
 import { appUser } from './identity';
 import { inspection } from './inspections';
 import { templateItem, templateVersionItem } from './templates';
 
 /**
  * ADR-004 — La fuente de verdad de estas tablas es
- * `apps/api/drizzle/0010_findings.sql` y la migración 0037, no este archivo.
+ * `apps/api/drizzle/0010_findings.sql` y las migraciones 0037 y 0040, no este archivo.
  *
  * Acá solo viven los tipos con los que el repositorio consulta. El SQL lleva además
  * la restricción diferida de "al menos una foto", los de prohibición de
@@ -141,10 +143,61 @@ export const findingPhoto = pgTable(
   ],
 );
 
+/**
+ * El stream del estado agregado del hallazgo (migración 0040).
+ *
+ * El motor crea el origen y deriva cada cambio del estado vigente de las acciones. El
+ * único `(findingId, position)` evita bifurcaciones; `sourceActionEventId` identifica el
+ * evento de acción que causó cada cambio posterior al origen.
+ */
+export const findingStateEvent = pgTable(
+  'finding_state_event',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+
+    findingId: uuid('finding_id')
+      .notNull()
+      .references(() => finding.id),
+
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => site.id),
+
+    position: integer('position').notNull(),
+    fromState: text('from_state').$type<FindingState>(),
+    toState: text('to_state').$type<FindingState>().notNull(),
+
+    sourceActionEventId: uuid('source_action_event_id'),
+
+    // Nulo solo en el baseline creado por la migración.
+    actorUserId: uuid('actor_user_id').references(() => appUser.id),
+
+    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
+    recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.findingId, table.siteId],
+      foreignColumns: [finding.id, finding.siteId],
+    }),
+    foreignKey({
+      columns: [table.sourceActionEventId, table.siteId],
+      foreignColumns: [correctiveActionEvent.id, correctiveActionEvent.siteId],
+    }),
+    unique('finding_state_event_position_uq').on(table.findingId, table.position),
+    unique('finding_state_event_id_site_uq').on(table.id, table.siteId),
+    uniqueIndex('finding_state_event_source_uq')
+      .on(table.sourceActionEventId)
+      .where(sql`${table.sourceActionEventId} IS NOT NULL`),
+    index('finding_state_event_site_recorded_idx').on(table.siteId, table.recordedAt),
+  ],
+);
+
 /* La clasificación de riesgo fue retirada por la migración 0037. */
 
 export type Finding = typeof finding.$inferSelect;
 export type FindingPhoto = typeof findingPhoto.$inferSelect;
+export type FindingStateEvent = typeof findingStateEvent.$inferSelect;
 
 /**
  * Lo que un caller aporta al insertar un hallazgo. `id` y `recordedAt` no están: los
@@ -167,3 +220,5 @@ export type NewFindingPhoto = Pick<
   typeof findingPhoto.$inferInsert,
   'findingId' | 'siteId' | 'objectKey'
 >;
+
+export type NewFindingStateEvent = typeof findingStateEvent.$inferInsert;

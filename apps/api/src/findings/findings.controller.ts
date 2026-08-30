@@ -1,5 +1,5 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
-import { manualFindingRequestSchema, type Finding } from '@hs/contracts';
+import { manualFindingRequestSchema, type Finding, type PersonOption } from '@hs/contracts';
 
 import { CurrentSession } from '../auth/session.decorator';
 import type { SessionContext } from '../auth/session.service';
@@ -44,4 +44,12 @@ export class FindingsController {
     return this.findings.report(session, manualFindingRequestSchema.parse(body));
   }
 
+  /** El subconjunto activo del roster de la planta de este hallazgo (ADR-017). */
+  @Get('findings/:id/roster')
+  async rosterPackage(
+    @CurrentSession() session: SessionContext,
+    @Param('id') id: string,
+  ): Promise<PersonOption[]> {
+    return this.findings.rosterPackage(session, id);
+  }
 }

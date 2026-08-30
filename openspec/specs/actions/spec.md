@@ -2,8 +2,9 @@
 
 Turns a finding, or the investigation of an incident, into an obligation with a named owner and a
 deadline declared by the HS coordinator, records every step of that obligation as an immutable event
-rather than a status column, requires evidence and a second person's verification to close it, and
-escalates it to the supervisor and then to management when it runs past its deadline unclosed.
+rather than a status column, records optional evidence, requires a second person's verification to
+close it, and escalates it to the supervisor and then to management when it runs past its deadline
+unclosed.
 
 ## Requirements
 
@@ -242,28 +243,30 @@ written.
   the database guard
 - **THEN** the two report the same set of accepted pairs
 
-### Requirement: Declaring the work done requires evidence
+### Requirement: Completion evidence is recorded and never required
 
-The system SHALL require, for the transition `in_progress` → `awaiting_verification`, at least one
-`corrective_action_evidence` row of `kind` `after` attached to that event, and SHALL accept
-evidence of `kind` `before` on any event of the action. Evidence SHALL be stored as an
-`object_key` of a file uploaded beforehand and SHALL NEVER carry image bytes. The system SHALL
-reject an `object_key` outside the prefix derived from the action's own `site_id` and its own
-identifier. The absence of `after` evidence SHALL fail at commit, so that no path — endpoint or
-direct insert — can move an action to `awaiting_verification` with nothing to verify.
+The system SHALL accept evidence of `kind` `before` and `kind` `after` on any event of a
+corrective action, and SHALL NOT require evidence of any kind for any transition, including
+`in_progress` → `awaiting_verification`. Evidence SHALL be stored as an `object_key` of a file
+uploaded beforehand and SHALL NEVER carry image bytes. The system SHALL reject an `object_key`
+outside the prefix derived from the action's own `site_id` and its own identifier. No endpoint,
+constraint or trigger SHALL prevent an action from reaching `awaiting_verification` with no
+evidence attached, so that a completed repair is never held in `in_progress` by the absence of a
+photograph.
 
-#### Scenario: Completing without evidence is refused
+#### Scenario: Completing with no evidence is accepted
 
 - **GIVEN** an action whose current state is `in_progress`
-- **WHEN** the assignee declares the work done with no evidence
-- **THEN** the request is rejected with the code `evidence_required`
-- **AND** the action's state is still `in_progress`
+- **WHEN** the assignee declares the work done with an empty `evidence` array
+- **THEN** the action's state becomes `awaiting_verification`
+- **AND** no `corrective_action_evidence` row references the event that moved it
 
-#### Scenario: A completion event with no after evidence cannot commit
+#### Scenario: A completion event with no after evidence commits
 
-- **WHEN** an event with `to_state` `awaiting_verification` is inserted and the transaction commits
-  with no `corrective_action_evidence` row of `kind` `after` for it
-- **THEN** the commit fails with the dedicated SQLSTATE of the deferred evidence constraint
+- **WHEN** an event with `to_state` `awaiting_verification` is inserted with no
+  `corrective_action_evidence` row of `kind` `after` for it
+- **THEN** the transaction commits
+- **AND** the action reads as `awaiting_verification`
 
 #### Scenario: Before and after evidence are both recorded
 
@@ -276,6 +279,12 @@ direct insert — can move an action to `awaiting_verification` with nothing to 
 - **WHEN** an evidence `object_key` outside the prefix derived from the action's `site_id` and id
   is submitted
 - **THEN** the request is rejected with the code `invalid_evidence`
+
+#### Scenario: Evidence already recorded survives the change
+
+- **GIVEN** an action that reached `awaiting_verification` carrying two `after` object keys
+- **WHEN** the action is read by its identifier
+- **THEN** the event that moved it still lists both `corrective_action_evidence` rows
 
 ### Requirement: The verifier is never the person who declared the work done
 

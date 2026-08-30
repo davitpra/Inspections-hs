@@ -84,6 +84,7 @@ function report(overrides: Record<string, unknown> = {}) {
         id: '55555555-5555-4555-8555-555555555555',
         site_id: '33333333-3333-4333-8333-333333333333',
         origin: 'inspection',
+        state: 'raised',
         inspection_id: '22222222-2222-4222-8222-222222222222',
         template_version_item_id: '66666666-6666-4666-8666-666666666666',
         item_key: 'general.guards',

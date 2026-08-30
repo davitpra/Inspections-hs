@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type {
   Finding,
   ManualFindingRequest,
+  PersonOption,
 } from '@hs/contracts';
 import type { PoolClient } from 'pg';
 
@@ -36,7 +37,8 @@ export class FindingsService {
    * El hallazgo de entrada manual: el peligro que alguien ve fuera de una inspección,
    * y el casi-accidente presenciado que §5 riesgo F manda por este camino.
    *
-   * No lleva clasificación: el coordinador declara la fecha límite al abrir una acción.
+   * No lleva clasificación: la fecha límite se declara al abrir una acción, por el
+   * coordinador o por quien reportó este hallazgo (ADR-017).
    */
   async report(session: SessionScope, payload: ManualFindingRequest): Promise<Finding> {
     if (!CAN_REPORT.has(session.role)) {
@@ -109,7 +111,50 @@ export class FindingsService {
     return this.db.withSessionClient(session, (client) => this.readOne(client, findingId));
   }
 
+  /**
+   * El subconjunto ACTIVO del roster de la planta de este hallazgo (ADR-017).
+   *
+   * Mismo criterio que `InspectionsService.rosterPackage`: cuatro columnas y ni una más
+   * —§4 dice que se elige a una persona **sin poder ver su perfil**—, y
+   * `employee_number` viaja porque el nombre no identifica.
+   *
+   * Sin comprobación de rol: quien puede leer el hallazgo puede elegir a quién lo
+   * arregla. El `WHERE site_id` de abajo es selección entre las plantas del alcance —el
+   * coordinador ve las dos y esto elige la del hallazgo—, no el límite de seguridad: ese
+   * lo pone la política RLS al resolver el hallazgo mismo, dos líneas arriba.
+   */
+  async rosterPackage(session: SessionScope, findingId: string): Promise<PersonOption[]> {
+    return this.db.withSessionClient(session, async (client) => {
+      const siteId = await this.requireSite(client, findingId);
+
+      const { rows } = await client.query<PersonOption>(
+        `SELECT id, employee_number, first_name, last_name
+           FROM person
+          WHERE site_id = $1
+            AND deactivated_at IS NULL
+          ORDER BY last_name, first_name`,
+        [siteId],
+      );
+
+      return rows;
+    });
+  }
+
   // -------------------------------------------------------------------------
+
+  /** El sitio de un hallazgo dentro del alcance, o el 404 que comparte con `readOne`. */
+  private async requireSite(client: PoolClient, findingId: string): Promise<string> {
+    const { rows } = await client.query<{ site_id: string }>(
+      `SELECT site_id FROM finding WHERE id = $1`,
+      [findingId],
+    );
+
+    const row = rows[0];
+
+    if (!row) throw findingNotFound();
+
+    return row.site_id;
+  }
 
   /**
    * La ubicación tiene que estar ACTIVA para un hallazgo manual, y esa exigencia no
@@ -172,8 +217,16 @@ const CAN_REPORT = new Set(['supervisor', 'management', 'hs_coordinator']);
 const FINDING_SELECT = `
   SELECT f.id, f.site_id, f.origin, f.inspection_id, f.template_version_item_id, f.item_key,
          f.location_id, f.description, f.reported_by, f.occurred_at, f.recorded_at,
+         current_state.to_state AS state,
          COALESCE(p.keys, ARRAY[]::text[]) AS photo_object_keys
     FROM finding f
+    JOIN LATERAL (
+      SELECT event.to_state
+        FROM finding_state_event event
+       WHERE event.finding_id = f.id
+       ORDER BY event.position DESC
+       LIMIT 1
+    ) current_state ON true
     LEFT JOIN LATERAL (
       SELECT array_agg(fp.object_key ORDER BY fp.created_at, fp.id) AS keys
         FROM finding_photo fp WHERE fp.finding_id = f.id
@@ -188,6 +241,7 @@ interface FindingRow {
   item_key: string | null;
   location_id: string;
   description: string;
+  state: Finding['state'];
   reported_by: string;
   occurred_at: Date;
   recorded_at: Date;
@@ -204,6 +258,7 @@ function toFinding(row: FindingRow): Finding {
     item_key: row.item_key,
     location_id: row.location_id,
     description: row.description,
+    state: row.state,
     photo_object_keys: row.photo_object_keys,
     reported_by: row.reported_by,
     occurred_at: row.occurred_at.toISOString(),
