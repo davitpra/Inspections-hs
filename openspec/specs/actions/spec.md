@@ -397,26 +397,56 @@ photograph.
 - **WHEN** the action is read by its identifier
 - **THEN** the event that moved it still lists both `corrective_action_evidence` rows
 
-### Requirement: The verifier is never the person who declared the work done
+### Requirement: The verifier is someone other than the executor, unless they are the HS coordinator
 
 The system SHALL refuse the transition `awaiting_verification` → `closed`, and the refusal
 `awaiting_verification` → `in_progress`, when the acting account is the `actor_user_id` of the
-event that moved the action to `awaiting_verification`. The rule SHALL be enforced by the database
-and not only by the endpoint. When the verification is refused, the event SHALL carry a `reason`;
-when it closes the action, a `reason` SHALL NOT be required.
+event that moved the action to `awaiting_verification` **and** that account's role is
+`supervisor` or `management`. An `hs_coordinator` account SHALL be accepted for both
+transitions even when it is the `actor_user_id` of that event. The rule SHALL be enforced by
+the database and not only by the endpoint, and the database SHALL decide the exception from the
+acting account's own role, not from a value supplied with the event. When the verification is
+refused, the event SHALL carry a `reason`; when it closes the action, a `reason` SHALL NOT be
+required.
 
-#### Scenario: The executor cannot verify their own work
+#### Scenario: A supervisor cannot verify their own work
 
 - **GIVEN** an action moved to `awaiting_verification` by the supervisor who executed it
 - **WHEN** that same account attempts to close it
 - **THEN** the request is rejected with the code `verifier_is_executor`
 - **AND** the action's state is still `awaiting_verification`
 
+#### Scenario: A manager cannot verify their own work
+
+- **GIVEN** an action moved to `awaiting_verification` by a `management` account
+- **WHEN** that same account attempts to close it
+- **THEN** the request is rejected with the code `verifier_is_executor`
+
 #### Scenario: The rule holds for a direct insert too
 
-- **WHEN** a closing event whose `actor_user_id` equals the actor of the completion event is
-  inserted directly, bypassing the endpoint
+- **WHEN** a closing event whose `actor_user_id` equals the `supervisor` actor of the completion
+  event is inserted directly, bypassing the endpoint
 - **THEN** the insert fails on the verifier guard
+
+#### Scenario: The HS coordinator closes an action they declared done
+
+- **GIVEN** an action moved to `awaiting_verification` by an `hs_coordinator` account
+- **WHEN** that same account closes it
+- **THEN** the action's state becomes `closed`
+- **AND** the closing event names that coordinator as `actor_user_id`
+
+#### Scenario: The HS coordinator sends back work they declared done
+
+- **GIVEN** an action moved to `awaiting_verification` by an `hs_coordinator` account
+- **WHEN** that same account refuses the verification with a `reason`
+- **THEN** the action's state becomes `in_progress`
+- **AND** the event carries that `reason`
+
+#### Scenario: The exception survives a direct insert
+
+- **WHEN** a closing event whose `actor_user_id` equals the `hs_coordinator` actor of the
+  completion event is inserted directly, bypassing the endpoint
+- **THEN** the insert succeeds
 
 #### Scenario: A different person closes the action
 

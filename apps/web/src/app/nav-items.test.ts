@@ -50,6 +50,7 @@ describe('sectionTitle', () => {
   it('nombra las pantallas con id, que son a las que se llega desde otra', () => {
     expect(sectionTitle('/inspections/abc-123/capture')).toBe('Inspection');
     expect(sectionTitle('/inspections/abc-123/review')).toBe('Review');
+    expect(sectionTitle('/historical/template-123')).toBe('Inspection history');
   });
 
   /**

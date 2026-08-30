@@ -1,15 +1,15 @@
-import { useQuery } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
+import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 
-import { listScheduled, listSites } from '../../api/inspections';
-import { queryKeys } from '../../api/query-keys';
-import { useAppSession } from '../../app/session-context';
-import { CompletedInspectionsTable } from '../../components/CompletedInspectionsTable';
-import { CalendarIcon } from '../../components/icons';
-import { completedInspections } from '../../presentation/inspections';
+import { listScheduled } from "../../api/inspections";
+import { queryKeys } from "../../api/query-keys";
+import { useAppSession } from "../../app/session-context";
+import { CalendarIcon } from "../../components/icons";
+import { completedInspections } from "../../presentation/inspections";
+import { inspectionTypeGroups } from "./presentation";
 
 /**
- * Todo lo que esta cuenta cerró, no solo lo último.
+ * Los tipos de inspección que esta cuenta cerró, como entrada a cada historial completo.
  *
  * Lee con la MISMA consulta y la MISMA clave que la pantalla de inicio, así que llegar acá
  * desde su cabecera no cuesta una llamada: es la caché ya tibia, leída con otro filtro.
@@ -22,17 +22,16 @@ import { completedInspections } from '../../presentation/inspections';
 export function HistoricalInspectionsRoute(): React.JSX.Element {
   const { account } = useAppSession();
 
-  const sites = useQuery({ queryKey: queryKeys.sites(), queryFn: listSites, retry: false });
   const scheduled = useQuery({
     queryKey: queryKeys.scheduledInspections(),
     queryFn: listScheduled,
     retry: false,
   });
 
-  const siteName = (id: string): string =>
-    sites.data?.find((site) => site.id === id)?.name ?? id;
-
-  const completed = account ? completedInspections(scheduled.data ?? [], account.userId) : [];
+  const completed = account
+    ? completedInspections(scheduled.data ?? [], account.userId)
+    : [];
+  const types = inspectionTypeGroups(completed);
 
   return (
     <>
@@ -45,7 +44,7 @@ export function HistoricalInspectionsRoute(): React.JSX.Element {
             <h1>Historical inspections</h1>
           </div>
           <p className="scheduling__subtitle">
-            Every workplace inspection you have completed, most recent first.
+            Choose an inspection type to read everything you completed.
           </p>
         </div>
       </header>
@@ -58,22 +57,44 @@ export function HistoricalInspectionsRoute(): React.JSX.Element {
 
       {scheduled.isError ? (
         <p className="notice">
-          Historical inspections need a connection. They are kept on the server, not on this
-          device.
+          Historical inspections need a connection. They are kept on the server,
+          not on this device.
         </p>
+      ) : null}
+
+      {scheduled.isLoading ? (
+        <p className="status-card">Loading historical inspections…</p>
       ) : null}
 
       {scheduled.isSuccess && completed.length === 0 ? (
         <p>You have not completed any inspections yet.</p>
       ) : null}
 
-      {completed.length > 0 ? (
-        <CompletedInspectionsTable
-          inspections={completed}
-          siteName={siteName}
-          to="/inspections/$id/report"
-          actionLabel="View report"
-        />
+      {types.length > 0 ? (
+        <table className="table historical-types__table" aria-label="Completed inspection types">
+          <thead>
+            <tr>
+              <th scope="col">Inspection type</th>
+              <th scope="col">Completed inspections</th>
+            </tr>
+          </thead>
+          <tbody>
+            {types.map((type) => (
+              <tr key={type.templateId}>
+                <th scope="row" data-label="Inspection type">
+                  <Link
+                    className="table__link historical-types__link"
+                    to="/historical/$templateId"
+                    params={{ templateId: type.templateId }}
+                  >
+                    {type.templateName}
+                  </Link>
+                </th>
+                <td data-label="Completed inspections">{type.inspections.length}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       ) : null}
     </>
   );

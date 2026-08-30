@@ -1,14 +1,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { HistoricalInspectionsRoute } from './index';
 
-const listSites = vi.hoisted(() => vi.fn());
 const listScheduled = vi.hoisted(() => vi.fn());
 const useAppSession = vi.hoisted(() => vi.fn());
 
-vi.mock('../../api/inspections', () => ({ listSites, listScheduled }));
+vi.mock('../../api/inspections', () => ({ listScheduled }));
 vi.mock('../../app/session-context', () => ({ useAppSession }));
 
 vi.mock('@tanstack/react-router', () => ({
@@ -23,7 +22,6 @@ vi.mock('@tanstack/react-router', () => ({
   }) => <a href={substitute(to, params)}>{children}</a>,
 }));
 
-/** El `$id` del `to` resuelto con los `params`, como haría el router de verdad. */
 function substitute(to: string, params?: Record<string, string>): string {
   return Object.entries(params ?? {}).reduce(
     (path, [name, value]) => path.replace(`$${name}`, value),
@@ -33,17 +31,16 @@ function substitute(to: string, params?: Record<string, string>): string {
 
 const USER = '11111111-1111-4111-8111-111111111111';
 const OTHER = '22222222-2222-4222-8222-222222222222';
-const SITE = '33333333-3333-4333-8333-333333333333';
 
 function scheduled(overrides: Record<string, unknown> = {}) {
   return {
     id: 's-1',
-    site_id: SITE,
+    site_id: '33333333-3333-4333-8333-333333333333',
     period_start: '2027-07-01',
     period_months: 1,
     period_end: '2027-07-31',
-    template_id: 't-1',
-    template_name: 'Monthly general workplace inspection',
+    template_id: 't-monthly',
+    template_name: 'Monthly workplace inspection',
     template_version_id: 'v-1',
     template_version: 1,
     inspector_id: USER,
@@ -72,7 +69,6 @@ function renderRoute(): void {
 
 beforeEach(() => {
   useAppSession.mockReturnValue({ account: { userId: USER }, ready: true });
-  listSites.mockResolvedValue([{ id: SITE, name: 'Glencoe' }]);
 });
 
 afterEach(() => {
@@ -81,88 +77,72 @@ afterEach(() => {
 });
 
 describe('HistoricalInspectionsRoute', () => {
-  it('lista lo completado con su fecha de cierre, lo más reciente primero', async () => {
+  it('presenta un tipo por template_id, su conteo y su enlace, ordenados por nombre', async () => {
     listScheduled.mockResolvedValue([
-      scheduled({ id: 'may', period_start: '2027-05-01', completed_at: '2027-05-30T18:00:00.000Z' }),
-      scheduled({ id: 'july', period_start: '2027-07-01', completed_at: '2027-07-29T18:00:00.000Z' }),
+      scheduled({
+        id: 'quarterly',
+        template_id: 't-quarterly',
+        template_name: 'Quarterly equipment inspection',
+      }),
+      scheduled({ id: 'monthly-july' }),
+      scheduled({ id: 'monthly-may', period_start: '2027-05-01' }),
     ]);
 
     renderRoute();
 
-    expect(await screen.findByText('Jul 29, 2027')).toBeTruthy();
-    expect(screen.getByText('May 30, 2027')).toBeTruthy();
-
-    const months = screen.getAllByRole('rowheader').map((cell) => cell.textContent);
-    expect(months).toEqual(['July 2027', 'May 2027']);
+    const table = await screen.findByRole('table', { name: 'Completed inspection types' });
+    const rows = within(table).getAllByRole('row').slice(1);
+    expect(rows).toHaveLength(2);
+    expect(rows.map((row) => within(row).getByRole('rowheader').textContent)).toEqual([
+      'Monthly workplace inspection',
+      'Quarterly equipment inspection',
+    ]);
+    expect(within(rows[0]!).getByText('2')).toBeTruthy();
+    expect(
+      within(rows[0]!).getByRole('link', { name: 'Monthly workplace inspection' }).getAttribute('href'),
+    ).toBe('/historical/t-monthly');
   });
 
-  /**
-   * El historial es de ESTA cuenta. `listScheduled` devuelve toda la planta —un miembro del
-   * JHSC viendo la programación de su sitio es legítimo—, así que el recorte es acá.
-   */
-  it('no lista lo que completó otro inspector', async () => {
+  it('mantiene separados dos template_id aunque tengan el mismo nombre', async () => {
     listScheduled.mockResolvedValue([
-      scheduled({ id: 'mine', period_start: '2027-07-01' }),
-      scheduled({ id: 'theirs', period_start: '2027-06-01', inspector_id: OTHER }),
+      scheduled({ id: 'first', template_id: 't-first' }),
+      scheduled({ id: 'second', template_id: 't-second' }),
     ]);
 
     renderRoute();
 
-    expect(await screen.findByText('July 2027')).toBeTruthy();
-    expect(screen.queryByText('June 2027')).toBeNull();
+    expect(await screen.findAllByRole('link', { name: 'Monthly workplace inspection' })).toHaveLength(2);
   });
 
-  it('un mes que todavía se debe no figura como completado', async () => {
+  it('no cuenta lo que completó otro inspector ni un período pendiente', async () => {
     listScheduled.mockResolvedValue([
-      scheduled({ id: 'open', period_start: '2027-08-01', status: 'open', inspection_id: null, completed_at: null }),
+      scheduled({ id: 'mine' }),
+      scheduled({ id: 'theirs', template_id: 'other', inspector_id: OTHER }),
+      scheduled({ id: 'open', template_id: 'open', status: 'open', inspection_id: null }),
     ]);
+
+    renderRoute();
+
+    const table = await screen.findByRole('table');
+    expect(within(table).getAllByRole('row')).toHaveLength(2);
+    expect(screen.queryByText('other')).toBeNull();
+  });
+
+  it('muestra el estado vacío solo cuando la consulta terminó', async () => {
+    listScheduled.mockResolvedValue([]);
 
     renderRoute();
 
     expect(await screen.findByText('You have not completed any inspections yet.')).toBeTruthy();
+    expect(screen.queryByRole('table')).toBeNull();
   });
 
-  /**
-   * Sin fecha visible se deja el hueco. Inventar el día del período fecharía el registro
-   * con algo que nadie firmó.
-   */
-  it('deja el hueco cuando el período está cerrado y la fecha no viene', async () => {
-    listScheduled.mockResolvedValue([scheduled({ completed_at: null })]);
-
-    renderRoute();
-
-    expect(await screen.findByText('July 2027')).toBeTruthy();
-    expect(screen.getByText('—')).toBeTruthy();
-  });
-
-  it('sin red lo dice, y no finge una lista vacía', async () => {
+  it('sin red lo dice y no finge un historial vacío', async () => {
     listScheduled.mockRejectedValue(new Error('offline'));
 
     renderRoute();
 
     expect(await screen.findByText(/Historical inspections need a connection/)).toBeTruthy();
     expect(screen.queryByText('You have not completed any inspections yet.')).toBeNull();
-  });
-
-  it('ofrece el reporte de cada envío, apuntando a su inspección', async () => {
-    listScheduled.mockResolvedValue([scheduled({ id: 'july' })]);
-
-    renderRoute();
-
-    const report = await screen.findByRole('link', { name: /View report/ });
-    expect(report.getAttribute('href')).toBe('/inspections/july/report');
-  });
-
-  /**
-   * `inspection_id` nulo es "no hay envío que leer". Ofrecer el link igual mandaría al
-   * inspector a una pantalla que va a responder que no encontró nada.
-   */
-  it('no ofrece reporte cuando el período no tiene envío que leer', async () => {
-    listScheduled.mockResolvedValue([scheduled({ inspection_id: null })]);
-
-    renderRoute();
-
-    await screen.findByText('July 2027');
-    expect(screen.queryByRole('link', { name: /View report/ })).toBeNull();
   });
 });

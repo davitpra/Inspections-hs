@@ -3772,6 +3772,16 @@ select:disabled {
   text-decoration: underline;
 }
 
+.historical-types__link {
+  display: block;
+}
+
+.historical-types__table th:last-child,
+.historical-types__table td:last-child {
+  width: 12rem;
+  text-align: center;
+}
+
 .requirements-table__actions-cell {
   position: relative;
   width: 1%;
@@ -4257,7 +4267,8 @@ button.schedule-cell:focus-visible {
 @media (max-width: 48rem) {
   .scheduled-inspections__table thead,
   .device-drafts__table thead,
-  .completed-inspections__table thead {
+  .completed-inspections__table thead,
+  .historical-types__table thead {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -4280,7 +4291,12 @@ button.schedule-cell:focus-visible {
   .completed-inspections__table tbody,
   .completed-inspections__table tr,
   .completed-inspections__table th,
-  .completed-inspections__table td {
+  .completed-inspections__table td,
+  .historical-types__table,
+  .historical-types__table tbody,
+  .historical-types__table tr,
+  .historical-types__table th,
+  .historical-types__table td {
     display: block;
     width: 100%;
     box-sizing: border-box;
@@ -4288,7 +4304,8 @@ button.schedule-cell:focus-visible {
 
   .scheduled-inspections__table tr,
   .device-drafts__table tr,
-  .completed-inspections__table tr {
+  .completed-inspections__table tr,
+  .historical-types__table tr {
     padding: var(--space-3) 0;
     border-top: 1px solid var(--line);
   }
@@ -4298,7 +4315,9 @@ button.schedule-cell:focus-visible {
   .device-drafts__table th,
   .device-drafts__table td,
   .completed-inspections__table th,
-  .completed-inspections__table td {
+  .completed-inspections__table td,
+  .historical-types__table th,
+  .historical-types__table td {
     display: grid;
     grid-template-columns: minmax(7rem, 0.42fr) minmax(0, 1fr);
     gap: var(--space-2);
@@ -4311,7 +4330,9 @@ button.schedule-cell:focus-visible {
   .device-drafts__table th::before,
   .device-drafts__table td::before,
   .completed-inspections__table th::before,
-  .completed-inspections__table td::before {
+  .completed-inspections__table td::before,
+  .historical-types__table th::before,
+  .historical-types__table td::before {
     content: attr(data-label);
     color: var(--muted);
     font-size: var(--text-sm);
@@ -4322,6 +4343,12 @@ button.schedule-cell:focus-visible {
   .device-drafts__action,
   .completed-inspections__action {
     white-space: normal;
+  }
+
+  .historical-types__table th:last-child,
+  .historical-types__table td:last-child {
+    width: 100%;
+    text-align: left;
   }
 
   /* El «⋮» se ancla en absoluto y la celda no tiene nada en flujo que le dé alto: en la
