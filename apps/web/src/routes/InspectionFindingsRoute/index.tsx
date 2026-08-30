@@ -1,7 +1,5 @@
-import type { Finding } from "@hs/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
-import { useRef, useState } from "react";
 
 import { listActions } from "../../api/actions";
 import { getSubmittedInspection } from "../../api/inspections";
@@ -15,7 +13,7 @@ import {
   ClockIcon,
   PersonIcon,
 } from "../../components/icons";
-import { enclosingReportItem, ReportItem } from "../../components/ReportItem";
+import { ReportItem } from "../../components/ReportItem";
 import { TemplateSectionCard } from "../../components/TemplateSectionCard";
 import {
   civilToday,
@@ -23,21 +21,12 @@ import {
   periodLabel,
 } from "../../presentation/dates";
 import { findingsLabel } from "../../presentation/findings";
-import { CreateActionForm } from "./CreateActionForm";
 import { FindingLifecycle } from "./FindingLifecycle";
 import {
   actionsByFinding,
   nextStep,
   sectionsWithFindings,
 } from "./presentation";
-
-/**
- * El único diálogo que se abre desde un hallazgo. Antes había dos —crear y avanzar—; avanzar
- * ya no es un diálogo ni algo que abrir, se dibuja dentro de `FindingNextStep`, y por eso la
- * unión quedó con un solo miembro. Se conserva como unión y no como `Finding | null` porque
- * un segundo diálogo puede volver a sumarse sin tocar la forma de `overlay`.
- */
-type Overlay = { kind: "create"; finding: Finding };
 
 /**
  * Una inspección enviada, leída por lo que salió mal.
@@ -63,7 +52,8 @@ type Overlay = { kind: "create"; finding: Finding };
  * lo respaldan—, que es justo lo que una tabla de hallazgos no puede dar. Se ofrece
  * dentro del próximo paso y solo mientras crear ES el próximo paso; a quién, lo decide
  * `nextStep`, y eso es comodidad, no garantía: el servidor vuelve a exigirlo en
- * `ActionsService.create`.
+ * `ActionsService.create`. La ruta no monta ese diálogo ni sabe cuál ficha lo abrió: lo
+ * hace el ciclo del hallazgo, que es de donde se ofrece.
  *
  * El estado sale del stream propio que ya trae el hallazgo. Las acciones se leen para el
  * próximo paso, el plazo y la historia; si esa consulta falla, el estado sigue siendo legible
@@ -77,8 +67,6 @@ export function InspectionFindingsRoute(): React.JSX.Element {
   const { id } = useParams({ from: "/findings/$id" });
 
   const { account } = useAppSession();
-  const [overlay, setOverlay] = useState<Overlay | null>(null);
-  const returnFocusTo = useRef<HTMLElement>(null);
 
   const submitted = useQuery({
     queryKey: queryKeys.submittedInspection(id),
@@ -124,24 +112,6 @@ export function InspectionFindingsRoute(): React.JSX.Element {
   );
   const existingActions = actionsByFinding(actions.data ?? []);
   const today = civilToday();
-
-  /*
-    UN SOLO LUGAR ABRE EL DIÁLOGO, y de paso deja anotado a dónde vuelve el foco al
-    cerrarlo. El botón que lo dispara está adentro de la lista —uno por hallazgo, en su
-    próximo paso— y el diálogo se dibuja fuera de ella; esto es la costura entre las dos
-    mitades, y tenerla escrita una vez es lo que hace que no haya dos maneras de abrir lo
-    mismo.
-  */
-  const openOverlay =
-    (next: Overlay): React.MouseEventHandler<HTMLElement> =>
-    (event) => {
-      const card = enclosingReportItem(event.currentTarget);
-
-      if (!card) return;
-
-      returnFocusTo.current = card;
-      setOverlay(next);
-    };
 
   return (
     <div className="report">
@@ -247,10 +217,7 @@ export function InspectionFindingsRoute(): React.JSX.Element {
             const step = actions.isError
               ? null
               : nextStep(existing, finding.state, account, finding);
-            const onAttempt =
-              step?.control?.kind === "create"
-                ? openOverlay({ kind: "create", finding })
-                : undefined;
+
             return (
               <ReportItem
                 key={item.item_key}
@@ -267,22 +234,16 @@ export function InspectionFindingsRoute(): React.JSX.Element {
                   {/*
                     EL CICLO ES NAVEGABLE: la etapa vigente ofrece el próximo paso y cada
                     etapa ya alcanzada abre, en ese mismo hueco, lo que se decidió en ella
-                    (ADR-018). La etapa elegida es estado por hallazgo, y por eso vive
+                    (ADR-018). La etapa elegida es estado por hallazgo —y el diálogo que
+                    crea el compromiso, uno por hallazgo—, y por eso las dos cosas viven
                     adentro de `FindingLifecycle` y no acá.
                   */}
                   <FindingLifecycle
-                    /*
-                      LA `key` ES EL ESTADO DEL HALLAZGO: avanzar reinicia la lectura del
-                      ciclo. Quedarse en la etapa que se estaba leyendo dejaría un registro
-                      viejo en pantalla justo después del acto que lo cambió.
-                    */
-                    key={finding.state}
                     finding={finding}
                     actions={actions.isError ? [] : existing}
                     step={step}
                     session={account}
                     today={today}
-                    onCreate={onAttempt}
                   />
                 </>
               </ReportItem>
@@ -290,27 +251,6 @@ export function InspectionFindingsRoute(): React.JSX.Element {
           })}
         </TemplateSectionCard>
       ))}
-
-      {/*
-        EL DIÁLOGO DE CREACIÓN, fuera del bucle. Crear invalida `queryKeys.actions()` y con
-        eso se vuelve a dibujar el ítem que lo abrió; un diálogo montado dentro de la fila se
-        desmontaría a mitad de su propia mutación. Es el mismo motivo por el que los
-        diálogos del roster viven fuera de la tabla.
-
-        Avanzar una acción que ya existe NO tiene este problema y por eso vive dentro de la
-        fila, en `FindingNextStep`: esa mutación invalida la MISMA lista, pero resuelve antes
-        de que la invalidación se refleje, y React conserva la fila por su `key` mientras
-        dura. Un diálogo por hallazgo no hacía falta para eso — solo para no perder el
-        formulario si la fila entera desaparece, que es lo que no puede pasar acá porque el
-        hallazgo persiste también después de llegar a `closed`.
-      */}
-      {overlay?.kind === "create" ? (
-        <CreateActionForm
-          finding={overlay.finding}
-          returnFocusTo={returnFocusTo}
-          onClose={() => setOverlay(null)}
-        />
-      ) : null}
     </div>
   );
 }

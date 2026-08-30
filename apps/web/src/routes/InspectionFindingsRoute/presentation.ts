@@ -1,13 +1,18 @@
 import {
+  ACTION_DESCRIPTION_MAX,
+  ACTION_DESCRIPTION_MIN,
   ASSIGNEE,
+  createActionRequestSchema,
   FINDING_STATES,
   ROLE_LABELS,
   transitionsFrom,
   type ActionEvent,
   type ActionState,
   type ActionSummary,
+  type CreateActionRequest,
   type Finding,
   type FindingState,
+  type PersonOption,
   type Session,
   type TransitionRequirement,
 } from '@hs/contracts';
@@ -231,7 +236,8 @@ export type FindingNextStep = {
 };
 
 const REQUIREMENT_LABELS: Readonly<Record<TransitionRequirement, string>> = {
-  not_executor: 'A verifier other than the person who declared the work done must submit it.',
+  not_executor:
+    'A verifier other than the person who declared the work done must submit it, unless they are the HS coordinator.',
   reason: 'A reason is required.',
 };
 
@@ -329,4 +335,59 @@ export function futureDueAt(value: string, now: Date): DueAtResult {
   }
 
   return { success: true, dueAt: instant.toISOString() };
+}
+
+/** Lo escrito en los tres campos del compromiso, tal como los devuelve el navegador. */
+export type CommitmentDraft = {
+  assigneePersonId: string;
+  description: string;
+  dueAt: string;
+};
+
+export type CommitmentResult =
+  | { success: true; request: CreateActionRequest }
+  | { success: false; message: string };
+
+/**
+ * Los tres campos del compromiso, comprobados en el orden en que se leen: responsable,
+ * plazo, trabajo.
+ *
+ * **Una sola regla para crear y para enmendar**, que es lo que ADR-018 dice que son: la misma
+ * decisión escrita dos veces, una al asignar y otra al corregir. Con la comprobación copiada
+ * en cada formulario, la primera vez que discreparan la enmienda aceptaría un compromiso que
+ * crear rechaza —o al revés— sin que nada lo delate.
+ *
+ * **El responsable se comprueba contra el roster** y no solo contra el esquema: `uuid()` no
+ * sabe si esa persona sigue activa en esta planta, y el mensaje que corresponde no es «forma
+ * inválida», es a quién se puede asignar. Es comodidad, no garantía: el servidor lo vuelve a
+ * exigir.
+ *
+ * `now` entra por parámetro —no hay reloj acá adentro— porque el plazo se compara contra el
+ * momento del envío y una función que lo lee sola no se puede probar.
+ */
+export function commitmentRequest(
+  draft: CommitmentDraft,
+  roster: readonly PersonOption[],
+  now: Date,
+): CommitmentResult {
+  if (!roster.some((person) => person.id === draft.assigneePersonId)) {
+    return { success: false, message: 'Choose an active assignee from this site.' };
+  }
+
+  const deadline = futureDueAt(draft.dueAt, now);
+
+  if (!deadline.success) return { success: false, message: deadline.message };
+
+  const request = createActionRequestSchema.safeParse({
+    assignee_person_id: draft.assigneePersonId,
+    description: draft.description,
+    due_at: deadline.dueAt,
+  });
+
+  return request.success
+    ? { success: true, request: request.data }
+    : {
+        success: false,
+        message: `Description must be between ${ACTION_DESCRIPTION_MIN} and ${ACTION_DESCRIPTION_MAX} characters.`,
+      };
 }

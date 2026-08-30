@@ -288,6 +288,13 @@
       "when": 1754524800040,
       "tag": "0041_assignment_amendments",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1754524800041,
+      "tag": "0042_coordinator_verifier_exception",
+      "breakpoints": true
     }
   ]
 }

@@ -73,8 +73,18 @@ export type TransitionActor = Role | typeof ASSIGNEE;
  * Lo que una transición exige además del estado de origen.
  *
  * - `not_executor`: el actor no puede ser quien declaró el trabajo hecho. R3,
- *   "una persona distinta del ejecutor".
+ *   "una persona distinta del ejecutor" — **salvo el `hs_coordinator`, que está
+ *   exento** (ADR-019): es la única cuenta que declara trabajo hecho por una
+ *   persona del roster sin usuario, y aplicarle la regla dejaba trabajo
+ *   terminado retenido en `awaiting_verification`. Sigue entera para
+ *   `supervisor` y `management`.
  * - `reason`: hay que decir por qué. Solo al rechazar una verificación.
+ *
+ * QUIÉN SUFRE `not_executor` NO SE LEE DE ACÁ, igual que `ASSIGNEE` no dice
+ * quién es: la fila declara la condición y la excepción se resuelve donde se
+ * conoce la cuenta —`ActionsService.transition` y la guarda `HS005` del motor—.
+ * Partirla en dos requisitos obligaría al cliente a elegir cuál aplica, y el
+ * cliente no evalúa ninguno de los dos a propósito.
  */
 export const TRANSITION_REQUIREMENTS = ['not_executor', 'reason'] as const;
 

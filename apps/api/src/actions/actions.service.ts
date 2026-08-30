@@ -44,7 +44,8 @@ import { foreignEvidenceKeys } from './object-key';
  *
  *   - Que la transición esté en la máquina de estados   → guarda `HS004`.
  *   - Que el stream no se bifurque bajo concurrencia    → único `(action_id, position)`.
- *   - Que quien verifica no sea quien ejecutó           → guarda `HS005`.
+ *   - Que quien verifica no sea quien ejecutó, salvo
+ *     el coordinador de H&S (ADR-019)                  → guarda `HS005`.
  *   - Que una acción tenga al menos un evento           → restricción diferida `HS007`.
  *   - Que rechazar una verificación lleve motivo        → CHECK de motivo.
  *   - Que la acción sea del sitio de su hallazgo        → FK compuesta.
@@ -224,11 +225,15 @@ export class ActionsService {
         throw invalidTransition('Refusing a verification requires a reason');
       }
 
-      if (transition.requires.includes('not_executor')) {
+      // El coordinador de H&S está exento (ADR-019): es la única cuenta que declara trabajo
+      // hecho por una persona del roster sin usuario, y la regla le retenía en
+      // `awaiting_verification` trabajo ya terminado. Sigue entera para el resto.
+      if (transition.requires.includes('not_executor') && session.role !== 'hs_coordinator') {
         const executor = await lastExecutor(client, actionId);
 
-        // El motor lo comprueba otra vez con `HS005`. Acá se adelanta para no depender
-        // de traducir un error de trigger en el camino normal.
+        // El motor lo comprueba otra vez con `HS005`, con la misma excepción y leyendo el rol
+        // de `app_user`. Acá se adelanta para no depender de traducir un error de trigger en
+        // el camino normal.
         if (executor === session.userId) {
           throw verifierIsExecutor();
         }

@@ -176,7 +176,9 @@ declarada por el coordinador de HS **o por quien reportó el hallazgo** (ADR-017
 
 El responsable ejecuta la acción; el sistema pide y conserva evidencia antes/después, pero no
 la exige para pasar a _esperando verificación_ (ADR-016). **Una persona distinta del ejecutor**
-la verifica y la cierra. Si vence sin
+la verifica y la cierra, salvo el coordinador de H&S, que es el único rol exento porque es la
+única cuenta que declara trabajo hecho por una persona del roster sin usuario (ADR-019). Si
+vence sin
 cerrarse: +3 días escala al supervisor, +7 días a gerencia. Cada transición es un evento
 append-only, no un campo que se sobrescribe.
 
@@ -689,7 +691,7 @@ del proyecto antes de que la siguiente dependa de ella.
 | 2     | Sitio, Persona, Usuario, auth, importación CSV del roster                      | Permisos por sitio verificados con datos reales   |
 | 3     | Motor de formularios en `packages/forms`, PWA, outbox, ingesta idempotente     | **Spike 1:** inspección completa sin señal        |
 | 4     | Hallazgos                                                                      | R1 y R2 completos; clasificación de riesgo retirada antes de producción |
-| 5     | Acciones correctivas, eventos, escalamientos con pg-boss                       | R3 completo, con evidencia de cierre opcional (ADR-016) |
+| 5     | Acciones correctivas, eventos, escalamientos con pg-boss                       | R3 completo, con evidencia de cierre opcional (ADR-016) y el coordinador exento del verificador distinto (ADR-019) |
 | 6     | Incidentes, campos guiados, estados, relojes regulatorios, pantalla del Form 7 | R4 completo                                       |
 | 7     | Consulta operativa de períodos                                             | R5 y la recurrencia de hallazgos retirados antes de producción |
 | 8     | Builder visual                                                                 | El coordinador deja de depender del desarrollador |

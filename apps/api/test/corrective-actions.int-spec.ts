@@ -51,7 +51,7 @@ let inspector: { accountId: string };
 let coordinator: { accountId: string };
 let supervisor: { accountId: string; personId: string };
 let otherSupervisor: { accountId: string; personId: string };
-let manager: { accountId: string };
+let manager: { accountId: string; personId: string };
 let auditor: { accountId: string };
 let jhsc: { accountId: string };
 let inspectorB: { accountId: string };
@@ -949,11 +949,34 @@ describe('el verificador', () => {
   });
 
   /**
-   * El caso que D6 explica: el coordinador ejecutó EN NOMBRE de una persona sin cuenta.
-   * Si la regla comparara contra `assignee_person_id`, ese coordinador podría
-   * verificarse a sí mismo — que es exactamente lo que R3 prohíbe.
+   * Gerencia solo puede declarar trabajo hecho cuando es la responsable de la acción —
+   * `open → in_progress` es del `assignee` o del coordinador—, así que el caso se monta
+   * asignándosela. La regla la alcanza igual que al supervisor: ADR-019 exime al
+   * coordinador y a nadie más.
    */
-  it('el coordinador que ejecutó en nombre de otro tampoco puede verificar', async () => {
+  it('gerencia tampoco puede verificar lo que declaró hecho', async () => {
+    const actionId = await openAction({ assignee: manager.personId });
+
+    await actions.transition(asManager(), actionId, { to: 'in_progress', evidence: [] });
+    await actions.transition(asManager(), actionId, {
+      to: 'awaiting_verification',
+      evidence: [{ kind: 'after', object_key: evidenceKey(actionId) }],
+    });
+
+    await expect(
+      actions.transition(asManager(), actionId, { to: 'closed', evidence: [] }),
+    ).rejects.toMatchObject({ response: { code: 'verifier_is_executor' } });
+  });
+
+  /**
+   * ADR-019 invierte el caso que D6 explicaba. Lo que D6 decidió SIGUE EN PIE: la regla se
+   * compara contra el autor del evento de completado y no contra `assignee_person_id` —los
+   * dos tests de arriba lo prueban con el supervisor y con gerencia—. Lo que cambia es que
+   * ese caso, el coordinador ejecutando EN NOMBRE de una persona sin cuenta, es justo el que
+   * dejaba trabajo terminado retenido en `awaiting_verification`: hay un solo coordinador y
+   * el segundo par de ojos que la regla prometía no existía.
+   */
+  it('el coordinador que ejecutó en nombre de otro sí verifica', async () => {
     const actionId = await openAction({ assignee: rosterPerson });
 
     await actions.transition(asCoordinator(), actionId, { to: 'in_progress', evidence: [] });
@@ -962,13 +985,62 @@ describe('el verificador', () => {
       evidence: [{ kind: 'after', object_key: evidenceKey(actionId) }],
     });
 
-    await expect(
-      actions.transition(asCoordinator(), actionId, { to: 'closed', evidence: [] }),
-    ).rejects.toMatchObject({ response: { code: 'verifier_is_executor' } });
-
-    const closed = await actions.transition(asManager(), actionId, { to: 'closed', evidence: [] });
+    const closed = await actions.transition(asCoordinator(), actionId, {
+      to: 'closed',
+      evidence: [],
+    });
 
     expect(closed.state).toBe('closed');
+
+    const events = await eventRows(actionId);
+
+    expect(events.at(-1)?.actor_user_id).toBe(coordinator.accountId);
+  });
+
+  it('el coordinador también puede rechazar su propio trabajo, con motivo', async () => {
+    const actionId = await openAction({ assignee: rosterPerson });
+
+    await actions.transition(asCoordinator(), actionId, { to: 'in_progress', evidence: [] });
+    await actions.transition(asCoordinator(), actionId, {
+      to: 'awaiting_verification',
+      evidence: [{ kind: 'after', object_key: evidenceKey(actionId) }],
+    });
+
+    const reason = 'the guard is installed on line 2, not line 3';
+
+    await actions.transition(asCoordinator(), actionId, {
+      to: 'in_progress',
+      reason,
+      evidence: [],
+    });
+
+    expect(await stateOf(actionId)).toBe('in_progress');
+    expect((await eventRows(actionId)).at(-1)?.reason).toBe(reason);
+  });
+
+  /**
+   * La excepción vive en el motor y no solo en el endpoint (ADR-019): es la contracara del
+   * INSERT directo del supervisor, que sigue fallando con `HS005`.
+   */
+  it('un INSERT directo del coordinador ejecutor commitea', async () => {
+    const actionId = await openAction({ assignee: rosterPerson });
+
+    await actions.transition(asCoordinator(), actionId, { to: 'in_progress', evidence: [] });
+    await actions.transition(asCoordinator(), actionId, {
+      to: 'awaiting_verification',
+      evidence: [{ kind: 'after', object_key: evidenceKey(actionId) }],
+    });
+
+    await inScope(
+      db.app,
+      [SITE_A],
+      `INSERT INTO corrective_action_event
+         (action_id, site_id, position, from_state, to_state, actor_user_id, occurred_at)
+       VALUES ($1, $2, 3, 'awaiting_verification', 'closed', $3, now())`,
+      [actionId, SITE_A, coordinator.accountId],
+    );
+
+    expect(await stateOf(actionId)).toBe('closed');
   });
 });
 

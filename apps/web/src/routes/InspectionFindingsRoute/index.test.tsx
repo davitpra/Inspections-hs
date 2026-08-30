@@ -263,26 +263,26 @@ beforeEach(() => {
   useAppSession.mockReturnValue({ account: session('hs_coordinator') });
 });
 
-async function openCreation(): Promise<HTMLElement> {
-  fireEvent.click(await screen.findByRole('button', { name: 'Create corrective action' }));
-  return await screen.findByRole('dialog', { name: 'Create corrective action' });
+/** El compromiso no se abre: está a la vista dentro del paso, y solo hay que encontrarlo. */
+async function creationForm(): Promise<HTMLElement> {
+  return await screen.findByRole('form', { name: 'Create corrective action' });
 }
 
-async function completeForm(dialog: HTMLElement, assignee = PERSON): Promise<void> {
-  await within(dialog).findByRole('option', { name: /\([0-9]+\)$/ });
-  fireEvent.change(within(dialog).getByLabelText('Assignee'), { target: { value: assignee } });
-  fireEvent.change(within(dialog).getByLabelText('Description'), {
+async function completeForm(form: HTMLElement, assignee = PERSON): Promise<void> {
+  await within(form).findByRole('option', { name: /\([0-9]+\)$/ });
+  fireEvent.change(within(form).getByLabelText('Responsible person'), {
+    target: { value: assignee },
+  });
+  fireEvent.change(within(form).getByLabelText('Description'), {
     target: { value: 'Install a fixed guard before restarting the line' },
   });
-  fireEvent.change(within(dialog).getByLabelText('Deadline'), {
+  fireEvent.change(within(form).getByLabelText('Deadline'), {
     target: { value: '2099-08-30T12:00' },
   });
 }
 
-function submit(dialog: HTMLElement): void {
-  fireEvent.submit(
-    within(dialog).getByRole('button', { name: 'Create action' }).closest('form')!,
-  );
+function submit(form: HTMLElement): void {
+  fireEvent.submit(form);
 }
 
 /**
@@ -431,7 +431,7 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
     renderRoute();
 
     const next = await screen.findByRole('region', { name: 'Next step' });
-    expect(within(next).getByRole('button', { name: 'Create corrective action' })).toBeTruthy();
+    expect(within(next).getByRole('form', { name: 'Create corrective action' })).toBeTruthy();
     expect(within(next).getByText(/Assign a responsible person/)).toBeTruthy();
   });
 
@@ -442,7 +442,7 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
     renderRoute();
 
     const next = await screen.findByRole('region', { name: 'Next step' });
-    expect(within(next).getByRole('button', { name: 'Create corrective action' })).toBeTruthy();
+    expect(within(next).getByRole('form', { name: 'Create corrective action' })).toBeTruthy();
   });
 
   it('no ofrece la creación a un jhsc_member que no reportó el hallazgo', async () => {
@@ -453,8 +453,9 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
 
     renderRoute();
 
+    // El nombre del paso sigue escrito en la copia; lo que no está es con qué ejecutarlo.
     const next = await screen.findByRole('region', { name: 'Next step' });
-    expect(within(next).queryByRole('button', { name: 'Create corrective action' })).toBeNull();
+    expect(within(next).queryByRole('form', { name: 'Create corrective action' })).toBeNull();
   });
 
   it('ofrece al responsable empezar el trabajo', async () => {
@@ -530,9 +531,9 @@ describe('InspectionFindingsRoute — el compromiso', () => {
 
     renderRoute();
 
-    const dialog = await openCreation();
-    await completeForm(dialog);
-    submit(dialog);
+    const form = await creationForm();
+    await completeForm(form);
+    submit(form);
 
     await waitFor(() => expect(createAction).toHaveBeenCalledTimes(1));
     expect(listFindingRoster).toHaveBeenCalledWith(FINDING);
@@ -543,7 +544,7 @@ describe('InspectionFindingsRoute — el compromiso', () => {
     });
   });
 
-  it('cierra el diálogo y muestra la acción recién creada', async () => {
+  it('retira el formulario y muestra la acción recién creada', async () => {
     let reads = 0;
     let findingReads = 0;
     getSubmittedInspection.mockImplementation(() => {
@@ -559,11 +560,13 @@ describe('InspectionFindingsRoute — el compromiso', () => {
 
     renderRoute();
 
-    const dialog = await openCreation();
-    await completeForm(dialog);
-    submit(dialog);
+    const form = await creationForm();
+    await completeForm(form);
+    submit(form);
 
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() =>
+      expect(screen.queryByRole('form', { name: 'Create corrective action' })).toBeNull(),
+    );
     expect(await screen.findByRole('button', { name: 'Start work' })).toBeTruthy();
   });
 
@@ -572,14 +575,14 @@ describe('InspectionFindingsRoute — el compromiso', () => {
 
     renderRoute();
 
-    const dialog = await openCreation();
-    await completeForm(dialog);
-    fireEvent.change(within(dialog).getByLabelText('Deadline'), {
+    const form = await creationForm();
+    await completeForm(form);
+    fireEvent.change(within(form).getByLabelText('Deadline'), {
       target: { value: '2000-01-01T12:00' },
     });
-    submit(dialog);
+    submit(form);
 
-    expect((await within(dialog).findByRole('alert')).textContent).toContain(
+    expect((await within(form).findByRole('alert')).textContent).toContain(
       'Deadline must be in the future.',
     );
     expect(createAction).not.toHaveBeenCalled();
@@ -591,15 +594,14 @@ describe('InspectionFindingsRoute — el compromiso', () => {
 
     renderRoute();
 
-    const dialog = await openCreation();
-    await completeForm(dialog);
+    const form = await creationForm();
+    await completeForm(form);
 
-    // El formulario se toma UNA vez: al enviar, el botón pasa a decir «Creating…» y
-    // buscarlo por su nombre anterior no encontraría nada.
-    const form = within(dialog).getByRole('button', { name: 'Create action' }).closest('form')!;
+    // El paso se toma UNA vez: al enviar, el botón pasa a decir «Creating…» y el segundo
+    // envío no encuentra nada que pulsar.
     fireEvent.submit(form);
     expect(
-      ((await within(dialog).findByRole('button', { name: 'Creating…' })) as HTMLButtonElement)
+      ((await within(form).findByRole('button', { name: 'Creating…' })) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
     fireEvent.submit(form);
@@ -613,34 +615,36 @@ describe('InspectionFindingsRoute — el compromiso', () => {
 
     renderRoute();
 
-    const dialog = await openCreation();
-    await completeForm(dialog);
-    submit(dialog);
+    const form = await creationForm();
+    await completeForm(form);
+    submit(form);
 
-    expect((await within(dialog).findByRole('alert')).textContent).toContain(
+    expect((await within(form).findByRole('alert')).textContent).toContain(
       'The server rejected this commitment.',
     );
-    expect((within(dialog).getByLabelText('Assignee') as HTMLSelectElement).value).toBe(PERSON);
-    expect((within(dialog).getByLabelText('Description') as HTMLTextAreaElement).value).toBe(
+    expect(
+      (within(form).getByLabelText('Responsible person') as HTMLSelectElement).value,
+    ).toBe(PERSON);
+    expect((within(form).getByLabelText('Description') as HTMLTextAreaElement).value).toBe(
       'Install a fixed guard before restarting the line',
     );
-    expect((within(dialog).getByLabelText('Deadline') as HTMLInputElement).value).toBe(
+    expect((within(form).getByLabelText('Deadline') as HTMLInputElement).value).toBe(
       '2099-08-30T12:00',
     );
   });
 
-  it('limita un fallo del roster al formulario abierto', async () => {
+  it('limita un fallo del roster al formulario del paso', async () => {
     getSubmittedInspection.mockResolvedValue(report());
     listFindingRoster.mockRejectedValue(new Error('offline'));
 
     renderRoute();
 
-    const dialog = await openCreation();
+    const form = await creationForm();
     expect(
-      await within(dialog).findByText('The active people for this site need a connection.'),
+      await within(form).findByText('The active people for this site need a connection.'),
     ).toBeTruthy();
     expect(
-      (within(dialog).getByRole('button', { name: 'Create action' }) as HTMLButtonElement).disabled,
+      (within(form).getByRole('button', { name: 'Create action' }) as HTMLButtonElement).disabled,
     ).toBe(true);
     expect(screen.getByText('Guard missing on the infeed of packaging line 3')).toBeTruthy();
   });

@@ -1,7 +1,6 @@
 import {
   ACTION_DESCRIPTION_MAX,
   ACTION_DESCRIPTION_MIN,
-  amendActionCommitmentRequestSchema,
   type ActionSummary,
   type AmendActionCommitmentRequest,
 } from '@hs/contracts';
@@ -11,7 +10,7 @@ import { useState } from 'react';
 import { amendAssignment } from '../../api/actions';
 import { listFindingRoster } from '../../api/findings';
 import { queryKeys } from '../../api/query-keys';
-import { futureDueAt, toDateTimeLocal } from './presentation';
+import { commitmentRequest, toDateTimeLocal } from './presentation';
 
 /**
  * El formulario que corrige responsable, trabajo y plazo mientras la acción sigue en
@@ -59,35 +58,27 @@ export function EditAssignmentForm({
     },
   });
 
+  /*
+    LA MISMA REGLA QUE AL ASIGNAR, y por eso no está escrita acá: enmendar es reemplazar el
+    compromiso entero (ADR-018), así que lo que se comprueba es lo mismo. Con la comprobación
+    copiada, la enmienda terminaría aceptando lo que crear rechaza.
+  */
   const submit = (): void => {
     if (amendment.isPending || !roster.isSuccess) return;
 
-    if (!roster.data.some((person) => person.id === assigneePersonId)) {
-      setValidationError('Choose an active assignee from this site.');
-      return;
-    }
+    const commitment = commitmentRequest(
+      { assigneePersonId, description, dueAt },
+      roster.data,
+      new Date(),
+    );
 
-    const deadline = futureDueAt(dueAt, new Date());
-    if (!deadline.success) {
-      setValidationError(deadline.message);
-      return;
-    }
-
-    const request = amendActionCommitmentRequestSchema.safeParse({
-      assignee_person_id: assigneePersonId,
-      description,
-      due_at: deadline.dueAt,
-    });
-
-    if (!request.success) {
-      setValidationError(
-        `Description must be between ${ACTION_DESCRIPTION_MIN} and ${ACTION_DESCRIPTION_MAX} characters.`,
-      );
+    if (!commitment.success) {
+      setValidationError(commitment.message);
       return;
     }
 
     setValidationError(null);
-    amendment.mutate(request.data);
+    amendment.mutate(commitment.request);
   };
 
   return (

@@ -45,10 +45,11 @@ export function canAmendAssignment(
  * Solo pide esa relación: el listado trae `ActionSummary`, sin el stream de `events`, y
  * alcanza para tomar esta decisión.
  *
- * Lo que esto **no** decide es la regla del verificador —quien ejecutó no cierra—,
- * porque necesita saber quién declaró el trabajo hecho y eso depende del stream, no del
- * rol. El botón se ofrece y el servidor responde `verifier_is_executor`, que es un error
- * que se lee. Media regla copiada acá sería una que puede separarse de la otra mitad.
+ * Lo que esto **no** decide es la regla del verificador —quien ejecutó no cierra, salvo el
+ * coordinador de H&S (ADR-019)—, porque necesita saber quién declaró el trabajo hecho y eso
+ * depende del stream, no del rol. El botón se ofrece y el servidor responde
+ * `verifier_is_executor` a quien todavía la tiene prohibida, que es un error que se lee.
+ * Media regla copiada acá sería una que puede separarse de la otra mitad.
  */
 export function canAttempt(
   transition: ActionTransition,

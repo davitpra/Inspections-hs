@@ -7,10 +7,10 @@ import { EditAssignmentForm } from "./EditAssignmentForm";
 import type { FindingNextStep as NextStep } from "./presentation";
 
 /**
- * El único camino principal, y con dos formas de ejecutarlo. Crear una acción sigue siendo
- * un diálogo —asignar una persona, describir el trabajo y comprometer una fecha es un acto
- * aparte—; avanzar una que ya existe se hace SIN salir de la ficha y SIN nada que abrir:
- * `ActionTransitionForm` se dibuja acá mismo, debajo de la copia del paso.
+ * El único camino principal, y una sola forma de ejecutarlo: sus campos, debajo de la copia
+ * que lo nombra. Crear el compromiso y avanzar una acción que ya existe se resuelven los dos
+ * SIN salir de la ficha y SIN nada que abrir —el formulario de creación llega hecho desde el
+ * ciclo, en `create`; el de una transición lo arma `ActionTransitionForm`—.
  *
  * **A la vista y no plegado.** Un diálogo tapaba justo el contexto —la pregunta, lo
  * prescrito, lo observado— que justifica la decisión, y un disclosure costaba dos
@@ -32,13 +32,14 @@ export function FindingNextStep({
   step,
   session,
   findingId,
-  onAttempt,
+  create,
   onDraftChange,
 }: {
   step: NextStep;
   session: Session | null;
   findingId: string;
-  onAttempt?: React.MouseEventHandler<HTMLButtonElement>;
+  /** El formulario que escribe el compromiso, cuando crear ES el paso; lo arma el ciclo. */
+  create?: React.ReactNode;
   onDraftChange?: (drafting: boolean) => void;
 }): React.JSX.Element {
   const sectionRef = useRef<HTMLElement>(null);
@@ -76,26 +77,18 @@ export function FindingNextStep({
       aria-label="Next step"
       ref={sectionRef}
     >
-      <div className="finding__next-step-head">
-        <div className="finding__next-step-copy">
-          <p className="finding__next-step-eyebrow">Next step</p>
-          <h3>{step.label}</h3>
-          <p>{step.requirement}</p>
-          <p className="finding__next-step-owner">
-            {step.control ? "Responsible" : "Waiting on"}:{" "}
-            <strong>{step.waitingOn}</strong>
-          </p>
-        </div>
-        {step.control?.kind === "create" && onAttempt ? (
-          <button
-            type="button"
-            className="button--primary finding__next-step-button"
-            onClick={onAttempt}
-          >
-            {step.label}
-          </button>
-        ) : null}
+      <div className="finding__next-step-copy">
+        <p className="finding__next-step-eyebrow">Next step</p>
+        <h3>{step.label}</h3>
+        <p>{step.requirement}</p>
+        <p className="finding__next-step-owner">
+          {step.control ? "Responsible" : "Waiting on"}:{" "}
+          <strong>{step.waitingOn}</strong>
+        </p>
       </div>
+
+      {/* El mismo hueco para las dos formas del paso: la que crea y la que avanza. */}
+      {create ? <div className="finding__next-step-form">{create}</div> : null}
 
       {step.control?.kind === "progress" ? (
         <div className="finding__next-step-form">

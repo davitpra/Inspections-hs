@@ -1821,9 +1821,9 @@ select:disabled {
 }
 
 /*
- * El único camino principal dentro de la ficha. APILA y no es un renglón: el segundo
- * renglón es el formulario del paso, y `finding__next-step-head` es lo que ANTES era este
- * bloque entero, cuando avanzar una acción abría un diálogo en vez de resolverse acá.
+ * El único camino principal dentro de la ficha. APILA y no es un renglón: abajo va el
+ * formulario del paso —crear el compromiso o avanzar la acción—, que antes era un diálogo y
+ * dejaba a este bloque siendo solo su copia y un botón.
  */
 .finding__next-step {
   display: grid;
@@ -1836,13 +1836,6 @@ select:disabled {
   background: var(--info-bg);
 }
 
-.finding__next-step-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-}
-
 .finding__next-step-copy,
 .finding__next-step-copy h3,
 .finding__next-step-copy p {
@@ -1850,8 +1843,6 @@ select:disabled {
 }
 
 .finding__next-step-copy {
-  flex: 1 1 auto;
-  min-width: 0;
   display: grid;
   gap: var(--space-1);
 }
@@ -1870,18 +1861,6 @@ select:disabled {
 }
 
 /*
- * El único `button--primary` que no toma el ancho: comparte renglón con la copia del paso,
- * y el `width: 100%` del modificador la dejaba en una columna de dos palabras. Se mide por
- * su contenido, como `.scheduling__header-add`, y no parte la etiqueta en dos líneas: es el
- * mismo texto del encabezado del bloque, y leerlo distinto haría dudar de que sea lo mismo.
- */
-.finding__next-step-button {
-  flex: none;
-  padding-inline: var(--space-6);
-  white-space: nowrap;
-}
-
-/*
  * EL ANCHO VA CALIFICADO POR EL BLOQUE, y no en la regla de arriba. `button--primary` y
  * `button--outline` se declaran más abajo en este archivo con la misma especificidad, así
  * que un `width: auto` por clase sola pierde por orden y el botón vuelve a comerse el
@@ -1892,11 +1871,18 @@ select:disabled {
   width: auto;
 }
 
-/* El formulario del paso, siempre a la vista. La línea punteada lo separa de la copia que
-   lo nombra: es otro nivel de detalle, no una continuación del mismo texto. */
+/* El formulario del paso, siempre a la vista —el que crea el compromiso y el que avanza la
+   acción usan el mismo hueco—. La línea punteada lo separa de la copia que lo nombra: es otro
+   nivel de detalle, no una continuación del mismo texto. */
 .finding__next-step-form {
   padding-top: var(--space-4);
   border-top: 1px dashed var(--line);
+}
+
+/* Los tres campos del compromiso, con el mismo aire que la enmienda: es la misma decisión. */
+.finding__create-form {
+  display: grid;
+  gap: var(--space-2);
 }
 
 /*
@@ -2090,13 +2076,6 @@ select:disabled {
   .finding__stage--draft {
     border-top-style: solid;
     border-left-style: dashed;
-  }
-
-  /* La copia deja de compartir renglón antes de volverse una columna de dos palabras, y el
-     botón pasa a ser el pie del bloque en vez de disputarle el ancho. */
-  .finding__next-step-head {
-    flex-direction: column;
-    align-items: stretch;
   }
 
   .finding__next-step .button--primary {

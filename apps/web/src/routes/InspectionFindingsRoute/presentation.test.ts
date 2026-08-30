@@ -6,6 +6,7 @@ import {
   actionsByFinding,
   blockingActions,
   commitmentLabel,
+  commitmentRequest,
   eventLabel,
   eventsInStage,
   findingDeadline,
@@ -440,6 +441,65 @@ describe('el plazo del formulario', () => {
     expect(futureDueAt('2026-08-28T12:00:00.000Z', now)).toEqual({
       success: false,
       message: 'Deadline must be in the future.',
+    });
+  });
+});
+
+/**
+ * LA MISMA REGLA PARA CREAR Y PARA ENMENDAR (ADR-018). Se prueba una vez porque es una sola:
+ * si el compromiso que se asigna y el que se corrige se comprobaran distinto, la enmienda
+ * aceptaría lo que crear rechaza sin que nada lo delate.
+ */
+describe('el compromiso escrito en los tres campos', () => {
+  const now = new Date('2026-08-28T12:00:00.000Z');
+  const PERSON = '99999999-9999-4999-8999-999999999999';
+  const roster = [
+    {
+      id: PERSON,
+      first_name: 'Ada',
+      last_name: 'Lovelace',
+      employee_number: '1042',
+    },
+  ];
+
+  const draft = {
+    assigneePersonId: PERSON,
+    description: 'Install a fixed guard before restarting the line',
+    dueAt: '2026-08-29T12:00',
+  };
+
+  it('devuelve el cuerpo que espera el servidor', () => {
+    expect(commitmentRequest(draft, roster, now)).toEqual({
+      success: true,
+      request: {
+        assignee_person_id: PERSON,
+        description: draft.description,
+        due_at: new Date(draft.dueAt).toISOString(),
+      },
+    });
+  });
+
+  /* Que la persona esté ACTIVA en esta planta no lo sabe `uuid()`, y el aviso que corresponde
+     no es sobre la forma del dato sino sobre a quién se puede asignar. */
+  it('rechaza a quien no está en el roster', () => {
+    expect(
+      commitmentRequest({ ...draft, assigneePersonId: FINDING_A }, roster, now),
+    ).toEqual({
+      success: false,
+      message: 'Choose an active assignee from this site.',
+    });
+  });
+
+  it('rechaza un plazo que no es futuro antes de mirar el trabajo', () => {
+    expect(
+      commitmentRequest({ ...draft, description: '', dueAt: '2026-08-01T12:00' }, roster, now),
+    ).toEqual({ success: false, message: 'Deadline must be in the future.' });
+  });
+
+  it('rechaza una descripción demasiado corta', () => {
+    expect(commitmentRequest({ ...draft, description: 'Fix it' }, roster, now)).toEqual({
+      success: false,
+      message: 'Description must be between 10 and 2000 characters.',
     });
   });
 });
