@@ -53,7 +53,13 @@ import {
  * dentro del próximo paso y solo mientras crear ES el próximo paso; a quién, lo decide
  * `nextStep`, y eso es comodidad, no garantía: el servidor vuelve a exigirlo en
  * `ActionsService.create`. La ruta no dibuja esos campos ni sabe cuál ficha los está
- * llenando: los pone el ciclo del hallazgo, a la vista y sin abrir nada.
+ * llenando: los pone el ciclo del hallazgo.
+ *
+ * SOBRE UN HALLAZGO RECIÉN LEVANTADO, EL COMPROMISO ESTÁ A UNA PULSACIÓN Y NO DIBUJADO. La
+ * pantalla abre por la lectura —la pregunta, lo prescrito, lo observado, las fotos—; una
+ * inspección recién enviada con seis hallazgos abría si no seis formularios de alta apilados y
+ * se leía como una planilla de carga. Cuál ficha llega plegada lo decide `FindingLifecycle`, y
+ * es exactamente donde no hay ninguna decisión que leer todavía.
  *
  * El estado sale del stream propio que ya trae el hallazgo. Las acciones se leen para el
  * próximo paso, el plazo y la historia; si esa consulta falla, el estado sigue siendo legible

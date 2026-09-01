@@ -163,7 +163,6 @@ const evidenceKey = (actionId: string) => `${SITE_A}/actions/${actionId}/${rando
 
 /** Recorre una acción hasta `closed`, ejecutada por el supervisor y cerrada por otro. */
 async function closeAction(actionId: string): Promise<void> {
-  await actions.transition(asSupervisor(), actionId, { to: 'in_progress', evidence: [] });
   await actions.transition(asSupervisor(), actionId, {
     to: 'awaiting_verification',
     evidence: [{ kind: 'after', object_key: evidenceKey(actionId) }],
@@ -508,7 +507,6 @@ describe('la guarda que da sentido a la máquina: no se cierra con acciones abie
     const incidentId = await investigated();
     const actionId = await openActionOn(incidentId);
 
-    await actions.transition(asSupervisor(), actionId, { to: 'in_progress', evidence: [] });
     await actions.transition(asSupervisor(), actionId, {
       to: 'awaiting_verification',
       evidence: [{ kind: 'after', object_key: evidenceKey(actionId) }],
@@ -1345,7 +1343,6 @@ describe('el segundo padre de la acción correctiva', () => {
     const incidentId = await investigated();
     const actionId = await openActionOn(incidentId);
 
-    await actions.transition(asSupervisor(), actionId, { to: 'in_progress', evidence: [] });
     await actions.transition(asSupervisor(), actionId, {
       to: 'awaiting_verification',
       evidence: [{ kind: 'after', object_key: evidenceKey(actionId) }],

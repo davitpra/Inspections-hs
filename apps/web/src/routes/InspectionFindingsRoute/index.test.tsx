@@ -263,8 +263,18 @@ beforeEach(() => {
   useAppSession.mockReturnValue({ account: session('hs_coordinator') });
 });
 
-/** El compromiso no se abre: está a la vista dentro del paso, y solo hay que encontrarlo. */
+/**
+ * El ciclo de un hallazgo levantado llega plegado: hay que abrirlo. Adentro no hay nada más
+ * que pulsar —el compromiso está a la vista dentro del paso—, y por eso el helper es una sola
+ * pulsación y no dos.
+ */
+async function openLifecycle(): Promise<void> {
+  fireEvent.click(await screen.findByRole('button', { name: 'Create corrective action' }));
+}
+
 async function creationForm(): Promise<HTMLElement> {
+  await openLifecycle();
+
   return await screen.findByRole('form', { name: 'Create corrective action' });
 }
 
@@ -391,6 +401,7 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
   it('presenta raised y sin plazo cuando todavía no hay acciones', async () => {
     renderRoute();
 
+    await openLifecycle();
     await screen.findByRole('region', { name: 'Finding lifecycle' });
     expectCurrentStage('Raised');
     expect(screen.queryByText(/day(?:s)? overdue|in \d+ day/)).toBeNull();
@@ -404,6 +415,7 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
   it('abre el compromiso en la etapa que va a escribir, no en la vigente', async () => {
     renderRoute();
 
+    await openLifecycle();
     const assigned = await screen.findByRole('tab', { name: 'Assigned' });
     expect(assigned.getAttribute('aria-selected')).toBe('true');
     expectCurrentStage('Raised');
@@ -452,6 +464,7 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
   it('ofrece al coordinador asignar el hallazgo levantado', async () => {
     renderRoute();
 
+    await openLifecycle();
     const next = await screen.findByRole('region', { name: 'Next step' });
     expect(within(next).getByRole('form', { name: 'Create corrective action' })).toBeTruthy();
     expect(within(next).getByText(/Assign a responsible person/)).toBeTruthy();
@@ -463,6 +476,7 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
 
     renderRoute();
 
+    await openLifecycle();
     const next = await screen.findByRole('region', { name: 'Next step' });
     expect(within(next).getByRole('form', { name: 'Create corrective action' })).toBeTruthy();
   });
@@ -520,6 +534,107 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
     const next = await screen.findByRole('region', { name: 'Next step' });
     expect(within(next).getByText('Ada Reid')).toBeTruthy();
     expect(within(next).queryByRole('button')).toBeNull();
+  });
+});
+
+/**
+ * LA FICHA ABRE POR LA LECTURA. Un hallazgo que todavía no decidió nada no dibuja su ciclo:
+ * una inspección recién enviada con varios hallazgos apilaba un formulario de alta por cada
+ * uno y se leía como una planilla de carga. El ciclo está a una pulsación, y solo se pliega
+ * donde hay algo que plegar —quien puede asignar un hallazgo levantado—.
+ */
+describe('InspectionFindingsRoute — la ficha plegada', () => {
+  beforeEach(() => {
+    getSubmittedInspection.mockResolvedValue(report());
+  });
+
+  it('el hallazgo levantado llega plegado, con la lectura entera y un solo control', async () => {
+    renderRoute();
+
+    // Lo que salió mal está completo desde el primer momento.
+    expect(await screen.findByText('Machine guards in place')).toBeTruthy();
+    expect(screen.getByText('Guard missing on the infeed of packaging line 3')).toBeTruthy();
+    expect(screen.getByText('Refit the guard before the line runs again.')).toBeTruthy();
+    expect(screen.getByText('1 photo')).toBeTruthy();
+
+    // El ciclo no: ni la tira de etapas, ni el registro, ni los tres campos del compromiso.
+    expect(screen.getByRole('button', { name: 'Create corrective action' })).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Finding lifecycle' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Next step' })).toBeNull();
+    expect(screen.queryByRole('form', { name: 'Create corrective action' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Assigned' })).toBeNull();
+  });
+
+  /**
+   * El roster es por hallazgo (`/findings/:id/roster`, ADR-017), así que no hay una consulta
+   * que sirva para todos: dibujado el formulario de cada ficha, la pantalla pedía uno por
+   * hallazgo antes de que nadie mirara ninguno.
+   */
+  it('plegada no pide el roster de nadie', async () => {
+    renderRoute();
+
+    await screen.findByRole('button', { name: 'Create corrective action' });
+    expect(listFindingRoster).not.toHaveBeenCalled();
+
+    await openLifecycle();
+
+    await waitFor(() => expect(listFindingRoster).toHaveBeenCalledWith(FINDING));
+  });
+
+  /** Hide no descarta: se oculta el ciclo, no se desmonta lo que alguien ya escribió. */
+  it('el control abre el ciclo y vuelve a plegarlo conservando el borrador', async () => {
+    renderRoute();
+
+    const form = await creationForm();
+    await completeForm(form);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide' }));
+    expect(screen.queryByRole('region', { name: 'Finding lifecycle' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create corrective action' }));
+
+    const reopened = await screen.findByRole('form', { name: 'Create corrective action' });
+    expect((within(reopened).getByLabelText('Description') as HTMLTextAreaElement).value).toBe(
+      'Install a fixed guard before restarting the line',
+    );
+    expect(
+      (within(reopened).getByLabelText('Responsible person') as HTMLSelectElement).value,
+    ).toBe(PERSON);
+  });
+
+  /** Sin control no hay borrador que proteger, y sí un registro que auditar. */
+  it('sin permiso para crear, el ciclo llega abierto y nada lo pliega', async () => {
+    getSubmittedInspection.mockResolvedValue(
+      report({ findings: [finding({ reported_by: '77777777-7777-4777-8777-777777777777' })] }),
+    );
+    useAppSession.mockReturnValue({ account: session('jhsc_member') });
+
+    renderRoute();
+
+    expect(await screen.findByRole('region', { name: 'Finding lifecycle' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Create corrective action' })).toBeNull();
+  });
+
+  it('con las acciones caídas, el ciclo llega abierto y nada lo pliega', async () => {
+    listActions.mockRejectedValue(new Error('offline'));
+
+    renderRoute();
+
+    expect(await screen.findByRole('region', { name: 'Finding lifecycle' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Create corrective action' })).toBeNull();
+  });
+
+  /** Un hallazgo que ya tiene trabajo abierto no se pliega: hay decisiones que leer. */
+  it('el hallazgo ya asignado llega abierto', async () => {
+    getSubmittedInspection.mockResolvedValue(
+      report({ findings: [finding({ state: 'assigned' })] }),
+    );
+    listActions.mockResolvedValue([action()]);
+
+    renderRoute();
+
+    expect(await screen.findByRole('region', { name: 'Finding lifecycle' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Start work' })).toBeTruthy();
   });
 });
 

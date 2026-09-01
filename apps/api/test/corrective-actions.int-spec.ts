@@ -204,9 +204,12 @@ function daysAfter(dueAt: string, days: number): Date {
 const evidenceKey = (actionId: string, siteId = SITE_A) =>
   `${siteId}/actions/${actionId}/${randomUUID()}`;
 
-/** Lleva una acción hasta `awaiting_verification`, ejecutada por el supervisor. */
+/**
+ * Lleva una acción hasta `awaiting_verification`, ejecutada por el supervisor.
+ *
+ * Es UNA transición desde ADR-020: nadie declara que empezó a trabajar.
+ */
 async function awaitingVerification(actionId: string): Promise<void> {
-  await actions.transition(asSupervisor(), actionId, { to: 'in_progress', evidence: [] });
   await actions.transition(asSupervisor(), actionId, {
     to: 'awaiting_verification',
     evidence: [{ kind: 'after', object_key: evidenceKey(actionId) }],
@@ -352,7 +355,7 @@ afterAll(async () => {
 });
 
 describe('el estado propio del hallazgo', () => {
-  it('nace raised y recorre automáticamente las cinco etapas con su acción', async () => {
+  it('nace raised y recorre automáticamente las etapas con su acción', async () => {
     const { findingId, reporterAccountId } = await derivedFinding();
 
     expect((await findings.get(asCoordinator(), findingId)).state).toBe('raised');
@@ -364,9 +367,6 @@ describe('el estado propio del hallazgo', () => {
     });
 
     expect(await findingStateOf(findingId)).toBe('assigned');
-
-    await actions.transition(asSupervisor(), created.id, { to: 'in_progress', evidence: [] });
-    expect(await findingStateOf(findingId)).toBe('in_progress');
 
     await actions.transition(asSupervisor(), created.id, {
       to: 'awaiting_verification',
@@ -381,8 +381,7 @@ describe('el estado propio del hallazgo', () => {
     expect(stream.map(({ from_state, to_state }) => [from_state, to_state])).toEqual([
       [null, 'raised'],
       ['raised', 'assigned'],
-      ['assigned', 'in_progress'],
-      ['in_progress', 'verification'],
+      ['assigned', 'verification'],
       ['verification', 'closed'],
     ]);
     expect(stream[0]?.actor_user_id).toBe(reporterAccountId);
@@ -439,7 +438,10 @@ describe('el estado propio del hallazgo', () => {
       due_at: LATER_DUE_AT,
     });
 
-    await actions.transition(asSupervisor(), first.id, { to: 'in_progress', evidence: [] });
+    await actions.transition(asSupervisor(), first.id, {
+      to: 'awaiting_verification',
+      evidence: [],
+    });
 
     expect(await findingStateOf(findingId)).toBe('assigned');
     expect(await findingStateRows(findingId)).toHaveLength(2);
@@ -459,15 +461,15 @@ describe('el estado propio del hallazgo', () => {
     });
 
     await Promise.all([
-      actions.transition(asSupervisor(), first.id, { to: 'in_progress', evidence: [] }),
-      actions.transition(asSupervisor(), second.id, { to: 'in_progress', evidence: [] }),
+      actions.transition(asSupervisor(), first.id, { to: 'awaiting_verification', evidence: [] }),
+      actions.transition(asSupervisor(), second.id, { to: 'awaiting_verification', evidence: [] }),
     ]);
 
-    expect(await findingStateOf(findingId)).toBe('in_progress');
+    expect(await findingStateOf(findingId)).toBe('verification');
     expect((await findingStateRows(findingId)).map((event) => event.to_state)).toEqual([
       'raised',
       'assigned',
-      'in_progress',
+      'verification',
     ]);
   });
 
@@ -627,9 +629,6 @@ describe('el recorrido completo de R3', () => {
 
     expect(await stateOf(actionId)).toBe('open');
 
-    await actions.transition(asSupervisor(), actionId, { to: 'in_progress', evidence: [] });
-    expect(await stateOf(actionId)).toBe('in_progress');
-
     await actions.transition(asSupervisor(), actionId, {
       to: 'awaiting_verification',
       evidence: [
@@ -651,13 +650,12 @@ describe('el recorrido completo de R3', () => {
 
     expect(events.map((row) => row.to_state)).toEqual([
       'open',
-      'in_progress',
       'awaiting_verification',
       'closed',
     ]);
-    expect(events.map((row) => row.position)).toEqual([0, 1, 2, 3]);
+    expect(events.map((row) => row.position)).toEqual([0, 1, 2]);
     expect(one(events).from_state).toBeNull();
-    expect(events[3]?.actor_user_id).toBe(coordinator.accountId);
+    expect(events[2]?.actor_user_id).toBe(coordinator.accountId);
   });
 
   it('no hay ninguna columna de estado que leer', async () => {
@@ -749,7 +747,7 @@ describe('la máquina de estados', () => {
           `SELECT EXISTS (
              SELECT 1 FROM (VALUES
                (NULL, 'open'),
-               ('open', 'in_progress'),
+               ('open', 'awaiting_verification'),
                ('in_progress', 'awaiting_verification'),
                ('awaiting_verification', 'closed'),
                ('awaiting_verification', 'in_progress')
@@ -785,7 +783,10 @@ describe('la máquina de estados', () => {
   it('un evento cuyo from_state no es el vigente falla con HS004', async () => {
     const actionId = await openAction();
 
-    await actions.transition(asSupervisor(), actionId, { to: 'in_progress', evidence: [] });
+    await actions.transition(asSupervisor(), actionId, {
+      to: 'awaiting_verification',
+      evidence: [],
+    });
 
     await expect(
       inScope(
@@ -793,7 +794,7 @@ describe('la máquina de estados', () => {
         [SITE_A],
         `INSERT INTO corrective_action_event
            (action_id, site_id, position, from_state, to_state, actor_user_id, occurred_at)
-         VALUES ($1, $2, 2, 'open', 'in_progress', $3, now())`,
+         VALUES ($1, $2, 2, 'open', 'awaiting_verification', $3, now())`,
         [actionId, SITE_A, coordinator.accountId],
       ),
     ).rejects.toSatisfy((error: unknown) => sqlstate(error) === 'HS004');
@@ -808,7 +809,7 @@ describe('la máquina de estados', () => {
         [SITE_A],
         `INSERT INTO corrective_action_event
            (action_id, site_id, position, from_state, to_state, actor_user_id, occurred_at)
-         VALUES ($1, $2, 99, 'open', 'in_progress', $3, now())`,
+         VALUES ($1, $2, 99, 'open', 'awaiting_verification', $3, now())`,
         [actionId, SITE_A, coordinator.accountId],
       ),
     ).rejects.toSatisfy((error: unknown) => sqlstate(error) === 'HS004');
@@ -826,8 +827,8 @@ describe('la máquina de estados', () => {
     const actionId = await openAction();
 
     const results = await Promise.allSettled([
-      actions.transition(asSupervisor(), actionId, { to: 'in_progress', evidence: [] }),
-      actions.transition(asCoordinator(), actionId, { to: 'in_progress', evidence: [] }),
+      actions.transition(asSupervisor(), actionId, { to: 'awaiting_verification', evidence: [] }),
+      actions.transition(asCoordinator(), actionId, { to: 'awaiting_verification', evidence: [] }),
     ]);
 
     expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
@@ -836,7 +837,7 @@ describe('la máquina de estados', () => {
 
     expect(rejected).toBeDefined();
     expect(await eventRows(actionId)).toHaveLength(2);
-    expect(await stateOf(actionId)).toBe('in_progress');
+    expect(await stateOf(actionId)).toBe('awaiting_verification');
   });
 });
 
@@ -924,7 +925,7 @@ describe('el verificador', () => {
 
     const events = await eventRows(actionId);
 
-    expect(events[3]?.reason).toBe(reason);
+    expect(events[2]?.reason).toBe(reason);
   });
 
   it('rechazar sin motivo se rechaza en el servicio y en el motor', async () => {
@@ -942,7 +943,7 @@ describe('el verificador', () => {
         [SITE_A],
         `INSERT INTO corrective_action_event
            (action_id, site_id, position, from_state, to_state, actor_user_id, occurred_at)
-         VALUES ($1, $2, 3, 'awaiting_verification', 'in_progress', $3, now())`,
+         VALUES ($1, $2, 2, 'awaiting_verification', 'in_progress', $3, now())`,
         [actionId, SITE_A, coordinator.accountId],
       ),
     ).rejects.toSatisfy((error: unknown) => sqlstate(error) === '23514');
@@ -950,14 +951,13 @@ describe('el verificador', () => {
 
   /**
    * Gerencia solo puede declarar trabajo hecho cuando es la responsable de la acción —
-   * `open → in_progress` es del `assignee` o del coordinador—, así que el caso se monta
+   * `open → awaiting_verification` es del `assignee` o del coordinador—, así que el caso se monta
    * asignándosela. La regla la alcanza igual que al supervisor: ADR-019 exime al
    * coordinador y a nadie más.
    */
   it('gerencia tampoco puede verificar lo que declaró hecho', async () => {
     const actionId = await openAction({ assignee: manager.personId });
 
-    await actions.transition(asManager(), actionId, { to: 'in_progress', evidence: [] });
     await actions.transition(asManager(), actionId, {
       to: 'awaiting_verification',
       evidence: [{ kind: 'after', object_key: evidenceKey(actionId) }],
@@ -979,7 +979,6 @@ describe('el verificador', () => {
   it('el coordinador que ejecutó en nombre de otro sí verifica', async () => {
     const actionId = await openAction({ assignee: rosterPerson });
 
-    await actions.transition(asCoordinator(), actionId, { to: 'in_progress', evidence: [] });
     await actions.transition(asCoordinator(), actionId, {
       to: 'awaiting_verification',
       evidence: [{ kind: 'after', object_key: evidenceKey(actionId) }],
@@ -1000,7 +999,6 @@ describe('el verificador', () => {
   it('el coordinador también puede rechazar su propio trabajo, con motivo', async () => {
     const actionId = await openAction({ assignee: rosterPerson });
 
-    await actions.transition(asCoordinator(), actionId, { to: 'in_progress', evidence: [] });
     await actions.transition(asCoordinator(), actionId, {
       to: 'awaiting_verification',
       evidence: [{ kind: 'after', object_key: evidenceKey(actionId) }],
@@ -1025,7 +1023,6 @@ describe('el verificador', () => {
   it('un INSERT directo del coordinador ejecutor commitea', async () => {
     const actionId = await openAction({ assignee: rosterPerson });
 
-    await actions.transition(asCoordinator(), actionId, { to: 'in_progress', evidence: [] });
     await actions.transition(asCoordinator(), actionId, {
       to: 'awaiting_verification',
       evidence: [{ kind: 'after', object_key: evidenceKey(actionId) }],
@@ -1048,8 +1045,6 @@ describe('la evidencia', () => {
   it('declarar el trabajo hecho sin evidencia llega a esperando verificación', async () => {
     const actionId = await openAction();
 
-    await actions.transition(asSupervisor(), actionId, { to: 'in_progress', evidence: [] });
-
     const action = await actions.transition(asSupervisor(), actionId, {
       to: 'awaiting_verification',
       evidence: [],
@@ -1063,14 +1058,12 @@ describe('la evidencia', () => {
   it('un evento directo de completado sin evidencia commitea', async () => {
     const actionId = await openAction();
 
-    await actions.transition(asSupervisor(), actionId, { to: 'in_progress', evidence: [] });
-
     await inScope(
       db.app,
       [SITE_A],
       `INSERT INTO corrective_action_event
          (action_id, site_id, position, from_state, to_state, actor_user_id, occurred_at)
-       VALUES ($1, $2, 2, 'in_progress', 'awaiting_verification', $3, now())`,
+       VALUES ($1, $2, 1, 'open', 'awaiting_verification', $3, now())`,
       [actionId, SITE_A, supervisor.accountId],
     );
 
@@ -1079,8 +1072,6 @@ describe('la evidencia', () => {
 
   it('guarda el antes y el después con su tipo', async () => {
     const actionId = await openAction();
-
-    await actions.transition(asSupervisor(), actionId, { to: 'in_progress', evidence: [] });
 
     const action = await actions.transition(asSupervisor(), actionId, {
       to: 'awaiting_verification',
@@ -1099,8 +1090,6 @@ describe('la evidencia', () => {
 
   it('una key de otro prefijo se rechaza', async () => {
     const actionId = await openAction();
-
-    await actions.transition(asSupervisor(), actionId, { to: 'in_progress', evidence: [] });
 
     await expect(
       actions.transition(asSupervisor(), actionId, {
@@ -1367,7 +1356,10 @@ describe('los permisos', () => {
     const actionId = await openAction({ assignee: rosterPerson });
 
     await expect(
-      actions.transition(asSupervisor(), actionId, { to: 'in_progress', evidence: [] }),
+      actions.transition(asSupervisor(), actionId, {
+        to: 'awaiting_verification',
+        evidence: [],
+      }),
     ).rejects.toMatchObject({ response: { code: 'forbidden' } });
   });
 
@@ -1375,11 +1367,11 @@ describe('los permisos', () => {
     const actionId = await openAction({ assignee: rosterPerson });
 
     const action = await actions.transition(asCoordinator(), actionId, {
-      to: 'in_progress',
+      to: 'awaiting_verification',
       evidence: [],
     });
 
-    expect(action.state).toBe('in_progress');
+    expect(action.state).toBe('awaiting_verification');
     expect(action.events[1]?.actor_user_id).toBe(coordinator.accountId);
   });
 
@@ -1391,7 +1383,7 @@ describe('los permisos', () => {
       sessionFor(auditor.accountId, 'external_auditor', [SITE_A]),
     ]) {
       await expect(
-        actions.transition(session, actionId, { to: 'in_progress', evidence: [] }),
+        actions.transition(session, actionId, { to: 'awaiting_verification', evidence: [] }),
       ).rejects.toMatchObject({ response: { code: 'forbidden' } });
     }
   });
@@ -1560,14 +1552,12 @@ describe('el escalamiento', () => {
     const actionId = await openAction();
     const action = await actions.get(asCoordinator(), actionId);
 
-    await actions.transition(asSupervisor(), actionId, { to: 'in_progress', evidence: [] });
-
     const before = await eventRows(actionId);
 
     await escalation.run(daysAfter(action.due_at, 8));
 
     expect(await eventRows(actionId)).toHaveLength(before.length);
-    expect(await stateOf(actionId)).toBe('in_progress');
+    expect(await stateOf(actionId)).toBe('open');
   });
 });
 
@@ -1823,7 +1813,7 @@ describe('la inmutabilidad', () => {
       [SITE_A, SITE_B],
       `INSERT INTO corrective_action_event
          (action_id, site_id, position, from_state, to_state, actor_user_id, occurred_at)
-       VALUES ($1, $2, 1, 'open', 'in_progress', $3, now())`,
+       VALUES ($1, $2, 1, 'open', 'awaiting_verification', $3, now())`,
       [actionId, SITE_B, coordinator.accountId],
     ).catch((caught: unknown) => caught);
 
@@ -1929,10 +1919,10 @@ describe('la enmienda del compromiso (ADR-018)', () => {
     expect(second.due_at).toBe(DUE_AT);
   });
 
-  it('una acción en marcha ya no acepta enmiendas', async () => {
+  it('una acción cuyo trabajo ya se declaró hecho no acepta enmiendas', async () => {
     const { actionId } = await amendable();
 
-    await actions.transition(asSupervisor(), actionId, { to: 'in_progress', evidence: [] });
+    await awaitingVerification(actionId);
 
     await expect(
       actions.amendCommitment(asCoordinator(), actionId, {
@@ -2110,9 +2100,9 @@ describe('la enmienda del compromiso (ADR-018)', () => {
     expect(sqlstate(ownerError)).toBe('HS001');
   });
 
-  it('un INSERT directo sobre una acción en marcha falla con HS014', async () => {
+  it('un INSERT directo sobre una acción ya declarada hecha falla con HS014', async () => {
     const { actionId } = await amendable();
-    await actions.transition(asSupervisor(), actionId, { to: 'in_progress', evidence: [] });
+    await awaitingVerification(actionId);
 
     const error = await inScope(
       db.app,
@@ -2165,13 +2155,12 @@ describe('la cadena de auditoría', () => {
 
     expect(myTransitions.map((row) => row.payload.to_state)).toEqual([
       'open',
-      'in_progress',
       'awaiting_verification',
       'closed',
     ]);
 
     // El eslabón del cierre nombra al VERIFICADOR, nunca al ejecutor.
-    expect(myTransitions[3]?.payload.actor_user_id).toBe(coordinator.accountId);
+    expect(myTransitions[2]?.payload.actor_user_id).toBe(coordinator.accountId);
 
     expect(evidence.filter((row) => row.payload.action_id === actionId)).toHaveLength(1);
 

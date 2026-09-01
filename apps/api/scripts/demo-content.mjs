@@ -618,8 +618,8 @@ async function ensureManualFinding(token, references) {
 }
 
 /**
- * Una acción por cada estado de la máquina: abierta, en curso, esperando verificación y
- * cerrada.
+ * Una acción por cada estado del camino normal: abierta, esperando verificación y cerrada.
+ * `in_progress` no está porque solo se alcanza devolviendo un trabajo (ADR-020).
  *
  * QUIÉN HACE CADA PASO IMPORTA Y NO ES DECORATIVO. `awaiting_verification → closed` exige
  * `not_executor` —§3 R3, "una persona distinta del ejecutor"— y el motor lo comprueba en
@@ -638,12 +638,11 @@ async function seedActions(tokens) {
 
   // La descripción es la que identifica cada paso entre corridas. Sin esto, la segunda
   // corrida encontraría hallazgos todavía sin acción —los que la primera no alcanzó a
-  // usar— y abriría cuatro acciones más sobre ellos.
+  // usar— y abriría otras tantas acciones sobre ellos.
   const already = new Set(actions.map((action) => action.description));
 
   const plan = [
     { state: 'open', description: 'Mark the aisle bay with floor tape and brief the line crew.' },
-    { state: 'in_progress', description: 'Fit the emergency stop with a keep-clear enclosure.' },
     {
       state: 'awaiting_verification',
       description: 'Lag the exposed steam line and post a hot-surface sign at the doorway.',
@@ -677,13 +676,6 @@ async function seedActions(tokens) {
     created.push({ id: action.id, state: step.state });
 
     if (step.state === 'open') continue;
-
-    await request('POST', `/actions/${action.id}/transitions`, {
-      token: tokens.inspector,
-      body: { to: 'in_progress', note: 'Started on the floor this morning.' },
-    });
-
-    if (step.state === 'in_progress') continue;
 
     const objectKey = await uploadPhoto(tokens.inspector, '/uploads/presign/action', {
       action_id: action.id,

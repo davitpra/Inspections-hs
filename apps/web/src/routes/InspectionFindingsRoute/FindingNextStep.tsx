@@ -13,11 +13,18 @@ import type { FindingNextStep as NextStep } from "./presentation";
  * ciclo, en `create`; el de una transición lo arma `ActionTransitionForm`—.
  *
  * **A la vista y no plegado.** Un diálogo tapaba justo el contexto —la pregunta, lo
- * prescrito, lo observado— que justifica la decisión, y un disclosure costaba dos
+ * prescrito, lo observado— que justifica la decisión, y un disclosure acá adentro costaba dos
  * pulsaciones para el único acto principal que la pantalla ofrece: una para revelar el
  * formulario y otra para enviarlo, con un botón que además repetía el nombre que ya está en
  * el encabezado del bloque. Los botones del formulario son los únicos controles del paso, y
  * por eso `awaiting_verification` puede ofrecer sus dos salidas sin competir con un tercero.
+ *
+ * **El ciclo que contiene a este bloque SÍ puede llegar plegado, y no es el mismo caso.** Se
+ * pliega solo sobre un hallazgo que todavía no decidió nada, donde nada de esto está en
+ * pantalla: el control que lo abre no repite ningún encabezado visible, lo estrena. Abierto,
+ * este bloque vuelve a ser lo que dice el párrafo de arriba —los campos a la vista y un solo
+ * envío—, y la cuenta de pulsaciones para el acto es la misma. El plegado vive en
+ * `FindingLifecycle`; acá no hay nada que revelar.
  *
  * **Corregir la asignación sí está plegado, y esa asimetría es la regla.** El acto principal
  * de la etapa Assigned es empezar el trabajo; enmendar el compromiso es la excepción
