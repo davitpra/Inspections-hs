@@ -50,17 +50,15 @@ describe('sectionTitle', () => {
   it('nombra las pantallas con id, que son a las que se llega desde otra', () => {
     expect(sectionTitle('/inspections/abc-123/capture')).toBe('Inspection');
     expect(sectionTitle('/inspections/abc-123/review')).toBe('Review');
-    expect(sectionTitle('/historical/template-123')).toBe('Inspection history');
   });
 
   /**
-   * Dos patrones y no uno: `matches` exige el mismo número de segmentos, así que
+   * `matches` exige el mismo número de segmentos, así que
    * `/findings` no cubre `/findings/abc-123` y el detalle caería al nombre de la
    * aplicación — que en el teléfono es lo único que dice dónde se está.
    */
   it('nombra la lista de hallazgos y también el envío que se abre desde ella', () => {
     expect(sectionTitle('/findings')).toBe('Findings');
-    expect(sectionTitle('/findings/types/template-123')).toBe('Findings by inspection type');
     expect(sectionTitle('/findings/abc-123')).toBe('Inspection findings');
   });
 

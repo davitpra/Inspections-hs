@@ -121,13 +121,11 @@ export function visibleNavItems(account: Session): readonly NavItem[] {
 const TITLES: readonly (readonly [string, string])[] = [
   ['/', 'Inspections'],
   ['/historical', 'Historical inspections'],
-  ['/historical/*', 'Inspection history'],
   ['/inspections/*/capture', 'Inspection'],
   ['/inspections/*/review', 'Review'],
   ['/inspections/*/report', 'Inspection report'],
   ['/inspections/*', 'Inspection'],
   ['/findings', 'Findings'],
-  ['/findings/types/*', 'Findings by inspection type'],
   ['/findings/*', 'Inspection findings'],
   ['/incidents', 'Incidents'],
   ['/incidents/report', 'Report an incident'],

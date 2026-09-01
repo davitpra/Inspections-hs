@@ -5,10 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FindingsRoute } from './index';
 
 const listScheduled = vi.hoisted(() => vi.fn());
+const listSites = vi.hoisted(() => vi.fn());
 const listFindings = vi.hoisted(() => vi.fn());
 const useAppSession = vi.hoisted(() => vi.fn());
 
-vi.mock('../../api/inspections', () => ({ listScheduled }));
+vi.mock('../../api/inspections', () => ({ listScheduled, listSites }));
 vi.mock('../../api/findings', () => ({ listFindings }));
 vi.mock('../../app/session-context', () => ({ useAppSession }));
 vi.mock('@tanstack/react-router', () => ({
@@ -90,6 +91,7 @@ function renderRoute(): void {
 
 beforeEach(() => {
   useAppSession.mockReturnValue({ account: { userId: USER }, ready: true });
+  listSites.mockResolvedValue([{ id: SITE, name: 'Glencoe' }]);
 });
 
 afterEach(() => {
@@ -98,7 +100,7 @@ afterEach(() => {
 });
 
 describe('FindingsRoute', () => {
-  it('agrupa por tipo y cuenta inspecciones con hallazgos, no hallazgos individuales', async () => {
+  it('presenta una tabla por tipo sin duplicar inspecciones con varios hallazgos', async () => {
     listScheduled.mockResolvedValue([
       scheduled({ id: 'july', inspection_id: 'insp-july' }),
       scheduled({ id: 'may', period_start: '2027-05-01', inspection_id: 'insp-may' }),
@@ -118,16 +120,29 @@ describe('FindingsRoute', () => {
 
     renderRoute();
 
-    const table = await screen.findByRole('table', { name: 'Inspection types with findings' });
-    const rows = within(table).getAllByRole('row').slice(1);
-    expect(rows.map((row) => within(row).getByRole('rowheader').textContent)).toEqual([
+    const headings = await screen.findAllByRole('heading', { level: 2 });
+    expect(headings.map((heading) => heading.textContent)).toEqual([
       'Monthly workplace inspection',
       'Quarterly equipment inspection',
     ]);
-    expect(within(rows[0]!).getByText('2')).toBeTruthy();
+
+    const monthly = screen.getByRole('table', {
+      name: 'Monthly workplace inspection inspections with findings',
+    });
+    expect(within(monthly).getAllByRole('rowheader').map((cell) => cell.textContent)).toEqual([
+      'July 2027',
+      'May 2027',
+    ]);
+    expect(within(monthly).getAllByText('Glencoe')).toHaveLength(2);
     expect(
-      within(rows[0]!).getByRole('link', { name: 'Monthly workplace inspection' }).getAttribute('href'),
-    ).toBe('/findings/types/t-monthly');
+      within(monthly).getAllByRole('link', { name: /View findings/ })[0]?.getAttribute('href'),
+    ).toBe('/findings/july');
+
+    expect(
+      screen.getByRole('table', {
+        name: 'Quarterly equipment inspection inspections with findings',
+      }),
+    ).toBeTruthy();
   });
 
   it('excluye inspecciones limpias, pendientes y completadas por otra cuenta', async () => {
@@ -176,6 +191,7 @@ describe('FindingsRoute', () => {
   it.each([
     ['findings', () => listFindings.mockRejectedValue(new Error('offline'))],
     ['inspections', () => listScheduled.mockRejectedValue(new Error('offline'))],
+    ['sites', () => listSites.mockRejectedValue(new Error('offline'))],
   ])('si falla la consulta de %s informa que necesita conexión', async (_, reject) => {
     listScheduled.mockResolvedValue([scheduled()]);
     listFindings.mockResolvedValue([finding()]);
@@ -187,5 +203,6 @@ describe('FindingsRoute', () => {
     expect(
       screen.queryByText('None of the inspections you completed recorded a finding.'),
     ).toBeNull();
+    expect(screen.queryByRole('table')).toBeNull();
   });
 });

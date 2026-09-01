@@ -4,14 +4,14 @@ import { OfflineRoute } from '../routes/OfflineRoute';
 import { router } from './router';
 
 describe('router', () => {
-  it('registra el índice y el detalle del historial', () => {
+  it('registra el historial completo sin una ruta intermedia por tipo', () => {
     expect('/historical' in router.routesByPath).toBe(true);
-    expect('/historical/$templateId' in router.routesByPath).toBe(true);
+    expect('/historical/$templateId' in router.routesByPath).toBe(false);
   });
 
-  it('separa el índice, el tipo y el envío individual de hallazgos', () => {
+  it('registra los hallazgos agrupados y su envío individual sin una ruta intermedia', () => {
     expect('/findings' in router.routesByPath).toBe(true);
-    expect('/findings/types/$templateId' in router.routesByPath).toBe(true);
+    expect('/findings/types/$templateId' in router.routesByPath).toBe(false);
     expect('/findings/$id' in router.routesByPath).toBe(true);
   });
 

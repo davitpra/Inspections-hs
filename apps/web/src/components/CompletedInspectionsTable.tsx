@@ -5,9 +5,9 @@ import { formatCivilDay, periodLabel } from "../presentation/dates";
 import { ExternalLinkIcon } from "./icons";
 
 /**
- * Lo que un inspector cerró, en tabla. Hoy la dibuja solo la pantalla del historial, y
- * vive en `components/` igual: es la forma en que esta aplicación muestra un período
- * cerrado, y la segunda pantalla que liste lo cerrado tiene que verse igual que esta.
+ * Lo que un inspector cerró, en tabla. La dibujan el historial completo y la lectura de
+ * inspecciones con hallazgos: es la forma compartida en que la aplicación muestra un período
+ * cerrado.
  *
  * Los `data-label` no son decorativos: son lo que la regla de teléfono de `index.css` lee
  * para plegar cada fila a una tarjeta, la misma que usan las agendadas y los borradores
@@ -34,16 +34,18 @@ export function CompletedInspectionsTable({
   siteName,
   to,
   actionLabel,
+  ariaLabel,
 }: {
   inspections: readonly ScheduledInspection[];
   siteName: (id: string) => string;
   to: "/inspections/$id/report" | "/findings/$id";
   actionLabel: string;
+  ariaLabel: string;
 }): React.JSX.Element {
   return (
     <table
       className="table completed-inspections__table"
-      aria-label="Completed inspections"
+      aria-label={ariaLabel}
     >
       <thead>
         <tr>

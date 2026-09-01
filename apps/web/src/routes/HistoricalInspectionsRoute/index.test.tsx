@@ -5,9 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HistoricalInspectionsRoute } from './index';
 
 const listScheduled = vi.hoisted(() => vi.fn());
+const listSites = vi.hoisted(() => vi.fn());
 const useAppSession = vi.hoisted(() => vi.fn());
 
-vi.mock('../../api/inspections', () => ({ listScheduled }));
+vi.mock('../../api/inspections', () => ({ listScheduled, listSites }));
 vi.mock('../../app/session-context', () => ({ useAppSession }));
 
 vi.mock('@tanstack/react-router', () => ({
@@ -31,11 +32,13 @@ function substitute(to: string, params?: Record<string, string>): string {
 
 const USER = '11111111-1111-4111-8111-111111111111';
 const OTHER = '22222222-2222-4222-8222-222222222222';
+const SITE = '33333333-3333-4333-8333-333333333333';
+const OTHER_SITE = '44444444-4444-4444-8444-444444444444';
 
 function scheduled(overrides: Record<string, unknown> = {}) {
   return {
     id: 's-1',
-    site_id: '33333333-3333-4333-8333-333333333333',
+    site_id: SITE,
     period_start: '2027-07-01',
     period_months: 1,
     period_end: '2027-07-31',
@@ -69,6 +72,10 @@ function renderRoute(): void {
 
 beforeEach(() => {
   useAppSession.mockReturnValue({ account: { userId: USER }, ready: true });
+  listSites.mockResolvedValue([
+    { id: SITE, name: 'Glencoe' },
+    { id: OTHER_SITE, name: 'St. Thomas' },
+  ]);
 });
 
 afterEach(() => {
@@ -77,30 +84,46 @@ afterEach(() => {
 });
 
 describe('HistoricalInspectionsRoute', () => {
-  it('presenta un tipo por template_id, su conteo y su enlace, ordenados por nombre', async () => {
+  it('presenta una tabla por template_id, ordenadas por nombre y con períodos recientes primero', async () => {
     listScheduled.mockResolvedValue([
       scheduled({
         id: 'quarterly',
         template_id: 't-quarterly',
         template_name: 'Quarterly equipment inspection',
+        site_id: OTHER_SITE,
       }),
       scheduled({ id: 'monthly-july' }),
-      scheduled({ id: 'monthly-may', period_start: '2027-05-01' }),
+      scheduled({
+        id: 'monthly-may',
+        period_start: '2027-05-01',
+        completed_at: '2027-05-30T18:00:00.000Z',
+      }),
     ]);
 
     renderRoute();
 
-    const table = await screen.findByRole('table', { name: 'Completed inspection types' });
-    const rows = within(table).getAllByRole('row').slice(1);
-    expect(rows).toHaveLength(2);
-    expect(rows.map((row) => within(row).getByRole('rowheader').textContent)).toEqual([
+    const headings = await screen.findAllByRole('heading', { level: 2 });
+    expect(headings.map((heading) => heading.textContent)).toEqual([
       'Monthly workplace inspection',
       'Quarterly equipment inspection',
     ]);
-    expect(within(rows[0]!).getByText('2')).toBeTruthy();
+
+    const monthly = screen.getByRole('table', {
+      name: 'Monthly workplace inspection completed inspections',
+    });
+    expect(within(monthly).getAllByRole('rowheader').map((cell) => cell.textContent)).toEqual([
+      'July 2027',
+      'May 2027',
+    ]);
+    expect(within(monthly).getAllByText('Glencoe')).toHaveLength(2);
     expect(
-      within(rows[0]!).getByRole('link', { name: 'Monthly workplace inspection' }).getAttribute('href'),
-    ).toBe('/historical/t-monthly');
+      within(monthly).getAllByRole('link', { name: /View report/ })[0]?.getAttribute('href'),
+    ).toBe('/inspections/monthly-july/report');
+
+    const quarterly = screen.getByRole('table', {
+      name: 'Quarterly equipment inspection completed inspections',
+    });
+    expect(within(quarterly).getByText('St. Thomas')).toBeTruthy();
   });
 
   it('mantiene separados dos template_id aunque tengan el mismo nombre', async () => {
@@ -111,21 +134,39 @@ describe('HistoricalInspectionsRoute', () => {
 
     renderRoute();
 
-    expect(await screen.findAllByRole('link', { name: 'Monthly workplace inspection' })).toHaveLength(2);
+    expect(
+      await screen.findAllByRole('heading', {
+        name: 'Monthly workplace inspection',
+        level: 2,
+      }),
+    ).toHaveLength(2);
+    expect(screen.getAllByRole('table')).toHaveLength(2);
   });
 
   it('no cuenta lo que completó otro inspector ni un período pendiente', async () => {
     listScheduled.mockResolvedValue([
       scheduled({ id: 'mine' }),
-      scheduled({ id: 'theirs', template_id: 'other', inspector_id: OTHER }),
-      scheduled({ id: 'open', template_id: 'open', status: 'open', inspection_id: null }),
+      scheduled({
+        id: 'theirs',
+        template_id: 'other',
+        template_name: 'Other inspection',
+        inspector_id: OTHER,
+      }),
+      scheduled({
+        id: 'open',
+        template_id: 'open',
+        template_name: 'Open inspection',
+        status: 'open',
+        inspection_id: null,
+      }),
     ]);
 
     renderRoute();
 
     const table = await screen.findByRole('table');
     expect(within(table).getAllByRole('row')).toHaveLength(2);
-    expect(screen.queryByText('other')).toBeNull();
+    expect(screen.queryByText('Other inspection')).toBeNull();
+    expect(screen.queryByText('Open inspection')).toBeNull();
   });
 
   it('muestra el estado vacío solo cuando la consulta terminó', async () => {
@@ -144,5 +185,16 @@ describe('HistoricalInspectionsRoute', () => {
 
     expect(await screen.findByText(/Historical inspections need a connection/)).toBeTruthy();
     expect(screen.queryByText('You have not completed any inspections yet.')).toBeNull();
+  });
+
+  it('si no puede resolver los sitios no muestra tablas con identificadores crudos', async () => {
+    listScheduled.mockResolvedValue([scheduled()]);
+    listSites.mockRejectedValue(new Error('offline'));
+
+    renderRoute();
+
+    expect(await screen.findByText(/Historical inspections need a connection/)).toBeTruthy();
+    expect(screen.queryByRole('table')).toBeNull();
+    expect(screen.queryByText(SITE)).toBeNull();
   });
 });

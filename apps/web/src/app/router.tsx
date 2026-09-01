@@ -10,10 +10,8 @@ import { z } from 'zod';
 import { AcceptInvitationRoute } from '../routes/AcceptInvitationRoute';
 import { CaptureRoute } from '../routes/CaptureRoute';
 import { FindingsRoute } from '../routes/FindingsRoute';
-import { FindingInspectionTypeRoute } from '../routes/FindingInspectionTypeRoute';
 import { Form7Route } from '../routes/Form7Route';
 import { HistoricalInspectionsRoute } from '../routes/HistoricalInspectionsRoute';
-import { HistoricalInspectionTypeRoute } from '../routes/HistoricalInspectionTypeRoute';
 import { InspectionFindingsRoute } from '../routes/InspectionFindingsRoute';
 import { InspectionReportRoute } from '../routes/InspectionReportRoute';
 import { InspectionAssignmentRoute } from '../routes/InspectionAssignmentRoute';
@@ -203,12 +201,6 @@ const historicalInspectionsRoute = createRoute({
   component: HistoricalInspectionsRoute,
 });
 
-const historicalInspectionTypeRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/historical/$templateId',
-  component: HistoricalInspectionTypeRoute,
-});
-
 /**
  * Lo que salió mal, y el envío en el que salió: la lista de lo cerrado con hallazgos, y UN
  * envío leído solo por sus hallazgos.
@@ -226,12 +218,6 @@ const findingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/findings',
   component: FindingsRoute,
-});
-
-const findingInspectionTypeRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/findings/types/$templateId',
-  component: FindingInspectionTypeRoute,
 });
 
 const inspectionFindingsRoute = createRoute({
@@ -368,12 +354,10 @@ const routeTree = rootRoute.addChildren([
   inspectorHomeRoute,
   captureRoute,
   historicalInspectionsRoute,
-  historicalInspectionTypeRoute,
   inspectionAssignmentRoute,
   inspectionReportRoute,
   reviewRoute,
   findingsRoute,
-  findingInspectionTypeRoute,
   inspectionFindingsRoute,
   outboxRoute,
   schedulingRoute,

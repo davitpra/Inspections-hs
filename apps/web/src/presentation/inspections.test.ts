@@ -4,7 +4,6 @@ import {
   assignmentState,
   completedInspections,
   dueIn,
-  inspectionHistoryForType,
   inspectionTypeGroups,
   opensCapture,
   readiness,
@@ -179,16 +178,4 @@ describe('lo completado por este inspector', () => {
     expect(groups.map((group) => group.templateId)).toEqual(['b', 'a', 'z']);
   });
 
-  it('filtra un tipo sin alterar el orden recibido', () => {
-    const history = inspectionHistoryForType(
-      [
-        scheduled({ id: 'july', template_id: 'chosen' }),
-        scheduled({ id: 'other', template_id: 'other' }),
-        scheduled({ id: 'may', template_id: 'chosen' }),
-      ],
-      'chosen',
-    );
-
-    expect(history.map((item) => item.id)).toEqual(['july', 'may']);
-  });
 });

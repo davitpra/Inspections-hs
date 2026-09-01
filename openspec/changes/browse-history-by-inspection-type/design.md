@@ -12,7 +12,7 @@ does not touch any immutable table or any database table at all.
 
 **Goals:**
 
-- Give each stable `template_id` one index row and a dedicated history address.
+- Give each stable `template_id` one named table on the complete history page.
 - Keep filtering, ordering and grouping deterministic and independently testable.
 - Reuse the existing query key and completed-inspection table.
 
@@ -24,61 +24,58 @@ does not touch any immutable table or any database table at all.
 
 ## Decisions
 
-### Use `/historical/$templateId` for the detail
+### Keep every historical type on `/historical`
 
 `template_id` is the stable identity across template versions, while `template_version_id`
 would split one inspection type and the schedule id would identify only one recurrence rule.
-The detail remains outside `/inspections/*` so the service worker does not mistake this
-online-only reading for capture content.
+Each stable identity becomes a named section with its own `CompletedInspectionsTable`. The
+route does not add a detail address: all groups remain visible together and the report link
+continues to be the only navigation from an inspection row.
 
 ### Derive both views from the existing scheduled-inspection query
 
-Both routes use `queryKeys.scheduledInspections()` followed by `completedInspections`. TanStack
-Query therefore reuses the warm cache while the client keeps applying the account-specific
-projection already required by the current API shape. A dedicated endpoint would add a second
-definition of the list without a demonstrated volume need.
+The history uses `queryKeys.scheduledInspections()` followed by `completedInspections`, plus
+the existing sites query needed to resolve each table's site names. TanStack Query therefore
+reuses the warm caches while the client keeps applying the account-specific projection already
+required by the current API shape. A dedicated endpoint would add a second definition of the
+list without a demonstrated volume need.
 
 ### Keep route-specific grouping in pure presentation code
 
-The index groups by `template_id`, retains the most recent historical name for presentation,
-counts each group's inspections and sorts groups by name. The detail filters the already
-ordered completed list by the route parameter. These decisions live in
-`presentation/inspections.ts`; route components only compose data and UI. The intersection
-between completed inspections and findings moves to `presentation/findings.ts` because both
-the findings index and its type detail consume it.
+The history and findings readings group by `template_id`, retain the most recent historical
+name for presentation, keep each group's already ordered inspections and sort groups by name.
+These decisions live in `presentation/inspections.ts`; route components only compose data and
+UI. The intersection between completed inspections and findings lives in
+`presentation/findings.ts` before the findings groups are formed.
 
-### Use an explicit link inside the type cell
+### Use the same grouped-table structure for history and findings
 
-A block-level typed `Link` makes the visible type cell the navigation target without adding
-imperative row click handling or invalid interactive table markup. The count remains a plain
-value and the destination remains usable by keyboard and assistive technology.
+Both readings use named sections containing `CompletedInspectionsTable`, and each table gets a
+distinct accessible name. Findings narrows the completed list to inspections that recorded a
+finding before grouping it, then links each row directly to `/findings/$id`. No intermediate
+type route or type-index component remains.
 
-The markup becomes `InspectionTypeIndexTable`, shared by history and findings. Its destination
-is a typed union of `/historical/$templateId` and `/findings/types/$templateId`; route copy and
-data selection remain with each consumer.
+### Preserve the existing individual findings address
 
-### Preserve the existing findings detail address
-
-`/findings/$id` already identifies a scheduled inspection and remains unchanged. The type
-detail uses `/findings/types/$templateId`, whose additional static segment prevents a route
-collision and makes the two identifiers explicit. Both findings list routes derive their data
-in the order `completedInspections` → `inspectionsWithFindings` → group or filter by
-`template_id`, so clean inspections and other inspectors never enter a count.
+`/findings/$id` already identifies a scheduled inspection and remains unchanged. The findings
+reading derives data in the order `completedInspections` → `inspectionsWithFindings` →
+`inspectionTypeGroups`, so clean inspections and other inspectors never enter a section.
 
 ## Risks / Trade-offs
 
 - [The same template had different historical names] → Use the first item from the
-  newest-first completed list so index and detail have one deterministic current historical
-  label while individual rows preserve their own names.
+  newest-first completed list so the section has one deterministic current historical label
+  while individual rows preserve their own names.
 - [The client receives the complete scheduled list] → Preserve the existing architecture and
   query cache; revisit pagination only with measured volume.
-- [A copied detail URL names a type no longer visible to the account] → Derive visibility from
-  the same account-filtered completed list and render a not-visible state.
-- [A manual finding has no inspection type] → Keep it outside this inspection-derived index,
+- [Many inspection types make the page long] → Preserve one complete server reading and avoid
+  adding pagination without measured volume; headings keep every table navigable by structure.
+- [A manual finding has no inspection type] → Keep it outside this inspection-derived reading,
   matching the declared regression of the existing findings route.
 
 ## Migration Plan
 
-Deploy the web route and UI atomically. Existing `/historical` bookmarks continue to resolve
-to the new index; no persisted data or API migration is required. Rollback consists only of
-restoring the previous route component and removing the detail route.
+Deploy the web route and UI atomically. Existing `/historical` bookmarks continue to resolve;
+the temporary `/historical/$templateId` and `/findings/types/$templateId` details are removed.
+No persisted data or API migration is required. Rollback consists only of restoring the
+previous route components and detail routes.

@@ -1,8 +1,8 @@
 ## Why
 
-El historial cronológico mezcla tipos de inspección y obliga al inspector a recorrer toda
-la lista para recuperar recorridos comparables. Un índice por tipo permite entrar primero
-al contexto correcto y leer después su historial completo.
+El historial cronológico mezcla tipos de inspección y obliga al inspector a distinguir a
+ojo cuáles son comparables. Separar la lectura en una tabla por tipo conserva todo el
+historial en una pantalla y hace visible el contexto de cada recorrido sin navegación extra.
 
 Este change mejora la consulta operativa de períodos de requisitos-v1.2 §7, etapa 7; no
 cierra una etapa nueva, sino que reorganiza una lectura ya entregada sin cambiar qué datos
@@ -10,15 +10,17 @@ se consideran completados.
 
 ## What Changes
 
-- Reemplazar la lista global de `/historical` por un índice con una fila por tipo de
-  inspección completada por la cuenta y su cantidad de recorridos.
-- Hacer navegable la celda del tipo hacia `/historical/$templateId`.
-- Presentar en el detalle todo el historial completado de ese tipo, en orden cronológico
-  descendente y con acceso al reporte de cada envío.
-- Reorganizar `/findings` con el mismo índice por tipo, contando solo las inspecciones
-  completadas por la cuenta que registraron al menos un hallazgo.
-- Presentar en `/findings/types/$templateId` esas inspecciones y conservar
-  `/findings/$id` como la lectura de los hallazgos de un envío individual.
+- Reemplazar la lista global de `/historical` por una sección y una tabla por tipo de
+  inspección completada por la cuenta.
+- Presentar todas las secciones en `/historical`, ordenadas por nombre de tipo, y cada tabla
+  en orden cronológico descendente con acceso al reporte de cada envío.
+- Retirar la ruta intermedia `/historical/$templateId`; el historial completo se lee sin
+  abandonar la página principal.
+- Reorganizar `/findings` con una sección y una tabla por tipo, incluyendo solo las
+  inspecciones completadas por la cuenta que registraron al menos un hallazgo.
+- Presentar todas esas tablas directamente en `/findings`, retirar
+  `/findings/types/$templateId` y conservar `/findings/$id` como la lectura de los
+  hallazgos de un envío individual.
 - Conservar la misma definición de completitud, el recorte por cuenta y la consulta de
   servidor que usa el historial actual.
 
@@ -30,10 +32,10 @@ Ninguna.
 
 ### Modified Capabilities
 
-- `inspections`: cambia la navegación del historial completo desde una lista global a un
-  índice por tipo seguido de una lista cronológica del tipo elegido.
-- `findings`: organiza las inspecciones con hallazgos por tipo antes de abrir la lista
-  cronológica y el detalle individual existentes.
+- `inspections`: organiza el historial completo en tablas por tipo dentro de una sola
+  lectura cronológica.
+- `findings`: organiza en una sola página las inspecciones con hallazgos por tipo antes de
+  abrir el detalle individual existente.
 
 ## Impact
 

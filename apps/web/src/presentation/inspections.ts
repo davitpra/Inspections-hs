@@ -174,11 +174,3 @@ export function inspectionTypeGroups(
     left.templateName.localeCompare(right.templateName),
   );
 }
-
-/** Conserva el orden cronológico que ya decidió `completedInspections`. */
-export function inspectionHistoryForType(
-  inspections: readonly ScheduledInspection[],
-  templateId: string,
-): ScheduledInspection[] {
-  return inspections.filter((inspection) => inspection.template_id === templateId);
-}

@@ -1,18 +1,15 @@
-import { useQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { useQuery } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 
-import { listScheduled } from "../../api/inspections";
-import { queryKeys } from "../../api/query-keys";
-import { useAppSession } from "../../app/session-context";
-import { InspectionTypeIndexTable } from "../../components/InspectionTypeIndexTable";
-import { CalendarIcon } from "../../components/icons";
-import {
-  completedInspections,
-  inspectionTypeGroups,
-} from "../../presentation/inspections";
+import { listScheduled, listSites } from '../../api/inspections';
+import { queryKeys } from '../../api/query-keys';
+import { useAppSession } from '../../app/session-context';
+import { CompletedInspectionsTable } from '../../components/CompletedInspectionsTable';
+import { CalendarIcon } from '../../components/icons';
+import { completedInspections, inspectionTypeGroups } from '../../presentation/inspections';
 
 /**
- * Los tipos de inspección que esta cuenta cerró, como entrada a cada historial completo.
+ * Todo lo que esta cuenta cerró, separado por la identidad estable de cada plantilla.
  *
  * Lee con la MISMA consulta y la MISMA clave que la pantalla de inicio, así que llegar acá
  * desde su cabecera no cuesta una llamada: es la caché ya tibia, leída con otro filtro.
@@ -30,11 +27,20 @@ export function HistoricalInspectionsRoute(): React.JSX.Element {
     queryFn: listScheduled,
     retry: false,
   });
+  const sites = useQuery({
+    queryKey: queryKeys.sites(),
+    queryFn: listSites,
+    retry: false,
+  });
 
   const completed = account
     ? completedInspections(scheduled.data ?? [], account.userId)
     : [];
   const types = inspectionTypeGroups(completed);
+  const loaded = scheduled.isSuccess && sites.isSuccess;
+  const failed = scheduled.isError || sites.isError;
+  const siteName = (id: string): string =>
+    sites.data?.find((site) => site.id === id)?.name ?? id;
 
   return (
     <>
@@ -47,7 +53,7 @@ export function HistoricalInspectionsRoute(): React.JSX.Element {
             <h1>Historical inspections</h1>
           </div>
           <p className="scheduling__subtitle">
-            Choose an inspection type to read everything you completed.
+            Review every inspection you completed, grouped by inspection type.
           </p>
         </div>
       </header>
@@ -58,28 +64,44 @@ export function HistoricalInspectionsRoute(): React.JSX.Element {
         </Link>
       </p>
 
-      {scheduled.isError ? (
+      {failed ? (
         <p className="notice">
           Historical inspections need a connection. They are kept on the server,
           not on this device.
         </p>
       ) : null}
 
-      {scheduled.isLoading ? (
+      {!failed && !loaded ? (
         <p className="status-card">Loading historical inspections…</p>
       ) : null}
 
-      {scheduled.isSuccess && completed.length === 0 ? (
+      {loaded && completed.length === 0 ? (
         <p>You have not completed any inspections yet.</p>
       ) : null}
 
-      {types.length > 0 ? (
-        <InspectionTypeIndexTable
-          groups={types}
-          to="/historical/$templateId"
-          ariaLabel="Completed inspection types"
-          countLabel="Completed inspections"
-        />
+      {loaded && types.length > 0 ? (
+        <div className="inspection-groups">
+          {types.map((group) => {
+            const headingId = `historical-type-${group.templateId}`;
+
+            return (
+              <section
+                key={group.templateId}
+                className="inspection-group"
+                aria-labelledby={headingId}
+              >
+                <h2 id={headingId}>{group.templateName}</h2>
+                <CompletedInspectionsTable
+                  inspections={group.inspections}
+                  siteName={siteName}
+                  to="/inspections/$id/report"
+                  actionLabel="View report"
+                  ariaLabel={`${group.templateName} completed inspections`}
+                />
+              </section>
+            );
+          })}
+        </div>
       ) : null}
     </>
   );
