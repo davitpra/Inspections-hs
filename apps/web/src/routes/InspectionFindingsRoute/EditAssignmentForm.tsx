@@ -90,7 +90,7 @@ export function EditAssignmentForm({
         submit();
       }}
     >
-      <label className="finding__create-field">
+      <label className="finding__step-field">
         <span>Responsible person</span>
         <select
           value={assigneePersonId}
@@ -117,7 +117,7 @@ export function EditAssignmentForm({
         </p>
       ) : null}
 
-      <label className="finding__create-field">
+      <label className="finding__step-field">
         <span>Description</span>
         <textarea
           value={description}
@@ -129,7 +129,7 @@ export function EditAssignmentForm({
         />
       </label>
 
-      <label className="finding__create-field">
+      <label className="finding__step-field">
         <span>Deadline</span>
         <input
           type="datetime-local"

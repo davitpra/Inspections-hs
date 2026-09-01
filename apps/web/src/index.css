@@ -1675,23 +1675,6 @@ select:disabled {
   margin: 0;
 }
 
-/*
- * EL CONTROL QUE ABRE EL CICLO sobre un hallazgo que todavía no decidió nada. Aparece solo
- * ahí, así que es él quien trae el filete que separa la lectura del hallazgo de lo que se
- * hizo con él; abierto, el ciclo de abajo no lo vuelve a dibujar (la regla de adyacencia
- * más abajo). El ancho va calificado por el bloque por lo mismo que en `.finding__next-step`.
- */
-.finding__lifecycle-toggle {
-  margin-top: var(--space-4);
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--line);
-}
-
-.finding__lifecycle-toggle .button--primary,
-.finding__lifecycle-toggle .button--outline {
-  width: auto;
-}
-
 /* El ciclo es una lectura de las acciones, no otro dato del hallazgo. Cada segmento lleva
    su nombre y su forma además del color: el filete lleno quedó atrás, el doble anillo es el
    vigente y el punto con línea tenue todavía está por delante. */
@@ -1699,14 +1682,6 @@ select:disabled {
   margin-top: var(--space-4);
   padding-top: var(--space-4);
   border-top: 1px solid var(--line);
-}
-
-/* Detrás del control que lo abrió, el separador ya está puesto: repetirlo sería un doble
-   filete a dos alturas del mismo corte. */
-.finding__lifecycle-toggle + .finding__lifecycle-body .finding__lifecycle {
-  margin-top: 0;
-  padding-top: 0;
-  border-top: none;
 }
 
 .finding__lifecycle-head {
@@ -1917,7 +1892,7 @@ select:disabled {
  * EDIT ASSIGNMENT es un control que revela el formulario, no un formulario a la vista: el
  * acto principal del paso Assigned es empezar el trabajo, y corregir la asignación es la
  * excepción (ADR-018). Abierto usa el vocabulario de la ficha del hallazgo
- * (`finding__create-*`), no el del control de transición compartido.
+ * (`finding__step-*`), el mismo que el resto del paso.
  */
 .finding__amend {
   margin-top: var(--space-4);
@@ -2037,20 +2012,115 @@ select:disabled {
 }
 
 /*
- * El compromiso escrito en el mismo hueco donde el paso de avance escribe el suyo. Vocabulario
- * propio y no `action-detail__*`: este formulario pertenece a la ficha de `/findings/$id`,
- * no al control compartido que ejecuta una transición.
+ * UN SOLO CAMPO PARA LOS DOS FORMULARIOS DEL PASO: el que escribe el compromiso y el que
+ * avanza la acción ocupan el mismo hueco de la ficha, y hasta acá estaban escritos con dos
+ * vocabularios y dos reglas idénticas —el segundo heredado de una pantalla de acciones que ya
+ * no existe—. Comparten campo porque son el mismo paso en dos momentos, y la enmienda
+ * (ADR-018) usa el mismo por lo mismo.
  */
-.finding__create-field {
+.finding__step-field {
   display: grid;
   gap: var(--space-2);
   margin: 0 0 var(--space-4);
   font-weight: var(--weight-strong);
 }
 
-.finding__create-field textarea {
+.finding__step-field textarea {
   min-height: 6rem;
   resize: vertical;
+}
+
+.finding__step-optional {
+  margin-inline-start: var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-normal);
+}
+
+.finding__step-actions {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+/* El fieldset de evidencia pierde el chrome default del navegador —borde y legend
+   indentada— y cada input de archivo queda separado de su etiqueta y del otro kind. */
+.finding__evidence {
+  border: 0;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.finding__evidence legend {
+  padding: 0;
+  margin: 0 0 var(--space-2);
+  font-weight: var(--weight-strong);
+}
+
+.finding__evidence label {
+  font-weight: var(--weight-normal);
+}
+
+.finding__evidence-upload {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 64px;
+  padding: var(--space-3);
+  border: 1px dashed var(--line-control);
+  border-radius: var(--radius);
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.finding__evidence-upload:hover,
+.finding__evidence-upload:focus-within {
+  background: var(--tint-bg);
+  border-color: var(--brand);
+}
+
+.finding__evidence-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.finding__evidence-icon {
+  display: grid;
+  flex: none;
+  width: var(--space-10);
+  height: var(--space-10);
+  place-items: center;
+  border-radius: var(--radius);
+  background: var(--tint-bg);
+  color: var(--brand);
+}
+
+.finding__evidence-upload > span:last-child {
+  display: grid;
+}
+
+.finding__evidence-upload small {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.finding__evidence-count {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.finding__step-waiting,
+.finding__step-error {
+  margin: var(--space-4) 0 0;
 }
 
 /* Crear y cancelar comparten renglón y se miden por su contenido: son dos salidas del mismo
@@ -2990,113 +3060,6 @@ select:disabled {
   justify-content: center;
   padding-top: var(--space-3);
   border-top: 1px solid var(--line);
-}
-
-/* Cada campo de "What now" con su etiqueta separada del control, como
-   `.invite-dialog__field`. */
-.action-detail__field {
-  display: grid;
-  gap: var(--space-2);
-  margin: 0 0 var(--space-4);
-  font-weight: var(--weight-strong);
-}
-
-.action-detail__field textarea {
-  min-height: 6rem;
-  resize: vertical;
-}
-
-.action-detail__optional {
-  margin-inline-start: var(--space-1);
-  color: var(--muted);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-normal);
-}
-
-.action-detail__actions {
-  display: grid;
-  gap: var(--space-2);
-  margin-top: var(--space-4);
-}
-
-/* El fieldset de evidencia pierde el chrome default del navegador —borde y legend
-   indentada— y cada input de archivo queda separado de su etiqueta y del otro kind. */
-.action-detail__evidence {
-  border: 0;
-  margin: 0 0 var(--space-4);
-  padding: 0;
-  display: grid;
-  gap: var(--space-3);
-}
-
-.action-detail__evidence legend {
-  padding: 0;
-  margin: 0 0 var(--space-2);
-  font-weight: var(--weight-strong);
-}
-
-.action-detail__evidence label {
-  font-weight: var(--weight-normal);
-}
-
-.action-detail__evidence-upload {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-height: 64px;
-  padding: var(--space-3);
-  border: 1px dashed var(--line-control);
-  border-radius: var(--radius);
-  cursor: pointer;
-  box-sizing: border-box;
-}
-
-.action-detail__evidence-upload:hover,
-.action-detail__evidence-upload:focus-within {
-  background: var(--tint-bg);
-  border-color: var(--brand);
-}
-
-.action-detail__file-input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-.action-detail__upload-icon {
-  display: grid;
-  flex: none;
-  width: var(--space-10);
-  height: var(--space-10);
-  place-items: center;
-  border-radius: var(--radius);
-  background: var(--tint-bg);
-  color: var(--brand);
-}
-
-.action-detail__evidence-upload > span:last-child {
-  display: grid;
-}
-
-.action-detail__evidence-upload small {
-  color: var(--muted);
-  font-size: var(--text-xs);
-}
-
-.action-detail__evidence-count {
-  margin: 0;
-  color: var(--muted);
-  font-size: var(--text-sm);
-}
-
-.action-detail__waiting,
-.action-detail__error {
-  margin: var(--space-4) 0 0;
 }
 
 /*

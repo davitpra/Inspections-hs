@@ -5,24 +5,24 @@ import {
   type CreateActionRequest,
   type Finding,
   type Session,
-} from '@hs/contracts';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useId, useRef, useState } from 'react';
+} from "@hs/contracts";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useId, useState } from "react";
 
-import { createAction } from '../../api/actions';
-import { listFindingRoster } from '../../api/findings';
-import { queryKeys } from '../../api/query-keys';
-import { enclosingReportItem } from '../../components/ReportItem';
-import { FindingNextStep } from './FindingNextStep';
-import { FindingStageRecord } from './FindingStageRecord';
-import { FindingStepper } from './FindingStepper';
+import { createAction } from "../../api/actions";
+import { listFindingRoster } from "../../api/findings";
+import { queryKeys } from "../../api/query-keys";
+import { useReturnToReportItem } from "../../components/ReportItem";
+import { FindingNextStep } from "./FindingNextStep";
+import { FindingStageRecord } from "./FindingStageRecord";
+import { FindingStepper } from "./FindingStepper";
 import {
   commitmentRequest,
   findingDeadline,
   stageStatus,
   type FindingNextStep as NextStep,
   type FindingStage,
-} from './presentation';
+} from "./presentation";
 
 /**
  * El ciclo de UN hallazgo: la tira de etapas, el panel que la etapa elegida abre, y el
@@ -38,17 +38,11 @@ import {
  * respaldan. Es el mismo argumento por el que avanzar una acción ya se resuelve en la ficha
  * (`FindingNextStep`), y crear era el último acto que abría algo.
  *
- * **PERO EL CICLO LLEGA PLEGADO SOBRE UN HALLAZGO QUE NO DECIDIÓ NADA TODAVÍA**, detrás de un
- * solo control que dice el nombre del paso. Una inspección recién enviada con seis hallazgos
- * abría seis tiras de etapas, seis registros vacíos y seis formularios de alta de tres campos
- * apilados: la pantalla que existe para leer QUÉ SALIÓ MAL se leía como una planilla de carga,
- * y pedía además un roster por hallazgo antes de que nadie mirara ninguno.
- *
- * Se pliega el CICLO, no el paso, y solo donde el ciclo está en blanco (`collapsed`, abajo).
- * Abierto, el compromiso sigue a la vista y se envía de una: el argumento de `FindingNextStep`
- * contra el disclosure era que costaba dos pulsaciones para revelar un formulario bajo un botón
- * que repetía un encabezado ya presente en pantalla; acá el encabezado no está —no hay nada de
- * este hallazgo en pantalla— y la pulsación es la que decide leerlo.
+ * **Y EL CICLO ESTÁ SIEMPRE A LA VISTA.** Llegó a estar plegado detrás de un control con el
+ * nombre del paso, para que una inspección recién enviada con seis hallazgos no apilara seis
+ * formularios de alta; el precio era una pulsación por hallazgo para ver en qué anda cada uno,
+ * sobre la pantalla que existe justamente para leer eso. Es el mismo argumento por el que el
+ * compromiso no vive en un diálogo: lo que hay que decidir no se esconde bajo un botón.
  *
  * **El panel es uno y el hueco es el mismo.** Cada etapa abre lo que se decidió en ella, y la
  * que el paso va a escribir abre su formulario. Que todas compartan lugar es lo que hace que
@@ -82,7 +76,8 @@ export function FindingLifecycle({
 }): React.JSX.Element {
   const queryClient = useQueryClient();
   const prefix = useId();
-  const panelRef = useRef<HTMLDivElement>(null);
+  const { ref: panelRef, returnFocus } =
+    useReturnToReportItem<HTMLDivElement>();
   /*
     LA ETAPA QUE EL PASO VA A ESCRIBIR, y donde por eso se lee su formulario: asignar se lee
     bajo `assigned` aunque el hallazgo siga en `raised`, y en cuanto la acción existe la lectura
@@ -90,13 +85,14 @@ export function FindingLifecycle({
     pulsar —el paso espera a otro— y entonces el paso se lee en la etapa vigente.
   */
   const draft = step?.writes ?? null;
-  const [selected, setSelected] = useState<FindingStage>(draft ?? finding.state);
+  const [selected, setSelected] = useState<FindingStage>(
+    draft ?? finding.state,
+  );
   const [seen, setSeen] = useState<FindingStage>(finding.state);
   const [amendOpen, setAmendOpen] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-  const [assigneePersonId, setAssigneePersonId] = useState('');
-  const [description, setDescription] = useState('');
-  const [dueAt, setDueAt] = useState('');
+  const [assigneePersonId, setAssigneePersonId] = useState("");
+  const [description, setDescription] = useState("");
+  const [dueAt, setDueAt] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
 
   if (seen !== finding.state) {
@@ -108,53 +104,35 @@ export function FindingLifecycle({
 
   const tabId = (stage: FindingStage): string => `${prefix}-${stage}`;
   const panelId = `${prefix}-panel`;
-  const bodyId = `${prefix}-body`;
-  const creating = step?.control?.kind === 'create';
-  /*
-    EL CICLO LLEGA PLEGADO SOLO DONDE TODAVÍA NO HAY NADA ESCRITO, que es exactamente
-    `creating`: `nextStep` devuelve ese control únicamente sobre un hallazgo levantado que
-    quien lee puede asignar. Sin control —sin permiso, con el hallazgo ya en marcha o
-    cerrado, o con la lista de acciones caída— no hay ningún borrador que proteger y sí algo
-    que auditar, así que el ciclo se dibuja abierto.
-  */
-  const collapsed = creating && !expanded;
+  const creating = step?.control?.kind === "create";
 
   /*
-    EL ROSTER ES POR HALLAZGO Y SE PIDE AL ABRIR EL CICLO, no al dibujar la pantalla. El
-    endpoint es `/findings/:id/roster` porque quién puede recibir el trabajo depende de la
-    planta de ESE hallazgo (ADR-017), así que no hay una consulta que sirva para todos: una
-    inspección con seis hallazgos levantados pedía seis rosters al montar, y cinco de ellos
-    para formularios que nadie iba a mirar. Colgado de `expanded` se pide el de la ficha que
-    alguien efectivamente abrió, y sigue sin haber ninguna ventana que abrir para ver a quién
-    se puede asignar.
+    EL ROSTER ES POR HALLAZGO, y solo lo pide el hallazgo que ofrece asignar. El endpoint es
+    `/findings/:id/roster` porque quién puede recibir el trabajo depende de la planta de ESE
+    hallazgo (ADR-017), así que no hay una consulta que sirva para todos: colgarlo de
+    `creating` deja fuera a los hallazgos que ya están en marcha o cerrados, que son los que
+    no tienen a quién asignar.
   */
   const roster = useQuery({
     queryKey: queryKeys.findingRoster(finding.id),
     queryFn: () => listFindingRoster(finding.id),
     retry: false,
-    enabled: creating && expanded,
+    enabled: creating,
   });
 
-  /*
-    EL FOCO VUELVE A LA FICHA cuando el compromiso queda escrito: el hallazgo pasa a
-    `assigned`, este formulario deja de dibujarse y el botón que tenía el foco no sobrevive.
-    Sin esto el foco caería al `body`. Diferido por lo mismo que en `FindingNextStep`: el
-    formulario puede desaparecer antes de que el navegador pinte, y la ficha sigue ahí.
-  */
-  const returnFocus = (): void => {
-    const card = panelRef.current ? enclosingReportItem(panelRef.current) : null;
-
-    window.setTimeout(() => card?.focus(), 0);
-  };
-
   const creation = useMutation({
-    mutationFn: (request: CreateActionRequest) => createAction(finding.id, request),
+    mutationFn: (request: CreateActionRequest) =>
+      createAction(finding.id, request),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.actions() }),
         queryClient.invalidateQueries({ queryKey: queryKeys.findings() }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.submittedInspection() }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.submittedInspection(),
+        }),
       ]);
+      // El hallazgo pasa a `assigned` y este formulario deja de dibujarse: el foco vuelve a
+      // la ficha, que es lo único que sobrevive al acto (ver `useReturnToReportItem`).
       returnFocus();
     },
   });
@@ -191,20 +169,23 @@ export function FindingLifecycle({
         submit();
       }}
     >
-      <label className="finding__create-field">
+      <label className="finding__step-field">
         <span>Responsible person</span>
         <select
           value={assigneePersonId}
           disabled={!roster.isSuccess || creation.isPending}
-          aria-invalid={validationError?.startsWith('Choose an active assignee') || undefined}
+          aria-invalid={
+            validationError?.startsWith("Choose an active assignee") ||
+            undefined
+          }
           onChange={(event) => setAssigneePersonId(event.target.value)}
         >
           <option value="">
             {roster.isLoading
-              ? 'Loading active people…'
+              ? "Loading active people…"
               : roster.isError
-                ? 'Active people unavailable'
-                : 'Choose an active person'}
+                ? "Active people unavailable"
+                : "Choose an active person"}
           </option>
           {roster.data?.map((person) => (
             <option key={person.id} value={person.id}>
@@ -220,25 +201,27 @@ export function FindingLifecycle({
         </p>
       ) : null}
 
-      <label className="finding__create-field">
+      <label className="finding__step-field">
         <span>Description</span>
         <textarea
           value={description}
           minLength={ACTION_DESCRIPTION_MIN}
           maxLength={ACTION_DESCRIPTION_MAX}
           disabled={creation.isPending}
-          aria-invalid={validationError?.startsWith('Description') || undefined}
+          aria-invalid={validationError?.startsWith("Description") || undefined}
           onChange={(event) => setDescription(event.target.value)}
         />
       </label>
 
-      <label className="finding__create-field">
+      <label className="finding__step-field">
         <span>Deadline</span>
         <input
           type="datetime-local"
           value={dueAt}
           disabled={creation.isPending}
-          aria-invalid={validationError?.toLowerCase().includes('deadline') || undefined}
+          aria-invalid={
+            validationError?.toLowerCase().includes("deadline") || undefined
+          }
           onChange={(event) => setDueAt(event.target.value)}
         />
       </label>
@@ -251,7 +234,8 @@ export function FindingLifecycle({
 
       {creation.isError ? (
         <p role="alert" className="notice notice--warn">
-          {creation.error.message || 'The corrective action could not be created.'}
+          {creation.error.message ||
+            "The corrective action could not be created."}
         </p>
       ) : null}
 
@@ -261,7 +245,7 @@ export function FindingLifecycle({
           type="submit"
           disabled={!roster.isSuccess || creation.isPending}
         >
-          {creation.isPending ? 'Creating…' : 'Create action'}
+          {creation.isPending ? "Creating…" : "Create action"}
         </button>
       </div>
     </form>
@@ -269,81 +253,47 @@ export function FindingLifecycle({
 
   return (
     <>
-      {/*
-        EL CONTROL QUE ABRE EL CICLO, y con el nombre del paso que hay adentro: se lee
-        `step.label` y no una copia, para que el acto se llame igual acá arriba y en el
-        encabezado del paso. Desplegado dice `Hide` y no `Cancel` porque no descarta nada
-        —el cuerpo se oculta, no se desmonta, y lo escrito en los tres campos sigue ahí—.
-      */}
-      {step && creating ? (
-        <div className="finding__lifecycle-toggle">
-          <button
-            type="button"
-            className={expanded ? 'button--outline' : 'button--primary'}
-            aria-expanded={expanded}
-            aria-controls={bodyId}
-            onClick={() => setExpanded(!expanded)}
-          >
-            {expanded ? 'Hide' : step.label}
-          </button>
-        </div>
-      ) : null}
+      {/* tira de 5 etapas */}
+      <FindingStepper
+        current={finding.state}
+        deadline={findingDeadline(actions, finding.state, today)}
+        selected={selected}
+        draft={draft}
+        locked={amendOpen}
+        onSelect={setSelected}
+        tabId={tabId}
+        panelId={panelId}
+      />
 
-      {/*
-        SE OCULTA, NO SE DESMONTA. Plegar y volver a abrir tiene que devolver el compromiso
-        a medio escribir donde estaba; desmontar el formulario lo perdería sin decirlo, y
-        entonces el control de arriba sería un `Cancel` disfrazado.
-      */}
-      <div className="finding__lifecycle-body" id={bodyId} hidden={collapsed}>
-        <FindingStepper
-          current={finding.state}
-          deadline={findingDeadline(actions, finding.state, today)}
-          selected={selected}
-          draft={draft}
-          locked={amendOpen}
-          onSelect={setSelected}
-          tabId={tabId}
-          panelId={panelId}
+      {/* un panel*/}
+      <div
+        role="tabpanel"
+        id={panelId}
+        aria-labelledby={tabId(selected)}
+        tabIndex={-1}
+        ref={panelRef}
+      >
+        {/* que se eligio en cada etapa.  */}
+        <FindingStageRecord
+          stage={selected}
+          finding={finding}
+          actions={actions}
+          pending={stageStatus(selected, finding.state) === "todo"}
         />
-
-        {/*
-          EL PANEL ES EL CONTENEDOR Y NO EL BLOQUE: arriba el registro de la etapa elegida
-          —vacío y diciéndolo cuando esa etapa es la que se está por escribir— y abajo el
-          próximo paso, cuando esa etapa es la que el paso escribe. Cada uno conserva su región
-          con nombre propio —"Assigned record", "Next step"—, que es como se los nombra en
-          pantalla y como se los busca, y el `tabpanel` sigue siendo uno solo, que es lo que la
-          pestaña controla.
-
-          SIN BORRADOR, EL PASO SE LEE EN LA ETAPA VIGENTE: es el paso que no ofrece nada que
-          pulsar —"Waiting on: …"—, y no hay ningún segmento por delante que le corresponda.
-        */}
-        <div
-          role="tabpanel"
-          id={panelId}
-          aria-labelledby={tabId(selected)}
-          tabIndex={-1}
-          ref={panelRef}
-        >
-          <FindingStageRecord
-            stage={selected}
-            finding={finding}
-            actions={actions}
-            pending={stageStatus(selected, finding.state) === 'todo'}
+        {/* La etapa elegida*/}
+        {step && selected === (draft ?? finding.state) ? (
+          <FindingNextStep
+            // El paso se suelta entero al avanzar: la enmienda desplegada era de la etapa
+            // anterior. El compromiso, que sí tiene que sobrevivir a su propio envío, no
+            // vive acá adentro.
+            key={finding.state}
+            step={step}
+            session={session}
+            findingId={finding.id}
+            create={commitmentForm}
+            onDraftChange={setAmendOpen}
           />
-          {step && selected === (draft ?? finding.state) ? (
-            <FindingNextStep
-              // El paso se suelta entero al avanzar: la enmienda desplegada era de la etapa
-              // anterior. El compromiso, que sí tiene que sobrevivir a su propio envío, no
-              // vive acá adentro.
-              key={finding.state}
-              step={step}
-              session={session}
-              findingId={finding.id}
-              create={commitmentForm}
-              onDraftChange={setAmendOpen}
-            />
-          ) : null}
-        </div>
+        ) : null}
       </div>
     </>
   );

@@ -1,8 +1,13 @@
 import type { EvidenceInput } from '@hs/contracts';
 
-import { UploadIcon } from './icons';
+import { UploadIcon } from '../../components/icons';
 
-/** Los archivos que acompañan una transición, antes de subirlos. */
+/**
+ * Los archivos que acompañan una transición, antes de subirlos.
+ *
+ * Solo lo dibuja la etapa que declara el trabajo hecho —`stepForm` decide dónde—, porque es
+ * ahí donde alguien distinto va a mirar el trabajo y las fotos son lo que va a mirar.
+ */
 export function EvidencePicker({
   files,
   onChange,
@@ -11,13 +16,13 @@ export function EvidencePicker({
   onChange: (next: { kind: EvidenceInput['kind']; file: File }[]) => void;
 }): React.JSX.Element {
   return (
-    <fieldset className="action-detail__evidence">
+    <fieldset className="finding__evidence">
       <legend>Evidence</legend>
 
       {(['before', 'after'] as const).map((kind) => (
-        <label key={kind} className="action-detail__evidence-upload">
+        <label key={kind} className="finding__evidence-upload">
           <input
-            className="action-detail__file-input"
+            className="finding__evidence-input"
             type="file"
             accept="image/jpeg,image/png"
             multiple
@@ -28,7 +33,7 @@ export function EvidencePicker({
               ])
             }
           />
-          <span className="action-detail__upload-icon">
+          <span className="finding__evidence-icon">
             <UploadIcon size={20} />
           </span>
           <span>
@@ -38,7 +43,7 @@ export function EvidencePicker({
         </label>
       ))}
 
-      <p className="action-detail__evidence-count">
+      <p className="finding__evidence-count">
         {files.filter((item) => item.kind === 'after').length} after,{' '}
         {files.filter((item) => item.kind === 'before').length} before
       </p>

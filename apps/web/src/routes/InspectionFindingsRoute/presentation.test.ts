@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import type { ActionEvent, ActionSummary, Finding, Session } from '@hs/contracts';
+import {
+  transitionsFrom,
+  type ActionEvent,
+  type ActionState,
+  type ActionSummary,
+  type Finding,
+  type Session,
+} from '@hs/contracts';
 import type { TemplateDocument } from '@hs/forms';
 
+import { canAttempt } from '../../permissions/actions';
 import {
   actionsByFinding,
   blockingActions,
@@ -15,6 +23,7 @@ import {
   openableStages,
   sectionsWithFindings,
   stageStatus,
+  stepForm,
   toDateTimeLocal,
 } from './presentation';
 
@@ -401,6 +410,62 @@ describe('el próximo paso del hallazgo', () => {
         session('hs_coordinator'),
         itemFinding(GUARDS),
       )?.amend,
+    ).toBeNull();
+  });
+});
+
+describe('los campos y las salidas del paso, etapa por etapa', () => {
+  /** Lo mismo que arma el formulario antes de dibujar: la tabla, recortada por la cuenta. */
+  function offered(state: ActionState, account: Session) {
+    const current = action({ state });
+
+    return transitionsFrom(state).filter((transition) =>
+      canAttempt(transition, current, account),
+    );
+  }
+
+  it('en Assigned no pide nada y ofrece una sola salida', () => {
+    expect(stepForm('open', offered('open', session('external_auditor')))).toEqual({
+      evidence: false,
+      reason: false,
+      note: false,
+      choices: [{ to: 'in_progress', label: 'Start work' }],
+    });
+  });
+
+  it('en In progress pide la evidencia y la nota antes de declarar el trabajo hecho', () => {
+    expect(stepForm('in_progress', offered('in_progress', session('external_auditor')))).toEqual({
+      evidence: true,
+      reason: false,
+      note: true,
+      choices: [{ to: 'awaiting_verification', label: 'Declare the work done' }],
+    });
+  });
+
+  it('en Verification pide la razón y ofrece las dos salidas, cerrar primero', () => {
+    expect(
+      stepForm(
+        'awaiting_verification',
+        offered('awaiting_verification', session('supervisor')),
+      ),
+    ).toEqual({
+      evidence: false,
+      reason: true,
+      note: true,
+      choices: [
+        { to: 'closed', label: 'Verify and close' },
+        { to: 'in_progress', label: 'Send it back' },
+      ],
+    });
+  });
+
+  /** El responsable declaró el trabajo hecho; verificarlo no es suyo (R3, ADR-016). */
+  it('no hay formulario cuando la cuenta no puede pedir ninguna transición', () => {
+    expect(
+      stepForm(
+        'awaiting_verification',
+        offered('awaiting_verification', session('external_auditor')),
+      ),
     ).toBeNull();
   });
 });

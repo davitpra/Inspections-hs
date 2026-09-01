@@ -1,5 +1,6 @@
 import type { AnswerValue } from "@hs/contracts";
 import type { TemplateItem } from "@hs/forms";
+import { useEffect, useRef } from "react";
 
 import { answerText } from "../presentation/answers";
 
@@ -68,18 +69,45 @@ export function ReportItem({
 }
 
 /**
- * La ficha que contiene a un control, para devolverle el foco cuando el diálogo que ese
- * control abrió se cierra.
- *
- * El selector vive junto al único lugar que escribe la clase; una ruta que lo escribiera
- * por su cuenta quedaría atada a un detalle que no le pertenece.
- *
- * **Se busca desde el evento y el foco vuelve a la FICHA, no al botón.** Hay un botón por
- * acción y otro por hallazgo, así que cuál abrió el diálogo lo sabe el evento y no una
- * ref; y el botón puede no sobrevivir a la invalidación que dispara la propia mutación
- * —crear una acción vuelve a dibujar la lista que lo contenía—, con lo que el foco caería
- * al `body`. La ficha sigue ahí.
+ * La ficha que contiene a un nodo. El selector vive junto al único lugar que escribe la clase;
+ * una ruta que lo escribiera por su cuenta quedaría atada a un detalle que no le pertenece.
  */
-export function enclosingReportItem(element: HTMLElement): HTMLElement | null {
+function enclosingReportItem(element: HTMLElement): HTMLElement | null {
   return element.closest<HTMLElement>(".report__item");
+}
+
+/**
+ * La ficha que contiene a este nodo, y la orden de devolverle el foco.
+ *
+ * **UN PASO EJECUTADO DESDE ADENTRO SE QUEDA SIN BOTÓN**: la transición ofrecida pasa a ser
+ * otra, o el paso entero desaparece porque la acción se cerró. Sin esto el foco caería al
+ * `body`, que es donde nadie sabe dónde está.
+ *
+ * La ficha se captura AL MONTAR y no al terminar: sigue en el documento aunque el componente
+ * que la buscó se desmonte, que es justo lo que pasa cuando el paso deja de existir. Y la
+ * vuelta va DIFERIDA porque la invalidación que dispara la propia mutación puede desmontar el
+ * botón antes de que el navegador pinte, y la ficha sigue ahí en ese momento.
+ *
+ * **El foco vuelve a la FICHA y no al botón**, que es lo que puede no sobrevivir. Y vive acá,
+ * junto al selector, porque el detalle de cómo se vuelve a la ficha pertenece al archivo que
+ * dibuja la ficha, y no a cada pantalla que ofrece un paso —las dos que lo hacen lo tenían
+ * escrito igual, palabra por palabra—.
+ */
+export function useReturnToReportItem<T extends HTMLElement>(): {
+  ref: React.RefObject<T | null>;
+  returnFocus: () => void;
+} {
+  const ref = useRef<T>(null);
+  const card = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (ref.current) card.current = enclosingReportItem(ref.current);
+  }, []);
+
+  return {
+    ref,
+    returnFocus: () => {
+      window.setTimeout(() => card.current?.focus(), 0);
+    },
+  };
 }

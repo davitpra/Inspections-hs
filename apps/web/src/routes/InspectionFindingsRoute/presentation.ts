@@ -9,6 +9,7 @@ import {
   type ActionEvent,
   type ActionState,
   type ActionSummary,
+  type ActionTransition,
   type CreateActionRequest,
   type Finding,
   type FindingState,
@@ -26,7 +27,11 @@ import {
 } from '@hs/forms';
 
 import { canAmendAssignment, canAttempt, canCreateAction } from '../../permissions/actions';
-import { STATE_LABELS, transitionLabel } from '../../presentation/actions';
+import {
+  STATE_LABELS,
+  transitionLabel,
+  transitionTakesNote,
+} from '../../presentation/actions';
 import { formatDay } from '../../presentation/dates';
 import { dueIn } from '../../presentation/inspections';
 
@@ -312,6 +317,67 @@ export function nextStep(
     writes: allowed ? STAGE_BY_ACTION_STATE[transition.to] : null,
     // Solo en `assigned` —la acción en `open`— y antes de que nadie pulse `Start work`.
     amend: state === 'assigned' && canAmendAssignment(session, finding) ? action : null,
+  };
+}
+
+/** Una salida del paso: el estado al que lleva y el texto del botón que la pide. */
+export type StepChoice = { to: ActionState; label: string };
+
+/**
+ * Qué pide y qué ofrece el paso de avance, ya recortado a lo que ESTA cuenta puede pedir.
+ *
+ * Las salidas van en el orden de `TRANSITIONS`; la primera es la principal y se dibuja como
+ * `button--primary`.
+ */
+export type StepForm = {
+  evidence: boolean;
+  reason: boolean;
+  note: boolean;
+  choices: StepChoice[];
+};
+
+/**
+ * Lo que el formulario del paso muestra, ETAPA POR ETAPA. `null` cuando no queda ninguna
+ * transición que esta cuenta pueda pedir: no hay formulario, hay que decir que espera a otro.
+ *
+ * | etapa            | acción en               | campos                    | salidas                            |
+ * | ---------------- | ----------------------- | ------------------------- | ---------------------------------- |
+ * | Assigned         | `open`                  | ninguno                   | Start work                         |
+ * | In progress      | `in_progress`           | evidencia + nota          | Declare the work done              |
+ * | Verification     | `awaiting_verification` | razón + nota              | Verify and close · Send it back    |
+ *
+ * Y por qué cada uno:
+ *
+ * - **La evidencia acompaña a lo que va a verificarse**, así que se pide en la transición
+ *   que entra a `awaiting_verification` y en ninguna otra: es el momento en que alguien
+ *   distinto va a mirar el trabajo, y las fotos son lo que va a mirar.
+ * - **La razón solo la exige el rechazo**, y no porque lo diga esta tabla: sale de
+ *   `requires: ['reason']` en la fila de `TRANSITIONS`, la misma que aplica el servidor.
+ * - **La nota la admite todo menos empezar el trabajo** (`transitionTakesNote`): ese paso se
+ *   anuncia como "No additional information is required", y un campo debajo la desmiente.
+ *
+ * ES UNA LECTURA DE `TRANSITIONS`, NO UNA SEGUNDA TABLA. Las cuatro respuestas se derivan de
+ * lo que ya trae cada fila —a dónde va, qué exige— más `transitionTakesNote`, que es
+ * vocabulario. Escrita como `switch` por etapa sería la máquina de estados copiada en la UI,
+ * que es la forma en que cliente y servidor empiezan a discrepar (ADR-008).
+ *
+ * Aparte del componente porque es una decisión: "en Verification se pide una razón y hay dos
+ * salidas" se comprueba sin renderizar, o no lo comprueba nadie.
+ */
+export function stepForm(
+  from: ActionState,
+  available: readonly ActionTransition[],
+): StepForm | null {
+  if (available.length === 0) return null;
+
+  return {
+    evidence: available.some((transition) => transition.to === 'awaiting_verification'),
+    reason: available.some((transition) => transition.requires.includes('reason')),
+    note: available.some((transition) => transitionTakesNote(from, transition.to)),
+    choices: available.map((transition) => ({
+      to: transition.to,
+      label: transitionLabel(from, transition.to),
+    })),
   };
 }
 

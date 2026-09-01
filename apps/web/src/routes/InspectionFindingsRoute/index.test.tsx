@@ -264,17 +264,9 @@ beforeEach(() => {
 });
 
 /**
- * El ciclo de un hallazgo levantado llega plegado: hay que abrirlo. Adentro no hay nada más
- * que pulsar —el compromiso está a la vista dentro del paso—, y por eso el helper es una sola
- * pulsación y no dos.
+ * El compromiso está a la vista con la ficha: no hay nada que pulsar para llegar a él.
  */
-async function openLifecycle(): Promise<void> {
-  fireEvent.click(await screen.findByRole('button', { name: 'Create corrective action' }));
-}
-
 async function creationForm(): Promise<HTMLElement> {
-  await openLifecycle();
-
   return await screen.findByRole('form', { name: 'Create corrective action' });
 }
 
@@ -401,7 +393,6 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
   it('presenta raised y sin plazo cuando todavía no hay acciones', async () => {
     renderRoute();
 
-    await openLifecycle();
     await screen.findByRole('region', { name: 'Finding lifecycle' });
     expectCurrentStage('Raised');
     expect(screen.queryByText(/day(?:s)? overdue|in \d+ day/)).toBeNull();
@@ -415,7 +406,6 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
   it('abre el compromiso en la etapa que va a escribir, no en la vigente', async () => {
     renderRoute();
 
-    await openLifecycle();
     const assigned = await screen.findByRole('tab', { name: 'Assigned' });
     expect(assigned.getAttribute('aria-selected')).toBe('true');
     expectCurrentStage('Raised');
@@ -464,7 +454,6 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
   it('ofrece al coordinador asignar el hallazgo levantado', async () => {
     renderRoute();
 
-    await openLifecycle();
     const next = await screen.findByRole('region', { name: 'Next step' });
     expect(within(next).getByRole('form', { name: 'Create corrective action' })).toBeTruthy();
     expect(within(next).getByText(/Assign a responsible person/)).toBeTruthy();
@@ -476,7 +465,6 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
 
     renderRoute();
 
-    await openLifecycle();
     const next = await screen.findByRole('region', { name: 'Next step' });
     expect(within(next).getByRole('form', { name: 'Create corrective action' })).toBeTruthy();
   });
@@ -538,17 +526,16 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
 });
 
 /**
- * LA FICHA ABRE POR LA LECTURA. Un hallazgo que todavía no decidió nada no dibuja su ciclo:
- * una inspección recién enviada con varios hallazgos apilaba un formulario de alta por cada
- * uno y se leía como una planilla de carga. El ciclo está a una pulsación, y solo se pliega
- * donde hay algo que plegar —quien puede asignar un hallazgo levantado—.
+ * LA FICHA ABRE POR LA LECTURA Y NO ESCONDE NADA. El ciclo llegó a estar plegado detrás de un
+ * control con el nombre del paso; el precio era una pulsación por hallazgo sobre la pantalla
+ * que existe justamente para leer en qué anda cada uno.
  */
-describe('InspectionFindingsRoute — la ficha plegada', () => {
+describe('InspectionFindingsRoute — la ficha abierta', () => {
   beforeEach(() => {
     getSubmittedInspection.mockResolvedValue(report());
   });
 
-  it('el hallazgo levantado llega plegado, con la lectura entera y un solo control', async () => {
+  it('el hallazgo levantado llega con la lectura entera y el ciclo a la vista', async () => {
     renderRoute();
 
     // Lo que salió mal está completo desde el primer momento.
@@ -557,53 +544,38 @@ describe('InspectionFindingsRoute — la ficha plegada', () => {
     expect(screen.getByText('Refit the guard before the line runs again.')).toBeTruthy();
     expect(screen.getByText('1 photo')).toBeTruthy();
 
-    // El ciclo no: ni la tira de etapas, ni el registro, ni los tres campos del compromiso.
-    expect(screen.getByRole('button', { name: 'Create corrective action' })).toBeTruthy();
-    expect(screen.queryByRole('region', { name: 'Finding lifecycle' })).toBeNull();
-    expect(screen.queryByRole('region', { name: 'Next step' })).toBeNull();
-    expect(screen.queryByRole('form', { name: 'Create corrective action' })).toBeNull();
-    expect(screen.queryByRole('tab', { name: 'Assigned' })).toBeNull();
+    // Y el ciclo también: la tira de etapas, el paso y los tres campos del compromiso.
+    expect(screen.getByRole('region', { name: 'Finding lifecycle' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Next step' })).toBeTruthy();
+    expect(screen.getByRole('form', { name: 'Create corrective action' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Assigned' })).toBeTruthy();
   });
 
   /**
    * El roster es por hallazgo (`/findings/:id/roster`, ADR-017), así que no hay una consulta
-   * que sirva para todos: dibujado el formulario de cada ficha, la pantalla pedía uno por
-   * hallazgo antes de que nadie mirara ninguno.
+   * que sirva para todos: lo pide el hallazgo que ofrece asignar, y solo ese.
    */
-  it('plegada no pide el roster de nadie', async () => {
+  it('pide el roster del hallazgo que ofrece asignar', async () => {
     renderRoute();
 
-    await screen.findByRole('button', { name: 'Create corrective action' });
-    expect(listFindingRoster).not.toHaveBeenCalled();
-
-    await openLifecycle();
-
+    await screen.findByRole('form', { name: 'Create corrective action' });
     await waitFor(() => expect(listFindingRoster).toHaveBeenCalledWith(FINDING));
   });
 
-  /** Hide no descarta: se oculta el ciclo, no se desmonta lo que alguien ya escribió. */
-  it('el control abre el ciclo y vuelve a plegarlo conservando el borrador', async () => {
+  it('no pide el roster de un hallazgo que ya está en marcha', async () => {
+    getSubmittedInspection.mockResolvedValue(
+      report({ findings: [finding({ state: 'assigned' })] }),
+    );
+    listActions.mockResolvedValue([action()]);
+
     renderRoute();
 
-    const form = await creationForm();
-    await completeForm(form);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Hide' }));
-    expect(screen.queryByRole('region', { name: 'Finding lifecycle' })).toBeNull();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Create corrective action' }));
-
-    const reopened = await screen.findByRole('form', { name: 'Create corrective action' });
-    expect((within(reopened).getByLabelText('Description') as HTMLTextAreaElement).value).toBe(
-      'Install a fixed guard before restarting the line',
-    );
-    expect(
-      (within(reopened).getByLabelText('Responsible person') as HTMLSelectElement).value,
-    ).toBe(PERSON);
+    expect(await screen.findByRole('button', { name: 'Start work' })).toBeTruthy();
+    expect(listFindingRoster).not.toHaveBeenCalled();
   });
 
-  /** Sin control no hay borrador que proteger, y sí un registro que auditar. */
-  it('sin permiso para crear, el ciclo llega abierto y nada lo pliega', async () => {
+  /** Sin control para crear queda el registro, que es lo que hay que auditar. */
+  it('sin permiso para crear, el ciclo se lee igual', async () => {
     getSubmittedInspection.mockResolvedValue(
       report({ findings: [finding({ reported_by: '77777777-7777-4777-8777-777777777777' })] }),
     );
@@ -612,20 +584,19 @@ describe('InspectionFindingsRoute — la ficha plegada', () => {
     renderRoute();
 
     expect(await screen.findByRole('region', { name: 'Finding lifecycle' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Create corrective action' })).toBeNull();
+    expect(screen.queryByRole('form', { name: 'Create corrective action' })).toBeNull();
   });
 
-  it('con las acciones caídas, el ciclo llega abierto y nada lo pliega', async () => {
+  it('con las acciones caídas, el ciclo se lee igual', async () => {
     listActions.mockRejectedValue(new Error('offline'));
 
     renderRoute();
 
     expect(await screen.findByRole('region', { name: 'Finding lifecycle' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Create corrective action' })).toBeNull();
+    expect(screen.queryByRole('form', { name: 'Create corrective action' })).toBeNull();
   });
 
-  /** Un hallazgo que ya tiene trabajo abierto no se pliega: hay decisiones que leer. */
-  it('el hallazgo ya asignado llega abierto', async () => {
+  it('el hallazgo ya asignado se lee en el paso que sigue', async () => {
     getSubmittedInspection.mockResolvedValue(
       report({ findings: [finding({ state: 'assigned' })] }),
     );

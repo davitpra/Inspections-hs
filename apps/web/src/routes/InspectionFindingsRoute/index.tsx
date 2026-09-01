@@ -55,11 +55,10 @@ import {
  * `ActionsService.create`. La ruta no dibuja esos campos ni sabe cuál ficha los está
  * llenando: los pone el ciclo del hallazgo.
  *
- * SOBRE UN HALLAZGO RECIÉN LEVANTADO, EL COMPROMISO ESTÁ A UNA PULSACIÓN Y NO DIBUJADO. La
- * pantalla abre por la lectura —la pregunta, lo prescrito, lo observado, las fotos—; una
- * inspección recién enviada con seis hallazgos abría si no seis formularios de alta apilados y
- * se leía como una planilla de carga. Cuál ficha llega plegada lo decide `FindingLifecycle`, y
- * es exactamente donde no hay ninguna decisión que leer todavía.
+ * LA PANTALLA ABRE POR LA LECTURA —la pregunta, lo prescrito, lo observado, las fotos— y el
+ * ciclo de cada hallazgo va abajo, a la vista. Estuvo plegado detrás de un control, para que
+ * una inspección recién enviada con seis hallazgos no apilara seis formularios de alta; el
+ * precio era una pulsación por hallazgo para ver en qué anda cada uno.
  *
  * El estado sale del stream propio que ya trae el hallazgo. Las acciones se leen para el
  * próximo paso, el plazo y la historia; si esa consulta falla, el estado sigue siendo legible
