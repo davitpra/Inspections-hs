@@ -1,24 +1,35 @@
-/**
- * Cómo se nombra un hallazgo en pantalla.
- *
- * Las dos pantallas que los dibujan —el reporte completo y la lectura de solo hallazgos—
- * los cuentan igual. Es la única razón por la que esto no vive en la carpeta de una ruta.
- */
+import type { Finding, ScheduledInspection } from '@hs/contracts';
 
-/**
- * Cuántas fotos acompañan a un hallazgo, dicho como se lee en pantalla.
- *
- * `No photos` y no un hueco: las fotos todavía no se pueden mirar, así que el conteo ES la
- * declaración de la evidencia. Callar el cero haría que un hallazgo sin fotos se leyera
- * igual que uno cuyas fotos la pantalla no supo contar.
- */
+/** Cuántas fotos acompañan a un hallazgo, dicho como se lee en pantalla. */
 export function photoCountText(count: number): string {
   if (count === 0) return 'No photos';
 
   return count === 1 ? '1 photo' : `${count} photos`;
 }
 
-/** Cuántos hallazgos abrió una sección. Plural correcto, por lo mismo que `answersLabel`. */
+/** Cuántos hallazgos abrió una sección. */
 export function findingsLabel(count: number): string {
   return count === 1 ? '1 finding' : `${count} findings`;
+}
+
+/**
+ * Qué inspecciones cerradas dejaron algo que arreglar.
+ *
+ * El cruce es por `inspection_id`, el id del envío que referencia el hallazgo, y no por el
+ * id de la inspección programada que viaja en la URL. Los hallazgos manuales quedan afuera
+ * porque no tienen envío. No reordena: conserva el orden de `completedInspections`.
+ */
+export function inspectionsWithFindings(
+  completed: readonly ScheduledInspection[],
+  findings: readonly Finding[],
+): ScheduledInspection[] {
+  const withFindings = new Set(
+    findings
+      .map((finding) => finding.inspection_id)
+      .filter((id): id is string => id !== null),
+  );
+
+  return completed.filter(
+    (item) => item.inspection_id !== null && withFindings.has(item.inspection_id),
+  );
 }

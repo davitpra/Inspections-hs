@@ -60,6 +60,7 @@ describe('sectionTitle', () => {
    */
   it('nombra la lista de hallazgos y también el envío que se abre desde ella', () => {
     expect(sectionTitle('/findings')).toBe('Findings');
+    expect(sectionTitle('/findings/types/template-123')).toBe('Findings by inspection type');
     expect(sectionTitle('/findings/abc-123')).toBe('Inspection findings');
   });
 

@@ -52,8 +52,8 @@ import {
  * lo respaldan—, que es justo lo que una tabla de hallazgos no puede dar. Se ofrece
  * dentro del próximo paso y solo mientras crear ES el próximo paso; a quién, lo decide
  * `nextStep`, y eso es comodidad, no garantía: el servidor vuelve a exigirlo en
- * `ActionsService.create`. La ruta no monta ese diálogo ni sabe cuál ficha lo abrió: lo
- * hace el ciclo del hallazgo, que es de donde se ofrece.
+ * `ActionsService.create`. La ruta no dibuja esos campos ni sabe cuál ficha los está
+ * llenando: los pone el ciclo del hallazgo, a la vista y sin abrir nada.
  *
  * El estado sale del stream propio que ya trae el hallazgo. Las acciones se leen para el
  * próximo paso, el plazo y la historia; si esa consulta falla, el estado sigue siendo legible
@@ -77,7 +77,7 @@ export function InspectionFindingsRoute(): React.JSX.Element {
   /*
     LA MISMA CLAVE QUE `/actions`, por lo mismo que el envío comparte la del reporte: es la
     misma pregunta hecha desde otra pantalla. Llegar acá desde las acciones correctivas no
-    cuesta una llamada, y la invalidación que hace el diálogo al crear refresca las dos.
+    cuesta una llamada, y la invalidación que hace el ciclo al crear refresca las dos.
   */
   const actions = useQuery({
     queryKey: queryKeys.actions(),
@@ -234,8 +234,8 @@ export function InspectionFindingsRoute(): React.JSX.Element {
                   {/*
                     EL CICLO ES NAVEGABLE: la etapa vigente ofrece el próximo paso y cada
                     etapa ya alcanzada abre, en ese mismo hueco, lo que se decidió en ella
-                    (ADR-018). La etapa elegida es estado por hallazgo —y el diálogo que
-                    crea el compromiso, uno por hallazgo—, y por eso las dos cosas viven
+                    (ADR-018). La etapa elegida es estado por hallazgo —y el compromiso que
+                    se escribe en la etapa vigente, también—, y por eso las dos cosas viven
                     adentro de `FindingLifecycle` y no acá.
                   */}
                   <FindingLifecycle

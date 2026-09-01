@@ -29,6 +29,11 @@ import {
  * - las demás son los eventos que las escribieron, con su nota, su motivo y su evidencia
  *   contada.
  *
+ * **La etapa que se está por escribir también se dibuja**, y dice que todavía no tiene nada.
+ * Es la que el formulario de abajo va a escribir, y sin ella el panel se quedaba sin decir en
+ * qué etapa está parado: quien completa el compromiso lee "Next step" y nada que lo ubique en
+ * `assigned`. Que esté vacía no es lo mismo que no poder leerla —eso lo dice otro aviso—.
+ *
  * El detalle viaja completo en `getAction` —eventos y compromisos juntos—, así que no hay una
  * llamada por versión; y como se dibuja una sola etapa por vez, tampoco una por etapa.
  */
@@ -36,10 +41,13 @@ export function FindingStageRecord({
   stage,
   finding,
   actions,
+  pending = false,
 }: {
   stage: FindingStage;
   finding: Finding;
   actions: readonly ActionSummary[];
+  /** La etapa todavía no ocurrió: es la que el paso a la vista va a escribir. */
+  pending?: boolean;
 }): React.JSX.Element {
   return (
     <section
@@ -48,7 +56,12 @@ export function FindingStageRecord({
     >
       <p className="finding__stage-record-eyebrow">{STAGE_LABELS[stage]}</p>
 
-      {stage === 'raised' ? (
+      {/* La misma voz que la etapa alcanzada sin eventos: es la misma ausencia. */}
+      {pending ? (
+        <p className="finding__stage-record-eyebrow">
+          Nothing has been recorded here yet. The step below is what writes it.
+        </p>
+      ) : stage === 'raised' ? (
         <dl className="finding__stage-record-facts">
           <div>
             <dt>Reported</dt>

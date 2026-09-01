@@ -14,3 +14,13 @@
 - [x] 3.1 Cubrir el índice y el detalle con pruebas de ruta para identidad, conteo, aislamiento por cuenta, orden y enlaces a reportes.
 - [ ] 3.2 Ejecutar pruebas específicas, lint, build y typecheck en el orden requerido por el repositorio.
 - [x] 3.3 Validar estrictamente el change de OpenSpec.
+
+## 4. Hallazgos por tipo
+
+- [x] 4.1 Promover la agrupación por `template_id` y el filtro de inspecciones con hallazgos a presentación compartida, con pruebas unitarias.
+- [x] 4.2 Extraer la tabla índice de tipos a un componente compartido y usarla en el historial.
+- [x] 4.3 Convertir `/findings` en el índice de tipos con conteo de inspecciones que registraron hallazgos.
+- [x] 4.4 Crear `/findings/types/$templateId` con la lista cronológica y enlaces al `/findings/$id` existente.
+- [x] 4.5 Registrar la ruta, el título móvil y los estilos compartidos sin colisionar con el detalle individual.
+- [x] 4.6 Cubrir presentación, rutas, navegación y regresiones con pruebas específicas.
+- [ ] 4.7 Ejecutar lint, pruebas, validación OpenSpec, build y typecheck.

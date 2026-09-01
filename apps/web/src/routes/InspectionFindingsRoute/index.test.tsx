@@ -396,6 +396,28 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
     expect(screen.queryByText(/day(?:s)? overdue|in \d+ day/)).toBeNull();
   });
 
+  /**
+   * UN FORMULARIO SE LEE EN EL SEGMENTO QUE ESCRIBE. El compromiso escribe `assigned`, así que
+   * se lee ahí aunque el hallazgo siga levantado: DÓNDE ESTÁ el hallazgo (`aria-current`) y QUÉ
+   * SE ESTÁ LEYENDO (`aria-selected`) son dos cosas distintas y acá se separan.
+   */
+  it('abre el compromiso en la etapa que va a escribir, no en la vigente', async () => {
+    renderRoute();
+
+    const assigned = await screen.findByRole('tab', { name: 'Assigned' });
+    expect(assigned.getAttribute('aria-selected')).toBe('true');
+    expectCurrentStage('Raised');
+
+    const next = await screen.findByRole('region', { name: 'Next step' });
+    expect(within(next).getByRole('form', { name: 'Create corrective action' })).toBeTruthy();
+
+    // El registro de esa etapa se dibuja vacío y lo dice: es lo que el formulario va a escribir.
+    const record = screen.getByRole('region', { name: 'Assigned record' });
+    expect(within(record).getByText(/Nothing has been recorded here yet/)).toBeTruthy();
+    // Y la etapa levantada no está: ya ocurrió, pero no es la que se está leyendo.
+    expect(screen.queryByRole('region', { name: 'Raised record' })).toBeNull();
+  });
+
   it('deja que la acción menos avanzada mande aunque otra esté cerrada', async () => {
     getSubmittedInspection.mockResolvedValue(
       report({ findings: [finding({ state: 'assigned' })] }),
@@ -567,7 +589,16 @@ describe('InspectionFindingsRoute — el compromiso', () => {
     await waitFor(() =>
       expect(screen.queryByRole('form', { name: 'Create corrective action' })).toBeNull(),
     );
+    /*
+      LA LECTURA SIGUE AL PASO: escrito el compromiso, el hallazgo queda en `assigned` y lo que
+      se lee es el segmento que escribe `Start work`. Quedarse en el que acaba de escribirse
+      dejaría el próximo paso una pestaña atrás del acto que lo habilitó.
+    */
     expect(await screen.findByRole('button', { name: 'Start work' })).toBeTruthy();
+    expect(
+      screen.getByRole('tab', { name: 'In progress' }).getAttribute('aria-selected'),
+    ).toBe('true');
+    expectCurrentStage('Assigned');
   });
 
   it('no envía un plazo que no es futuro', async () => {
@@ -859,6 +890,9 @@ describe('InspectionFindingsRoute — Edit assignment (ADR-018)', () => {
 
     renderRoute();
 
+    // El registro se lee abriendo su etapa; lo que está abierto por defecto es el paso.
+    fireEvent.click(await screen.findByRole('tab', { name: 'Assigned' }));
+
     const record = await screen.findByRole('region', { name: 'Assigned record' });
     const versions = within(record).getAllByRole('listitem');
     expect(versions[0]?.textContent).toContain('Original commitment');
@@ -874,6 +908,8 @@ describe('InspectionFindingsRoute — Edit assignment (ADR-018)', () => {
    */
   it('muestra el compromiso original aunque no haya habido enmiendas', async () => {
     renderRoute();
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'Assigned' }));
 
     const record = await screen.findByRole('region', { name: 'Assigned record' });
     expect(within(record).getByText('Original commitment')).toBeTruthy();
@@ -977,8 +1013,12 @@ describe('InspectionFindingsRoute — navegación entre etapas', () => {
     getAction.mockResolvedValue(history());
   });
 
-  /** Una etapa por delante no está vacía: no ocurrió, y ofrecerla prometería una lectura. */
-  it('no ofrece como pestaña la etapa que el hallazgo todavía no alcanzó', async () => {
+  /**
+   * Una etapa por delante no está vacía: no ocurrió, y ofrecerla prometería una lectura. La
+   * única excepción es la que el paso a la vista va a escribir —acá, `In progress`—, que se
+   * abre justamente porque tiene algo que mostrar: ese formulario.
+   */
+  it('no ofrece como pestaña una etapa que ni ocurrió ni se está por escribir', async () => {
     getSubmittedInspection.mockResolvedValue(
       report({ findings: [finding({ state: 'assigned' })] }),
     );
@@ -1078,11 +1118,11 @@ describe('InspectionFindingsRoute — navegación entre etapas', () => {
   });
 
   /**
-   * Avanzar mueve la lectura con el hallazgo: sin eso, la etapa elegida se quedaría en la
-   * que acaba de terminar y la ficha mostraría un registro viejo —y ningún paso— justo en el
-   * momento en que hay que ver qué sigue.
+   * Avanzar mueve la lectura, y la deja donde escribe el paso SIGUIENTE: sin eso, la etapa
+   * elegida se quedaría en la que acaba de terminar y la ficha mostraría un registro viejo
+   * justo en el momento en que hay que ver qué sigue.
    */
-  it('vuelve a la etapa vigente cuando el hallazgo avanza', async () => {
+  it('mueve la lectura al segmento del próximo paso cuando el hallazgo avanza', async () => {
     let findingReads = 0;
     getSubmittedInspection.mockImplementation(() => {
       findingReads += 1;
@@ -1104,9 +1144,11 @@ describe('InspectionFindingsRoute — navegación entre etapas', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Start work' }));
 
+    // El hallazgo queda en `in_progress`, y lo que se lee es donde escribe declarar el
+    // trabajo hecho: la etapa de verificación.
     await waitFor(() => expectCurrentStage('In progress'));
     expect(
-      screen.getByRole('tab', { name: 'In progress' }).getAttribute('aria-selected'),
+      screen.getByRole('tab', { name: 'Verification' }).getAttribute('aria-selected'),
     ).toBe('true');
     expect(await screen.findByRole('region', { name: 'Next step' })).toBeTruthy();
   });

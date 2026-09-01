@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { AcceptInvitationRoute } from '../routes/AcceptInvitationRoute';
 import { CaptureRoute } from '../routes/CaptureRoute';
 import { FindingsRoute } from '../routes/FindingsRoute';
+import { FindingInspectionTypeRoute } from '../routes/FindingInspectionTypeRoute';
 import { Form7Route } from '../routes/Form7Route';
 import { HistoricalInspectionsRoute } from '../routes/HistoricalInspectionsRoute';
 import { HistoricalInspectionTypeRoute } from '../routes/HistoricalInspectionTypeRoute';
@@ -227,6 +228,12 @@ const findingsRoute = createRoute({
   component: FindingsRoute,
 });
 
+const findingInspectionTypeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/findings/types/$templateId',
+  component: FindingInspectionTypeRoute,
+});
+
 const inspectionFindingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/findings/$id',
@@ -366,6 +373,7 @@ const routeTree = rootRoute.addChildren([
   inspectionReportRoute,
   reviewRoute,
   findingsRoute,
+  findingInspectionTypeRoute,
   inspectionFindingsRoute,
   outboxRoute,
   schedulingRoute,

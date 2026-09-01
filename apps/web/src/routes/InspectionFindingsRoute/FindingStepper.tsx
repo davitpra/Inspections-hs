@@ -3,25 +3,27 @@ import { useRef } from 'react';
 import {
   FINDING_STAGES,
   STAGE_LABELS,
-  reachedStages,
+  openableStages,
   stageStatus,
   type FindingStage,
 } from './presentation';
 
 /**
- * Las cinco etapas escritas, y la etapa alcanzada COMO CONTROL.
+ * Las cinco etapas escritas, y la etapa que se puede abrir COMO CONTROL.
  *
  * El color solo acompaña; lo que cada segmento dice está en su nombre y en su forma. Lo que
  * el segmento agrega ahora es poder abrirlo: elegir una etapa ya ocurrida cambia el panel de
- * abajo por lo que se decidió en ella, sin sacar el hallazgo de la pantalla ni mover el ciclo.
+ * abajo por lo que se decidió en ella, y elegir el borrador lo cambia por el formulario que la
+ * va a escribir, sin sacar el hallazgo de la pantalla ni mover el ciclo.
  *
  * **Es un `tablist` de verdad y no una lista con botones.** Quien navega con lector de
  * pantalla necesita oír que hay cinco pestañas y cuál está abierta (`aria-selected`), y eso es
- * distinto de dónde está el hallazgo (`aria-current`), que no se mueve al leer una etapa
- * pasada. Las dos cosas conviven en el mismo botón a propósito.
+ * distinto de dónde está el hallazgo (`aria-current`), que no se mueve al leer otra etapa. Las
+ * dos cosas conviven en el mismo botón a propósito.
  *
- * Las etapas por delante NO son controles: no están vacías, no ocurrieron, y ofrecerlas
- * prometería una lectura que no existe.
+ * Las etapas por delante NO son controles —no ocurrieron y no tienen nada que mostrar—, salvo
+ * el borrador: ese sí tiene algo, el formulario del próximo paso. `openableStages` es donde
+ * está escrita esa única excepción.
  */
 export function FindingStepper({
   current,
@@ -45,24 +47,24 @@ export function FindingStepper({
   panelId: string;
 }): React.JSX.Element {
   const tabs = useRef(new Map<FindingStage, HTMLButtonElement>());
-  const reached = reachedStages(current);
+  const openable = openableStages(current, draft);
 
   /*
-    Las flechas mueven la selección entre las etapas alcanzadas, y el foco con ella. El
+    Las flechas mueven la selección entre las etapas que se pueden abrir, y el foco con ella. El
     `tabIndex` móvil deja al tablist entero como una sola parada del tabulador: dentro se
     navega con flechas, que es lo que un lector de pantalla anuncia al entrar.
   */
   const step = (event: React.KeyboardEvent<HTMLOListElement>): void => {
-    const index = reached.indexOf(selected);
+    const index = openable.indexOf(selected);
     const next =
       event.key === 'ArrowRight' || event.key === 'ArrowDown'
-        ? reached[index + 1]
+        ? openable[index + 1]
         : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
-          ? reached[index - 1]
+          ? openable[index - 1]
           : event.key === 'Home'
-            ? reached[0]
+            ? openable[0]
             : event.key === 'End'
-              ? reached[reached.length - 1]
+              ? openable[openable.length - 1]
               : undefined;
 
     if (!next || locked) return;
@@ -101,9 +103,7 @@ export function FindingStepper({
                 stage === draft ? ' finding__stage--draft' : ''
               }`}
             >
-              {status === 'todo' ? (
-                mark
-              ) : (
+              {openable.includes(stage) ? (
                 <button
                   type="button"
                   role="tab"
@@ -122,6 +122,8 @@ export function FindingStepper({
                 >
                   {mark}
                 </button>
+              ) : (
+                mark
               )}
             </li>
           );

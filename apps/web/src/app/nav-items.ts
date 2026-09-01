@@ -127,6 +127,7 @@ const TITLES: readonly (readonly [string, string])[] = [
   ['/inspections/*/report', 'Inspection report'],
   ['/inspections/*', 'Inspection'],
   ['/findings', 'Findings'],
+  ['/findings/types/*', 'Findings by inspection type'],
   ['/findings/*', 'Inspection findings'],
   ['/incidents', 'Incidents'],
   ['/incidents/report', 'Report an incident'],

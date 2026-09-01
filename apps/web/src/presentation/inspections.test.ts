@@ -4,6 +4,8 @@ import {
   assignmentState,
   completedInspections,
   dueIn,
+  inspectionHistoryForType,
+  inspectionTypeGroups,
   opensCapture,
   readiness,
 } from './inspections';
@@ -154,5 +156,39 @@ describe('lo completado por este inspector', () => {
       'june',
       'may',
     ]);
+  });
+
+  it('agrupa versiones por template_id y conserva el nombre más reciente', () => {
+    const groups = inspectionTypeGroups([
+      scheduled({ id: 'new', template_version: 2, template_name: 'Current name' }),
+      scheduled({ id: 'old', template_version: 1, template_name: 'Former name' }),
+    ]);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.templateName).toBe('Current name');
+    expect(groups[0]?.inspections.map((item) => item.id)).toEqual(['new', 'old']);
+  });
+
+  it('no une nombres iguales con identidades distintas y ordena tipos por nombre', () => {
+    const groups = inspectionTypeGroups([
+      scheduled({ template_id: 'z', template_name: 'Quarterly inspection' }),
+      scheduled({ template_id: 'b', template_name: 'Monthly inspection' }),
+      scheduled({ template_id: 'a', template_name: 'Monthly inspection' }),
+    ]);
+
+    expect(groups.map((group) => group.templateId)).toEqual(['b', 'a', 'z']);
+  });
+
+  it('filtra un tipo sin alterar el orden recibido', () => {
+    const history = inspectionHistoryForType(
+      [
+        scheduled({ id: 'july', template_id: 'chosen' }),
+        scheduled({ id: 'other', template_id: 'other' }),
+        scheduled({ id: 'may', template_id: 'chosen' }),
+      ],
+      'chosen',
+    );
+
+    expect(history.map((item) => item.id)).toEqual(['july', 'may']);
   });
 });

@@ -43,13 +43,27 @@ definition of the list without a demonstrated volume need.
 The index groups by `template_id`, retains the most recent historical name for presentation,
 counts each group's inspections and sorts groups by name. The detail filters the already
 ordered completed list by the route parameter. These decisions live in
-`HistoricalInspectionsRoute/presentation.ts`; route components only compose data and UI.
+`presentation/inspections.ts`; route components only compose data and UI. The intersection
+between completed inspections and findings moves to `presentation/findings.ts` because both
+the findings index and its type detail consume it.
 
 ### Use an explicit link inside the type cell
 
 A block-level typed `Link` makes the visible type cell the navigation target without adding
 imperative row click handling or invalid interactive table markup. The count remains a plain
 value and the destination remains usable by keyboard and assistive technology.
+
+The markup becomes `InspectionTypeIndexTable`, shared by history and findings. Its destination
+is a typed union of `/historical/$templateId` and `/findings/types/$templateId`; route copy and
+data selection remain with each consumer.
+
+### Preserve the existing findings detail address
+
+`/findings/$id` already identifies a scheduled inspection and remains unchanged. The type
+detail uses `/findings/types/$templateId`, whose additional static segment prevents a route
+collision and makes the two identifiers explicit. Both findings list routes derive their data
+in the order `completedInspections` → `inspectionsWithFindings` → group or filter by
+`template_id`, so clean inspections and other inspectors never enter a count.
 
 ## Risks / Trade-offs
 
@@ -60,6 +74,8 @@ value and the destination remains usable by keyboard and assistive technology.
   query cache; revisit pagination only with measured volume.
 - [A copied detail URL names a type no longer visible to the account] → Derive visibility from
   the same account-filtered completed list and render a not-visible state.
+- [A manual finding has no inspection type] → Keep it outside this inspection-derived index,
+  matching the declared regression of the existing findings route.
 
 ## Migration Plan
 

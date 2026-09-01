@@ -2,16 +2,16 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 
 import { listFindings } from '../../api/findings';
-import { listScheduled, listSites } from '../../api/inspections';
+import { listScheduled } from '../../api/inspections';
 import { queryKeys } from '../../api/query-keys';
 import { useAppSession } from '../../app/session-context';
-import { CompletedInspectionsTable } from '../../components/CompletedInspectionsTable';
+import { InspectionTypeIndexTable } from '../../components/InspectionTypeIndexTable';
 import { AlertCircleIcon } from '../../components/icons';
-import { completedInspections } from '../../presentation/inspections';
-import { inspectionsWithFindings } from './presentation';
+import { inspectionsWithFindings } from '../../presentation/findings';
+import { completedInspections, inspectionTypeGroups } from '../../presentation/inspections';
 
 /**
- * Lo que salió mal, y en qué recorrido.
+ * Los tipos de recorrido en los que esta cuenta encontró algo que arreglar.
  *
  * El historial contesta «qué cerré» y el reporte contesta «qué contesté»; esta pantalla
  * contesta la pregunta que se hace al día siguiente —«qué encontré»— y por eso ESCONDE LA
@@ -19,7 +19,7 @@ import { inspectionsWithFindings } from './presentation';
  * no una fila que revisar, y dejarlo acá obligaría a distinguir a ojo cuáles de veinte
  * filas valen la pena abrir. El que quiera la lista completa la tiene en `/historical`.
  *
- * TRES CONSULTAS, NINGUNA CLAVE NUEVA. Las mismas que ya usan la pantalla de inicio, el
+ * DOS CONSULTAS, NINGUNA CLAVE NUEVA. Las mismas que ya usan la pantalla de inicio, el
  * historial y las acciones correctivas, así que llegar acá desde cualquiera de ellas lee
  * la caché que ya está tibia en vez de volver a pedir.
  *
@@ -29,7 +29,6 @@ import { inspectionsWithFindings } from './presentation';
 export function FindingsRoute(): React.JSX.Element {
   const { account } = useAppSession();
 
-  const sites = useQuery({ queryKey: queryKeys.sites(), queryFn: listSites, retry: false });
   const scheduled = useQuery({
     queryKey: queryKeys.scheduledInspections(),
     queryFn: listScheduled,
@@ -41,11 +40,9 @@ export function FindingsRoute(): React.JSX.Element {
     retry: false,
   });
 
-  const siteName = (id: string): string =>
-    sites.data?.find((site) => site.id === id)?.name ?? id;
-
   const completed = account ? completedInspections(scheduled.data ?? [], account.userId) : [];
   const withFindings = inspectionsWithFindings(completed, findings.data ?? []);
+  const types = inspectionTypeGroups(withFindings);
 
   /*
     Las DOS consultas de red tienen que haber llegado para poder afirmar que no hay nada.
@@ -67,7 +64,7 @@ export function FindingsRoute(): React.JSX.Element {
             <h1>Findings</h1>
           </div>
           <p className="scheduling__subtitle">
-            The inspections you completed that recorded something to fix, most recent first.
+            Choose an inspection type to review what you found.
           </p>
         </div>
       </header>
@@ -84,16 +81,18 @@ export function FindingsRoute(): React.JSX.Element {
         </p>
       ) : null}
 
+      {!failed && !loaded ? <p className="status-card">Loading findings…</p> : null}
+
       {loaded && withFindings.length === 0 ? (
         <p>None of the inspections you completed recorded a finding.</p>
       ) : null}
 
       {withFindings.length > 0 ? (
-        <CompletedInspectionsTable
-          inspections={withFindings}
-          siteName={siteName}
-          to="/findings/$id"
-          actionLabel="View findings"
+        <InspectionTypeIndexTable
+          groups={types}
+          to="/findings/types/$templateId"
+          ariaLabel="Inspection types with findings"
+          countLabel="Inspections with findings"
         />
       ) : null}
     </>

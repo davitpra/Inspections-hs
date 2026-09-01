@@ -1,17 +1,20 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { FindingsRoute } from './index';
+import { FindingInspectionTypeRoute } from './index';
 
+const listSites = vi.hoisted(() => vi.fn());
 const listScheduled = vi.hoisted(() => vi.fn());
 const listFindings = vi.hoisted(() => vi.fn());
 const useAppSession = vi.hoisted(() => vi.fn());
+const useParams = vi.hoisted(() => vi.fn());
 
-vi.mock('../../api/inspections', () => ({ listScheduled }));
+vi.mock('../../api/inspections', () => ({ listSites, listScheduled }));
 vi.mock('../../api/findings', () => ({ listFindings }));
 vi.mock('../../app/session-context', () => ({ useAppSession }));
 vi.mock('@tanstack/react-router', () => ({
+  useParams,
   Link: ({
     to,
     params,
@@ -83,13 +86,15 @@ function renderRoute(): void {
 
   render(
     <QueryClientProvider client={client}>
-      <FindingsRoute />
+      <FindingInspectionTypeRoute />
     </QueryClientProvider>,
   );
 }
 
 beforeEach(() => {
+  useParams.mockReturnValue({ templateId: 't-monthly' });
   useAppSession.mockReturnValue({ account: { userId: USER }, ready: true });
+  listSites.mockResolvedValue([{ id: SITE, name: 'Glencoe' }]);
 });
 
 afterEach(() => {
@@ -97,86 +102,75 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe('FindingsRoute', () => {
-  it('agrupa por tipo y cuenta inspecciones con hallazgos, no hallazgos individuales', async () => {
+describe('FindingInspectionTypeRoute', () => {
+  it('lista solo inspecciones del tipo elegido con hallazgos, más reciente primero', async () => {
     listScheduled.mockResolvedValue([
       scheduled({ id: 'july', inspection_id: 'insp-july' }),
       scheduled({ id: 'may', period_start: '2027-05-01', inspection_id: 'insp-may' }),
-      scheduled({
-        id: 'quarterly',
-        inspection_id: 'insp-quarterly',
-        template_id: 't-quarterly',
-        template_name: 'Quarterly equipment inspection',
-      }),
+      scheduled({ id: 'clean', period_start: '2027-06-01', inspection_id: 'insp-clean' }),
+      scheduled({ id: 'other', template_id: 'other', inspection_id: 'insp-other' }),
     ]);
     listFindings.mockResolvedValue([
       finding({ inspection_id: 'insp-july' }),
-      finding({ id: 'f-2', inspection_id: 'insp-july' }),
-      finding({ id: 'f-3', inspection_id: 'insp-may' }),
-      finding({ id: 'f-4', inspection_id: 'insp-quarterly' }),
+      finding({ id: 'f-may', inspection_id: 'insp-may' }),
+      finding({ id: 'f-other', inspection_id: 'insp-other' }),
     ]);
 
     renderRoute();
 
-    const table = await screen.findByRole('table', { name: 'Inspection types with findings' });
-    const rows = within(table).getAllByRole('row').slice(1);
-    expect(rows.map((row) => within(row).getByRole('rowheader').textContent)).toEqual([
-      'Monthly workplace inspection',
-      'Quarterly equipment inspection',
+    expect(await screen.findByRole('heading', { name: 'Monthly workplace inspection' })).toBeTruthy();
+    expect(screen.getAllByText('Glencoe')).toHaveLength(2);
+    expect(screen.getAllByRole('rowheader').map((cell) => cell.textContent)).toEqual([
+      'July 2027',
+      'May 2027',
     ]);
-    expect(within(rows[0]!).getByText('2')).toBeTruthy();
-    expect(
-      within(rows[0]!).getByRole('link', { name: 'Monthly workplace inspection' }).getAttribute('href'),
-    ).toBe('/findings/types/t-monthly');
+    expect(screen.queryByText('June 2027')).toBeNull();
   });
 
-  it('excluye inspecciones limpias, pendientes y completadas por otra cuenta', async () => {
+  it('excluye una inspección con hallazgos completada por otra cuenta', async () => {
     listScheduled.mockResolvedValue([
       scheduled({ id: 'mine', inspection_id: 'insp-mine' }),
-      scheduled({ id: 'clean', template_id: 'clean', inspection_id: 'insp-clean' }),
-      scheduled({ id: 'theirs', template_id: 'theirs', inspection_id: 'insp-theirs', inspector_id: OTHER }),
-      scheduled({ id: 'open', template_id: 'open', inspection_id: 'insp-open', status: 'open' }),
+      scheduled({ id: 'theirs', period_start: '2027-06-01', inspection_id: 'insp-theirs', inspector_id: OTHER }),
     ]);
     listFindings.mockResolvedValue([
       finding({ inspection_id: 'insp-mine' }),
       finding({ id: 'f-theirs', inspection_id: 'insp-theirs' }),
-      finding({ id: 'f-open', inspection_id: 'insp-open' }),
     ]);
 
     renderRoute();
 
-    const table = await screen.findByRole('table');
-    expect(within(table).getAllByRole('row')).toHaveLength(2);
+    expect(await screen.findByText('July 2027')).toBeTruthy();
+    expect(screen.queryByText('June 2027')).toBeNull();
   });
 
-  it('no crea una entrada para un hallazgo manual', async () => {
-    listScheduled.mockResolvedValue([scheduled()]);
-    listFindings.mockResolvedValue([
-      finding({ origin: 'manual', inspection_id: null, item_key: null }),
+  it('abre el detalle existente usando el id de inspección programada', async () => {
+    listScheduled.mockResolvedValue([scheduled({ id: 'july' })]);
+    listFindings.mockResolvedValue([finding()]);
+
+    renderRoute();
+
+    const link = await screen.findByRole('link', { name: /View findings/ });
+    expect(link.getAttribute('href')).toBe('/findings/july');
+  });
+
+  it('no revela un tipo sin inspecciones con hallazgos visibles', async () => {
+    listScheduled.mockResolvedValue([
+      scheduled({ template_id: 'other' }),
+      scheduled({ inspector_id: OTHER }),
     ]);
+    listFindings.mockResolvedValue([finding()]);
 
     renderRoute();
 
-    expect(
-      await screen.findByText('None of the inspections you completed recorded a finding.'),
-    ).toBeTruthy();
-  });
-
-  it('solo declara vacío cuando ambas consultas terminaron', async () => {
-    listScheduled.mockResolvedValue([scheduled()]);
-    listFindings.mockResolvedValue([]);
-
-    renderRoute();
-
-    expect(
-      await screen.findByText('None of the inspections you completed recorded a finding.'),
-    ).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Inspection type not found' })).toBeTruthy();
+    expect(screen.queryByRole('table')).toBeNull();
   });
 
   it.each([
-    ['findings', () => listFindings.mockRejectedValue(new Error('offline'))],
+    ['sites', () => listSites.mockRejectedValue(new Error('offline'))],
     ['inspections', () => listScheduled.mockRejectedValue(new Error('offline'))],
-  ])('si falla la consulta de %s informa que necesita conexión', async (_, reject) => {
+    ['findings', () => listFindings.mockRejectedValue(new Error('offline'))],
+  ])('si falla la consulta de %s no muestra una tabla parcial', async (_, reject) => {
     listScheduled.mockResolvedValue([scheduled()]);
     listFindings.mockResolvedValue([finding()]);
     reject();
@@ -184,8 +178,6 @@ describe('FindingsRoute', () => {
     renderRoute();
 
     expect(await screen.findByText(/Findings need a connection/)).toBeTruthy();
-    expect(
-      screen.queryByText('None of the inspections you completed recorded a finding.'),
-    ).toBeNull();
+    expect(screen.queryByRole('table')).toBeNull();
   });
 });

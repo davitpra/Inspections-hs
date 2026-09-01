@@ -4,9 +4,12 @@ import { Link } from "@tanstack/react-router";
 import { listScheduled } from "../../api/inspections";
 import { queryKeys } from "../../api/query-keys";
 import { useAppSession } from "../../app/session-context";
+import { InspectionTypeIndexTable } from "../../components/InspectionTypeIndexTable";
 import { CalendarIcon } from "../../components/icons";
-import { completedInspections } from "../../presentation/inspections";
-import { inspectionTypeGroups } from "./presentation";
+import {
+  completedInspections,
+  inspectionTypeGroups,
+} from "../../presentation/inspections";
 
 /**
  * Los tipos de inspección que esta cuenta cerró, como entrada a cada historial completo.
@@ -71,30 +74,12 @@ export function HistoricalInspectionsRoute(): React.JSX.Element {
       ) : null}
 
       {types.length > 0 ? (
-        <table className="table historical-types__table" aria-label="Completed inspection types">
-          <thead>
-            <tr>
-              <th scope="col">Inspection type</th>
-              <th scope="col">Completed inspections</th>
-            </tr>
-          </thead>
-          <tbody>
-            {types.map((type) => (
-              <tr key={type.templateId}>
-                <th scope="row" data-label="Inspection type">
-                  <Link
-                    className="table__link historical-types__link"
-                    to="/historical/$templateId"
-                    params={{ templateId: type.templateId }}
-                  >
-                    {type.templateName}
-                  </Link>
-                </th>
-                <td data-label="Completed inspections">{type.inspections.length}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <InspectionTypeIndexTable
+          groups={types}
+          to="/historical/$templateId"
+          ariaLabel="Completed inspection types"
+          countLabel="Completed inspections"
+        />
       ) : null}
     </>
   );

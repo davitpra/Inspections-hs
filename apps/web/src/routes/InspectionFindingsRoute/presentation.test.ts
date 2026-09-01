@@ -12,7 +12,7 @@ import {
   findingDeadline,
   futureDueAt,
   nextStep,
-  reachedStages,
+  openableStages,
   sectionsWithFindings,
   stageStatus,
   toDateTimeLocal,
@@ -526,10 +526,23 @@ describe('la lectura de una etapa', () => {
     };
   }
 
-  it('solo se abren las etapas que ya ocurrieron', () => {
-    expect(reachedStages('in_progress')).toEqual(['raised', 'assigned', 'in_progress']);
-    expect(reachedStages('raised')).toEqual(['raised']);
-    expect(reachedStages('closed')).toEqual([
+  /**
+   * La etapa que el formulario a la vista va a escribir se abre aunque no haya ocurrido: es la
+   * única que tiene algo que mostrar sin haber pasado, y es donde ese formulario se lee.
+   */
+  it('abre también la etapa que el próximo paso escribe', () => {
+    expect(openableStages('raised', 'assigned')).toEqual(['raised', 'assigned']);
+    expect(openableStages('assigned', 'in_progress')).toEqual([
+      'raised',
+      'assigned',
+      'in_progress',
+    ]);
+  });
+
+  it('sin borrador solo se abre lo que ya ocurrió', () => {
+    expect(openableStages('raised', null)).toEqual(['raised']);
+    expect(openableStages('assigned', null)).toEqual(['raised', 'assigned']);
+    expect(openableStages('closed', null)).toEqual([
       'raised',
       'assigned',
       'in_progress',

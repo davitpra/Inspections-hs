@@ -167,13 +167,25 @@ export function stageStatus(stage: FindingStage, current: FindingStage): StageSt
 }
 
 /**
- * Las etapas que el hallazgo ya alcanzó, y por eso las únicas que se pueden abrir.
+ * Las etapas que se pueden abrir: las alcanzadas, más la que el formulario a la vista escribe.
  *
- * Una etapa por delante no tiene registro que mostrar: no es que esté vacía, es que todavía
- * no ocurrió, y ofrecerla como control prometería una lectura que no existe.
+ * **UN FORMULARIO SE LEE EN EL SEGMENTO QUE ESCRIBE**, no en el que ya pasó. Asignar se lee
+ * bajo `assigned` aunque el hallazgo todavía esté en `raised`, y en cuanto la acción existe la
+ * lectura se corre a `in_progress`, que es donde vive `Start work`. Un paso ofrecido desde la
+ * etapa anterior obligaba a leer el ciclo al revés: lo que se está por escribir, contado desde
+ * lo último que se escribió.
+ *
+ * El borrador es la única etapa NO alcanzada que se abre, y se abre porque tiene algo que
+ * mostrar —el formulario—; las demás siguen siendo promesas sin registro. Que una etapa haya
+ * ocurrido se sigue preguntando con `stageStatus`, que es lo que decide si hay registro.
  */
-export function reachedStages(current: FindingStage): FindingStage[] {
-  return FINDING_STAGES.filter((stage) => stageStatus(stage, current) !== 'todo');
+export function openableStages(
+  current: FindingStage,
+  draft: FindingStage | null,
+): FindingStage[] {
+  return FINDING_STAGES.filter(
+    (stage) => stageStatus(stage, current) !== 'todo' || stage === draft,
+  );
 }
 
 /**

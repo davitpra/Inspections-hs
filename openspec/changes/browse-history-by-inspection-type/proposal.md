@@ -15,6 +15,10 @@ se consideran completados.
 - Hacer navegable la celda del tipo hacia `/historical/$templateId`.
 - Presentar en el detalle todo el historial completado de ese tipo, en orden cronológico
   descendente y con acceso al reporte de cada envío.
+- Reorganizar `/findings` con el mismo índice por tipo, contando solo las inspecciones
+  completadas por la cuenta que registraron al menos un hallazgo.
+- Presentar en `/findings/types/$templateId` esas inspecciones y conservar
+  `/findings/$id` como la lectura de los hallazgos de un envío individual.
 - Conservar la misma definición de completitud, el recorte por cuenta y la consulta de
   servidor que usa el historial actual.
 
@@ -28,10 +32,12 @@ Ninguna.
 
 - `inspections`: cambia la navegación del historial completo desde una lista global a un
   índice por tipo seguido de una lista cronológica del tipo elegido.
+- `findings`: organiza las inspecciones con hallazgos por tipo antes de abrir la lista
+  cronológica y el detalle individual existentes.
 
 ## Impact
 
-- Frontend web: rutas históricas, presentación pura, árbol de TanStack Router, títulos de
-  navegación, estilos y pruebas.
-- OpenSpec: requisito de lectura de inspecciones completadas.
+- Frontend web: rutas históricas y de hallazgos, componentes compartidos, presentación pura,
+  árbol de TanStack Router, títulos de navegación, estilos y pruebas.
+- OpenSpec: requisitos de lectura de inspecciones completadas y hallazgos por tipo.
 - Sin cambios de API, contratos, base de datos, RLS, service worker ni dependencias.
