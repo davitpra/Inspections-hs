@@ -9,27 +9,26 @@ import {
 } from './presentation';
 
 /**
- * Las cinco etapas escritas, y la etapa que se puede abrir COMO CONTROL.
+ * Las cinco etapas escritas, y la etapa alcanzada que se puede abrir COMO CONTROL.
  *
  * El color solo acompaña; lo que cada segmento dice está en su nombre y en su forma. Lo que
  * el segmento agrega ahora es poder abrirlo: elegir una etapa ya ocurrida cambia el panel de
- * abajo por lo que se decidió en ella, y elegir el borrador lo cambia por el formulario que la
- * va a escribir, sin sacar el hallazgo de la pantalla ni mover el ciclo.
+ * abajo por lo que se decidió en ella, sin sacar el hallazgo de la pantalla ni mover el ciclo.
  *
  * **Es un `tablist` de verdad y no una lista con botones.** Quien navega con lector de
  * pantalla necesita oír que hay cinco pestañas y cuál está abierta (`aria-selected`), y eso es
  * distinto de dónde está el hallazgo (`aria-current`), que no se mueve al leer otra etapa. Las
  * dos cosas conviven en el mismo botón a propósito.
  *
- * Las etapas por delante NO son controles —no ocurrieron y no tienen nada que mostrar—, salvo
- * el borrador: ese sí tiene algo, el formulario del próximo paso. `openableStages` es donde
- * está escrita esa única excepción.
+ * Las etapas por delante NO son controles, y no hay excepción: no ocurrieron, no tienen
+ * registro, y ofrecerlas prometería una lectura que no existe. El formulario del próximo paso
+ * tampoco las necesita —se lee en la etapa desde la que se ejecuta, que es la vigente—.
+ * `openableStages` es donde está escrito.
  */
 export function FindingStepper({
   current,
   deadline,
   selected,
-  draft,
   locked,
   onSelect,
   tabId,
@@ -38,8 +37,6 @@ export function FindingStepper({
   current: FindingStage;
   deadline: string | null;
   selected: FindingStage;
-  /** La etapa que el formulario a la vista escribiría y que todavía no ocurrió. */
-  draft: FindingStage | null;
   /** Con un borrador abierto no se elige etapa: el formulario se perdería al cambiar de panel. */
   locked: boolean;
   onSelect: (stage: FindingStage) => void;
@@ -47,7 +44,7 @@ export function FindingStepper({
   panelId: string;
 }): React.JSX.Element {
   const tabs = useRef(new Map<FindingStage, HTMLButtonElement>());
-  const openable = openableStages(current, draft);
+  const openable = openableStages(current);
 
   /*
     Las flechas mueven la selección entre las etapas que se pueden abrir, y el foco con ella. El
@@ -99,9 +96,7 @@ export function FindingStepper({
             <li
               key={stage}
               role="presentation"
-              className={`finding__stage finding__stage--${status}${
-                stage === draft ? ' finding__stage--draft' : ''
-              }`}
+              className={`finding__stage finding__stage--${status}`}
             >
               {openable.includes(stage) ? (
                 <button

@@ -19,7 +19,6 @@ import { FindingStepper } from "./FindingStepper";
 import {
   commitmentRequest,
   findingDeadline,
-  stageStatus,
   type FindingNextStep as NextStep,
   type FindingStage,
 } from "./presentation";
@@ -45,13 +44,16 @@ import {
  * compromiso no vive en un diálogo: lo que hay que decidir no se esconde bajo un botón.
  *
  * **El panel es uno y el hueco es el mismo.** Cada etapa abre lo que se decidió en ella, y la
- * que el paso va a escribir abre su formulario. Que todas compartan lugar es lo que hace que
- * leer el pasado no agregue pantalla ni empuje el paso fuera de la vista.
+ * vigente abre además el formulario de lo que sigue. Que todas compartan lugar es lo que hace
+ * que leer el pasado no agregue pantalla ni empuje el paso fuera de la vista.
  *
- * **La lectura arranca en el borrador**, no en la etapa vigente: el formulario se lee en el
- * segmento que escribe. Y por eso avanzar mueve la lectura sola —al crear la acción, el paso
- * pasa a ser `Start work` y la lectura se para en `in_progress`—, con el seguimiento de
- * `finding.state` durante el render: si el hallazgo se movió mientras alguien leía una etapa
+ * **EL PASO SE LEE EN LA ETAPA DESDE LA QUE SE EJECUTA**, que es la vigente, y por eso la
+ * lectura arranca ahí. Llegó a leerse en la etapa DESTINO —`Start work` bajo `In progress`,
+ * que todavía no había ocurrido—, y el precio era un registro vacío arriba del paso en las
+ * tres etapas donde hay algo decidido: el compromiso escrito quedaba una pestaña atrás de
+ * donde alguien estaba mirando, en la pantalla que existe para leerlo.
+ *
+ * Avanzar mueve la lectura sola, con el seguimiento de `finding.state` durante el render: si el hallazgo se movió mientras alguien leía una etapa
  * pasada, quedarse donde estaba dejaría la ficha mostrando un registro viejo justo después
  * del acto que la cambió, que es el momento en que hay que ver qué sigue.
  *
@@ -78,16 +80,7 @@ export function FindingLifecycle({
   const prefix = useId();
   const { ref: panelRef, returnFocus } =
     useReturnToReportItem<HTMLDivElement>();
-  /*
-    LA ETAPA QUE EL PASO VA A ESCRIBIR, y donde por eso se lee su formulario: asignar se lee
-    bajo `assigned` aunque el hallazgo siga en `raised`, y en cuanto la acción existe la lectura
-    se corre sola a `in_progress`, que es donde vive `Start work`. `null` cuando no hay nada que
-    pulsar —el paso espera a otro— y entonces el paso se lee en la etapa vigente.
-  */
-  const draft = step?.writes ?? null;
-  const [selected, setSelected] = useState<FindingStage>(
-    draft ?? finding.state,
-  );
+  const [selected, setSelected] = useState<FindingStage>(finding.state);
   const [seen, setSeen] = useState<FindingStage>(finding.state);
   const [amendOpen, setAmendOpen] = useState(false);
   const [assigneePersonId, setAssigneePersonId] = useState("");
@@ -97,7 +90,7 @@ export function FindingLifecycle({
 
   if (seen !== finding.state) {
     setSeen(finding.state);
-    setSelected(draft ?? finding.state);
+    setSelected(finding.state);
     // Nada quedó escrito: el paso que tenía la enmienda abierta ya no es este.
     setAmendOpen(false);
   }
@@ -258,7 +251,6 @@ export function FindingLifecycle({
         current={finding.state}
         deadline={findingDeadline(actions, finding.state, today)}
         selected={selected}
-        draft={draft}
         locked={amendOpen}
         onSelect={setSelected}
         tabId={tabId}
@@ -278,10 +270,9 @@ export function FindingLifecycle({
           stage={selected}
           finding={finding}
           actions={actions}
-          pending={stageStatus(selected, finding.state) === "todo"}
         />
         {/* La etapa elegida*/}
-        {step && selected === (draft ?? finding.state) ? (
+        {step && selected === finding.state ? (
           <FindingNextStep
             // El paso se suelta entero al avanzar: la enmienda desplegada era de la etapa
             // anterior. El compromiso, que sí tiene que sobrevivir a su propio envío, no

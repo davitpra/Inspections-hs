@@ -311,7 +311,6 @@ describe('el próximo paso del hallazgo', () => {
       requirement: 'Assign a responsible person, describe the work, and set a deadline.',
       waitingOn: 'H&S coordinator or whoever raised the finding',
       control: { kind: 'create' },
-      writes: 'assigned',
       amend: null,
     });
   });
@@ -592,22 +591,13 @@ describe('la lectura de una etapa', () => {
   }
 
   /**
-   * La etapa que el formulario a la vista va a escribir se abre aunque no haya ocurrido: es la
-   * única que tiene algo que mostrar sin haber pasado, y es donde ese formulario se lee.
+   * Solo lo que ya ocurrió. El formulario del paso no pide ninguna excepción: se lee en la
+   * etapa desde la que se ejecuta, y esa etapa está alcanzada por definición.
    */
-  it('abre también la etapa que el próximo paso escribe', () => {
-    expect(openableStages('raised', 'assigned')).toEqual(['raised', 'assigned']);
-    expect(openableStages('assigned', 'in_progress')).toEqual([
-      'raised',
-      'assigned',
-      'in_progress',
-    ]);
-  });
-
-  it('sin borrador solo se abre lo que ya ocurrió', () => {
-    expect(openableStages('raised', null)).toEqual(['raised']);
-    expect(openableStages('assigned', null)).toEqual(['raised', 'assigned']);
-    expect(openableStages('closed', null)).toEqual([
+  it('solo se abre lo que ya ocurrió', () => {
+    expect(openableStages('raised')).toEqual(['raised']);
+    expect(openableStages('assigned')).toEqual(['raised', 'assigned']);
+    expect(openableStages('closed')).toEqual([
       'raised',
       'assigned',
       'in_progress',
@@ -663,31 +653,5 @@ describe('la lectura de una etapa', () => {
     ).toBe('Send it back');
     // La creación no la nombró ningún botón.
     expect(eventLabel(event({ from_state: null, to_state: 'open' }))).toBe('Open');
-  });
-});
-
-describe('la etapa que el paso a la vista escribiría', () => {
-  it('la creación escribe assigned', () => {
-    expect(nextStep([], 'raised', session('hs_coordinator'), itemFinding(GUARDS))?.writes).toBe(
-      'assigned',
-    );
-  });
-
-  it('empezar el trabajo escribe in_progress', () => {
-    expect(
-      nextStep([action()], 'assigned', session('external_auditor'), itemFinding(GUARDS))?.writes,
-    ).toBe('in_progress');
-  });
-
-  /** Sin control no hay borrador: quien mira no escribe nada y no hay etapa que anticipar. */
-  it('no anticipa ninguna etapa cuando no hay nada que pulsar', () => {
-    expect(
-      nextStep(
-        [action({ state: 'awaiting_verification' })],
-        'verification',
-        session('external_auditor'),
-        itemFinding(GUARDS),
-      )?.writes,
-    ).toBeNull();
   });
 });

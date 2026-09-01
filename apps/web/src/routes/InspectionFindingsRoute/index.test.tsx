@@ -105,6 +105,12 @@ function actionDetail(overrides: Partial<Action> = {}): Action {
         evidence: [],
       },
     ],
+    /*
+      El compromiso original, siempre presente (`commitments` es `.min(1)` en el contrato). Lo
+      trae el fixture por defecto porque la etapa `assigned` ahora se dibuja sin que nadie la
+      pulse: es donde se lee `Start work`.
+    */
+    commitments: [commitment(0)],
     escalations: [],
     ...overrides,
   };
@@ -399,25 +405,26 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
   });
 
   /**
-   * UN FORMULARIO SE LEE EN EL SEGMENTO QUE ESCRIBE. El compromiso escribe `assigned`, así que
-   * se lee ahí aunque el hallazgo siga levantado: DÓNDE ESTÁ el hallazgo (`aria-current`) y QUÉ
-   * SE ESTÁ LEYENDO (`aria-selected`) son dos cosas distintas y acá se separan.
+   * UN FORMULARIO SE LEE EN LA ETAPA DESDE LA QUE SE EJECUTA. El compromiso se escribe estando
+   * el hallazgo levantado, así que se lee en `raised`, junto a los hechos que lo justifican y
+   * no sobre un registro vacío de una etapa que todavía no ocurrió.
    */
-  it('abre el compromiso en la etapa que va a escribir, no en la vigente', async () => {
+  it('abre el compromiso en la etapa vigente, junto a lo observado', async () => {
     renderRoute();
 
-    const assigned = await screen.findByRole('tab', { name: 'Assigned' });
-    expect(assigned.getAttribute('aria-selected')).toBe('true');
+    const raised = await screen.findByRole('tab', { name: 'Raised' });
+    expect(raised.getAttribute('aria-selected')).toBe('true');
     expectCurrentStage('Raised');
 
     const next = await screen.findByRole('region', { name: 'Next step' });
     expect(within(next).getByRole('form', { name: 'Create corrective action' })).toBeTruthy();
 
-    // El registro de esa etapa se dibuja vacío y lo dice: es lo que el formulario va a escribir.
-    const record = screen.getByRole('region', { name: 'Assigned record' });
-    expect(within(record).getByText(/Nothing has been recorded here yet/)).toBeTruthy();
-    // Y la etapa levantada no está: ya ocurrió, pero no es la que se está leyendo.
-    expect(screen.queryByRole('region', { name: 'Raised record' })).toBeNull();
+    // Y arriba del paso, lo que esa etapa sí registró: no hay ningún hueco que anunciar.
+    const record = screen.getByRole('region', { name: 'Raised record' });
+    expect(within(record).getByText('Reported')).toBeTruthy();
+    expect(screen.queryByText(/Nothing has been recorded here yet/)).toBeNull();
+    // La etapa que el compromiso escribiría no se ofrece: no ocurrió.
+    expect(screen.queryByRole('tab', { name: 'Assigned' })).toBeNull();
   });
 
   it('deja que la acción menos avanzada mande aunque otra esté cerrada', async () => {
@@ -548,7 +555,7 @@ describe('InspectionFindingsRoute — la ficha abierta', () => {
     expect(screen.getByRole('region', { name: 'Finding lifecycle' })).toBeTruthy();
     expect(screen.getByRole('region', { name: 'Next step' })).toBeTruthy();
     expect(screen.getByRole('form', { name: 'Create corrective action' })).toBeTruthy();
-    expect(screen.getByRole('tab', { name: 'Assigned' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Raised' })).toBeTruthy();
   });
 
   /**
@@ -676,14 +683,15 @@ describe('InspectionFindingsRoute — el compromiso', () => {
       expect(screen.queryByRole('form', { name: 'Create corrective action' })).toBeNull(),
     );
     /*
-      LA LECTURA SIGUE AL PASO: escrito el compromiso, el hallazgo queda en `assigned` y lo que
-      se lee es el segmento que escribe `Start work`. Quedarse en el que acaba de escribirse
-      dejaría el próximo paso una pestaña atrás del acto que lo habilitó.
+      LA LECTURA SIGUE AL HALLAZGO: escrito el compromiso, el hallazgo queda en `assigned`, y
+      ahí se leen las dos cosas —lo que se acaba de prometer y `Start work`—. Quedarse en la
+      etapa anterior dejaría la ficha mostrando un registro viejo justo después del acto que
+      la cambió.
     */
     expect(await screen.findByRole('button', { name: 'Start work' })).toBeTruthy();
-    expect(
-      screen.getByRole('tab', { name: 'In progress' }).getAttribute('aria-selected'),
-    ).toBe('true');
+    expect(screen.getByRole('tab', { name: 'Assigned' }).getAttribute('aria-selected')).toBe(
+      'true',
+    );
     expectCurrentStage('Assigned');
   });
 
@@ -832,15 +840,16 @@ describe('InspectionFindingsRoute — avance de la acción', () => {
   });
 
   /**
-   * El paso se ejecuta con una sola pulsación: los campos y el botón de la transición están
-   * dibujados desde que se lee el hallazgo. Nada revela el formulario, así que tampoco hay
-   * nada que replegar.
+   * El paso se ejecuta con una sola pulsación: los campos que la etapa pide y el botón de la
+   * transición están dibujados desde que se lee el hallazgo. Nada revela el formulario, así que
+   * tampoco hay nada que replegar. Empezar el trabajo no pide ninguno —se anuncia como "No
+   * additional information is required", y un campo debajo lo desmentiría (`stepForm`)—.
    */
   it('dibuja los campos del paso sin pulsar nada, y no ofrece un control que lo pliegue', async () => {
     renderRoute();
 
     const next = await screen.findByRole('region', { name: 'Next step' });
-    expect(within(next).getByLabelText(/Note/)).toBeTruthy();
+    expect(within(next).queryByLabelText(/Note/)).toBeNull();
     expect(within(next).getByRole('button', { name: 'Start work' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Collapse' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
@@ -1100,11 +1109,11 @@ describe('InspectionFindingsRoute — navegación entre etapas', () => {
   });
 
   /**
-   * Una etapa por delante no está vacía: no ocurrió, y ofrecerla prometería una lectura. La
-   * única excepción es la que el paso a la vista va a escribir —acá, `In progress`—, que se
-   * abre justamente porque tiene algo que mostrar: ese formulario.
+   * Una etapa por delante no ocurrió, no tiene registro, y ofrecerla prometería una lectura que
+   * no existe. No hay excepción: el paso a la vista tampoco pide una, porque se lee en la etapa
+   * desde la que se ejecuta.
    */
-  it('no ofrece como pestaña una etapa que ni ocurrió ni se está por escribir', async () => {
+  it('no ofrece como pestaña una etapa que no ocurrió', async () => {
     getSubmittedInspection.mockResolvedValue(
       report({ findings: [finding({ state: 'assigned' })] }),
     );
@@ -1114,9 +1123,34 @@ describe('InspectionFindingsRoute — navegación entre etapas', () => {
 
     expect(await screen.findByRole('tab', { name: 'Raised' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'Assigned' })).toBeTruthy();
+    expect(screen.queryByRole('tab', { name: 'In progress' })).toBeNull();
     expect(screen.queryByRole('tab', { name: 'Verification' })).toBeNull();
-    // Sigue escrita: el ciclo entero, no el recorrido hecho.
+    // Siguen escritas: el ciclo entero, no el recorrido hecho.
+    expect(screen.getByText('In progress')).toBeTruthy();
     expect(screen.getByText('Verification')).toBeTruthy();
+  });
+
+  /**
+   * EL CORAZÓN DEL CICLO: lo que ya se decidió y lo que sigue, en la misma pestaña. El
+   * compromiso escrito se lee arriba del botón que lo pone en marcha, y no una pestaña atrás.
+   */
+  it('lee el compromiso y su próximo paso en la misma etapa', async () => {
+    getSubmittedInspection.mockResolvedValue(
+      report({ findings: [finding({ state: 'assigned' })] }),
+    );
+    listActions.mockResolvedValue([action()]);
+    getAction.mockResolvedValue(actionDetail());
+
+    renderRoute();
+
+    expect(
+      (await screen.findByRole('tab', { name: 'Assigned' })).getAttribute('aria-selected'),
+    ).toBe('true');
+
+    const record = await screen.findByRole('region', { name: 'Assigned record' });
+    expect(within(record).getByText('Original commitment')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Start work' })).toBeTruthy();
+    expect(screen.queryByText(/Nothing has been recorded here yet/)).toBeNull();
   });
 
   it('abre el registro de una etapa pasada sin mover el hallazgo', async () => {
@@ -1230,11 +1264,11 @@ describe('InspectionFindingsRoute — navegación entre etapas', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Start work' }));
 
-    // El hallazgo queda en `in_progress`, y lo que se lee es donde escribe declarar el
-    // trabajo hecho: la etapa de verificación.
+    // El hallazgo queda en `in_progress`, y ahí se lee: lo que el trabajo registró y, debajo,
+    // declararlo hecho.
     await waitFor(() => expectCurrentStage('In progress'));
     expect(
-      screen.getByRole('tab', { name: 'Verification' }).getAttribute('aria-selected'),
+      screen.getByRole('tab', { name: 'In progress' }).getAttribute('aria-selected'),
     ).toBe('true');
     expect(await screen.findByRole('region', { name: 'Next step' })).toBeTruthy();
   });

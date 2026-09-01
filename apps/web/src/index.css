@@ -1791,7 +1791,7 @@ select:disabled {
   cursor: pointer;
 }
 
-/* Con un borrador abierto no se elige etapa: el formulario se perdería al cambiar de panel. */
+/* Con una enmienda abierta no se elige etapa: el formulario se perdería al cambiar de panel. */
 .finding__stage-tab:disabled {
   cursor: default;
 }
@@ -1809,17 +1809,6 @@ select:disabled {
  */
 .finding__stage-tab[aria-selected='true'] {
   background: var(--tint-bg);
-}
-
-/* La etapa que un borrador abierto está escribiendo, y que todavía no ocurrió: mismo color de
-   vigente, pero el filete punteado y sin el peso fuerte. La distinción no queda en la forma
-   sola —`finding__lifecycle-head` la escribe con palabras—; esto solo evita que se lea igual
-   que una transición registrada. */
-.finding__stage--draft {
-  border-color: var(--state-info);
-  color: var(--state-info);
-  border-top-style: dashed;
-  font-weight: var(--weight-normal);
 }
 
 /*
@@ -2168,12 +2157,6 @@ select:disabled {
 
   .finding__stage--current {
     border-color: var(--state-info);
-  }
-
-  /* El filete del segmento pasó a la izquierda, y con él la marca del borrador. */
-  .finding__stage--draft {
-    border-top-style: solid;
-    border-left-style: dashed;
   }
 
   .finding__next-step .button--primary {

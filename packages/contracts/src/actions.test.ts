@@ -182,7 +182,7 @@ describe('los requests', () => {
   });
 
   it('una enmienda reemplaza los tres campos del compromiso', async () => {
-    const { amendActionCommitmentRequestSchema } = await import('./actions');
+    const { amendActionCommitmentRequestSchema } = await import('./actions.js');
     const result = amendActionCommitmentRequestSchema.safeParse({
       assignee_person_id: PERSON_ID,
       description: 'Install a fixed guard on the infeed of line 4',
@@ -193,7 +193,7 @@ describe('los requests', () => {
   });
 
   it('una enmienda no acepta campos parciales ni de creación', async () => {
-    const { amendActionCommitmentRequestSchema } = await import('./actions');
+    const { amendActionCommitmentRequestSchema } = await import('./actions.js');
 
     expect(amendActionCommitmentRequestSchema.safeParse({
       assignee_person_id: PERSON_ID,

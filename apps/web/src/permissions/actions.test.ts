@@ -111,24 +111,24 @@ function offered(state: ActionState, actor: Session | null): string[] {
 }
 
 describe('los botones del detalle', () => {
-  it('el responsable puede declarar el trabajo hecho, y nada más', () => {
+  it('el responsable puede empezar y declarar el trabajo hecho, y nada más', () => {
     const assignee = session('supervisor', PERSON);
 
-    expect(offered('open', assignee)).toEqual(['awaiting_verification']);
+    expect(offered('open', assignee)).toEqual(['in_progress']);
     expect(offered('in_progress', assignee)).toEqual(['awaiting_verification']);
   });
 
   it('un supervisor que no es el responsable no puede declararla hecha', () => {
-    // `supervisor` no está entre los roles de `open → awaiting_verification`: ahí solo
-    // están el responsable y el coordinador. Que la cuenta sea supervisora no la vuelve
-    // dueña de la acción de otro.
+    // `supervisor` no está entre los roles de `open → in_progress`: ahí solo están el
+    // responsable y el coordinador. Que la cuenta sea supervisora no la vuelve dueña de la
+    // acción de otro.
     expect(offered('open', session('supervisor', OTHER_PERSON))).toEqual([]);
   });
 
   it('el coordinador puede avanzar en nombre de otro', () => {
     const coordinator = session('hs_coordinator', OTHER_PERSON);
 
-    expect(offered('open', coordinator)).toEqual(['awaiting_verification']);
+    expect(offered('open', coordinator)).toEqual(['in_progress']);
     expect(offered('in_progress', coordinator)).toEqual(['awaiting_verification']);
   });
 

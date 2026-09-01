@@ -172,25 +172,21 @@ export function stageStatus(stage: FindingStage, current: FindingStage): StageSt
 }
 
 /**
- * Las etapas que se pueden abrir: las alcanzadas, más la que el formulario a la vista escribe.
+ * Las etapas que se pueden abrir: las alcanzadas, y nada más.
  *
- * **UN FORMULARIO SE LEE EN EL SEGMENTO QUE ESCRIBE**, no en el que ya pasó. Asignar se lee
- * bajo `assigned` aunque el hallazgo todavía esté en `raised`, y en cuanto la acción existe la
- * lectura se corre a `in_progress`, que es donde vive `Start work`. Un paso ofrecido desde la
- * etapa anterior obligaba a leer el ciclo al revés: lo que se está por escribir, contado desde
- * lo último que se escribió.
+ * **UN FORMULARIO SE LEE EN LA ETAPA DESDE LA QUE SE EJECUTA**, no en la que escribiría.
+ * `Start work` se pulsa estando en `assigned` y por eso se lee ahí, junto al compromiso que
+ * ese mismo botón va a poner en marcha. Llegó a leerse en la etapa DESTINO —bajo `In
+ * progress`, que todavía no había ocurrido—, y el precio era que el registro que acompaña al
+ * paso salía vacío en las tres etapas donde hay algo decidido, con lo decidido escondido una
+ * pestaña atrás.
  *
- * El borrador es la única etapa NO alcanzada que se abre, y se abre porque tiene algo que
- * mostrar —el formulario—; las demás siguen siendo promesas sin registro. Que una etapa haya
- * ocurrido se sigue preguntando con `stageStatus`, que es lo que decide si hay registro.
+ * Sin esa excepción no queda ninguna: una etapa por delante no ocurrió, no tiene registro y
+ * ofrecerla prometería una lectura. `stageStatus` es quien lo decide, y es el mismo que
+ * decide si hay registro que dibujar.
  */
-export function openableStages(
-  current: FindingStage,
-  draft: FindingStage | null,
-): FindingStage[] {
-  return FINDING_STAGES.filter(
-    (stage) => stageStatus(stage, current) !== 'todo' || stage === draft,
-  );
+export function openableStages(current: FindingStage): FindingStage[] {
+  return FINDING_STAGES.filter((stage) => stageStatus(stage, current) !== 'todo');
 }
 
 /**
@@ -238,12 +234,6 @@ export type FindingNextStep = {
   requirement: string;
   waitingOn: string;
   control: { kind: 'create' } | { kind: 'progress'; action: ActionSummary } | null;
-  /**
-   * La etapa que el control a la vista escribiría, y que todavía no ocurrió. El stepper la
-   * dibuja como borrador: el formulario que está abajo lleva ahí, y decirlo con el segmento
-   * evita que avanzar parezca un salto sin destino. `null` cuando no hay nada que pulsar.
-   */
-  writes: FindingStage | null;
   /**
    * La acción cuyo compromiso todavía se puede corregir (ADR-018): presente solo mientras
    * el hallazgo está en `assigned` y quien lee puede enmendar. Iniciar el trabajo la
@@ -295,7 +285,6 @@ export function nextStep(
       requirement: 'Assign a responsible person, describe the work, and set a deadline.',
       waitingOn: `${ROLE_LABELS.hs_coordinator} or whoever raised the finding`,
       control: canCreateAction(session, finding) ? { kind: 'create' } : null,
-      writes: canCreateAction(session, finding) ? 'assigned' : null,
       amend: null,
     };
   }
@@ -314,7 +303,6 @@ export function nextStep(
     requirement: transitionRequirement(transition.requires),
     waitingOn: transitionOwner(action),
     control: allowed ? { kind: 'progress', action } : null,
-    writes: allowed ? STAGE_BY_ACTION_STATE[transition.to] : null,
     // Solo en `assigned` —la acción en `open`— y antes de que nadie pulse `Start work`.
     amend: state === 'assigned' && canAmendAssignment(session, finding) ? action : null,
   };
