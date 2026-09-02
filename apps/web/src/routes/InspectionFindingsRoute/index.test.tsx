@@ -270,9 +270,12 @@ beforeEach(() => {
 });
 
 /**
- * El compromiso está a la vista con la ficha: no hay nada que pulsar para llegar a él.
+ * El compromiso llega plegado detrás del control que lo nombra: un hallazgo levantado no tiene
+ * ciclo que leer, y la pulsación es la que decide componerlo.
  */
 async function creationForm(): Promise<HTMLElement> {
+  fireEvent.click(await screen.findByRole('button', { name: 'Create a corrective action' }));
+
   return await screen.findByRole('form', { name: 'Create corrective action' });
 }
 
@@ -285,7 +288,7 @@ async function completeForm(form: HTMLElement, assignee = PERSON): Promise<void>
     target: { value: 'Install a fixed guard before restarting the line' },
   });
   fireEvent.change(within(form).getByLabelText('Deadline'), {
-    target: { value: '2099-08-30T12:00' },
+    target: { value: '2099-08-30' },
   });
 }
 
@@ -399,32 +402,53 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
   it('presenta raised y sin plazo cuando todavía no hay acciones', async () => {
     renderRoute();
 
-    await screen.findByRole('region', { name: 'Finding lifecycle' });
+    await creationForm();
     expectCurrentStage('Raised');
     expect(screen.queryByText(/day(?:s)? overdue|in \d+ day/)).toBeNull();
   });
 
   /**
-   * UN FORMULARIO SE LEE EN LA ETAPA DESDE LA QUE SE EJECUTA. El compromiso se escribe estando
-   * el hallazgo levantado, así que se lee en `raised`, junto a los hechos que lo justifican y
-   * no sobre un registro vacío de una etapa que todavía no ocurrió.
+   * EL ALTA SE LEE EN LA ETAPA QUE ESCRIBE, que es la única excepción: no hay ninguna etapa
+   * anterior con algo decidido que el formulario esté tapando. `Assigned` sale vacía y lo dice,
+   * y el indicador del ciclo no se mueve: el hallazgo sigue levantado hasta que se envíe.
    */
-  it('abre el compromiso en la etapa vigente, junto a lo observado', async () => {
+  it('abre la composición en la etapa que escribiría, marcada como no registrada', async () => {
     renderRoute();
+    await creationForm();
 
-    const raised = await screen.findByRole('tab', { name: 'Raised' });
-    expect(raised.getAttribute('aria-selected')).toBe('true');
-    expectCurrentStage('Raised');
-
-    const next = await screen.findByRole('region', { name: 'Next step' });
+    const next = screen.getByRole('region', { name: 'Next step' });
     expect(within(next).getByRole('form', { name: 'Create corrective action' })).toBeTruthy();
 
-    // Y arriba del paso, lo que esa etapa sí registró: no hay ningún hueco que anunciar.
+    const assigned = screen.getByRole('tab', { name: 'Assigned' });
+    expect(assigned.getAttribute('aria-selected')).toBe('true');
+    expectCurrentStage('Raised');
+
+    const record = screen.getByRole('region', { name: 'Assigned record' });
+    expect(within(record).getByText(/Nothing has been recorded here yet/)).toBeTruthy();
+    expect(within(record).queryByText(/needs a connection/)).toBeNull();
+  });
+
+  /** Leer lo observado no descarta lo escrito: los tres campos viven fuera del panel. */
+  it('ir a Raised y volver conserva la composición', async () => {
+    renderRoute();
+
+    const form = await creationForm();
+    await completeForm(form);
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Raised' }));
     const record = screen.getByRole('region', { name: 'Raised record' });
     expect(within(record).getByText('Reported')).toBeTruthy();
-    expect(screen.queryByText(/Nothing has been recorded here yet/)).toBeNull();
-    // La etapa que el compromiso escribiría no se ofrece: no ocurrió.
-    expect(screen.queryByRole('tab', { name: 'Assigned' })).toBeNull();
+    expect(screen.queryByRole('form', { name: 'Create corrective action' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Assigned' }));
+    const again = screen.getByRole('form', { name: 'Create corrective action' });
+    expect((within(again).getByLabelText('Responsible person') as HTMLSelectElement).value).toBe(
+      PERSON,
+    );
+    expect((within(again).getByLabelText('Deadline') as HTMLInputElement).value).toBe(
+      '2099-08-30',
+    );
+    expect(createAction).not.toHaveBeenCalled();
   });
 
   it('deja que la acción menos avanzada mande aunque otra esté cerrada', async () => {
@@ -460,8 +484,9 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
 
   it('ofrece al coordinador asignar el hallazgo levantado', async () => {
     renderRoute();
+    await creationForm();
 
-    const next = await screen.findByRole('region', { name: 'Next step' });
+    const next = screen.getByRole('region', { name: 'Next step' });
     expect(within(next).getByRole('form', { name: 'Create corrective action' })).toBeTruthy();
     expect(within(next).getByText(/Assign a responsible person/)).toBeTruthy();
   });
@@ -471,8 +496,9 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
     useAppSession.mockReturnValue({ account: session('jhsc_member') });
 
     renderRoute();
+    await creationForm();
 
-    const next = await screen.findByRole('region', { name: 'Next step' });
+    const next = screen.getByRole('region', { name: 'Next step' });
     expect(within(next).getByRole('form', { name: 'Create corrective action' })).toBeTruthy();
   });
 
@@ -533,16 +559,15 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
 });
 
 /**
- * LA FICHA ABRE POR LA LECTURA Y NO ESCONDE NADA. El ciclo llegó a estar plegado detrás de un
- * control con el nombre del paso; el precio era una pulsación por hallazgo sobre la pantalla
- * que existe justamente para leer en qué anda cada uno.
+ * LA FICHA ABRE POR LA LECTURA. Lo que salió mal está entero desde el primer momento; lo que
+ * llega plegado es el ciclo de un hallazgo que todavía no decidió nada, y solo ese.
  */
 describe('InspectionFindingsRoute — la ficha abierta', () => {
   beforeEach(() => {
     getSubmittedInspection.mockResolvedValue(report());
   });
 
-  it('el hallazgo levantado llega con la lectura entera y el ciclo a la vista', async () => {
+  it('el hallazgo levantado llega con la lectura entera y el acto a un control', async () => {
     renderRoute();
 
     // Lo que salió mal está completo desde el primer momento.
@@ -551,21 +576,59 @@ describe('InspectionFindingsRoute — la ficha abierta', () => {
     expect(screen.getByText('Refit the guard before the line runs again.')).toBeTruthy();
     expect(screen.getByText('1 photo')).toBeTruthy();
 
-    // Y el ciclo también: la tira de etapas, el paso y los tres campos del compromiso.
+    // El ciclo, en cambio, está en blanco: no hay tira ni formulario, hay un control.
+    const toggle = screen.getByRole('button', { name: 'Create a corrective action' });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('region', { name: 'Finding lifecycle' })).toBeNull();
+    expect(screen.queryByRole('form', { name: 'Create corrective action' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Raised' })).toBeNull();
+  });
+
+  /** Y desplegarlo trae la tira entera, con el compromiso en la etapa que va a escribir. */
+  it('el control despliega el ciclo y la composición', async () => {
+    renderRoute();
+
+    const form = await creationForm();
+
     expect(screen.getByRole('region', { name: 'Finding lifecycle' })).toBeTruthy();
-    expect(screen.getByRole('region', { name: 'Next step' })).toBeTruthy();
-    expect(screen.getByRole('form', { name: 'Create corrective action' })).toBeTruthy();
-    expect(screen.getByRole('tab', { name: 'Raised' })).toBeTruthy();
+    expect(within(screen.getByRole('region', { name: 'Next step' })).getByRole('form', {
+      name: 'Create corrective action',
+    })).toBe(form);
+    expect(screen.getByRole('tab', { name: 'Assigned' }).getAttribute('aria-selected')).toBe(
+      'true',
+    );
+    expect(screen.queryByRole('button', { name: 'Create a corrective action' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Hide form' })).toBeTruthy();
+  });
+
+  it('separa crear de ocultar sin descartar la composición', async () => {
+    renderRoute();
+
+    const form = await creationForm();
+    await completeForm(form);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide form' }));
+    expect(screen.queryByRole('button', { name: 'Hide form' })).toBeNull();
+    expect(screen.queryByRole('form', { name: 'Create corrective action' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create a corrective action' }));
+    const reopened = screen.getByRole('form', { name: 'Create corrective action' });
+    expect((within(reopened).getByLabelText('Responsible person') as HTMLSelectElement).value).toBe(
+      PERSON,
+    );
   });
 
   /**
    * El roster es por hallazgo (`/findings/:id/roster`, ADR-017), así que no hay una consulta
-   * que sirva para todos: lo pide el hallazgo que ofrece asignar, y solo ese.
+   * que sirva para todos: lo pide el hallazgo cuya composición alguien desplegó, y solo ese.
    */
-  it('pide el roster del hallazgo que ofrece asignar', async () => {
+  it('pide el roster recién cuando alguien despliega la composición', async () => {
     renderRoute();
 
-    await screen.findByRole('form', { name: 'Create corrective action' });
+    await screen.findByRole('button', { name: 'Create a corrective action' });
+    expect(listFindingRoster).not.toHaveBeenCalled();
+
+    await creationForm();
     await waitFor(() => expect(listFindingRoster).toHaveBeenCalledWith(FINDING));
   });
 
@@ -581,8 +644,11 @@ describe('InspectionFindingsRoute — la ficha abierta', () => {
     expect(listFindingRoster).not.toHaveBeenCalled();
   });
 
-  /** Sin control para crear queda el registro, que es lo que hay que auditar. */
-  it('sin permiso para crear, el ciclo se lee igual', async () => {
+  /**
+   * Sin control para crear no hay nada que plegar: queda el registro, que es lo que hay que
+   * auditar, y no se le esconde detrás de una pulsación a quien solo puede leer.
+   */
+  it('sin permiso para crear, el ciclo se lee sin plegar', async () => {
     getSubmittedInspection.mockResolvedValue(
       report({ findings: [finding({ reported_by: '77777777-7777-4777-8777-777777777777' })] }),
     );
@@ -591,7 +657,13 @@ describe('InspectionFindingsRoute — la ficha abierta', () => {
     renderRoute();
 
     expect(await screen.findByRole('region', { name: 'Finding lifecycle' })).toBeTruthy();
+    expect(
+      screen.queryByRole('button', { name: 'Create a corrective action' }),
+    ).toBeNull();
     expect(screen.queryByRole('form', { name: 'Create corrective action' })).toBeNull();
+    // Y sin composición no hay excepción: la etapa que escribiría no se ofrece.
+    expect(screen.getByRole('tab', { name: 'Raised' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.queryByRole('tab', { name: 'Assigned' })).toBeNull();
   });
 
   it('con las acciones caídas, el ciclo se lee igual', async () => {
@@ -655,7 +727,7 @@ describe('InspectionFindingsRoute — el compromiso', () => {
     expect(createAction).toHaveBeenCalledWith(FINDING, {
       assignee_person_id: PERSON,
       description: 'Install a fixed guard before restarting the line',
-      due_at: new Date('2099-08-30T12:00').toISOString(),
+      due_at: new Date('2099-08-30').toISOString(),
     });
   });
 
@@ -703,7 +775,7 @@ describe('InspectionFindingsRoute — el compromiso', () => {
     const form = await creationForm();
     await completeForm(form);
     fireEvent.change(within(form).getByLabelText('Deadline'), {
-      target: { value: '2000-01-01T12:00' },
+      target: { value: '2000-01-01' },
     });
     submit(form);
 
@@ -754,7 +826,7 @@ describe('InspectionFindingsRoute — el compromiso', () => {
       'Install a fixed guard before restarting the line',
     );
     expect((within(form).getByLabelText('Deadline') as HTMLInputElement).value).toBe(
-      '2099-08-30T12:00',
+      '2099-08-30',
     );
   });
 
@@ -1110,8 +1182,8 @@ describe('InspectionFindingsRoute — navegación entre etapas', () => {
 
   /**
    * Una etapa por delante no ocurrió, no tiene registro, y ofrecerla prometería una lectura que
-   * no existe. No hay excepción: el paso a la vista tampoco pide una, porque se lee en la etapa
-   * desde la que se ejecuta.
+   * no existe. Los tres pasos de acá en adelante no piden excepción: se leen en la etapa desde
+   * la que se ejecutan. La única que la pide es el alta desplegada, que no llega hasta acá.
    */
   it('no ofrece como pestaña una etapa que no ocurrió', async () => {
     getSubmittedInspection.mockResolvedValue(

@@ -19,6 +19,7 @@ import { FindingStepper } from "./FindingStepper";
 import {
   commitmentRequest,
   findingDeadline,
+  stageStatus,
   type FindingNextStep as NextStep,
   type FindingStage,
 } from "./presentation";
@@ -37,11 +38,18 @@ import {
  * respaldan. Es el mismo argumento por el que avanzar una acción ya se resuelve en la ficha
  * (`FindingNextStep`), y crear era el último acto que abría algo.
  *
- * **Y EL CICLO ESTÁ SIEMPRE A LA VISTA.** Llegó a estar plegado detrás de un control con el
- * nombre del paso, para que una inspección recién enviada con seis hallazgos no apilara seis
- * formularios de alta; el precio era una pulsación por hallazgo para ver en qué anda cada uno,
- * sobre la pantalla que existe justamente para leer eso. Es el mismo argumento por el que el
- * compromiso no vive en un diálogo: lo que hay que decidir no se esconde bajo un botón.
+ * **PERO EL CICLO LLEGA PLEGADO DONDE ESTÁ EN BLANCO**, detrás de un solo control que nombra
+ * el acto. Una inspección recién enviada con seis hallazgos abría seis tiras de etapas vacías
+ * y seis formularios de alta apilados, y pedía seis rosters —uno por hallazgo, ADR-017— antes
+ * de que nadie mirara ninguno: la pantalla que existe para leer QUÉ SALIÓ MAL se leía como una
+ * planilla de carga.
+ *
+ * El pliegue se retiró una vez porque cobraba una pulsación por hallazgo para ver en qué anda
+ * cada uno. Ese precio se paga cuando hay algo escrito. **Un hallazgo levantado no anda en
+ * nada**: no tiene compromiso, ni eventos, ni plazo, y su ciclo son cinco segmentos vacíos. Por
+ * eso el pliegue se cuelga de `creating` —el alta, que `nextStep` solo ofrece sobre un hallazgo
+ * levantado que quien lee puede asignar— y no del estado del hallazgo a secas: donde hay algo
+ * que auditar, el ciclo se dibuja abierto.
  *
  * **El panel es uno y el hueco es el mismo.** Cada etapa abre lo que se decidió en ella, y la
  * vigente abre además el formulario de lo que sigue. Que todas compartan lugar es lo que hace
@@ -52,6 +60,11 @@ import {
  * que todavía no había ocurrido—, y el precio era un registro vacío arriba del paso en las
  * tres etapas donde hay algo decidido: el compromiso escrito quedaba una pestaña atrás de
  * donde alguien estaba mirando, en la pantalla que existe para leerlo.
+ *
+ * **EL ALTA DESPLEGADA ES LA ÚNICA EXCEPCIÓN**, y se lee bajo `Assigned`, la etapa que va a
+ * escribir. No paga aquel precio porque no hay ninguna etapa anterior con algo decidido que
+ * esté tapando, y `Assigned` sale vacía diciéndolo. La excepción la produce el despliegue y no
+ * el paso: `FindingNextStep` no declara qué etapa escribiría, lo decide `draft`, acá abajo.
  *
  * Avanzar mueve la lectura sola, con el seguimiento de `finding.state` durante el render: si el hallazgo se movió mientras alguien leía una etapa
  * pasada, quedarse donde estaba dejaría la ficha mostrando un registro viejo justo después
@@ -83,6 +96,7 @@ export function FindingLifecycle({
   const [selected, setSelected] = useState<FindingStage>(finding.state);
   const [seen, setSeen] = useState<FindingStage>(finding.state);
   const [amendOpen, setAmendOpen] = useState(false);
+  const [opened, setOpened] = useState(false);
   const [assigneePersonId, setAssigneePersonId] = useState("");
   const [description, setDescription] = useState("");
   const [dueAt, setDueAt] = useState("");
@@ -97,20 +111,29 @@ export function FindingLifecycle({
 
   const tabId = (stage: FindingStage): string => `${prefix}-${stage}`;
   const panelId = `${prefix}-panel`;
+  const bodyId = `${prefix}-body`;
   const creating = step?.control?.kind === "create";
+  const collapsed = creating && !opened;
+  /*
+    LA ETAPA QUE LA COMPOSICIÓN DESPLEGADA ESCRIBIRÍA, y donde por eso se lee su formulario.
+    Sale del despliegue y no del paso: sin desplegar no hay excepción que ofrecer, y un lector
+    que no puede componer nada —`creating` en falso— nunca ve `Assigned` prometida ni pierde de
+    vista los hechos del hallazgo, que es lo único que tiene para leer.
+  */
+  const draft = creating && opened ? ("assigned" as const) : null;
 
   /*
-    EL ROSTER ES POR HALLAZGO, y solo lo pide el hallazgo que ofrece asignar. El endpoint es
+    EL ROSTER ES POR HALLAZGO Y SE PIDE AL DESPLEGAR, no al dibujar la pantalla. El endpoint es
     `/findings/:id/roster` porque quién puede recibir el trabajo depende de la planta de ESE
-    hallazgo (ADR-017), así que no hay una consulta que sirva para todos: colgarlo de
-    `creating` deja fuera a los hallazgos que ya están en marcha o cerrados, que son los que
-    no tienen a quién asignar.
+    hallazgo (ADR-017), así que no hay una consulta que sirva para todos: una inspección con
+    seis hallazgos levantados pedía seis rosters al montar, y cinco eran para formularios que
+    nadie iba a mirar.
   */
   const roster = useQuery({
     queryKey: queryKeys.findingRoster(finding.id),
     queryFn: () => listFindingRoster(finding.id),
     retry: false,
-    enabled: creating,
+    enabled: creating && opened,
   });
 
   const creation = useMutation({
@@ -209,7 +232,7 @@ export function FindingLifecycle({
       <label className="finding__step-field">
         <span>Deadline</span>
         <input
-          type="datetime-local"
+          type="date"
           value={dueAt}
           disabled={creation.isPending}
           aria-invalid={
@@ -246,45 +269,88 @@ export function FindingLifecycle({
 
   return (
     <>
-      {/* tira de 5 etapas */}
-      <FindingStepper
-        current={finding.state}
-        deadline={findingDeadline(actions, finding.state, today)}
-        selected={selected}
-        locked={amendOpen}
-        onSelect={setSelected}
-        tabId={tabId}
-        panelId={panelId}
-      />
+      {/*
+        LOS CONTROLES DEL CICLO SON DOS ACTOS DISTINTOS. Crear despliega la composición y deja su
+        lugar a `Hide form`, que puede plegarla sin descartar nada —el cuerpo se oculta, no se
+        desmonta, y lo escrito sigue ahí—. Desplegar elige además la etapa que el formulario va
+        a escribir, que es donde se lo lee.
+      */}
+      {creating ? (
+        <div className="finding__lifecycle-toggle">
+          {opened ? (
+            <button
+              type="button"
+              className="finding__lifecycle-back"
+              aria-controls={bodyId}
+              onClick={() => setOpened(false)}
+            >
+              Hide form
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="button--primary"
+              aria-expanded={false}
+              aria-controls={bodyId}
+              onClick={() => {
+                setSelected("assigned");
+                setOpened(true);
+              }}
+            >
+              Create a corrective action
+            </button>
+          )}
+        </div>
+      ) : null}
 
-      {/* un panel*/}
-      <div
-        role="tabpanel"
-        id={panelId}
-        aria-labelledby={tabId(selected)}
-        tabIndex={-1}
-        ref={panelRef}
-      >
-        {/* que se eligio en cada etapa.  */}
-        <FindingStageRecord
-          stage={selected}
-          finding={finding}
-          actions={actions}
+      {/*
+        SE OCULTA, NO SE DESMONTA. Plegar y volver a abrir tiene que devolver la etapa elegida y
+        el compromiso a medio escribir donde estaban; desmontarlos los perdería sin decirlo, y
+        entonces el control de arriba sería un `Cancel` disfrazado.
+      */}
+      <div className="finding__lifecycle-body" id={bodyId} hidden={collapsed}>
+        {/* tira de 5 etapas */}
+        <FindingStepper
+          current={finding.state}
+          deadline={findingDeadline(actions, finding.state, today)}
+          selected={selected}
+          draft={draft}
+          locked={amendOpen}
+          onSelect={setSelected}
+          tabId={tabId}
+          panelId={panelId}
         />
-        {/* La etapa elegida*/}
-        {step && selected === finding.state ? (
-          <FindingNextStep
-            // El paso se suelta entero al avanzar: la enmienda desplegada era de la etapa
-            // anterior. El compromiso, que sí tiene que sobrevivir a su propio envío, no
-            // vive acá adentro.
-            key={finding.state}
-            step={step}
-            session={session}
-            findingId={finding.id}
-            create={commitmentForm}
-            onDraftChange={setAmendOpen}
+
+        {/* un panel*/}
+        <div
+          role="tabpanel"
+          id={panelId}
+          aria-labelledby={tabId(selected)}
+          tabIndex={-1}
+          ref={panelRef}
+        >
+          {/* que se eligio en cada etapa.  */}
+          <FindingStageRecord
+            stage={selected}
+            finding={finding}
+            actions={actions}
+            pending={stageStatus(selected, finding.state) === "todo"}
           />
-        ) : null}
+          {/* La etapa elegida*/}
+          {step && selected === (draft ?? finding.state) ? (
+            <FindingNextStep
+              // El paso se suelta entero al avanzar: la enmienda desplegada era de la etapa
+              // anterior. El compromiso, que sí tiene que sobrevivir a su propio envío, no
+              // vive acá adentro.
+              key={finding.state}
+              step={step}
+              session={session}
+              findingId={finding.id}
+              create={commitmentForm}
+              onDraftChange={setAmendOpen}
+            />
+          ) : null}
+        </div>
       </div>
     </>
   );

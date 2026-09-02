@@ -20,15 +20,17 @@ import {
  * distinto de dónde está el hallazgo (`aria-current`), que no se mueve al leer otra etapa. Las
  * dos cosas conviven en el mismo botón a propósito.
  *
- * Las etapas por delante NO son controles, y no hay excepción: no ocurrieron, no tienen
- * registro, y ofrecerlas prometería una lectura que no existe. El formulario del próximo paso
- * tampoco las necesita —se lee en la etapa desde la que se ejecuta, que es la vigente—.
- * `openableStages` es donde está escrito.
+ * Las etapas por delante NO son controles: no ocurrieron, no tienen registro, y ofrecerlas
+ * prometería una lectura que no existe. La única excepción es la etapa que una composición
+ * desplegada escribiría —el alta, bajo `Assigned`—, que sí tiene algo que mostrar: el
+ * formulario. Los pasos de las otras tres etapas no la necesitan, porque se leen en la etapa
+ * desde la que se ejecutan. `openableStages` es donde está escrito.
  */
 export function FindingStepper({
   current,
   deadline,
   selected,
+  draft,
   locked,
   onSelect,
   tabId,
@@ -37,14 +39,16 @@ export function FindingStepper({
   current: FindingStage;
   deadline: string | null;
   selected: FindingStage;
-  /** Con un borrador abierto no se elige etapa: el formulario se perdería al cambiar de panel. */
+  /** La etapa que la composición desplegada escribiría y que todavía no ocurrió. */
+  draft: FindingStage | null;
+  /** Con una enmienda abierta no se elige etapa: sus valores se perderían al cambiar de panel. */
   locked: boolean;
   onSelect: (stage: FindingStage) => void;
   tabId: (stage: FindingStage) => string;
   panelId: string;
 }): React.JSX.Element {
   const tabs = useRef(new Map<FindingStage, HTMLButtonElement>());
-  const openable = openableStages(current);
+  const openable = openableStages(current, draft);
 
   /*
     Las flechas mueven la selección entre las etapas que se pueden abrir, y el foco con ella. El
@@ -96,7 +100,9 @@ export function FindingStepper({
             <li
               key={stage}
               role="presentation"
-              className={`finding__stage finding__stage--${status}`}
+              className={`finding__stage finding__stage--${status}${
+                stage === draft ? ' finding__stage--draft' : ''
+              }`}
             >
               {openable.includes(stage) ? (
                 <button

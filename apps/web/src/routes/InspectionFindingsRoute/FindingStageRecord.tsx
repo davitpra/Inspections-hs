@@ -29,11 +29,15 @@ import {
  * - las demás son los eventos que las escribieron, con su nota, su motivo y su evidencia
  *   contada.
  *
- * **La etapa vigente nunca sale vacía**, y por eso no hay una rama que lo diga. El paso se lee
- * en la etapa desde la que se ejecuta, y esa etapa ya ocurrió: `raised` trae los hechos del
- * hallazgo, `assigned` tiene al menos el compromiso original, y las tres restantes tienen el
- * evento del que el servidor derivó el estado. Lo que sí sigue teniendo aviso propio es no
- * poder leer el registro, que no es lo mismo que no tener ninguno.
+ * **La etapa vigente nunca sale vacía**: el paso se lee en la etapa desde la que se ejecuta, y
+ * esa etapa ya ocurrió. La que SÍ sale vacía es la que una composición desplegada está por
+ * escribir (`pending`), y lo dice: sin ese renglón el panel abriría con el encabezado
+ * `Assigned`, nada, y «Next step» debajo, y quien completa el compromiso no tendría qué lo
+ * ubique en la etapa.
+ *
+ * **NO HABER REGISTRADO NADA NO ES NO PODER LEER EL REGISTRO**, y por eso son dos ramas. La
+ * segunda vale sobre una etapa alcanzada cuyas acciones no llegaron; anunciarla sobre un
+ * hallazgo levantado, que no tiene ninguna, sería falso.
  *
  * El detalle viaja completo en `getAction` —eventos y compromisos juntos—, así que no hay una
  * llamada por versión; y como se dibuja una sola etapa por vez, tampoco una por etapa.
@@ -42,10 +46,13 @@ export function FindingStageRecord({
   stage,
   finding,
   actions,
+  pending = false,
 }: {
   stage: FindingStage;
   finding: Finding;
   actions: readonly ActionSummary[];
+  /** La etapa todavía no ocurrió: es la que la composición a la vista va a escribir. */
+  pending?: boolean;
 }): React.JSX.Element {
   return (
     <section
@@ -54,7 +61,12 @@ export function FindingStageRecord({
     >
       <p className="finding__stage-record-eyebrow">{STAGE_LABELS[stage]}</p>
 
-      {stage === 'raised' ? (
+      {/* La misma voz que la etapa alcanzada sin eventos: es la misma ausencia. */}
+      {pending ? (
+        <p className="finding__stage-record-eyebrow">
+          Nothing has been recorded here yet. The step below is what writes it.
+        </p>
+      ) : stage === 'raised' ? (
         <dl className="finding__stage-record-facts">
           <div>
             <dt>Reported</dt>

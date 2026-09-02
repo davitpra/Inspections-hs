@@ -591,18 +591,32 @@ describe('la lectura de una etapa', () => {
   }
 
   /**
-   * Solo lo que ya ocurrió. El formulario del paso no pide ninguna excepción: se lee en la
-   * etapa desde la que se ejecuta, y esa etapa está alcanzada por definición.
+   * Sin composición desplegada, solo lo que ya ocurrió. Los pasos de las otras tres etapas no
+   * piden excepción: se leen en la etapa desde la que se ejecutan, alcanzada por definición.
    */
   it('solo se abre lo que ya ocurrió', () => {
-    expect(openableStages('raised')).toEqual(['raised']);
-    expect(openableStages('assigned')).toEqual(['raised', 'assigned']);
-    expect(openableStages('closed')).toEqual([
+    expect(openableStages('raised', null)).toEqual(['raised']);
+    expect(openableStages('assigned', null)).toEqual(['raised', 'assigned']);
+    expect(openableStages('closed', null)).toEqual([
       'raised',
       'assigned',
       'in_progress',
       'verification',
       'closed',
+    ]);
+  });
+
+  /** La única etapa no alcanzada que se ofrece: la que el alta desplegada va a escribir. */
+  it('agrega la etapa que la composición desplegada escribiría', () => {
+    expect(openableStages('raised', 'assigned')).toEqual(['raised', 'assigned']);
+  });
+
+  /** Y no la duplica ni corre la lectura cuando esa etapa ya ocurrió. */
+  it('no agrega dos veces una etapa ya alcanzada', () => {
+    expect(openableStages('in_progress', 'assigned')).toEqual([
+      'raised',
+      'assigned',
+      'in_progress',
     ]);
   });
 

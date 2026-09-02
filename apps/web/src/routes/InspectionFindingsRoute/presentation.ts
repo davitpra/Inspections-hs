@@ -172,7 +172,8 @@ export function stageStatus(stage: FindingStage, current: FindingStage): StageSt
 }
 
 /**
- * Las etapas que se pueden abrir: las alcanzadas, y nada más.
+ * Las etapas que se pueden abrir: las alcanzadas, más la que una composición desplegada
+ * escribiría.
  *
  * **UN FORMULARIO SE LEE EN LA ETAPA DESDE LA QUE SE EJECUTA**, no en la que escribiría.
  * `Start work` se pulsa estando en `assigned` y por eso se lee ahí, junto al compromiso que
@@ -181,12 +182,23 @@ export function stageStatus(stage: FindingStage, current: FindingStage): StageSt
  * paso salía vacío en las tres etapas donde hay algo decidido, con lo decidido escondido una
  * pestaña atrás.
  *
- * Sin esa excepción no queda ninguna: una etapa por delante no ocurrió, no tiene registro y
- * ofrecerla prometería una lectura. `stageStatus` es quien lo decide, y es el mismo que
- * decide si hay registro que dibujar.
+ * **LA ÚNICA EXCEPCIÓN ES EL ALTA DESPLEGADA**, y es excepción porque ahí no hay ninguna etapa
+ * anterior con algo escrito que el formulario esté tapando: un hallazgo levantado no tiene
+ * compromiso, ni eventos, ni plazo. `Assigned` se ofrece entonces vacía y diciéndolo, que es
+ * distinto de prometer una lectura que no existe.
+ *
+ * `draft` NO sale del paso —`FindingNextStep` no declara qué etapa escribiría—, sale del ciclo:
+ * la excepción la produce que alguien haya desplegado la composición, no la tabla de
+ * transiciones. Sin borrador, `stageStatus` decide sola, y es la misma que decide si hay
+ * registro que dibujar.
  */
-export function openableStages(current: FindingStage): FindingStage[] {
-  return FINDING_STAGES.filter((stage) => stageStatus(stage, current) !== 'todo');
+export function openableStages(
+  current: FindingStage,
+  draft: FindingStage | null,
+): FindingStage[] {
+  return FINDING_STAGES.filter(
+    (stage) => stageStatus(stage, current) !== 'todo' || stage === draft,
+  );
 }
 
 /**

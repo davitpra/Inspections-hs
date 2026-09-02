@@ -561,16 +561,17 @@ creation of a corrective action to an authenticated `hs_coordinator` or to the a
 `reported_by`, and to no other account (ADR-017). The system SHALL accept that composition within
 the finding's next step itself, without leaving the findings-only reading or opening a separate
 view, and SHALL NOT present the control that begins the composition alongside the composition it
-began. While such an account is composing a corrective
-action that has not been submitted, the system MAY indicate the lifecycle state that composition
-would reach, and SHALL then mark that state in words as not yet recorded and SHALL present no
-deadline for it. Abandoning the composition SHALL return the indicator to the persisted state. For a later non-closed state, the system SHALL
-offer at most one primary transition permitted by the action state machine and the reader's role
-or relationship. When the reader may attempt no transition, the system SHALL name who the finding
+began. For a later non-closed state, the system SHALL offer at most one primary transition
+permitted by the action state machine and the reader's role or relationship. When the reader may attempt no transition, the system SHALL name who the finding
 is waiting on. The system SHALL offer a closed finding no action transition, while still allowing
 an authorized account to create another corrective action. After a successful action creation or
 transition, the system SHALL refresh cached action, finding and submitted-inspection readings that
 can contain the changed state.
+
+The system SHALL present the next step within the record of the state the finding is currently
+in, and SHALL open that state by default. An unsubmitted composition or transition SHALL NOT
+move the lifecycle indicator, SHALL NOT add a state to those the reader may open, and SHALL NOT
+be presented in a state the finding has not reached.
 
 The system SHALL let the reader open any lifecycle state the finding has already reached and read
 the business decisions recorded there, without leaving the findings-only reading. Raised SHALL
@@ -584,12 +585,11 @@ If several actions or repeated passes through a state contribute decisions, the 
 present every applicable decision in recorded order and SHALL NOT collapse a later decision into
 an earlier one.
 
-Reading a reached state SHALL
-be read-only: it SHALL NOT offer any transition and SHALL NOT change the state the finding is
-reported to be in. The system SHALL NOT offer a state the finding has not reached, and SHALL NOT
-offer this navigation while a corrective action is being composed. When the record of a reached
-state cannot be read, the system SHALL say so and SHALL NOT report that nothing was recorded
-there.
+Reading a reached state SHALL be read-only: it SHALL NOT offer any transition and SHALL NOT
+change the state the finding is reported to be in. The system SHALL NOT offer a state the finding
+has not reached, with no exception, and SHALL NOT offer this navigation while a corrective action
+commitment is being composed or amended. When the record of a reached state cannot be read, the
+system SHALL say so and SHALL NOT report that nothing was recorded there.
 
 #### Scenario: The persisted state drives the lifecycle indicator
 
@@ -605,6 +605,15 @@ there.
 - **THEN** each applicable action's responsible person, description and `due_at` are presented
 - **AND** In progress is still named as the current lifecycle state
 - **AND** no transition is offered for the state being read
+
+#### Scenario: The next step is read inside the current state
+
+- **GIVEN** `finding.state` is `assigned` and its blocking action is `open`
+- **WHEN** a reader permitted to begin the work opens the findings-only screen
+- **THEN** Assigned is the lifecycle state opened by default
+- **AND** the commitment recorded in Assigned is presented above the next step
+- **AND** the transition from `open` to `in_progress` is offered in that same state
+- **AND** In progress cannot be opened
 
 #### Scenario: A state the finding has not reached is not offered
 
@@ -639,21 +648,6 @@ there.
 - **GIVEN** two actions of one finding contributed decisions to the same reached state and one action passed through that state twice
 - **WHEN** the reader opens that state
 - **THEN** every applicable decision from both actions is presented in recorded order
-
-#### Scenario: An unsubmitted composition is marked as not recorded
-
-- **GIVEN** `finding.state` is `raised` and an authorized reader has begun composing a corrective action
-- **WHEN** the findings-only screen is read
-- **THEN** Assigned is indicated as the state that composition would reach
-- **AND** that state is named in words as not yet recorded
-- **AND** no deadline is presented for it
-
-#### Scenario: Abandoning the composition restores the persisted state
-
-- **GIVEN** an authorized reader has begun composing a corrective action for a raised finding
-- **WHEN** that reader abandons the composition without submitting it
-- **THEN** Raised is again indicated as the current lifecycle state
-- **AND** no corrective action was created
 
 #### Scenario: The reporter can assign a raised finding
 
