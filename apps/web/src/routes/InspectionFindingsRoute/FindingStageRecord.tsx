@@ -1,16 +1,16 @@
-import type { ActionSummary, Finding } from '@hs/contracts';
-import { useQuery } from '@tanstack/react-query';
+import type { ActionSummary, Finding } from "@hs/contracts";
+import { useQuery } from "@tanstack/react-query";
 
-import { getAction } from '../../api/actions';
-import { queryKeys } from '../../api/query-keys';
-import { formatDay, formatInstant } from '../../presentation/dates';
+import { getAction } from "../../api/actions";
+import { queryKeys } from "../../api/query-keys";
+import { formatDay, formatInstant } from "../../presentation/dates";
 import {
   commitmentLabel,
   eventLabel,
   eventsInStage,
   STAGE_LABELS,
   type FindingStage,
-} from './presentation';
+} from "./presentation";
 
 /**
  * Lo que se decidió en UNA etapa, de solo lectura, en el mismo hueco donde la etapa vigente
@@ -66,19 +66,11 @@ export function FindingStageRecord({
         <p className="finding__stage-record-eyebrow">
           Nothing has been recorded here yet. The step below is what writes it.
         </p>
-      ) : stage === 'raised' ? (
+      ) : stage === "raised" ? (
         <dl className="finding__stage-record-facts">
           <div>
-            <dt>Reported</dt>
-            <dd>{formatInstant(finding.occurred_at)}</dd>
-          </div>
-          <div>
-            <dt>Recorded</dt>
-            <dd>{formatInstant(finding.recorded_at)}</dd>
-          </div>
-          <div>
-            <dt>Photos</dt>
-            <dd>{finding.photo_object_keys.length}</dd>
+            <dt>Finding recorded date</dt>
+            <dd>{formatDay(finding.recorded_at)}</dd>
           </div>
         </dl>
       ) : actions.length === 0 ? (
@@ -118,7 +110,7 @@ function ActionStageRecord({
     );
   }
 
-  if (stage === 'assigned') {
+  if (stage === "assigned") {
     return (
       <ol className="finding__stage-decisions">
         {detail.data.commitments.map((commitment) => (
@@ -129,7 +121,7 @@ function ActionStageRecord({
             <dl className="finding__stage-decision-values">
               <div>
                 <dt>Responsible</dt>
-                <dd>{commitment.assignee_name ?? 'Assigned person'}</dd>
+                <dd>{commitment.assignee_name ?? "Assigned person"}</dd>
               </div>
               <div>
                 <dt>Work</dt>
@@ -153,14 +145,22 @@ function ActionStageRecord({
   const events = eventsInStage(detail.data.events, stage);
 
   if (events.length === 0) {
-    return <p className="finding__stage-record-eyebrow">Nothing was recorded here yet.</p>;
+    return (
+      <p className="finding__stage-record-eyebrow">
+        Nothing was recorded here yet.
+      </p>
+    );
   }
 
   return (
     <ol className="finding__stage-decisions">
       {events.map((event) => {
-        const before = event.evidence.filter((item) => item.kind === 'before').length;
-        const after = event.evidence.filter((item) => item.kind === 'after').length;
+        const before = event.evidence.filter(
+          (item) => item.kind === "before",
+        ).length;
+        const after = event.evidence.filter(
+          (item) => item.kind === "after",
+        ).length;
 
         return (
           <li key={event.id} className="finding__stage-decision">

@@ -437,7 +437,7 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Raised' }));
     const record = screen.getByRole('region', { name: 'Raised record' });
-    expect(within(record).getByText('Reported')).toBeTruthy();
+    expect(within(record).getByText('Finding recorded date')).toBeTruthy();
     expect(screen.queryByRole('form', { name: 'Create corrective action' })).toBeNull();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Assigned' }));
@@ -1263,14 +1263,16 @@ describe('InspectionFindingsRoute — navegación entre etapas', () => {
     expect(within(record).queryByText('Verified on the floor.')).toBeNull();
   });
 
-  it('la etapa levantada se lee sin consultar ninguna acción', async () => {
+  it('la etapa levantada muestra solo cuándo se registró sin consultar acciones', async () => {
     renderRoute();
 
     fireEvent.click(await screen.findByRole('tab', { name: 'Raised' }));
 
     const record = await screen.findByRole('region', { name: 'Raised record' });
-    expect(within(record).getByText('Reported')).toBeTruthy();
-    expect(within(record).getByText('Photos')).toBeTruthy();
+    expect(within(record).getByText('Finding recorded date')).toBeTruthy();
+    expect(within(record).getByText('2027-07-29')).toBeTruthy();
+    expect(within(record).queryByText('Reported')).toBeNull();
+    expect(within(record).queryByText('Photos')).toBeNull();
   });
 
   it('las flechas recorren las etapas alcanzadas', async () => {
