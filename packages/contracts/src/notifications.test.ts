@@ -72,6 +72,14 @@ describe('notificationSchema', () => {
     }
   });
 
+  it('acepta el escalamiento de una acción de investigación sin hallazgo', () => {
+    expect(
+      notificationSchema.safeParse(
+        envelope('corrective_action_overdue_supervisor', { ...OVERDUE, finding_id: null }),
+      ).success,
+    ).toBe(true);
+  });
+
   /**
    * Lo que la unión discriminada compra (design D11): antes, cualquier `kind` de la
    * lista con el payload del período pasaba. Ahora el payload tiene que ser el de SU

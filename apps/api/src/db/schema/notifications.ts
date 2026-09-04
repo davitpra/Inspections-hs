@@ -32,8 +32,8 @@ export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
  * ADR-011 design D9: no hay servidor de correo y no se agrega uno. La notificación al
  * coordinador de HS es in-app o no es nada.
  *
- * `readAt` es lo ÚNICO que una notificación cambia en toda su vida, y no vuelve a
- * `NULL`: marcar como no leída sería reescribir un hecho.
+ * `readAt` y `withdrawnAt` son las únicas transiciones. Ninguna vuelve a `NULL`: leer y retirar
+ * son hechos monotónicos, y la fila nunca se elimina.
  */
 export const notification = pgTable(
   'notification',
@@ -61,6 +61,8 @@ export const notification = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 
     readAt: timestamp('read_at', { withTimezone: true }),
+
+    withdrawnAt: timestamp('withdrawn_at', { withTimezone: true }),
   },
   (table) => [
     check(
@@ -76,5 +78,5 @@ export const notification = pgTable(
 
 export type Notification = typeof notification.$inferSelect;
 
-/** Lo único mutable de una notificación. Marcarla leída es esto. */
-export type NotificationUpdate = Partial<Pick<Notification, 'readAt'>>;
+/** Las dos marcas operativas monotónicas de una notificación. */
+export type NotificationUpdate = Partial<Pick<Notification, 'readAt' | 'withdrawnAt'>>;

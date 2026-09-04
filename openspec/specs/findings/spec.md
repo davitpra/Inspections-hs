@@ -568,10 +568,21 @@ an authorized account to create another corrective action. After a successful ac
 transition, the system SHALL refresh cached action, finding and submitted-inspection readings that
 can contain the changed state.
 
+For a raised finding whose reader may create the corrective action, the system SHALL present that
+composition folded behind a single control naming the act, and SHALL present neither the lifecycle
+states nor the composition until that control is used. The system SHALL NOT fold the lifecycle of
+any other finding, nor of a raised finding whose reader may not create the action: a finding that
+has already recorded a decision SHALL present its lifecycle without asking for a gesture first.
+The system SHALL request the roster of people available as assignee only for a finding whose
+composition has been opened.
+
 The system SHALL present the next step within the record of the state the finding is currently
-in, and SHALL open that state by default. An unsubmitted composition or transition SHALL NOT
-move the lifecycle indicator, SHALL NOT add a state to those the reader may open, and SHALL NOT
-be presented in a state the finding has not reached.
+in, and SHALL open that state by default. The single exception SHALL be an opened corrective action
+composition, which the system SHALL present in the Assigned state that composition would write and
+SHALL open by default; the system SHALL then mark that state in words as not yet recorded and
+SHALL present no deadline for it. An unsubmitted composition or transition SHALL NOT move the
+lifecycle indicator, which SHALL keep naming the persisted state. No other state the finding has
+not reached SHALL be presented or offered.
 
 The system SHALL let the reader open any lifecycle state the finding has already reached and read
 the business decisions recorded there, without leaving the findings-only reading. Raised SHALL
@@ -587,9 +598,12 @@ an earlier one.
 
 Reading a reached state SHALL be read-only: it SHALL NOT offer any transition and SHALL NOT
 change the state the finding is reported to be in. The system SHALL NOT offer a state the finding
-has not reached, with no exception, and SHALL NOT offer this navigation while a corrective action
-commitment is being composed or amended. When the record of a reached state cannot be read, the
-system SHALL say so and SHALL NOT report that nothing was recorded there.
+has not reached, other than the Assigned state of an opened corrective action composition. The
+system SHALL NOT offer this navigation while a commitment amendment is being composed, whose
+entered values would not survive changing panels; an unsubmitted corrective action composition
+SHALL NOT withdraw that navigation, and SHALL be presented with its entered values intact when its
+state is opened again. When the record of a reached state cannot be read, the system SHALL say so
+and SHALL NOT report that nothing was recorded there.
 
 #### Scenario: The persisted state drives the lifecycle indicator
 
@@ -597,6 +611,40 @@ system SHALL say so and SHALL NOT report that nothing was recorded there.
 - **WHEN** the findings-only screen is read
 - **THEN** Verification is named as the current lifecycle state
 - **AND** the screen does not derive another state from cached actions
+
+#### Scenario: A raised finding offers the act before the lifecycle
+
+- **GIVEN** `finding.state` is `raised` and the reader is named by its `reported_by`
+- **WHEN** the findings-only screen is read
+- **THEN** one control naming the creation of a corrective action is offered
+- **AND** no lifecycle state and no composition are presented for that finding
+- **AND** the roster of people available as assignee is not requested
+
+#### Scenario: An opened composition is read in the state it would write
+
+- **GIVEN** `finding.state` is `raised` and its reader may create the corrective action
+- **WHEN** that reader uses the control that begins the composition
+- **THEN** Assigned is the lifecycle state opened, and the composition is presented in it
+- **AND** Assigned is named in words as not yet recorded, with no deadline presented
+- **AND** Raised is still named as the current lifecycle state
+- **AND** the control that began the composition is no longer presented
+
+#### Scenario: Reading Raised does not discard the composition
+
+- **GIVEN** an opened composition holds a responsible person, a description and a deadline that were not submitted
+- **WHEN** the reader opens Raised and then opens Assigned again
+- **THEN** the observation facts recorded with the finding are presented in Raised
+- **AND** the composition is presented again with the same entered values
+- **AND** no corrective action was created
+
+#### Scenario: A raised finding a reader cannot assign is not folded
+
+- **GIVEN** `finding.state` is `raised` and a `jhsc_member` who did not raise it reads the screen
+- **WHEN** the findings-only screen is read
+- **THEN** the lifecycle states are presented without asking for a gesture first
+- **AND** Raised is the lifecycle state opened by default
+- **AND** no composition and no control that begins one are offered
+- **AND** Assigned cannot be opened
 
 #### Scenario: A reached state presents decisions without moving the finding
 

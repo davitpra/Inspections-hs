@@ -164,6 +164,10 @@ const evidenceKey = (actionId: string) => `${SITE_A}/actions/${actionId}/${rando
 /** Recorre una acción hasta `closed`, ejecutada por el supervisor y cerrada por otro. */
 async function closeAction(actionId: string): Promise<void> {
   await actions.transition(asSupervisor(), actionId, {
+    to: 'in_progress',
+    evidence: [],
+  });
+  await actions.transition(asSupervisor(), actionId, {
     to: 'awaiting_verification',
     evidence: [{ kind: 'after', object_key: evidenceKey(actionId) }],
   });
@@ -507,6 +511,10 @@ describe('la guarda que da sentido a la máquina: no se cierra con acciones abie
     const incidentId = await investigated();
     const actionId = await openActionOn(incidentId);
 
+    await actions.transition(asSupervisor(), actionId, {
+      to: 'in_progress',
+      evidence: [],
+    });
     await actions.transition(asSupervisor(), actionId, {
       to: 'awaiting_verification',
       evidence: [{ kind: 'after', object_key: evidenceKey(actionId) }],
@@ -1344,6 +1352,10 @@ describe('el segundo padre de la acción correctiva', () => {
     const actionId = await openActionOn(incidentId);
 
     await actions.transition(asSupervisor(), actionId, {
+      to: 'in_progress',
+      evidence: [],
+    });
+    await actions.transition(asSupervisor(), actionId, {
       to: 'awaiting_verification',
       evidence: [{ kind: 'after', object_key: evidenceKey(actionId) }],
     });
@@ -1358,20 +1370,20 @@ describe('el segundo padre de la acción correctiva', () => {
     ).resolves.toMatchObject({ state: 'closed' });
   });
 
-  it('la asignación de una acción de investigación solo la enmienda el coordinador (ADR-018)', async () => {
+  it('la asignación de una acción de investigación solo la edita el coordinador (ADR-020)', async () => {
     const incidentId = await investigated();
     const actionId = await openActionOn(incidentId);
 
     // Una investigación no tiene reportante al que extenderle el permiso: es del coordinador.
     await expect(
-      actions.amendCommitment(asSupervisor(), actionId, {
+      actions.replaceAssignment(asSupervisor(), actionId, {
         assignee_person_id: witness,
         description: 'Reassign the interlock work while the action is still open',
         due_at: INVESTIGATION_DUE_AT,
       }),
     ).rejects.toMatchObject({ response: { code: 'forbidden' } });
 
-    const amended = await actions.amendCommitment(asCoordinator(), actionId, {
+    const amended = await actions.replaceAssignment(asCoordinator(), actionId, {
       assignee_person_id: witness,
       description: 'Reassign the interlock work while the action is still open',
       due_at: INVESTIGATION_DUE_AT,
@@ -1379,7 +1391,7 @@ describe('el segundo padre de la acción correctiva', () => {
 
     expect(amended.state).toBe('open');
     expect(amended.assignee_person_id).toBe(witness);
-    expect(amended.commitments).toHaveLength(2);
+    expect(amended.events).toHaveLength(1);
   });
 
   it('una acción con dos padres o sin ninguno se rechaza', async () => {

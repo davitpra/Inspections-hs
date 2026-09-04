@@ -1,12 +1,13 @@
 import { Injectable } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import {
   ASSIGNEE,
   transitionFor,
   type Action,
   type ActionState,
   type ActionSummary,
-  type AmendActionCommitmentRequest,
   type CreateActionRequest,
+  type ReplaceActionAssignmentRequest,
   type TransitionRequest,
 } from '@hs/contracts';
 import type { PoolClient } from 'pg';
@@ -28,12 +29,12 @@ import {
   currentState,
   findActionHeader,
   insertAction,
-  insertAmendment,
   insertEvent,
   insertEvidence,
   lastExecutor,
   listActions,
   readAction,
+  replaceAssignment,
 } from './actions.repository';
 import { foreignEvidenceKeys } from './object-key';
 
@@ -107,31 +108,28 @@ export class ActionsService {
   }
 
   /**
-   * Enmendar el compromiso mientras la acción sigue en `open` (ADR-018).
-   *
-   * Una instantánea completa de responsable, trabajo y plazo entra en el stream
-   * append-only; la fila original y las enmiendas anteriores no se tocan. A partir de
-   * ahí las lecturas, los plazos y las notificaciones usan la última.
+   * Corrige la única asignación vigente hasta que la acción se cierra (ADR-020).
    *
    * **Quién puede enmendar es quién podía abrir la acción (ADR-017):** el coordinador
    * para cualquiera, más la cuenta que reportó el hallazgo cuando el padre es un
    * hallazgo. Una acción de investigación es solo del coordinador.
    *
-   * El lock sobre la acción es el mismo que toma `transition`: si alguien pulsa
-   * `Start work` a la vez, uno de los dos espera y relee el estado. Después del lock, si
-   * la acción ya dejó `open`, la enmienda se rechaza con `invalid_action_state`.
+   * El lock es el mismo que toma `transition`: una edición y el cierre se serializan, y
+   * el motor vuelve a imponer esa frontera aunque la escritura no pase por el servicio.
    */
-  async amendCommitment(
+  async replaceAssignment(
     session: SessionScope,
     actionId: string,
-    payload: AmendActionCommitmentRequest,
+    payload: ReplaceActionAssignmentRequest,
   ): Promise<Action> {
     return this.db.withSessionClient(session, async (client) => {
-      const header = await findActionHeader(client, actionId);
+      let header = await findActionHeader(client, actionId);
 
       if (!header) throw actionNotFound();
 
       await this.lockAction(client, actionId);
+      header = await findActionHeader(client, actionId);
+      if (!header) throw actionNotFound();
       if (header.findingId) await this.lockFinding(client, header.findingId);
 
       if (session.role !== 'hs_coordinator') {
@@ -141,14 +139,14 @@ export class ActionsService {
 
         if (session.userId !== reportedBy) {
           throw actionForbidden(
-            'Only the HS coordinator or the person who raised the finding amends the assignment',
+            'Only the HS coordinator or the person who raised the finding edits the assignment',
           );
         }
       }
 
       const current = await currentState(client, actionId);
 
-      if (current?.state !== 'open') {
+      if (!current || current.state === 'closed') {
         throw invalidActionState();
       }
 
@@ -159,21 +157,18 @@ export class ActionsService {
 
       await this.requireAssignablePerson(client, payload.assignee_person_id, header.siteId);
 
-      const amendmentId = await this.guarded(() =>
-        insertAmendment(client, {
-          actionId,
-          siteId: header.siteId,
+      await this.guarded(() =>
+        replaceAssignment(client, actionId, {
           assigneePersonId: payload.assignee_person_id,
           description: payload.description,
           dueAt,
-          actorUserId: session.userId,
-          occurredAt: now,
         }),
       );
 
-      // El responsable vigente cambió: se avisa al nuevo. El `dedupe_key` es el id de la
-      // enmienda, así que una reasignación no choca con el aviso de la asignación previa.
-      await this.notifyAssignee(client, actionId, amendmentId);
+      if (payload.assignee_person_id !== header.assigneePersonId) {
+        await this.withdrawAssignmentNotifications(client, actionId);
+        await this.notifyAssignee(client, actionId, randomUUID());
+      }
 
       return this.readOne(client, actionId);
     });
@@ -192,16 +187,16 @@ export class ActionsService {
     payload: TransitionRequest,
   ): Promise<Action> {
     return this.db.withSessionClient(session, async (client) => {
-      const header = await findActionHeader(client, actionId);
+      let header = await findActionHeader(client, actionId);
 
       // La de otra planta no devuelve fila porque la transacción no la ve, no porque
       // este método la filtre. Por eso responde igual que una que no existe.
       if (!header) throw actionNotFound();
 
-      // `Start work` y `Edit assignment` toman el mismo lock sobre la acción (ADR-018):
-      // así, quien empieza el trabajo y quien corrige la asignación no confirman los dos
-      // contra el mismo estado `open`.
+      // Las transiciones y la edición toman el mismo lock; el cierre congela la asignación.
       await this.lockAction(client, actionId);
+      header = await findActionHeader(client, actionId);
+      if (!header) throw actionNotFound();
 
       // Dos acciones distintas del mismo hallazgo también pueden avanzar a la vez. El
       // lock solo serializa sus eventos para que el segundo lea el agregado que dejó el
@@ -402,11 +397,10 @@ export class ActionsService {
     );
 
     /*
-      LA ACCIÓN NACE EN `open` Y AHÍ SE QUEDA (ADR-018). La creación escribe un solo
+      LA ACCIÓN NACE EN `open` Y AHÍ SE QUEDA. La creación escribe un solo
       evento; declarar el inicio del trabajo es la transición explícita `open → in_progress`
-      —`Start work`— que también cierra la ventana de enmiendas. Mientras tanto `assigned`
-      es una etapa vigente: responsable, trabajo y plazo se pueden corregir sin abrir otra
-      acción ni perder la cadena de auditoría.
+      —`Start work`— que no cierra la ventana de edición. Responsable, trabajo y plazo se
+      pueden corregir hasta el cierre sin abrir otra acción ni crear historial provisional.
 
       El hallazgo deriva un solo evento de éste, por el trigger de 0040: `raised → assigned`.
     */
@@ -502,12 +496,8 @@ export class ActionsService {
    * consecuencia directa de Persona ≠ Usuario, y la red que la cubre es el escalamiento
    * a los +3 días, que llega al supervisor.
    *
-   * `dedupe_key` lo elige el llamador: el id de la acción al crearla, el id de la
-   * enmienda al reasignar. Así una reasignación avisa al nuevo responsable sin chocar
-   * con el aviso anterior, y un reintento de cualquiera de los dos no duplica nada.
-   *
-   * El responsable, el trabajo y el plazo salen del compromiso VIGENTE (ADR-018): la
-   * última enmienda o, si no hay ninguna, la fila original.
+   * `dedupe_key` lo elige el llamador: el id de la acción al crearla y un id de operación
+   * al corregirla. La notificación siempre lee la única asignación vigente (ADR-020).
    */
   private async notifyAssignee(
     client: PoolClient,
@@ -520,17 +510,10 @@ export class ActionsService {
               jsonb_build_object(
                 'action_id', a.id,
                 'finding_id', a.finding_id,
-                'description', COALESCE(eff.description, a.description),
-                'due_at', COALESCE(eff.due_at, a.due_at))
-         FROM corrective_action a
-         LEFT JOIN LATERAL (
-           SELECT m.assignee_person_id, m.description, m.due_at
-             FROM corrective_action_commitment_amendment m
-            WHERE m.action_id = a.id
-            ORDER BY m.position DESC
-            LIMIT 1
-         ) eff ON true
-         JOIN app_user u ON u.person_id = COALESCE(eff.assignee_person_id, a.assignee_person_id)
+                 'description', a.description,
+                 'due_at', a.due_at)
+          FROM corrective_action a
+          JOIN app_user u ON u.person_id = a.assignee_person_id
                         AND u.deactivated_at IS NULL
          JOIN user_site_scope s ON s.user_id = u.id
                                AND s.site_id = a.site_id
@@ -538,6 +521,21 @@ export class ActionsService {
         WHERE a.id = $1
        ON CONFLICT (user_id, kind, dedupe_key) DO NOTHING`,
       [actionId, dedupeKey],
+    );
+  }
+
+  /** Retira de la bandeja cualquier asignación operativa anterior, sin borrar su fila. */
+  private async withdrawAssignmentNotifications(
+    client: PoolClient,
+    actionId: string,
+  ): Promise<void> {
+    await client.query(
+      `UPDATE notification
+          SET withdrawn_at = now()
+        WHERE kind = 'corrective_action_assigned'
+          AND payload ->> 'action_id' = $1
+          AND withdrawn_at IS NULL`,
+      [actionId],
     );
   }
 

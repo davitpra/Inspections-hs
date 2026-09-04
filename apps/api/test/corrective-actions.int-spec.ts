@@ -206,10 +206,12 @@ const evidenceKey = (actionId: string, siteId = SITE_A) =>
 
 /**
  * Lleva una acción hasta `awaiting_verification`, ejecutada por el supervisor.
- *
- * Es UNA transición desde ADR-020: nadie declara que empezó a trabajar.
  */
 async function awaitingVerification(actionId: string): Promise<void> {
+  await actions.transition(asSupervisor(), actionId, {
+    to: 'in_progress',
+    evidence: [],
+  });
   await actions.transition(asSupervisor(), actionId, {
     to: 'awaiting_verification',
     evidence: [{ kind: 'after', object_key: evidenceKey(actionId) }],
@@ -332,6 +334,8 @@ beforeAll(async () => {
   coordinator = await createAccount(db.app, {
     siteIds: [SITE_A, SITE_B],
     role: 'hs_coordinator',
+    firstName: 'Casey',
+    lastName: 'Coordinator',
   });
   supervisor = await createAccount(db.app, { siteIds: [SITE_A], role: 'supervisor' });
   otherSupervisor = await createAccount(db.app, { siteIds: [SITE_A], role: 'supervisor' });
@@ -368,6 +372,9 @@ describe('el estado propio del hallazgo', () => {
 
     expect(await findingStateOf(findingId)).toBe('assigned');
 
+    await actions.transition(asSupervisor(), created.id, { to: 'in_progress', evidence: [] });
+    expect(await findingStateOf(findingId)).toBe('in_progress');
+
     await actions.transition(asSupervisor(), created.id, {
       to: 'awaiting_verification',
       evidence: [],
@@ -381,7 +388,8 @@ describe('el estado propio del hallazgo', () => {
     expect(stream.map(({ from_state, to_state }) => [from_state, to_state])).toEqual([
       [null, 'raised'],
       ['raised', 'assigned'],
-      ['assigned', 'verification'],
+      ['assigned', 'in_progress'],
+      ['in_progress', 'verification'],
       ['verification', 'closed'],
     ]);
     expect(stream[0]?.actor_user_id).toBe(reporterAccountId);
@@ -438,6 +446,7 @@ describe('el estado propio del hallazgo', () => {
       due_at: LATER_DUE_AT,
     });
 
+    await actions.transition(asSupervisor(), first.id, { to: 'in_progress', evidence: [] });
     await actions.transition(asSupervisor(), first.id, {
       to: 'awaiting_verification',
       evidence: [],
@@ -461,6 +470,10 @@ describe('el estado propio del hallazgo', () => {
     });
 
     await Promise.all([
+      actions.transition(asSupervisor(), first.id, { to: 'in_progress', evidence: [] }),
+      actions.transition(asSupervisor(), second.id, { to: 'in_progress', evidence: [] }),
+    ]);
+    await Promise.all([
       actions.transition(asSupervisor(), first.id, { to: 'awaiting_verification', evidence: [] }),
       actions.transition(asSupervisor(), second.id, { to: 'awaiting_verification', evidence: [] }),
     ]);
@@ -469,6 +482,7 @@ describe('el estado propio del hallazgo', () => {
     expect((await findingStateRows(findingId)).map((event) => event.to_state)).toEqual([
       'raised',
       'assigned',
+      'in_progress',
       'verification',
     ]);
   });
@@ -629,6 +643,9 @@ describe('el recorrido completo de R3', () => {
 
     expect(await stateOf(actionId)).toBe('open');
 
+    await actions.transition(asSupervisor(), actionId, { to: 'in_progress', evidence: [] });
+    expect(await stateOf(actionId)).toBe('in_progress');
+
     await actions.transition(asSupervisor(), actionId, {
       to: 'awaiting_verification',
       evidence: [
@@ -650,12 +667,13 @@ describe('el recorrido completo de R3', () => {
 
     expect(events.map((row) => row.to_state)).toEqual([
       'open',
+      'in_progress',
       'awaiting_verification',
       'closed',
     ]);
-    expect(events.map((row) => row.position)).toEqual([0, 1, 2]);
+    expect(events.map((row) => row.position)).toEqual([0, 1, 2, 3]);
     expect(one(events).from_state).toBeNull();
-    expect(events[2]?.actor_user_id).toBe(coordinator.accountId);
+    expect(events[3]?.actor_user_id).toBe(coordinator.accountId);
   });
 
   it('no hay ninguna columna de estado que leer', async () => {
@@ -747,7 +765,7 @@ describe('la máquina de estados', () => {
           `SELECT EXISTS (
              SELECT 1 FROM (VALUES
                (NULL, 'open'),
-               ('open', 'awaiting_verification'),
+               ('open', 'in_progress'),
                ('in_progress', 'awaiting_verification'),
                ('awaiting_verification', 'closed'),
                ('awaiting_verification', 'in_progress')
@@ -783,6 +801,7 @@ describe('la máquina de estados', () => {
   it('un evento cuyo from_state no es el vigente falla con HS004', async () => {
     const actionId = await openAction();
 
+    await actions.transition(asSupervisor(), actionId, { to: 'in_progress', evidence: [] });
     await actions.transition(asSupervisor(), actionId, {
       to: 'awaiting_verification',
       evidence: [],
@@ -794,7 +813,7 @@ describe('la máquina de estados', () => {
         [SITE_A],
         `INSERT INTO corrective_action_event
            (action_id, site_id, position, from_state, to_state, actor_user_id, occurred_at)
-         VALUES ($1, $2, 2, 'open', 'awaiting_verification', $3, now())`,
+         VALUES ($1, $2, 3, 'open', 'awaiting_verification', $3, now())`,
         [actionId, SITE_A, coordinator.accountId],
       ),
     ).rejects.toSatisfy((error: unknown) => sqlstate(error) === 'HS004');
@@ -826,6 +845,7 @@ describe('la máquina de estados', () => {
   it('dos transiciones simultáneas: una comete y la otra falla', async () => {
     const actionId = await openAction();
 
+    await actions.transition(asSupervisor(), actionId, { to: 'in_progress', evidence: [] });
     const results = await Promise.allSettled([
       actions.transition(asSupervisor(), actionId, { to: 'awaiting_verification', evidence: [] }),
       actions.transition(asCoordinator(), actionId, { to: 'awaiting_verification', evidence: [] }),
@@ -836,7 +856,7 @@ describe('la máquina de estados', () => {
     const rejected = results.find((result) => result.status === 'rejected');
 
     expect(rejected).toBeDefined();
-    expect(await eventRows(actionId)).toHaveLength(2);
+    expect(await eventRows(actionId)).toHaveLength(3);
     expect(await stateOf(actionId)).toBe('awaiting_verification');
   });
 });
@@ -925,7 +945,7 @@ describe('el verificador', () => {
 
     const events = await eventRows(actionId);
 
-    expect(events[2]?.reason).toBe(reason);
+    expect(events[3]?.reason).toBe(reason);
   });
 
   it('rechazar sin motivo se rechaza en el servicio y en el motor', async () => {
@@ -943,7 +963,7 @@ describe('el verificador', () => {
         [SITE_A],
         `INSERT INTO corrective_action_event
            (action_id, site_id, position, from_state, to_state, actor_user_id, occurred_at)
-         VALUES ($1, $2, 2, 'awaiting_verification', 'in_progress', $3, now())`,
+         VALUES ($1, $2, 3, 'awaiting_verification', 'in_progress', $3, now())`,
         [actionId, SITE_A, coordinator.accountId],
       ),
     ).rejects.toSatisfy((error: unknown) => sqlstate(error) === '23514');
@@ -951,13 +971,14 @@ describe('el verificador', () => {
 
   /**
    * Gerencia solo puede declarar trabajo hecho cuando es la responsable de la acción —
-   * `open → awaiting_verification` es del `assignee` o del coordinador—, así que el caso se monta
+   * `in_progress → awaiting_verification` es del `assignee` o del coordinador—, así que el caso se monta
    * asignándosela. La regla la alcanza igual que al supervisor: ADR-019 exime al
    * coordinador y a nadie más.
    */
   it('gerencia tampoco puede verificar lo que declaró hecho', async () => {
     const actionId = await openAction({ assignee: manager.personId });
 
+    await actions.transition(asManager(), actionId, { to: 'in_progress', evidence: [] });
     await actions.transition(asManager(), actionId, {
       to: 'awaiting_verification',
       evidence: [{ kind: 'after', object_key: evidenceKey(actionId) }],
@@ -979,6 +1000,7 @@ describe('el verificador', () => {
   it('el coordinador que ejecutó en nombre de otro sí verifica', async () => {
     const actionId = await openAction({ assignee: rosterPerson });
 
+    await actions.transition(asCoordinator(), actionId, { to: 'in_progress', evidence: [] });
     await actions.transition(asCoordinator(), actionId, {
       to: 'awaiting_verification',
       evidence: [{ kind: 'after', object_key: evidenceKey(actionId) }],
@@ -999,6 +1021,7 @@ describe('el verificador', () => {
   it('el coordinador también puede rechazar su propio trabajo, con motivo', async () => {
     const actionId = await openAction({ assignee: rosterPerson });
 
+    await actions.transition(asCoordinator(), actionId, { to: 'in_progress', evidence: [] });
     await actions.transition(asCoordinator(), actionId, {
       to: 'awaiting_verification',
       evidence: [{ kind: 'after', object_key: evidenceKey(actionId) }],
@@ -1023,6 +1046,7 @@ describe('el verificador', () => {
   it('un INSERT directo del coordinador ejecutor commitea', async () => {
     const actionId = await openAction({ assignee: rosterPerson });
 
+    await actions.transition(asCoordinator(), actionId, { to: 'in_progress', evidence: [] });
     await actions.transition(asCoordinator(), actionId, {
       to: 'awaiting_verification',
       evidence: [{ kind: 'after', object_key: evidenceKey(actionId) }],
@@ -1045,6 +1069,7 @@ describe('la evidencia', () => {
   it('declarar el trabajo hecho sin evidencia llega a esperando verificación', async () => {
     const actionId = await openAction();
 
+    await actions.transition(asSupervisor(), actionId, { to: 'in_progress', evidence: [] });
     const action = await actions.transition(asSupervisor(), actionId, {
       to: 'awaiting_verification',
       evidence: [],
@@ -1058,12 +1083,13 @@ describe('la evidencia', () => {
   it('un evento directo de completado sin evidencia commitea', async () => {
     const actionId = await openAction();
 
+    await actions.transition(asSupervisor(), actionId, { to: 'in_progress', evidence: [] });
     await inScope(
       db.app,
       [SITE_A],
       `INSERT INTO corrective_action_event
          (action_id, site_id, position, from_state, to_state, actor_user_id, occurred_at)
-       VALUES ($1, $2, 1, 'open', 'awaiting_verification', $3, now())`,
+       VALUES ($1, $2, 2, 'in_progress', 'awaiting_verification', $3, now())`,
       [actionId, SITE_A, supervisor.accountId],
     );
 
@@ -1073,6 +1099,7 @@ describe('la evidencia', () => {
   it('guarda el antes y el después con su tipo', async () => {
     const actionId = await openAction();
 
+    await actions.transition(asSupervisor(), actionId, { to: 'in_progress', evidence: [] });
     const action = await actions.transition(asSupervisor(), actionId, {
       to: 'awaiting_verification',
       evidence: [
@@ -1091,6 +1118,7 @@ describe('la evidencia', () => {
   it('una key de otro prefijo se rechaza', async () => {
     const actionId = await openAction();
 
+    await actions.transition(asSupervisor(), actionId, { to: 'in_progress', evidence: [] });
     await expect(
       actions.transition(asSupervisor(), actionId, {
         to: 'awaiting_verification',
@@ -1357,7 +1385,7 @@ describe('los permisos', () => {
 
     await expect(
       actions.transition(asSupervisor(), actionId, {
-        to: 'awaiting_verification',
+        to: 'in_progress',
         evidence: [],
       }),
     ).rejects.toMatchObject({ response: { code: 'forbidden' } });
@@ -1366,13 +1394,14 @@ describe('los permisos', () => {
   it('el coordinador avanza en nombre de una persona sin cuenta', async () => {
     const actionId = await openAction({ assignee: rosterPerson });
 
+    await actions.transition(asCoordinator(), actionId, { to: 'in_progress', evidence: [] });
     const action = await actions.transition(asCoordinator(), actionId, {
       to: 'awaiting_verification',
       evidence: [],
     });
 
     expect(action.state).toBe('awaiting_verification');
-    expect(action.events[1]?.actor_user_id).toBe(coordinator.accountId);
+    expect(action.events[2]?.actor_user_id).toBe(coordinator.accountId);
   });
 
   it('un miembro del JHSC y un auditor externo no escriben nada', async () => {
@@ -1383,7 +1412,7 @@ describe('los permisos', () => {
       sessionFor(auditor.accountId, 'external_auditor', [SITE_A]),
     ]) {
       await expect(
-        actions.transition(session, actionId, { to: 'awaiting_verification', evidence: [] }),
+        actions.transition(session, actionId, { to: 'in_progress', evidence: [] }),
       ).rejects.toMatchObject({ response: { code: 'forbidden' } });
     }
   });
@@ -1681,8 +1710,10 @@ describe('el responsable', () => {
 });
 
 describe('la inmutabilidad', () => {
-  it('el rol de la aplicación no puede correr un plazo', async () => {
+  it('el rol de la aplicación no puede correr el plazo después del cierre', async () => {
     const actionId = await openAction();
+    await awaitingVerification(actionId);
+    await actions.transition(asCoordinator(), actionId, { to: 'closed', evidence: [] });
 
     const error = await inScope(
       db.app,
@@ -1691,7 +1722,7 @@ describe('la inmutabilidad', () => {
       [actionId],
     ).catch((caught: unknown) => caught);
 
-    expect(sqlstate(error)).toBe('42501');
+    expect(sqlstate(error)).toBe('HS014');
   });
 
   it('el rol de la aplicación no puede reescribir un evento', async () => {
@@ -1707,8 +1738,10 @@ describe('la inmutabilidad', () => {
     expect(sqlstate(error)).toBe('42501');
   });
 
-  it('al rol de migración lo frena el trigger, no el privilegio', async () => {
+  it('al rol de migración también lo frena el cierre', async () => {
     const actionId = await openAction();
+    await awaitingVerification(actionId);
+    await actions.transition(asCoordinator(), actionId, { to: 'closed', evidence: [] });
 
     // Con alcance declarado: `FORCE ROW LEVEL SECURITY` aplica también al dueño, así que
     // sin él la sentencia no tocaría ninguna fila y el trigger no diría nada.
@@ -1719,7 +1752,7 @@ describe('la inmutabilidad', () => {
       [actionId],
     ).catch((caught: unknown) => caught);
 
-    expect(sqlstate(error)).toBe('HS001');
+    expect(sqlstate(error)).toBe('HS014');
   });
 
   it('ninguna de las cuatro tablas admite DELETE', async () => {
@@ -1813,7 +1846,7 @@ describe('la inmutabilidad', () => {
       [SITE_A, SITE_B],
       `INSERT INTO corrective_action_event
          (action_id, site_id, position, from_state, to_state, actor_user_id, occurred_at)
-       VALUES ($1, $2, 1, 'open', 'awaiting_verification', $3, now())`,
+       VALUES ($1, $2, 1, 'open', 'in_progress', $3, now())`,
       [actionId, SITE_B, coordinator.accountId],
     ).catch((caught: unknown) => caught);
 
@@ -1821,7 +1854,7 @@ describe('la inmutabilidad', () => {
   });
 });
 
-describe('la enmienda del compromiso (ADR-018)', () => {
+describe('la edición de la asignación vigente (ADR-020)', () => {
   /** Una acción `open` sobre un hallazgo derivado, con el reportante a mano. */
   async function amendable(): Promise<{
     actionId: string;
@@ -1848,7 +1881,7 @@ describe('la enmienda del compromiso (ADR-018)', () => {
   it('el coordinador reemplaza responsable, trabajo y plazo y la acción sigue open', async () => {
     const { actionId } = await amendable();
 
-    const amended = await actions.amendCommitment(asCoordinator(), actionId, {
+    const amended = await actions.replaceAssignment(asCoordinator(), actionId, {
       assignee_person_id: rosterPerson,
       description: 'Install an interlocked guard and update the lockout procedure',
       due_at: LATER_DUE_AT,
@@ -1860,16 +1893,17 @@ describe('la enmienda del compromiso (ADR-018)', () => {
       'Install an interlocked guard and update the lockout procedure',
     );
     expect(amended.due_at).toBe(LATER_DUE_AT);
+    expect(amended.events).toHaveLength(1);
 
     const reread = await actions.get(asCoordinator(), actionId);
     expect(reread.assignee_person_id).toBe(rosterPerson);
     expect(reread.due_at).toBe(LATER_DUE_AT);
   });
 
-  it('quien reportó el hallazgo también puede enmendar', async () => {
+  it('quien reportó el hallazgo también puede editar', async () => {
     const { actionId, reporterAccountId } = await amendable();
 
-    const amended = await actions.amendCommitment(
+    const amended = await actions.replaceAssignment(
       sessionFor(reporterAccountId, 'jhsc_member', [SITE_A]),
       actionId,
       {
@@ -1879,15 +1913,15 @@ describe('la enmienda del compromiso (ADR-018)', () => {
       },
     );
 
-    expect(amended.commitments).toHaveLength(2);
-    expect(amended.commitments[1]?.actor_user_id).toBe(reporterAccountId);
+    expect(amended.description).toBe('Install a fixed guard and brief the packaging crew');
+    expect(amended.events).toHaveLength(1);
   });
 
-  it('un supervisor que no reportó el hallazgo no puede enmendar', async () => {
+  it('un supervisor que no reportó el hallazgo no puede editar', async () => {
     const { actionId } = await amendable();
 
     await expect(
-      actions.amendCommitment(asSupervisor(), actionId, {
+      actions.replaceAssignment(asSupervisor(), actionId, {
         assignee_person_id: rosterPerson,
         description: 'Install a fixed guard on the infeed of line 3 now',
         due_at: LATER_DUE_AT,
@@ -1897,55 +1931,46 @@ describe('la enmienda del compromiso (ADR-018)', () => {
     expect(await eventRows(actionId)).toHaveLength(1);
   });
 
-  it('conserva el original y las dos enmiendas en orden', async () => {
+  it('dos ediciones sucesivas conservan solamente el último valor', async () => {
     const { actionId } = await amendable();
 
-    await actions.amendCommitment(asCoordinator(), actionId, {
+    await actions.replaceAssignment(asCoordinator(), actionId, {
       assignee_person_id: rosterPerson,
       description: 'First correction of the assignment for this action',
       due_at: LATER_DUE_AT,
     });
-    const second = await actions.amendCommitment(asCoordinator(), actionId, {
+    const second = await actions.replaceAssignment(asCoordinator(), actionId, {
       assignee_person_id: supervisor.personId,
       description: 'Second correction of the assignment for this action',
       due_at: DUE_AT,
     });
 
-    expect(second.commitments.map((c) => c.position)).toEqual([0, 1, 2]);
-    expect(second.commitments[0]?.description).toBe(
-      'Install a fixed guard on the infeed of line 3',
-    );
+    expect(second.description).toBe('Second correction of the assignment for this action');
     expect(second.assignee_person_id).toBe(supervisor.personId);
     expect(second.due_at).toBe(DUE_AT);
+    expect(second.events).toHaveLength(1);
   });
 
-  it('una acción cuyo trabajo ya se declaró hecho no acepta enmiendas', async () => {
+  it('acepta editar después de declarar el trabajo hecho', async () => {
     const { actionId } = await amendable();
 
     await awaitingVerification(actionId);
 
-    await expect(
-      actions.amendCommitment(asCoordinator(), actionId, {
-        assignee_person_id: rosterPerson,
-        description: 'Reassign the work after it already started here',
-        due_at: LATER_DUE_AT,
-      }),
-    ).rejects.toMatchObject({ response: { code: 'invalid_action_state' } });
+    const edited = await actions.replaceAssignment(asCoordinator(), actionId, {
+      assignee_person_id: rosterPerson,
+      description: 'Reassign the work after it already started here',
+      due_at: LATER_DUE_AT,
+    });
 
-    const rows = await inScope(
-      db.app,
-      [SITE_A],
-      'SELECT id FROM corrective_action_commitment_amendment WHERE action_id = $1',
-      [actionId],
-    );
-    expect(rows).toHaveLength(0);
+    expect(edited.state).toBe('awaiting_verification');
+    expect(edited.assignee_person_id).toBe(rosterPerson);
   });
 
   it('un plazo en el pasado se rechaza', async () => {
     const { actionId } = await amendable();
 
     await expect(
-      actions.amendCommitment(asCoordinator(), actionId, {
+      actions.replaceAssignment(asCoordinator(), actionId, {
         assignee_person_id: rosterPerson,
         description: 'Install a fixed guard on the infeed of line 3 soon',
         due_at: '2000-01-01T00:00:00.000Z',
@@ -1957,7 +1982,7 @@ describe('la enmienda del compromiso (ADR-018)', () => {
     const { actionId } = await amendable();
 
     await expect(
-      actions.amendCommitment(asCoordinator(), actionId, {
+      actions.replaceAssignment(asCoordinator(), actionId, {
         assignee_person_id: rosterPersonB,
         description: 'Install a fixed guard on the infeed of line 3 today',
         due_at: LATER_DUE_AT,
@@ -1965,18 +1990,16 @@ describe('la enmienda del compromiso (ADR-018)', () => {
     ).rejects.toMatchObject({ response: { code: 'invalid_assignee' } });
   });
 
-  it('dos enmiendas concurrentes se serializan sin huecos ni bifurcación', async () => {
+  it('dos ediciones concurrentes se serializan y dejan un solo valor vigente', async () => {
     const { actionId } = await amendable();
 
-    // El advisory lock sobre la acción las ordena: las dos entran, una en la posición 1
-    // y otra en la 2, y el compromiso vigente es el de la posición más alta.
     const results = await Promise.allSettled([
-      actions.amendCommitment(asCoordinator(), actionId, {
+      actions.replaceAssignment(asCoordinator(), actionId, {
         assignee_person_id: rosterPerson,
         description: 'Concurrent correction A of the assignment here',
         due_at: LATER_DUE_AT,
       }),
-      actions.amendCommitment(asCoordinator(), actionId, {
+      actions.replaceAssignment(asCoordinator(), actionId, {
         assignee_person_id: supervisor.personId,
         description: 'Concurrent correction B of the assignment here',
         due_at: DUE_AT,
@@ -1985,60 +2008,54 @@ describe('la enmienda del compromiso (ADR-018)', () => {
 
     expect(results.every((r) => r.status === 'fulfilled')).toBe(true);
 
-    const rows = await inScope<{ position: number }>(
-      db.app,
-      [SITE_A],
-      'SELECT position FROM corrective_action_commitment_amendment WHERE action_id = $1 ORDER BY position',
-      [actionId],
-    );
-    expect(rows.map((r) => r.position)).toEqual([1, 2]);
-
     const reread = await actions.get(asCoordinator(), actionId);
-    expect(reread.commitments).toHaveLength(3);
-    expect(reread.due_at).toBe(reread.commitments[2]?.due_at);
+    expect([
+      'Concurrent correction A of the assignment here',
+      'Concurrent correction B of the assignment here',
+    ]).toContain(reread.description);
+    expect(reread.events).toHaveLength(1);
   });
 
-  it('un INSERT directo con hueco de posición falla con HS014', async () => {
+  it('el motor rechaza por SQL directo un responsable de otra planta', async () => {
     const { actionId } = await amendable();
 
     const error = await inScope(
       db.app,
-      [SITE_A],
-      `INSERT INTO corrective_action_commitment_amendment
-         (action_id, site_id, position, assignee_person_id, description, due_at,
-          actor_user_id, occurred_at)
-       VALUES ($1, $2, 5, $3, 'An amendment that skips straight to position five', $4, $5, now())`,
-      [actionId, SITE_A, supervisor.personId, DUE_AT, coordinator.accountId],
+      [SITE_A, SITE_B],
+      'UPDATE corrective_action SET assignee_person_id = $2 WHERE id = $1',
+      [actionId, rosterPersonB],
     ).catch((caught: unknown) => caught);
 
-    expect(sqlstate(error)).toBe('HS014');
+    expect(sqlstate(error)).toBe('HS003');
   });
 
-  it('la reasignación notifica al nuevo responsable con cuenta', async () => {
+  it('retira la notificación anterior y notifica al nuevo responsable con cuenta', async () => {
     const { actionId } = await amendable();
 
-    await actions.amendCommitment(asCoordinator(), actionId, {
+    await actions.replaceAssignment(asCoordinator(), actionId, {
       assignee_person_id: otherSupervisor.personId,
       description: 'Reassign the guard installation to another supervisor',
       due_at: LATER_DUE_AT,
     });
 
-    const rows = await inScope<{ count: string }>(
+    const rows = await inScope<{ user_id: string; withdrawn_at: Date | null }>(
       db.app,
       [SITE_A],
-      `SELECT count(*)::text AS count FROM notification
+      `SELECT user_id, withdrawn_at FROM notification
         WHERE kind = 'corrective_action_assigned'
           AND payload->>'action_id' = $1
-          AND user_id = $2`,
-      [actionId, otherSupervisor.accountId],
+        ORDER BY created_at`,
+      [actionId],
     );
-    expect(Number(one(rows).count)).toBe(1);
+    expect(rows).toHaveLength(2);
+    expect(rows.find((row) => row.user_id === supervisor.accountId)?.withdrawn_at).not.toBeNull();
+    expect(rows.find((row) => row.user_id === otherSupervisor.accountId)?.withdrawn_at).toBeNull();
   });
 
   it('el escalamiento usa el plazo vigente, no el original', async () => {
     const { actionId } = await amendable();
 
-    await actions.amendCommitment(asCoordinator(), actionId, {
+    await actions.replaceAssignment(asCoordinator(), actionId, {
       assignee_person_id: supervisor.personId,
       description: 'Keep the assignee but push the deadline out one month',
       due_at: LATER_DUE_AT,
@@ -2065,9 +2082,29 @@ describe('la enmienda del compromiso (ADR-018)', () => {
     expect(new Date(one(escalated).due_at).toISOString()).toBe(LATER_DUE_AT);
   });
 
-  it('aísla las enmiendas por planta y rechaza toda mutación del motor', async () => {
+  it('conserva los escalamientos emitidos al cambiar el plazo', async () => {
     const { actionId } = await amendable();
-    await actions.amendCommitment(asCoordinator(), actionId, {
+
+    await escalation.run(daysAfter(DUE_AT, 4));
+    await actions.replaceAssignment(asCoordinator(), actionId, {
+      assignee_person_id: supervisor.personId,
+      description: 'Keep the issued escalation but move the current deadline',
+      due_at: LATER_DUE_AT,
+    });
+
+    const rows = await inScope<{ due_at: Date }>(
+      db.app,
+      [SITE_A],
+      'SELECT due_at FROM corrective_action_escalation WHERE action_id = $1',
+      [actionId],
+    );
+    expect(rows).toHaveLength(1);
+    expect(new Date(one(rows).due_at).toISOString()).toBe(DUE_AT);
+  });
+
+  it('aísla la acción por planta y limita las columnas mutables', async () => {
+    const { actionId } = await amendable();
+    await actions.replaceAssignment(asCoordinator(), actionId, {
       assignee_person_id: rosterPerson,
       description: 'Correction that another site must never see or touch',
       due_at: LATER_DUE_AT,
@@ -2076,14 +2113,14 @@ describe('la enmienda del compromiso (ADR-018)', () => {
     const hidden = await inScope(
       db.app,
       [SITE_B],
-      'SELECT id FROM corrective_action_commitment_amendment WHERE action_id = $1',
+      'SELECT id FROM corrective_action WHERE id = $1',
       [actionId],
     );
     expect(hidden).toHaveLength(0);
 
     for (const statement of [
-      'UPDATE corrective_action_commitment_amendment SET due_at = now() WHERE action_id = $1',
-      'DELETE FROM corrective_action_commitment_amendment WHERE action_id = $1',
+      'UPDATE corrective_action SET created_by = gen_random_uuid() WHERE id = $1',
+      'DELETE FROM corrective_action WHERE id = $1',
     ]) {
       const error = await inScope(db.app, [SITE_A], statement, [actionId]).catch(
         (caught: unknown) => caught,
@@ -2094,32 +2131,70 @@ describe('la enmienda del compromiso (ADR-018)', () => {
     const ownerError = await inScope(
       db.migrator,
       [SITE_A],
-      'UPDATE corrective_action_commitment_amendment SET due_at = now() WHERE action_id = $1',
+      'UPDATE corrective_action SET created_by = gen_random_uuid() WHERE id = $1',
       [actionId],
     ).catch((caught: unknown) => caught);
     expect(sqlstate(ownerError)).toBe('HS001');
   });
 
-  it('un INSERT directo sobre una acción ya declarada hecha falla con HS014', async () => {
+  it('una acción cerrada rechaza la edición por servicio y por SQL directo', async () => {
     const { actionId } = await amendable();
     await awaitingVerification(actionId);
+    await actions.transition(asCoordinator(), actionId, { to: 'closed', evidence: [] });
+
+    await expect(
+      actions.replaceAssignment(asCoordinator(), actionId, {
+        assignee_person_id: rosterPerson,
+        description: 'The final record cannot be rewritten after closure',
+        due_at: LATER_DUE_AT,
+      }),
+    ).rejects.toMatchObject({ response: { code: 'invalid_action_state' } });
 
     const error = await inScope(
       db.app,
       [SITE_A],
-      `INSERT INTO corrective_action_commitment_amendment
-         (action_id, site_id, position, assignee_person_id, description, due_at,
-          actor_user_id, occurred_at)
-       VALUES ($1, $2, 1, $3, 'Direct insert that the guard must refuse here', $4, $5, now())`,
-      [actionId, SITE_A, rosterPerson, LATER_DUE_AT, coordinator.accountId],
+      `UPDATE corrective_action
+          SET description = 'The final record cannot be rewritten after closure'
+        WHERE id = $1`,
+      [actionId],
     ).catch((caught: unknown) => caught);
 
     expect(sqlstate(error)).toBe('HS014');
   });
 
-  it('cada enmienda deja su eslabón en la cadena de auditoría', async () => {
+  it('el cierre y una edición concurrente dejan un único snapshot final coherente', async () => {
     const { actionId } = await amendable();
-    await actions.amendCommitment(asCoordinator(), actionId, {
+    await awaitingVerification(actionId);
+
+    const results = await Promise.allSettled([
+      actions.replaceAssignment(asCoordinator(), actionId, {
+        assignee_person_id: rosterPerson,
+        description: 'Concurrent replacement visible only if it wins the closure lock',
+        due_at: LATER_DUE_AT,
+      }),
+      actions.transition(asCoordinator(), actionId, { to: 'closed', evidence: [] }),
+    ]);
+
+    expect(results[1]?.status).toBe('fulfilled');
+    if (results[0]?.status === 'rejected') {
+      expect(results[0].reason).toMatchObject({ response: { code: 'invalid_action_state' } });
+    }
+
+    const current = await actions.get(asCoordinator(), actionId);
+    const closing = (await auditEvents(SITE_A, 'action.transitioned')).find(
+      (row) => row.payload.action_id === actionId && row.payload.to_state === 'closed',
+    );
+
+    expect(closing?.payload).toMatchObject({
+      assignee_person_id: current.assignee_person_id,
+      description: current.description,
+    });
+    expect(new Date(String(closing?.payload.due_at)).toISOString()).toBe(current.due_at);
+  });
+
+  it('las ediciones intermedias no dejan un historial de asignaciones', async () => {
+    const { actionId } = await amendable();
+    await actions.replaceAssignment(asCoordinator(), actionId, {
       assignee_person_id: rosterPerson,
       description: 'Correction that leaves an audit link of its own',
       due_at: LATER_DUE_AT,
@@ -2129,8 +2204,7 @@ describe('la enmienda del compromiso (ADR-018)', () => {
       (row) => row.payload.action_id === actionId,
     );
 
-    expect(links).toHaveLength(1);
-    expect(links[0]?.payload.position).toBe(1);
+    expect(links).toHaveLength(0);
     expect(await chainIsIntact(SITE_A)).toBe(true);
   });
 });
@@ -2141,6 +2215,11 @@ describe('la cadena de auditoría', () => {
     const actionId = await openAction();
 
     await awaitingVerification(actionId);
+    await actions.replaceAssignment(asCoordinator(), actionId, {
+      assignee_person_id: rosterPerson,
+      description: 'Install an interlocked guard and document the final configuration',
+      due_at: LATER_DUE_AT,
+    });
     await actions.transition(asCoordinator(), actionId, { to: 'closed', evidence: [] });
 
     const created = await auditEvents(SITE_A, 'action.created');
@@ -2151,16 +2230,22 @@ describe('la cadena de auditoría', () => {
     const myTransitions = transitioned.filter((row) => row.payload.action_id === actionId);
 
     expect(mine).toHaveLength(1);
-    expect(new Date(String(one(mine).payload.due_at)).toISOString()).toBe(DUE_AT);
+    expect(one(mine).payload.due_at).toBeUndefined();
 
     expect(myTransitions.map((row) => row.payload.to_state)).toEqual([
       'open',
+      'in_progress',
       'awaiting_verification',
       'closed',
     ]);
 
     // El eslabón del cierre nombra al VERIFICADOR, nunca al ejecutor.
-    expect(myTransitions[2]?.payload.actor_user_id).toBe(coordinator.accountId);
+    expect(myTransitions[3]?.payload.actor_user_id).toBe(coordinator.accountId);
+    expect(myTransitions[3]?.payload).toMatchObject({
+      assignee_person_id: rosterPerson,
+      description: 'Install an interlocked guard and document the final configuration',
+    });
+    expect(new Date(String(myTransitions[3]?.payload.due_at)).toISOString()).toBe(LATER_DUE_AT);
 
     expect(evidence.filter((row) => row.payload.action_id === actionId)).toHaveLength(1);
 

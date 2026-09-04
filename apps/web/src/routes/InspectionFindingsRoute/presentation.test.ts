@@ -13,7 +13,6 @@ import { canAttempt } from '../../permissions/actions';
 import {
   actionsByFinding,
   blockingActions,
-  commitmentLabel,
   commitmentRequest,
   eventLabel,
   eventsInStage,
@@ -311,7 +310,7 @@ describe('el próximo paso del hallazgo', () => {
       requirement: 'Assign a responsible person, describe the work, and set a deadline.',
       waitingOn: 'H&S coordinator or whoever raised the finding',
       control: { kind: 'create' },
-      amend: null,
+      editableAssignment: null,
     });
   });
 
@@ -383,12 +382,12 @@ describe('el próximo paso del hallazgo', () => {
     ).toBeNull();
   });
 
-  /** ADR-018: en `assigned`, el coordinador y quien reportó pueden enmendar la asignación. */
+  /** ADR-020: la corrección permanece disponible hasta el cierre. */
   it('ofrece Edit assignment junto a Start work en assigned', () => {
     const step = nextStep([action()], 'assigned', session('hs_coordinator'), itemFinding(GUARDS));
 
     expect(step?.control).toEqual({ kind: 'progress', action: action() });
-    expect(step?.amend).toEqual(action());
+    expect(step?.editableAssignment).toEqual(action());
   });
 
   it('no ofrece Edit assignment a quien no puede abrir la acción', () => {
@@ -397,19 +396,22 @@ describe('el próximo paso del hallazgo', () => {
     });
 
     expect(
-      nextStep([action()], 'assigned', session('supervisor'), reportedByOther)?.amend,
+      nextStep([action()], 'assigned', session('supervisor'), reportedByOther)?.editableAssignment,
     ).toBeNull();
   });
 
-  it('retira Edit assignment en cuanto el trabajo empezó', () => {
+  it.each([
+    ['in_progress', 'in_progress'],
+    ['verification', 'awaiting_verification'],
+  ] as const)('mantiene Edit assignment en %s', (findingState, actionState) => {
     expect(
       nextStep(
-        [action({ state: 'in_progress' })],
-        'in_progress',
+        [action({ state: actionState })],
+        findingState,
         session('hs_coordinator'),
         itemFinding(GUARDS),
-      )?.amend,
-    ).toBeNull();
+      )?.editableAssignment,
+    ).toEqual(action({ state: actionState }));
   });
 });
 
@@ -470,12 +472,6 @@ describe('los campos y las salidas del paso, etapa por etapa', () => {
 });
 
 describe('el registro de la etapa Assigned', () => {
-  it('nombra el compromiso original y cada enmienda', () => {
-    expect(commitmentLabel(0)).toBe('Original commitment');
-    expect(commitmentLabel(1)).toBe('Amendment 1');
-    expect(commitmentLabel(2)).toBe('Amendment 2');
-  });
-
   it('recorta el instante ISO a lo que espera datetime-local, sin mover el huso', () => {
     expect(toDateTimeLocal('2050-01-01T17:00:00.000Z')).toBe('2050-01-01T17:00');
     expect(toDateTimeLocal('2026-08-28T16:30:00-04:00')).toBe('2026-08-28T16:30');
@@ -510,8 +506,8 @@ describe('el plazo del formulario', () => {
 });
 
 /**
- * LA MISMA REGLA PARA CREAR Y PARA ENMENDAR (ADR-018). Se prueba una vez porque es una sola:
- * si el compromiso que se asigna y el que se corrige se comprobaran distinto, la enmienda
+ * LA MISMA REGLA PARA CREAR Y PARA EDITAR (ADR-020). Se prueba una vez porque es una sola:
+ * si el compromiso que se asigna y el que se corrige se comprobaran distinto, la edición
  * aceptaría lo que crear rechaza sin que nada lo delate.
  */
 describe('el compromiso escrito en los tres campos', () => {

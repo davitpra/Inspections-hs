@@ -2,7 +2,7 @@ import type { Session } from "@hs/contracts";
 
 import { useReturnToReportItem } from "../../components/ReportItem";
 import { AdvanceActionForm } from "./AdvanceActionForm";
-import { FindingAmendment } from "./FindingAmendment";
+import { FindingAssignmentEditor } from "./FindingAssignmentEditor";
 import type { FindingNextStep as NextStep } from "./presentation";
 
 export function FindingNextStep({
@@ -43,15 +43,15 @@ export function FindingNextStep({
         </p>
       </div>
 
-      {form ? <div className="finding__next-step-form">{form}</div> : null}
-
-      {step.amend ? (
-        <FindingAmendment
-          action={step.amend}
+      {step.editableAssignment ? (
+        <FindingAssignmentEditor
+          action={step.editableAssignment}
           findingId={findingId}
           onDraftChange={onDraftChange}
         />
       ) : null}
+
+      {form ? <div className="finding__next-step-form">{form}</div> : null}
     </section>
   );
 }

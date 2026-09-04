@@ -44,7 +44,7 @@ export const actionNotFound = (): ActionException =>
 export const invalidDueAt = (): ActionException =>
   new ActionException(
     'invalid_due_at',
-    'The due date must be later than the moment the action is created',
+    'The due date must be later than the moment the assignment is saved',
     HttpStatus.BAD_REQUEST,
   );
 
@@ -57,13 +57,12 @@ export const invalidTransition = (message: string): ActionException =>
   new ActionException('invalid_transition', message, HttpStatus.CONFLICT);
 
 /**
- * Una enmienda del compromiso sobre una acción que ya dejó `open` (ADR-018): iniciar el
- * trabajo cierra la ventana de corrección. El motor lo rechaza otra vez con `HS014`.
+ * Una corrección sobre una acción cerrada (ADR-020). El motor la rechaza con `HS014`.
  */
 export const invalidActionState = (): ActionException =>
   new ActionException(
     'invalid_action_state',
-    'The assignment can only be amended before the work starts',
+    'A closed action assignment cannot be edited',
     HttpStatus.CONFLICT,
   );
 
@@ -110,6 +109,8 @@ export function translatePgError(error: unknown): ActionException | undefined {
   const candidate = error as DatabaseError | undefined;
 
   switch (candidate?.code) {
+    case 'HS003':
+      return invalidAssignee('The assignee must be active and belong to the action site');
     case 'HS004':
       return invalidTransition(candidate.message);
     case 'HS005':
@@ -127,8 +128,7 @@ export function translatePgError(error: unknown): ActionException | undefined {
       return invalidActionState();
     case '23505':
       return candidate.constraint === 'corrective_action_event_position_uq' ||
-        candidate.constraint === 'finding_state_event_position_uq' ||
-        candidate.constraint === 'corrective_action_commitment_amendment_position_uq'
+        candidate.constraint === 'finding_state_event_position_uq'
         ? actionChanged()
         : undefined;
     default:

@@ -86,7 +86,7 @@ export type CorrectiveActionAssignedPayload = z.infer<
  */
 export const correctiveActionOverduePayloadSchema = z.strictObject({
   action_id: z.uuid(),
-  finding_id: z.uuid(),
+  finding_id: z.uuid().nullable(),
   description: z.string().min(1),
   assignee_person_id: z.uuid(),
   due_at: z.iso.datetime({ offset: true }),

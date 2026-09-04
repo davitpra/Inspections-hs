@@ -1932,18 +1932,18 @@ select:disabled {
  * excepción (ADR-018). Abierto usa el vocabulario de la ficha del hallazgo
  * (`finding__step-*`), el mismo que el resto del paso.
  */
-.finding__amend {
+.finding__assignment-editor {
   margin-top: var(--space-4);
   padding-top: var(--space-4);
   border-top: 1px dashed var(--line);
 }
 
-.finding__amend-toggle.button--outline {
+.finding__assignment-editor-toggle.button--outline {
   width: auto;
   padding-inline: var(--space-6);
 }
 
-.finding__amend-form {
+.finding__assignment-editor-form {
   display: grid;
   gap: var(--space-2);
   margin-top: var(--space-2);
@@ -1969,6 +1969,11 @@ select:disabled {
   margin: 0;
   color: var(--muted);
   font-size: var(--text-sm);
+}
+
+.finding__stage-record-title {
+  margin: 0;
+  font-weight: var(--weight-strong);
 }
 
 .finding__stage-record-facts {

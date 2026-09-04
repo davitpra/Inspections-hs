@@ -26,7 +26,7 @@ import {
   type TemplateSection,
 } from '@hs/forms';
 
-import { canAmendAssignment, canAttempt, canCreateAction } from '../../permissions/actions';
+import { canAttempt, canCreateAction, canEditAssignment } from '../../permissions/actions';
 import {
   STATE_LABELS,
   transitionLabel,
@@ -247,11 +247,9 @@ export type FindingNextStep = {
   waitingOn: string;
   control: { kind: 'create' } | { kind: 'progress'; action: ActionSummary } | null;
   /**
-   * La acción cuyo compromiso todavía se puede corregir (ADR-018): presente solo mientras
-   * el hallazgo está en `assigned` y quien lee puede enmendar. Iniciar el trabajo la
-   * retira. Es comodidad: el servidor vuelve a exigirlo.
+   * La acción cuya asignación todavía se puede corregir (ADR-020). Solo `closed` la retira.
    */
-  amend: ActionSummary | null;
+  editableAssignment: ActionSummary | null;
 };
 
 const REQUIREMENT_LABELS: Readonly<Record<TransitionRequirement, string>> = {
@@ -297,7 +295,7 @@ export function nextStep(
       requirement: 'Assign a responsible person, describe the work, and set a deadline.',
       waitingOn: `${ROLE_LABELS.hs_coordinator} or whoever raised the finding`,
       control: canCreateAction(session, finding) ? { kind: 'create' } : null,
-      amend: null,
+      editableAssignment: null,
     };
   }
 
@@ -315,8 +313,7 @@ export function nextStep(
     requirement: transitionRequirement(transition.requires),
     waitingOn: transitionOwner(action),
     control: allowed ? { kind: 'progress', action } : null,
-    // Solo en `assigned` —la acción en `open`— y antes de que nadie pulse `Start work`.
-    amend: state === 'assigned' && canAmendAssignment(session, finding) ? action : null,
+    editableAssignment: state !== 'closed' && canEditAssignment(session, finding) ? action : null,
   };
 }
 
@@ -381,11 +378,6 @@ export function stepForm(
   };
 }
 
-/** El nombre de una versión del compromiso en el registro de la etapa Assigned (ADR-018). */
-export function commitmentLabel(position: number): string {
-  return position === 0 ? 'Original commitment' : `Amendment ${position}`;
-}
-
 /**
  * El valor ISO guardado, recortado a lo que espera un `<input type="datetime-local">`.
  *
@@ -430,9 +422,9 @@ export type CommitmentResult =
  * Los tres campos del compromiso, comprobados en el orden en que se leen: responsable,
  * plazo, trabajo.
  *
- * **Una sola regla para crear y para enmendar**, que es lo que ADR-018 dice que son: la misma
+ * **Una sola regla para crear y para editar**, que es lo que ADR-020 conserva: la misma
  * decisión escrita dos veces, una al asignar y otra al corregir. Con la comprobación copiada
- * en cada formulario, la primera vez que discreparan la enmienda aceptaría un compromiso que
+ * en cada formulario, la primera vez que discreparan la edición aceptaría un compromiso que
  * crear rechaza —o al revés— sin que nada lo delate.
  *
  * **El responsable se comprueba contra el roster** y no solo contra el esquema: `uuid()` no

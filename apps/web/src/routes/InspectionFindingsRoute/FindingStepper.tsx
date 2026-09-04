@@ -41,7 +41,7 @@ export function FindingStepper({
   selected: FindingStage;
   /** La etapa que la composición desplegada escribiría y que todavía no ocurrió. */
   draft: FindingStage | null;
-  /** Con una enmienda abierta no se elige etapa: sus valores se perderían al cambiar de panel. */
+  /** Con una edición abierta no se elige etapa: sus valores se perderían al cambiar de panel. */
   locked: boolean;
   onSelect: (stage: FindingStage) => void;
   tabId: (stage: FindingStage) => string;

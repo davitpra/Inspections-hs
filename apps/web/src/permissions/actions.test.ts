@@ -9,7 +9,7 @@ import {
   type Session,
 } from '@hs/contracts';
 
-import { canAmendAssignment, canAttempt, canCreateAction } from './actions';
+import { canAttempt, canCreateAction, canEditAssignment } from './actions';
 
 const PERSON = '11111111-1111-4111-8111-111111111111';
 const OTHER_PERSON = '22222222-2222-4222-8222-222222222222';
@@ -30,18 +30,6 @@ function action(state: ActionState): Action {
     created_at: '2026-08-10T13:00:00.000Z',
     state,
     overdue: false,
-    commitments: [
-      {
-        id: '33333333-3333-4333-8333-333333333333',
-        position: 0,
-        assignee_person_id: PERSON,
-        assignee_name: 'Dana Okafor',
-        description: 'Install a fixed guard on the infeed of line 3',
-        due_at: '2026-08-17T13:00:00.000Z',
-        actor_user_id: '66666666-6666-4666-8666-666666666666',
-        occurred_at: '2026-08-10T13:00:00.000Z',
-      },
-    ],
     events: [],
     escalations: [],
   };
@@ -88,18 +76,18 @@ describe('la creación de acciones (ADR-017)', () => {
   });
 });
 
-describe('la enmienda de la asignación (ADR-018)', () => {
+describe('la edición de la asignación (ADR-020)', () => {
   it('se autoriza igual que abrir la acción: coordinador o quien reportó', () => {
     for (const role of ROLES) {
-      expect(canAmendAssignment(session(role), finding())).toBe(role === 'hs_coordinator');
+      expect(canEditAssignment(session(role), finding())).toBe(role === 'hs_coordinator');
       expect(
-        canAmendAssignment(session(role, PERSON, REPORTER_ACCOUNT), finding(REPORTER_ACCOUNT)),
+        canEditAssignment(session(role, PERSON, REPORTER_ACCOUNT), finding(REPORTER_ACCOUNT)),
       ).toBe(true);
     }
   });
 
   it('no se ofrece sin sesión', () => {
-    expect(canAmendAssignment(null, finding())).toBe(false);
+    expect(canEditAssignment(null, finding())).toBe(false);
   });
 });
 

@@ -95,7 +95,7 @@ export interface EscalationResult {
 interface EscalatedRow extends Record<string, unknown> {
   action_id: string;
   site_id: string;
-  finding_id: string;
+  finding_id: string | null;
   description: string;
   assignee_person_id: string;
   due_at: Date;
@@ -103,22 +103,19 @@ interface EscalatedRow extends Record<string, unknown> {
 }
 
 /**
- * Las acciones vencidas de este nivel que todavía no escalaron, escaladas en la misma
- * sentencia.
+ * Las acciones vencidas de este nivel que todavía no escalaron.
  *
- * **Una sola sentencia y no un `SELECT` seguido de un `INSERT`**: entre las dos cabe
- * otra corrida del cron, y las dos escalarían. Así, la que pierde la carrera no obtiene
- * fila del `ON CONFLICT DO NOTHING` y por lo tanto no notifica.
+ * El primer `SELECT` bloquea las filas padre para serializarse con edición y cierre; el
+ * segundo reevalúa plazo y estado con un snapshot nuevo. La carrera entre dos corridas
+ * sigue cerrada por `ON CONFLICT DO NOTHING`: solo la que inserta obtiene fila y notifica.
  *
  * Las condiciones, en orden:
  *   - el estado vigente no es `closed` — derivado del stream, no de una columna;
  *   - el plazo VIGENTE pasó el umbral del nivel (3 o 7 días);
  *   - no hay ya una escalada de este nivel.
  *
- * **El plazo vigente es la última enmienda o, si no hay ninguna, la fila original**
- * (ADR-018): posponer la fecha antes de empezar mueve el escalamiento todavía no
- * emitido, y las filas ya escritas no se tocan. El responsable y el trabajo del aviso
- * también salen del compromiso vigente.
+ * El plazo, responsable y trabajo salen de la única asignación vigente (ADR-020). Corregir
+ * la fecha antes del cierre mueve lo todavía no emitido; las filas ya escritas no se tocan.
  *
  * `days_overdue` se calcula y se guarda: el registro dice cuán tarde era CUANDO se
  * escaló, no cuán tarde es hoy.
@@ -128,12 +125,34 @@ async function overdueWithoutEscalation(
   level: EscalationLevel,
   now: Date,
 ): Promise<EscalatedRow[]> {
+  // Una segunda sentencia después del lock obtiene un snapshot nuevo en READ COMMITTED.
+  // Así ve el plazo o cierre que confirmó mientras esperaba por la fila padre.
+  const { rows: candidates } = await client.query<{ id: string }>(
+    `SELECT a.id
+       FROM corrective_action a
+       LEFT JOIN LATERAL (
+         SELECT e.to_state FROM corrective_action_event e
+          WHERE e.action_id = a.id
+          ORDER BY e.position DESC
+          LIMIT 1
+       ) s ON true
+      WHERE s.to_state IS DISTINCT FROM 'closed'
+        AND a.due_at < $1::timestamptz - make_interval(days => $2::int)
+        AND NOT EXISTS (
+          SELECT 1 FROM corrective_action_escalation x
+           WHERE x.action_id = a.id AND x.level = $3
+        )
+      FOR UPDATE OF a`,
+    [now, ESCALATION_DAYS[level], level],
+  );
+
+  if (candidates.length === 0) return [];
+
   const { rows } = await client.query<EscalatedRow>(
     `WITH overdue AS (
-       SELECT a.id, a.site_id,
-              COALESCE(eff.due_at, a.due_at) AS due_at,
-              floor(extract(epoch FROM ($2::timestamptz - COALESCE(eff.due_at, a.due_at)))
-                    / 86400)::int AS days_overdue
+       SELECT a.id, a.site_id, a.due_at,
+               floor(extract(epoch FROM ($2::timestamptz - a.due_at))
+                     / 86400)::int AS days_overdue
          FROM corrective_action a
          LEFT JOIN LATERAL (
            SELECT e.to_state FROM corrective_action_event e
@@ -141,14 +160,9 @@ async function overdueWithoutEscalation(
             ORDER BY e.position DESC
             LIMIT 1
          ) s ON true
-         LEFT JOIN LATERAL (
-           SELECT m.due_at FROM corrective_action_commitment_amendment m
-            WHERE m.action_id = a.id
-            ORDER BY m.position DESC
-            LIMIT 1
-         ) eff ON true
-        WHERE s.to_state IS DISTINCT FROM 'closed'
-          AND COALESCE(eff.due_at, a.due_at) < $2::timestamptz - make_interval(days => $3::int)
+          WHERE s.to_state IS DISTINCT FROM 'closed'
+            AND a.due_at < $2::timestamptz - make_interval(days => $3::int)
+            AND a.id = ANY($4::uuid[])
      ),
      inserted AS (
        INSERT INTO corrective_action_escalation (action_id, site_id, level, due_at, days_overdue)
@@ -158,18 +172,10 @@ async function overdueWithoutEscalation(
      )
      SELECT i.action_id, i.site_id, i.due_at, i.days_overdue,
             a.finding_id,
-            COALESCE(eff.description, a.description) AS description,
-            COALESCE(eff.assignee_person_id, a.assignee_person_id) AS assignee_person_id
-       FROM inserted i
-       JOIN corrective_action a ON a.id = i.action_id
-       LEFT JOIN LATERAL (
-         SELECT m.assignee_person_id, m.description
-           FROM corrective_action_commitment_amendment m
-          WHERE m.action_id = a.id
-          ORDER BY m.position DESC
-          LIMIT 1
-       ) eff ON true`,
-    [level, now, ESCALATION_DAYS[level]],
+             a.description, a.assignee_person_id
+        FROM inserted i
+        JOIN corrective_action a ON a.id = i.action_id`,
+    [level, now, ESCALATION_DAYS[level], candidates.map((row) => row.id)],
   );
 
   return rows;

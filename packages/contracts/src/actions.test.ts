@@ -181,9 +181,9 @@ describe('los requests', () => {
     expect(result.success).toBe(false);
   });
 
-  it('una enmienda reemplaza los tres campos del compromiso', async () => {
-    const { amendActionCommitmentRequestSchema } = await import('./actions.js');
-    const result = amendActionCommitmentRequestSchema.safeParse({
+  it('una edición reemplaza los tres campos de la asignación', async () => {
+    const { replaceActionAssignmentRequestSchema } = await import('./actions.js');
+    const result = replaceActionAssignmentRequestSchema.safeParse({
       assignee_person_id: PERSON_ID,
       description: 'Install a fixed guard on the infeed of line 4',
       due_at: '2027-02-01T00:00:00.000Z',
@@ -192,14 +192,14 @@ describe('los requests', () => {
     expect(result.success).toBe(true);
   });
 
-  it('una enmienda no acepta campos parciales ni de creación', async () => {
-    const { amendActionCommitmentRequestSchema } = await import('./actions.js');
+  it('una edición no acepta campos parciales ni de creación', async () => {
+    const { replaceActionAssignmentRequestSchema } = await import('./actions.js');
 
-    expect(amendActionCommitmentRequestSchema.safeParse({
+    expect(replaceActionAssignmentRequestSchema.safeParse({
       assignee_person_id: PERSON_ID,
       due_at: '2027-02-01T00:00:00.000Z',
     }).success).toBe(false);
-    expect(amendActionCommitmentRequestSchema.safeParse({
+    expect(replaceActionAssignmentRequestSchema.safeParse({
       assignee_person_id: PERSON_ID,
       description: 'Install a fixed guard on the infeed of line 4',
       due_at: '2027-02-01T00:00:00.000Z',

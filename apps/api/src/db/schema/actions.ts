@@ -23,16 +23,15 @@ import { appUser, person } from './identity';
  *
  * Acá solo viven los tipos con los que el repositorio consulta. El SQL lleva además
  * la guarda de la máquina de estados, la del verificador, la restricción diferida
- * —"una acción sin eventos no existe"—, los triggers de prohibición de
- * UPDATE/DELETE/TRUNCATE, los de
+ * —"una acción sin eventos no existe"—, las guardas de mutabilidad parcial y cierre, los de
  * auditoría, `hs_apply_site_isolation` y los GRANT. Nada de eso lo sabe expresar un
  * esquema de ORM. Por eso `drizzle-kit generate` está prohibido: regeneraría el
  * `.sql` a partir de esto y se llevaría puesto el mecanismo. Si el SQL cambia, este
  * espejo se actualiza a mano.
  *
- * **No hay ningún tipo `*Update` en este archivo y esa ausencia es deliberada**,
- * igual que en `findings.ts` e `inspections.ts`: 0011 no tiene un solo
- * `GRANT UPDATE`. Avanzar una acción es insertar un evento, no corregir una fila.
+ * Avanzar una acción sigue siendo insertar un evento. ADR-020 permite reemplazar únicamente
+ * responsable, trabajo y plazo hasta que ese stream llega a `closed`; 0043 limita ese UPDATE en
+ * el privilegio y en una guarda del motor.
  */
 
 /**
@@ -43,7 +42,7 @@ import { appUser, person } from './identity';
  * `correctiveActionEvent`; buscar acá un campo `status` es buscar lo que el diseño
  * decidió no tener.
  *
- * `dueAt` queda congelado el día que la acción se crea.
+ * `dueAt`, `description` y `assigneePersonId` quedan congelados al cerrar la acción.
  */
 export const correctiveAction = pgTable(
   'corrective_action',
@@ -76,7 +75,7 @@ export const correctiveAction = pgTable(
 
     description: text('description').notNull(),
 
-    // Fecha declarada por el coordinador y congelada al crear.
+    // Fecha vigente, corregible junto con la asignación hasta `closed` (ADR-020).
     dueAt: timestamp('due_at', { withTimezone: true }).notNull(),
 
     // La remediación compartida de la pregunta cerrada 9: agrupa en la UI y en
@@ -267,66 +266,3 @@ export type NewCorrectiveActionEvidence = typeof correctiveActionEvidence.$infer
 
 export type CorrectiveActionEscalation = typeof correctiveActionEscalation.$inferSelect;
 export type NewCorrectiveActionEscalation = typeof correctiveActionEscalation.$inferInsert;
-
-/**
- * Las enmiendas del compromiso (migración 0041). ADR-018, §7 etapa 4.
- *
- * **`corrective_action` sigue siendo la fila original inmutable.** Cada corrección de
- * responsable, trabajo o plazo hecha mientras la acción está en `open` es una fila nueva
- * acá, con una instantánea completa —nunca un PATCH— y su posición dentro de la acción.
- * La lectura toma la posición más alta y cae a la fila original si no hay ninguna.
- *
- * El SQL lleva además la guarda que solo admite enmiendas mientras el estado derivado es
- * `open`, el único `(action_id, position)` contra la bifurcación del historial, el
- * trigger de auditoría, los de prohibición de UPDATE/DELETE/TRUNCATE, `hs_apply_site_isolation`
- * y los GRANT. Nada de eso lo expresa el ORM; si el SQL cambia, este espejo se actualiza
- * a mano.
- */
-export const correctiveActionCommitmentAmendment = pgTable(
-  'corrective_action_commitment_amendment',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-
-    actionId: uuid('action_id')
-      .notNull()
-      .references(() => correctiveAction.id),
-
-    // Denormalizado: la política RLS necesita el sitio en la fila.
-    siteId: uuid('site_id')
-      .notNull()
-      .references(() => site.id),
-
-    // La fila original es la posición cero conceptual; la primera enmienda es la 1.
-    position: integer('position').notNull(),
-
-    assigneePersonId: uuid('assignee_person_id')
-      .notNull()
-      .references(() => person.id),
-
-    description: text('description').notNull(),
-
-    dueAt: timestamp('due_at', { withTimezone: true }).notNull(),
-
-    actorUserId: uuid('actor_user_id')
-      .notNull()
-      .references(() => appUser.id),
-
-    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
-    recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [
-    foreignKey({
-      columns: [table.actionId, table.siteId],
-      foreignColumns: [correctiveAction.id, correctiveAction.siteId],
-    }),
-
-    // La defensa contra la bifurcación del historial, y a la vez el índice del
-    // `ORDER BY position DESC` que resuelve el compromiso vigente.
-    unique('corrective_action_commitment_amendment_position_uq').on(table.actionId, table.position),
-  ],
-);
-
-export type CorrectiveActionCommitmentAmendment =
-  typeof correctiveActionCommitmentAmendment.$inferSelect;
-export type NewCorrectiveActionCommitmentAmendment =
-  typeof correctiveActionCommitmentAmendment.$inferInsert;

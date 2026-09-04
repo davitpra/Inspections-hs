@@ -8,8 +8,7 @@ import type { SessionScope } from '../db/site-scope';
  * La bandeja in-app. ADR-011 design D9: no hay correo, así que esto es el canal.
  *
  * Dos cosas que este servicio no hace y no debería: filtrar por planta —lo hace la
- * política de `notification`— y borrar. Una notificación leída queda; `read_at` es lo
- * único que cambia, y el trigger de guarda impide volverla a no leída.
+ * política de `notification`— y borrar. Una retirada deja de aparecer sin eliminar su fila.
  */
 @Injectable()
 export class NotificationsService {
@@ -21,7 +20,7 @@ export class NotificationsService {
       const { rows } = await client.query<NotificationRow>(
         `SELECT id, site_id, kind, payload, created_at, read_at
            FROM notification
-          WHERE user_id = $1
+           WHERE user_id = $1 AND withdrawn_at IS NULL
           ORDER BY (read_at IS NOT NULL), created_at DESC`,
         [session.userId],
       );
@@ -39,7 +38,7 @@ export class NotificationsService {
       const { rows } = await client.query<NotificationRow>(
         `UPDATE notification
             SET read_at = coalesce(read_at, now())
-          WHERE id = $1 AND user_id = $2
+          WHERE id = $1 AND user_id = $2 AND withdrawn_at IS NULL
         RETURNING id, site_id, kind, payload, created_at, read_at`,
         [id, session.userId],
       );

@@ -22,15 +22,14 @@ export function canCreateAction(
 }
 
 /**
- * Quién puede enmendar la asignación de una acción de ESTE hallazgo antes de empezar el
- * trabajo (ADR-018).
+ * Quién puede corregir la asignación de una acción de ESTE hallazgo hasta `closed` (ADR-020).
  *
  * Se autoriza igual que abrir la acción (ADR-017): coordinador, más la cuenta que
  * reportó el hallazgo. Corregir un error de responsable, trabajo o fecha es de la misma
  * clase de decisión que la asignación original, no una nueva. La interfaz ofrece el
- * control; el servidor vuelve a autorizarlo en `ActionsService.amendCommitment`.
+ * control; el servidor vuelve a autorizarlo en `ActionsService.replaceAssignment`.
  */
-export function canAmendAssignment(
+export function canEditAssignment(
   account: Session | null,
   finding: Pick<Finding, 'reported_by'>,
 ): boolean {

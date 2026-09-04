@@ -95,7 +95,7 @@ export function FindingLifecycle({
     useReturnToReportItem<HTMLDivElement>();
   const [selected, setSelected] = useState<FindingStage>(finding.state);
   const [seen, setSeen] = useState<FindingStage>(finding.state);
-  const [amendOpen, setAmendOpen] = useState(false);
+  const [assignmentEditOpen, setAssignmentEditOpen] = useState(false);
   const [opened, setOpened] = useState(false);
   const [assigneePersonId, setAssigneePersonId] = useState("");
   const [description, setDescription] = useState("");
@@ -105,8 +105,8 @@ export function FindingLifecycle({
   if (seen !== finding.state) {
     setSeen(finding.state);
     setSelected(finding.state);
-    // Nada quedó escrito: el paso que tenía la enmienda abierta ya no es este.
-    setAmendOpen(false);
+    // Nada quedó escrito: el editor de la etapa anterior ya no corresponde.
+    setAssignmentEditOpen(false);
   }
 
   const tabId = (stage: FindingStage): string => `${prefix}-${stage}`;
@@ -218,7 +218,7 @@ export function FindingLifecycle({
       ) : null}
 
       <label className="finding__step-field">
-        <span>Description</span>
+        <span>Describe the corrective action</span>
         <textarea
           value={description}
           minLength={ACTION_DESCRIPTION_MIN}
@@ -271,7 +271,7 @@ export function FindingLifecycle({
     <>
       {/*
         LOS CONTROLES DEL CICLO SON DOS ACTOS DISTINTOS. Crear despliega la composición y deja su
-        lugar a `Hide form`, que puede plegarla sin descartar nada —el cuerpo se oculta, no se
+        lugar a `Go back`, que puede plegarla sin descartar nada —el cuerpo se oculta, no se
         desmonta, y lo escrito sigue ahí—. Desplegar elige además la etapa que el formulario va
         a escribir, que es donde se lo lee.
       */}
@@ -284,7 +284,7 @@ export function FindingLifecycle({
               aria-controls={bodyId}
               onClick={() => setOpened(false)}
             >
-              Hide form
+              Go back
             </button>
           ) : (
             <button
@@ -315,7 +315,7 @@ export function FindingLifecycle({
           deadline={findingDeadline(actions, finding.state, today)}
           selected={selected}
           draft={draft}
-          locked={amendOpen}
+          locked={assignmentEditOpen}
           onSelect={setSelected}
           tabId={tabId}
           panelId={panelId}
@@ -339,7 +339,7 @@ export function FindingLifecycle({
           {/* La etapa elegida*/}
           {step && selected === (draft ?? finding.state) ? (
             <FindingNextStep
-              // El paso se suelta entero al avanzar: la enmienda desplegada era de la etapa
+              // El paso se suelta entero al avanzar: la edición desplegada era de la etapa
               // anterior. El compromiso, que sí tiene que sobrevivir a su propio envío, no
               // vive acá adentro.
               key={finding.state}
@@ -347,7 +347,7 @@ export function FindingLifecycle({
               session={session}
               findingId={finding.id}
               create={commitmentForm}
-              onDraftChange={setAmendOpen}
+              onDraftChange={setAssignmentEditOpen}
             />
           ) : null}
         </div>

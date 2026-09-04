@@ -2,35 +2,32 @@ import {
   ACTION_DESCRIPTION_MAX,
   ACTION_DESCRIPTION_MIN,
   type ActionSummary,
-  type AmendActionCommitmentRequest,
+  type ReplaceActionAssignmentRequest,
 } from '@hs/contracts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
-import { amendAssignment } from '../../api/actions';
+import { replaceAssignment } from '../../api/actions';
 import { listFindingRoster } from '../../api/findings';
 import { queryKeys } from '../../api/query-keys';
 import { commitmentRequest, toDateTimeLocal } from './presentation';
 
 /**
- * El formulario que corrige responsable, trabajo y plazo mientras la acción sigue en
- * `open` (ADR-018), a la vista y sin nada modal.
+ * El formulario que corrige responsable, trabajo y plazo mientras la acción siga
+ * abierta (ADR-020), a la vista y sin nada modal.
  *
  * Es un REEMPLAZO completo, no un PATCH: los tres campos viajan siempre, precargados con
- * el compromiso vigente. Un envío correcto agrega una enmienda y el hallazgo se queda en
- * `assigned`; un envío rechazado conserva lo escrito para corregirlo.
- *
- * `Start work` cierra esta ventana: cuando eso pasa `nextStep` deja de traer `amend` y
- * este formulario no se dibuja. La garantía la da el servidor con `invalid_action_state`.
+ * la asignación vigente. Un envío correcto reemplaza esos valores sin cambiar el estado;
+ * un envío rechazado conserva lo escrito para corregirlo.
  */
 export function EditAssignmentForm({
   action,
   findingId,
-  onAmended,
+  onSaved,
 }: {
   action: ActionSummary;
   findingId: string;
-  onAmended: () => void;
+  onSaved: () => void;
 }): React.JSX.Element {
   const queryClient = useQueryClient();
 
@@ -45,8 +42,8 @@ export function EditAssignmentForm({
     retry: false,
   });
 
-  const amendment = useMutation({
-    mutationFn: (request: AmendActionCommitmentRequest) => amendAssignment(action.id, request),
+  const replacement = useMutation({
+    mutationFn: (request: ReplaceActionAssignmentRequest) => replaceAssignment(action.id, request),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.actions() }),
@@ -54,17 +51,17 @@ export function EditAssignmentForm({
         queryClient.invalidateQueries({ queryKey: queryKeys.findings() }),
         queryClient.invalidateQueries({ queryKey: queryKeys.submittedInspection() }),
       ]);
-      onAmended();
+      onSaved();
     },
   });
 
   /*
-    LA MISMA REGLA QUE AL ASIGNAR, y por eso no está escrita acá: enmendar es reemplazar el
-    compromiso entero (ADR-018), así que lo que se comprueba es lo mismo. Con la comprobación
-    copiada, la enmienda terminaría aceptando lo que crear rechaza.
+    LA MISMA REGLA QUE AL ASIGNAR, y por eso no está escrita acá: editar es reemplazar la
+    asignación entera (ADR-020). Con la comprobación copiada, la edición terminaría aceptando
+    lo que crear rechaza.
   */
   const submit = (): void => {
-    if (amendment.isPending || !roster.isSuccess) return;
+    if (replacement.isPending || !roster.isSuccess) return;
 
     const commitment = commitmentRequest(
       { assigneePersonId, description, dueAt },
@@ -78,12 +75,12 @@ export function EditAssignmentForm({
     }
 
     setValidationError(null);
-    amendment.mutate(commitment.request);
+    replacement.mutate(commitment.request);
   };
 
   return (
     <form
-      className="finding__amend-form"
+      className="finding__assignment-editor-form"
       aria-label="Edit assignment"
       onSubmit={(event) => {
         event.preventDefault();
@@ -94,7 +91,7 @@ export function EditAssignmentForm({
         <span>Responsible person</span>
         <select
           value={assigneePersonId}
-          disabled={!roster.isSuccess || amendment.isPending}
+          disabled={!roster.isSuccess || replacement.isPending}
           aria-invalid={validationError?.startsWith('Choose an active assignee') || undefined}
           onChange={(event) => setAssigneePersonId(event.target.value)}
         >
@@ -118,12 +115,12 @@ export function EditAssignmentForm({
       ) : null}
 
       <label className="finding__step-field">
-        <span>Description</span>
+        <span>Describe the corrective action</span>
         <textarea
           value={description}
           minLength={ACTION_DESCRIPTION_MIN}
           maxLength={ACTION_DESCRIPTION_MAX}
-          disabled={amendment.isPending}
+          disabled={replacement.isPending}
           aria-invalid={validationError?.startsWith('Description') || undefined}
           onChange={(event) => setDescription(event.target.value)}
         />
@@ -134,7 +131,7 @@ export function EditAssignmentForm({
         <input
           type="datetime-local"
           value={dueAt}
-          disabled={amendment.isPending}
+          disabled={replacement.isPending}
           aria-invalid={validationError?.toLowerCase().includes('deadline') || undefined}
           onChange={(event) => setDueAt(event.target.value)}
         />
@@ -146,9 +143,9 @@ export function EditAssignmentForm({
         </p>
       ) : null}
 
-      {amendment.isError ? (
+      {replacement.isError ? (
         <p role="alert" className="notice notice--warn">
-          {amendment.error.message || 'The assignment could not be amended.'}
+          {replacement.error.message || 'The assignment could not be edited.'}
         </p>
       ) : null}
 
@@ -156,9 +153,9 @@ export function EditAssignmentForm({
         <button
           className="button--primary"
           type="submit"
-          disabled={!roster.isSuccess || amendment.isPending}
+          disabled={!roster.isSuccess || replacement.isPending}
         >
-          {amendment.isPending ? 'Saving…' : 'Save assignment'}
+          {replacement.isPending ? 'Saving…' : 'Save assignment'}
         </button>
       </div>
     </form>

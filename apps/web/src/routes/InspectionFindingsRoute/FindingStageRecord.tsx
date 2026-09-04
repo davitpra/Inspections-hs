@@ -5,7 +5,6 @@ import { getAction } from "../../api/actions";
 import { queryKeys } from "../../api/query-keys";
 import { formatDay, formatInstant } from "../../presentation/dates";
 import {
-  commitmentLabel,
   eventLabel,
   eventsInStage,
   STAGE_LABELS,
@@ -14,7 +13,7 @@ import {
 
 /**
  * Lo que se decidió en UNA etapa, de solo lectura, en el mismo hueco donde la etapa vigente
- * ofrece su próximo paso (ADR-018).
+ * ofrece su próximo paso (ADR-020).
  *
  * Se ve distinto del paso a propósito —filete neutro y no azul—: el paso es el único llamado
  * a la acción de la ficha, y si los dos se dibujaran igual, elegir una etapa pasada parecería
@@ -23,9 +22,7 @@ import {
  * Cada etapa contesta con lo que la conserva y no con el stream entero:
  *
  * - `raised` no consulta nada. El hallazgo ya viajó con la pantalla, y la etapa la abrió él.
- * - `assigned` son los compromisos: el original y cada enmienda, que es lo único que esa
- *   etapa decide. Se dibuja también sin enmiendas, porque ahora es la respuesta a una
- *   pregunta que alguien hizo y no un aviso que aparece solo.
+ * - `assigned` presenta la única asignación vigente directamente desde el resumen.
  * - las demás son los eventos que las escribieron, con su nota, su motivo y su evidencia
  *   contada.
  *
@@ -39,8 +36,8 @@ import {
  * segunda vale sobre una etapa alcanzada cuyas acciones no llegaron; anunciarla sobre un
  * hallazgo levantado, que no tiene ninguna, sería falso.
  *
- * El detalle viaja completo en `getAction` —eventos y compromisos juntos—, así que no hay una
- * llamada por versión; y como se dibuja una sola etapa por vez, tampoco una por etapa.
+ * El detalle se pide solo para las etapas que leen eventos. Assigned ya lleva sus valores vigentes
+ * en `ActionSummary` y no paga otra consulta.
  */
 export function FindingStageRecord({
   stage,
@@ -64,7 +61,8 @@ export function FindingStageRecord({
       {/* La misma voz que la etapa alcanzada sin eventos: es la misma ausencia. */}
       {pending ? (
         <p className="finding__stage-record-eyebrow">
-          Nothing has been recorded here yet. The step below is what writes it.
+          No corrective action has been created yet. Assign someone and describe
+          the work they need to complete.
         </p>
       ) : stage === "raised" ? (
         <dl className="finding__stage-record-facts">
@@ -98,7 +96,30 @@ function ActionStageRecord({
     queryKey: queryKeys.action(action.id),
     queryFn: () => getAction(action.id),
     retry: false,
+    enabled: stage !== "assigned",
   });
+
+  if (stage === "assigned") {
+    return (
+      <>
+        <p className="finding__stage-record-title">Current assignment</p>
+        <dl className="finding__stage-decision-values">
+          <div>
+            <dt>Responsible</dt>
+            <dd>{action.assignee_name ?? "Assigned person"}</dd>
+          </div>
+          <div>
+            <dt>Work</dt>
+            <dd>{action.description}</dd>
+          </div>
+          <div>
+            <dt>Deadline</dt>
+            <dd>{formatDay(action.due_at)}</dd>
+          </div>
+        </dl>
+      </>
+    );
+  }
 
   if (detail.isPending) return <p>Loading the stage record…</p>;
 
@@ -107,38 +128,6 @@ function ActionStageRecord({
       <p className="notice notice--warn">
         The record of this stage needs a connection.
       </p>
-    );
-  }
-
-  if (stage === "assigned") {
-    return (
-      <ol className="finding__stage-decisions">
-        {detail.data.commitments.map((commitment) => (
-          <li key={commitment.id} className="finding__stage-decision">
-            <p className="finding__stage-record-eyebrow">
-              {commitmentLabel(commitment.position)}
-            </p>
-            <dl className="finding__stage-decision-values">
-              <div>
-                <dt>Responsible</dt>
-                <dd>{commitment.assignee_name ?? "Assigned person"}</dd>
-              </div>
-              <div>
-                <dt>Work</dt>
-                <dd>{commitment.description}</dd>
-              </div>
-              <div>
-                <dt>Deadline</dt>
-                <dd>{formatDay(commitment.due_at)}</dd>
-              </div>
-              <div>
-                <dt>Recorded</dt>
-                <dd>{formatInstant(commitment.occurred_at)}</dd>
-              </div>
-            </dl>
-          </li>
-        ))}
-      </ol>
     );
   }
 

@@ -2,10 +2,10 @@
 
 |                             |                                                                  |
 | --------------------------- | ---------------------------------------------------------------- |
-| **Estado**                  | Aceptada                                                         |
+| **Estado**                  | Superada                                                         |
 | **Fecha**                   | 2026-08-30                                                       |
 | **Supersede**               | —                                                                |
-| **Superada por**            | —                                                                |
+| **Superada por**            | ADR-020                                                          |
 | **Referencias**             | `docs/requisitos-v1.2.md` §3 R2, §4, §7; ADR-002, ADR-004, ADR-008, ADR-014, ADR-017 |
 | **Changes que la consumen** | `allow-assignment-amendments`                                    |
 

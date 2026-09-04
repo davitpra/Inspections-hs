@@ -239,7 +239,7 @@ export function InspectionFindingsRoute(): React.JSX.Element {
                   {/*
                     EL CICLO ES NAVEGABLE: la etapa vigente ofrece el próximo paso y cada
                     etapa ya alcanzada abre, en ese mismo hueco, lo que se decidió en ella
-                    (ADR-018). La etapa elegida es estado por hallazgo —y el compromiso que
+                    (ADR-020). La etapa elegida es estado por hallazgo —y la asignación que
                     se escribe en la etapa vigente, también—, y por eso las dos cosas viven
                     adentro de `FindingLifecycle` y no acá.
                   */}

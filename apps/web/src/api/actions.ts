@@ -4,13 +4,13 @@ import {
   presignUploadResponseSchema,
   type Action,
   type ActionSummary,
-  type AmendActionCommitmentRequest,
   type CreateActionRequest,
   type EvidenceInput,
   type PresignUploadResponse,
+  type ReplaceActionAssignmentRequest,
   type TransitionRequest,
 } from '@hs/contracts';
-import { get, post } from './request';
+import { get, post, send } from './request';
 
 /**
  * El cliente de acciones correctivas (etapa 5).
@@ -45,17 +45,13 @@ export async function transitionAction(id: string, body: TransitionRequest): Pro
 }
 
 /**
- * Enmienda el compromiso mientras la acción sigue en `open` (ADR-018).
- *
- * `commitment-amendments` es un hecho append-only, no un PATCH: el servidor conserva la
- * fila original y cada enmienda anterior, y `actionSchema` devuelve el historial completo
- * en `commitments` junto con los valores vigentes.
+ * Reemplaza la asignación operativa completa hasta que la acción se cierra (ADR-020).
  */
-export async function amendAssignment(
+export async function replaceAssignment(
   id: string,
-  body: AmendActionCommitmentRequest,
+  body: ReplaceActionAssignmentRequest,
 ): Promise<Action> {
-  return post(`/actions/${id}/commitment-amendments`, body, (value) => actionSchema.parse(value));
+  return send('PUT', `/actions/${id}/assignment`, body, (value) => actionSchema.parse(value));
 }
 
 /**

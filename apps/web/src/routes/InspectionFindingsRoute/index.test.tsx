@@ -10,7 +10,7 @@ const listActions = vi.hoisted(() => vi.fn());
 const getAction = vi.hoisted(() => vi.fn());
 const createAction = vi.hoisted(() => vi.fn());
 const transitionAction = vi.hoisted(() => vi.fn());
-const amendAssignment = vi.hoisted(() => vi.fn());
+const replaceAssignment = vi.hoisted(() => vi.fn());
 const uploadEvidence = vi.hoisted(() => vi.fn());
 const listFindingRoster = vi.hoisted(() => vi.fn());
 const useAppSession = vi.hoisted(() => vi.fn());
@@ -21,7 +21,7 @@ vi.mock('../../api/actions', () => ({
   getAction,
   createAction,
   transitionAction,
-  amendAssignment,
+  replaceAssignment,
   uploadEvidence,
 }));
 vi.mock('../../api/findings', () => ({ listFindingRoster }));
@@ -105,28 +105,7 @@ function actionDetail(overrides: Partial<Action> = {}): Action {
         evidence: [],
       },
     ],
-    /*
-      El compromiso original, siempre presente (`commitments` es `.min(1)` en el contrato). Lo
-      trae el fixture por defecto porque la etapa `assigned` ahora se dibuja sin que nadie la
-      pulse: es donde se lee `Start work`.
-    */
-    commitments: [commitment(0)],
     escalations: [],
-    ...overrides,
-  };
-}
-
-/** Una enmienda del compromiso, como versión del historial (ADR-018). */
-function commitment(position: number, overrides: Record<string, unknown> = {}) {
-  return {
-    id: `cccccccc-cccc-4ccc-8ccc-00000000000${position}`,
-    position,
-    assignee_person_id: PERSON,
-    assignee_name: 'Ada Reid',
-    description: 'Refit the guard on packaging line 3',
-    due_at: '2027-08-30T16:00:00.000Z',
-    actor_user_id: '88888888-8888-4888-8888-888888888888',
-    occurred_at: '2027-08-05T09:00:00.000Z',
     ...overrides,
   };
 }
@@ -264,7 +243,7 @@ beforeEach(() => {
   listFindingRoster.mockResolvedValue([person()]);
   createAction.mockResolvedValue({});
   transitionAction.mockResolvedValue(actionDetail({ state: 'in_progress' }));
-  amendAssignment.mockResolvedValue(actionDetail());
+  replaceAssignment.mockResolvedValue(actionDetail());
   uploadEvidence.mockResolvedValue('actions/evidence.jpg');
   useAppSession.mockReturnValue({ account: session('hs_coordinator') });
 });
@@ -284,7 +263,7 @@ async function completeForm(form: HTMLElement, assignee = PERSON): Promise<void>
   fireEvent.change(within(form).getByLabelText('Responsible person'), {
     target: { value: assignee },
   });
-  fireEvent.change(within(form).getByLabelText('Description'), {
+  fireEvent.change(within(form).getByLabelText('Describe the corrective action'), {
     target: { value: 'Install a fixed guard before restarting the line' },
   });
   fireEvent.change(within(form).getByLabelText('Deadline'), {
@@ -424,7 +403,7 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
     expectCurrentStage('Raised');
 
     const record = screen.getByRole('region', { name: 'Assigned record' });
-    expect(within(record).getByText(/Nothing has been recorded here yet/)).toBeTruthy();
+    expect(within(record).getByText(/No corrective action has been created yet/)).toBeTruthy();
     expect(within(record).queryByText(/needs a connection/)).toBeNull();
   });
 
@@ -543,7 +522,14 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
 
   it('el lector sin permiso ve a quién espera y ningún control principal', async () => {
     getSubmittedInspection.mockResolvedValue(
-      report({ findings: [finding({ state: 'in_progress' })] }),
+      report({
+        findings: [
+          finding({
+            state: 'in_progress',
+            reported_by: '77777777-7777-4777-8777-777777777777',
+          }),
+        ],
+      }),
     );
     listActions.mockResolvedValue([action({ state: 'in_progress' })]);
     useAppSession.mockReturnValue({
@@ -598,7 +584,7 @@ describe('InspectionFindingsRoute — la ficha abierta', () => {
       'true',
     );
     expect(screen.queryByRole('button', { name: 'Create a corrective action' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Hide form' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Go back' })).toBeTruthy();
   });
 
   it('separa crear de ocultar sin descartar la composición', async () => {
@@ -607,8 +593,8 @@ describe('InspectionFindingsRoute — la ficha abierta', () => {
     const form = await creationForm();
     await completeForm(form);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Hide form' }));
-    expect(screen.queryByRole('button', { name: 'Hide form' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Go back' }));
+    expect(screen.queryByRole('button', { name: 'Go back' })).toBeNull();
     expect(screen.queryByRole('form', { name: 'Create corrective action' })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Create a corrective action' }));
@@ -822,7 +808,10 @@ describe('InspectionFindingsRoute — el compromiso', () => {
     expect(
       (within(form).getByLabelText('Responsible person') as HTMLSelectElement).value,
     ).toBe(PERSON);
-    expect((within(form).getByLabelText('Description') as HTMLTextAreaElement).value).toBe(
+    expect(
+      (within(form).getByLabelText('Describe the corrective action') as HTMLTextAreaElement)
+        .value,
+    ).toBe(
       'Install a fixed guard before restarting the line',
     );
     expect((within(form).getByLabelText('Deadline') as HTMLInputElement).value).toBe(
@@ -955,7 +944,7 @@ describe('InspectionFindingsRoute — avance de la acción', () => {
   });
 });
 
-describe('InspectionFindingsRoute — Edit assignment (ADR-018)', () => {
+describe('InspectionFindingsRoute — Edit assignment (ADR-020)', () => {
   beforeEach(() => {
     getSubmittedInspection.mockResolvedValue(
       report({ findings: [finding({ state: 'assigned' })] }),
@@ -973,11 +962,14 @@ describe('InspectionFindingsRoute — Edit assignment (ADR-018)', () => {
     await within(form).findByRole('option', { name: /\([0-9]+\)$/ });
 
     // Precargado con el compromiso vigente.
-    expect((within(form).getByLabelText('Description') as HTMLTextAreaElement).value).toBe(
+    expect(
+      (within(form).getByLabelText('Describe the corrective action') as HTMLTextAreaElement)
+        .value,
+    ).toBe(
       'Refit the guard on packaging line 3',
     );
 
-    fireEvent.change(within(form).getByLabelText('Description'), {
+    fireEvent.change(within(form).getByLabelText('Describe the corrective action'), {
       target: { value: 'Install an interlocked guard and update the lockout procedure' },
     });
     fireEvent.change(within(form).getByLabelText('Deadline'), {
@@ -986,7 +978,7 @@ describe('InspectionFindingsRoute — Edit assignment (ADR-018)', () => {
     fireEvent.submit(form);
 
     await waitFor(() =>
-      expect(amendAssignment).toHaveBeenCalledWith(action().id, {
+      expect(replaceAssignment).toHaveBeenCalledWith(action().id, {
         assignee_person_id: PERSON,
         description: 'Install an interlocked guard and update the lockout procedure',
         due_at: new Date('2099-09-01T12:00').toISOString(),
@@ -997,8 +989,8 @@ describe('InspectionFindingsRoute — Edit assignment (ADR-018)', () => {
     expect(screen.getByRole('button', { name: 'Start work' })).toBeTruthy();
   });
 
-  it('conserva lo escrito cuando el servidor rechaza la enmienda', async () => {
-    amendAssignment.mockRejectedValue(new Error('The assignment can only be amended before the work starts'));
+  it('conserva lo escrito cuando el servidor rechaza la edición', async () => {
+    replaceAssignment.mockRejectedValue(new Error('A closed action assignment cannot be edited'));
 
     renderRoute();
     const next = await screen.findByRole('region', { name: 'Next step' });
@@ -1006,13 +998,16 @@ describe('InspectionFindingsRoute — Edit assignment (ADR-018)', () => {
     const form = within(next).getByRole('form', { name: 'Edit assignment' });
     await within(form).findByRole('option', { name: /\([0-9]+\)$/ });
 
-    fireEvent.change(within(form).getByLabelText('Description'), {
+    fireEvent.change(within(form).getByLabelText('Describe the corrective action'), {
       target: { value: 'A corrected description that the server will reject here' },
     });
     fireEvent.submit(form);
 
-    expect((await within(form).findByRole('alert')).textContent).toContain('can only be amended');
-    expect((within(form).getByLabelText('Description') as HTMLTextAreaElement).value).toBe(
+    expect((await within(form).findByRole('alert')).textContent).toContain('cannot be edited');
+    expect(
+      (within(form).getByLabelText('Describe the corrective action') as HTMLTextAreaElement)
+        .value,
+    ).toBe(
       'A corrected description that the server will reject here',
     );
   });
@@ -1033,7 +1028,7 @@ describe('InspectionFindingsRoute — Edit assignment (ADR-018)', () => {
     expect(screen.queryByRole('button', { name: 'Edit assignment' })).toBeNull();
   });
 
-  it('retira Edit assignment en cuanto el trabajo empezó', async () => {
+  it('mantiene Edit assignment mientras el trabajo está en curso', async () => {
     getSubmittedInspection.mockResolvedValue(
       report({ findings: [finding({ state: 'in_progress' })] }),
     );
@@ -1042,18 +1037,13 @@ describe('InspectionFindingsRoute — Edit assignment (ADR-018)', () => {
     renderRoute();
 
     await screen.findByRole('region', { name: 'Next step' });
-    expect(screen.queryByRole('button', { name: 'Edit assignment' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Edit assignment' })).toBeTruthy();
   });
 
-  it('presenta el compromiso original y la enmienda en el registro de la etapa', async () => {
-    getAction.mockResolvedValue(
-      actionDetail({
-        commitments: [
-          commitment(0, { description: 'Refit the guard on packaging line 3' }),
-          commitment(1, { description: 'Install an interlocked guard instead' }),
-        ],
-      }),
-    );
+  it('presenta solamente la asignación vigente', async () => {
+    listActions.mockResolvedValue([
+      action({ description: 'Install an interlocked guard instead' }),
+    ]);
 
     renderRoute();
 
@@ -1061,26 +1051,25 @@ describe('InspectionFindingsRoute — Edit assignment (ADR-018)', () => {
     fireEvent.click(await screen.findByRole('tab', { name: 'Assigned' }));
 
     const record = await screen.findByRole('region', { name: 'Assigned record' });
-    const versions = within(record).getAllByRole('listitem');
-    expect(versions[0]?.textContent).toContain('Original commitment');
-    expect(versions[0]?.textContent).toContain('Refit the guard on packaging line 3');
-    expect(versions[1]?.textContent).toContain('Amendment 1');
-    expect(versions[1]?.textContent).toContain('Install an interlocked guard instead');
+    expect(within(record).getByText('Current assignment')).toBeTruthy();
+    expect(within(record).getByText('Install an interlocked guard instead')).toBeTruthy();
+    expect(within(record).queryByText('Assignment history')).toBeNull();
+    expect(getAction).not.toHaveBeenCalled();
   });
 
   /**
    * El registro contesta una pregunta que alguien hizo —abrir la etapa—, así que contesta
    * también cuando la respuesta es "se prometió esto y nada más". Antes se callaba sin
-   * enmiendas, cuando aparecía solo y sin que nadie lo pidiera.
+   * ediciones, cuando aparecía solo y sin que nadie lo pidiera.
    */
-  it('muestra el compromiso original aunque no haya habido enmiendas', async () => {
+  it('muestra una sola asignación', async () => {
     renderRoute();
 
     fireEvent.click(await screen.findByRole('tab', { name: 'Assigned' }));
 
     const record = await screen.findByRole('region', { name: 'Assigned record' });
-    expect(within(record).getByText('Original commitment')).toBeTruthy();
-    expect(within(record).queryByText('Amendment 1')).toBeNull();
+    expect(within(record).getByText('Current assignment')).toBeTruthy();
+    expect(within(record).getByText('Refit the guard on packaging line 3')).toBeTruthy();
   });
 });
 
@@ -1220,7 +1209,7 @@ describe('InspectionFindingsRoute — navegación entre etapas', () => {
     ).toBe('true');
 
     const record = await screen.findByRole('region', { name: 'Assigned record' });
-    expect(within(record).getByText('Original commitment')).toBeTruthy();
+    expect(within(record).getByText('Current assignment')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Start work' })).toBeTruthy();
     expect(screen.queryByText(/Nothing has been recorded here yet/)).toBeNull();
   });
@@ -1231,7 +1220,7 @@ describe('InspectionFindingsRoute — navegación entre etapas', () => {
     fireEvent.click(await screen.findByRole('tab', { name: 'Assigned' }));
 
     const record = await screen.findByRole('region', { name: 'Assigned record' });
-    expect(within(record).getByText('Original commitment')).toBeTruthy();
+    expect(within(record).getByText('Current assignment')).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'Assigned' }).getAttribute('aria-selected')).toBe(
       'true',
     );
@@ -1288,7 +1277,7 @@ describe('InspectionFindingsRoute — navegación entre etapas', () => {
   });
 
   /** Con un borrador abierto, cambiar de panel se llevaría puesto lo escrito. */
-  it('no deja elegir otra etapa mientras la enmienda está abierta', async () => {
+  it('no deja elegir otra etapa mientras la edición está abierta', async () => {
     getSubmittedInspection.mockResolvedValue(
       report({ findings: [finding({ state: 'assigned' })] }),
     );
