@@ -3806,18 +3806,73 @@ select:disabled {
   text-decoration: underline;
 }
 
+/*
+ * Los grupos por tipo de plantilla, en el historial y en los hallazgos. Cada uno es una
+ * TARJETA y no un `<h2>` suelto sobre su tabla: con cinco tipos en pantalla, las tablas
+ * seguidas se leen como una sola lista larga y no se ve dónde termina un tipo.
+ *
+ * No reusa `.card` porque `.card` es la caja chica de `--radius` y `--space-4` que dibujan
+ * los formularios; esto es una superficie de página completa y le corresponde
+ * `--radius-lg`, que es el radio de tarjeta que el bloque de tokens define.
+ */
 .inspection-groups {
   display: grid;
-  gap: var(--space-8);
+  gap: var(--space-6);
   margin-top: var(--space-6);
+}
+
+.inspection-group {
+  padding: var(--space-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--paper);
+}
+
+.inspection-group__head {
+  margin-bottom: var(--space-4);
 }
 
 .inspection-group h2 {
   margin: 0;
 }
 
+/* El conteo acompaña al título; en peso y color se lee como un dato, no como parte del
+   nombre. Va DENTRO del `<h2>` a propósito: `aria-labelledby` ya apunta ahí, y así la
+   sección se anuncia con su tamaño sin agregar un `aria-label` que lo repita. */
+.inspection-group__count {
+  color: var(--muted);
+  font-weight: var(--weight-normal);
+  font-size: var(--text-base);
+}
+
+.inspection-group__blurb {
+  margin: var(--space-1) 0 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+/* Sin el margen inferior que `.table` trae para cuando vive suelta en la página: acá el
+   aire lo da el `padding` de la tarjeta, y sumar los dos deja un hueco bajo la última fila. */
 .inspection-group .completed-inspections__table {
-  margin-top: var(--space-3);
+  margin-bottom: 0;
+}
+
+/* La última fila no cierra con divisoria: el borde de la tarjeta ya es esa línea, y las
+   dos juntas se ven como un doble filete. */
+.inspection-group .completed-inspections__table tbody tr:last-child th,
+.inspection-group .completed-inspections__table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+/* La columna de acciones se alinea a la derecha, contra el borde de la tarjeta: es la
+   última y no tiene nada que alinear a su izquierda. */
+.inspection-group .completed-inspections__table th:last-child,
+.inspection-group .completed-inspections__table td:last-child {
+  text-align: right;
+}
+
+.inspection-group .completed-inspections__table .table__actions {
+  justify-content: flex-end;
 }
 
 .requirements-table__actions-cell {
@@ -4370,6 +4425,25 @@ button.schedule-cell:focus-visible {
   .device-drafts__action,
   .completed-inspections__action {
     white-space: normal;
+  }
+
+  /*
+   * La tarjeta del grupo se aprieta contra el ancho del teléfono, y su tabla ya no es una
+   * tabla: cada fila se pliega a etiqueta/valor. La alineación a la derecha de la última
+   * columna era para la rejilla —acá empujaría la etiqueta y el valor contra el borde y
+   * rompería la columna que forman con las otras cuatro.
+   */
+  .inspection-group {
+    padding: var(--space-4);
+  }
+
+  .inspection-group .completed-inspections__table th:last-child,
+  .inspection-group .completed-inspections__table td:last-child {
+    text-align: left;
+  }
+
+  .inspection-group .completed-inspections__table .table__actions {
+    justify-content: flex-start;
   }
 
   /* El «⋮» se ancla en absoluto y la celda no tiene nada en flujo que le dé alto: en la
@@ -6526,10 +6600,16 @@ button.schedule-cell:focus-visible {
 /* ---------------------------------------------------------------------------
    El listado de plantillas — los borradores y el diálogo que los descarta.
 
-   Reusa el encabezado `scheduling__*`, `.card`, `.status-card`, `.notice-card` y
+   Reusa el encabezado `scheduling__*`, `.card`, `.status-card`, `.table` y
    `.status-pill*` del resto de las consolas del coordinador. Lo que sigue es lo que esas
-   piezas no cubrían: la lista metida DENTRO de una tarjeta —que no lleva ni el margen ni
-   la última divisoria de `.list` suelta—, el vacío, y la estructura del diálogo.
+   piezas no cubrían: la silueta de tarjeta-con-mesa, el vacío, y la estructura del
+   diálogo.
+
+   BORRADORES Y PUBLICADAS COMPARTEN MESA, y por eso comparten selector. Son dos
+   poblaciones distintas de la MISMA pantalla: el coordinador baja de una a la otra, y dos
+   formas de tabular lo mismo se leen como dos aplicaciones. Cada regla que las dos
+   necesitan se escribe una vez con los dos selectores; lo que sigue separado —el conteo
+   contra el borde, el botón "Add Template"— es lo que solo una tiene.
 
    Todo color es semántico (`--brand`, `--line`, `--muted`, `--tint-bg`, `--state-*`), que
    es lo que comprueba `scripts/check-tokens.mjs` en el build.
@@ -6573,45 +6653,11 @@ button.schedule-cell:focus-visible {
   font-weight: var(--weight-strong);
 }
 
-/* La lista deja de flotar en la página y pasa a ser el cuerpo de la tarjeta: sin el
-   margen inferior de `.list`, y sin la divisoria de la última fila, que dentro de un
-   borde se lee como una fila vacía de más. */
-.drafts-card .list {
-  margin: 0;
-}
-
-.drafts-card .list__row:last-child {
-  border-bottom: 0;
-  padding-bottom: 0;
-}
-
-/*
- * El nombre y la clave se quedan con el ancho; el estado y "Discard" se van contra el
- * borde derecho. `.list__row` alinea en fila pero no reparte, porque sus otras listas son
- * de una sola celda; acá hay dos y hay que decir cuál cede.
- */
-.drafts-card .list__row > div:first-child {
-  flex: 1 1 14rem;
-  min-width: 0;
-}
-
-.drafts-card .list__aside {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--space-2);
-  margin-left: auto;
-}
-
-.drafts-card .list__row .note {
-  margin: var(--space-0-5) 0 0;
-}
-
-/* Las publicadas usan la misma silueta que los requisitos de programación: título y
+/* Las dos tarjetas usan la misma silueta que los requisitos de programación: título y
    contexto a la izquierda, acción principal contra el borde y la tabla como cuerpo de
    una única superficie. */
-.published-card {
+.published-card,
+.drafts-card {
   margin: 0 0 var(--space-6);
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -6619,7 +6665,8 @@ button.schedule-cell:focus-visible {
   background: var(--paper);
 }
 
-.published-card__head {
+.published-card__head,
+.drafts-card__head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -6627,15 +6674,24 @@ button.schedule-cell:focus-visible {
   gap: var(--space-3);
 }
 
-.published-card__head h2 {
+.published-card__head h2,
+.drafts-card__head h2 {
   margin: 0;
 }
 
-.published-card__head .note {
+.published-card__head .note,
+.drafts-card__head .note {
   margin: var(--space-1) 0 0;
 }
 
 .published-card__head h2 .note {
+  margin: 0;
+}
+
+/* El conteo se apoya contra el borde derecho y no crece: es la única celda de la mitad
+   derecha del encabezado, y sin esto el `space-between` la estira hasta el título. */
+.drafts-card__head > .note {
+  flex: 0 0 auto;
   margin: 0;
 }
 
@@ -6646,41 +6702,57 @@ button.schedule-cell:focus-visible {
 
 /* Misma mesa que `.requirements-table`: el cuerpo llega hasta los bordes de la tarjeta y
    la columna de acciones ocupa lo mínimo, contra el borde derecho. */
-.published-card__table {
+.published-card__table,
+.drafts-card__table {
   margin: var(--space-4) 0 0;
 }
 
 .published-card__table th:first-child,
-.published-card__table td:first-child {
+.published-card__table td:first-child,
+.drafts-card__table th:first-child,
+.drafts-card__table td:first-child {
   padding-left: 0;
 }
 
 .published-card__table th:last-child,
-.published-card__table td:last-child {
+.published-card__table td:last-child,
+.drafts-card__table th:last-child,
+.drafts-card__table td:last-child {
   padding-right: 0;
 }
 
 .published-card__table tbody tr:last-child th,
-.published-card__table tbody tr:last-child td {
+.published-card__table tbody tr:last-child td,
+.drafts-card__table tbody tr:last-child th,
+.drafts-card__table tbody tr:last-child td {
   border-bottom: 0;
 }
 
 /* Clave, versión y fecha son el contexto de la fila, no lo que se lee primero. */
-.published-row__meta {
+.published-row__meta,
+.draft-row__meta {
   color: var(--muted);
   font-size: var(--text-sm);
   white-space: nowrap;
 }
 
+/* La excepción al `nowrap`: "Details" lleva la clave Y el tipo, y una clave larga que no
+   puede cortarse ensancha la tabla hasta empujar la fecha fuera de la tarjeta. */
+.draft-row td[data-label='Details'] {
+  white-space: normal;
+}
+
 /* `relative` para anclar el `.row-menu`, y sin `overflow` alrededor: un menú abierto
    dentro de un contenedor con scroll se recortaría. */
-.published-card__actions-cell {
+.published-card__actions-cell,
+.drafts-card__actions-cell {
   position: relative;
   width: 1%;
   white-space: nowrap;
 }
 
-.published-card__actions-cell .table__actions {
+.published-card__actions-cell .table__actions,
+.drafts-card__actions-cell .table__actions {
   flex-wrap: nowrap;
   justify-content: flex-end;
 }
@@ -6708,13 +6780,15 @@ button.schedule-cell:focus-visible {
 }
 
 /* En un teléfono cada fila pasa a ficha con su etiqueta, igual que los requisitos de
-   programación: cinco columnas no entran, y el desplazamiento lateral esconde columnas. */
+   programación: cinco columnas no entran, y el desplazamiento lateral esconde columnas.
+   Las dos mesas colapsan igual, por lo mismo que comparten el resto. */
 @media (max-width: 48rem) {
   .published-card__add {
     width: 100%;
   }
 
-  .published-card__table thead {
+  .published-card__table thead,
+  .drafts-card__table thead {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -6727,13 +6801,19 @@ button.schedule-cell:focus-visible {
   .published-card__table tbody,
   .published-card__table tr,
   .published-card__table th,
-  .published-card__table td {
+  .published-card__table td,
+  .drafts-card__table,
+  .drafts-card__table tbody,
+  .drafts-card__table tr,
+  .drafts-card__table th,
+  .drafts-card__table td {
     display: block;
     width: 100%;
     box-sizing: border-box;
   }
 
-  .published-card__table tr {
+  .published-card__table tr,
+  .drafts-card__table tr {
     padding: var(--space-3) 0;
     border-top: 1px solid var(--line);
   }
@@ -6743,7 +6823,13 @@ button.schedule-cell:focus-visible {
   .published-card__table th:first-child,
   .published-card__table td:first-child,
   .published-card__table th:last-child,
-  .published-card__table td:last-child {
+  .published-card__table td:last-child,
+  .drafts-card__table th,
+  .drafts-card__table td,
+  .drafts-card__table th:first-child,
+  .drafts-card__table td:first-child,
+  .drafts-card__table th:last-child,
+  .drafts-card__table td:last-child {
     display: grid;
     grid-template-columns: minmax(7rem, 0.42fr) minmax(0, 1fr);
     gap: var(--space-2);
@@ -6752,18 +6838,22 @@ button.schedule-cell:focus-visible {
   }
 
   .published-card__table th::before,
-  .published-card__table td::before {
+  .published-card__table td::before,
+  .drafts-card__table th::before,
+  .drafts-card__table td::before {
     content: attr(data-label);
     color: var(--muted);
     font-size: var(--text-sm);
     font-weight: var(--weight-strong);
   }
 
-  .published-card__actions-cell {
+  .published-card__actions-cell,
+  .drafts-card__actions-cell {
     white-space: normal;
   }
 
-  .published-card__actions-cell .table__actions {
+  .published-card__actions-cell .table__actions,
+  .drafts-card__actions-cell .table__actions {
     justify-content: flex-start;
   }
 }

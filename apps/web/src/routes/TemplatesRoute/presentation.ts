@@ -1,4 +1,7 @@
-import type { PublishedTemplateSummary, TemplateDraftSummary } from '@hs/contracts';
+import type {
+  PublishedTemplateSummary,
+  TemplateDraftSummary,
+} from "@hs/contracts";
 
 /**
  * La lógica pura del listado de borradores.
@@ -17,7 +20,9 @@ import type { PublishedTemplateSummary, TemplateDraftSummary } from '@hs/contrac
  * una lista es de la pantalla, y depender de que el endpoint no cambie el suyo hace que un
  * día se reordene sola sin que nadie lo haya pedido acá.
  */
-export function sortDrafts(drafts: readonly TemplateDraftSummary[]): TemplateDraftSummary[] {
+export function sortDrafts(
+  drafts: readonly TemplateDraftSummary[],
+): TemplateDraftSummary[] {
   return [...drafts].sort((a, b) => b.updated_at.localeCompare(a.updated_at));
 }
 
@@ -40,7 +45,7 @@ export function canCreate(name: string): boolean {
  * el singular importa porque el primer borrador es el caso que más veces se ve.
  */
 export function draftCountLabel(count: number): string {
-  return count === 1 ? '1 draft' : `${count} drafts`;
+  return count === 1 ? "1 draft" : `${count} drafts`;
 }
 
 /**
@@ -52,8 +57,8 @@ export function draftCountLabel(count: number): string {
  */
 export function draftKindLabel(draft: TemplateDraftSummary): string {
   return draft.template_id === null
-    ? 'New template'
-    : `Revision · version ${draft.next_version}`;
+    ? "New template"
+    : `Version ${draft.next_version}`;
 }
 
 /**
@@ -70,16 +75,23 @@ export function sortPublishedTemplates(
 }
 
 /** Un archivo no cambia el catálogo programable: toda archivada ya está retirada. */
-export function isTemplateArchived(template: PublishedTemplateSummary): boolean {
+export function isTemplateArchived(
+  template: PublishedTemplateSummary,
+): boolean {
   return template.archived_at !== null;
 }
 
 /** Separa lo que se muestra por defecto de lo que solo aparece tras pedirlo. */
 export function splitPublishedTemplates(
   templates: readonly PublishedTemplateSummary[],
-): { visible: PublishedTemplateSummary[]; archived: PublishedTemplateSummary[] } {
+): {
+  visible: PublishedTemplateSummary[];
+  archived: PublishedTemplateSummary[];
+} {
   return {
-    visible: sortPublishedTemplates(templates.filter((template) => !isTemplateArchived(template))),
+    visible: sortPublishedTemplates(
+      templates.filter((template) => !isTemplateArchived(template)),
+    ),
     archived: sortPublishedTemplates(templates.filter(isTemplateArchived)),
   };
 }
@@ -96,8 +108,14 @@ export function isTemplateActive(template: PublishedTemplateSummary): boolean {
 }
 
 /** El estado en palabras, que es como se lee una tabla. */
-export function templateStatusLabel(template: PublishedTemplateSummary): string {
-  return isTemplateArchived(template) ? 'Archived' : isTemplateActive(template) ? 'Active' : 'Deactivated';
+export function templateStatusLabel(
+  template: PublishedTemplateSummary,
+): string {
+  return isTemplateArchived(template)
+    ? "Archived"
+    : isTemplateActive(template)
+      ? "Active"
+      : "Deactivated";
 }
 
 /**
@@ -107,10 +125,12 @@ export function templateStatusLabel(template: PublishedTemplateSummary): string 
  * estrenar un par de clases: el coordinador se mueve entre las dos pantallas, y dos formas
  * distintas de pintar el mismo hecho se leen como dos hechos distintos.
  */
-export function templateStatusClass(template: PublishedTemplateSummary): string {
+export function templateStatusClass(
+  template: PublishedTemplateSummary,
+): string {
   return !isTemplateArchived(template) && isTemplateActive(template)
-    ? 'status-pill status-pill--open'
-    : 'status-pill status-pill--cancelled';
+    ? "status-pill status-pill--open"
+    : "status-pill status-pill--cancelled";
 }
 
 /** La versión es el dato que distingue el documento congelado que se está nombrando. */
@@ -120,5 +140,5 @@ export function publishedVersionLabel(version: number): string {
 
 /** El encabezado conserva la unidad incluso cuando hay una sola plantilla. */
 export function publishedCountLabel(count: number): string {
-  return count === 1 ? '1 template' : `${count} templates`;
+  return count === 1 ? "1 template" : `${count} templates`;
 }

@@ -174,13 +174,28 @@ describe('quién puede escribir plantillas', () => {
 });
 
 describe('el listado', () => {
-  it('explica que publicar congela la versión', async () => {
+  it('dice que un borrador se sigue editando hasta publicarlo', async () => {
     renderRoute();
 
     await screen.findByText('Monthly electrical inspection');
 
-    expect(screen.getByText(/Published versions are frozen/))
-      .toBeTruthy();
+    expect(screen.getByText(/can continue to be edited/)).toBeTruthy();
+  });
+
+  /**
+   * Las cabeceras, porque el listado es una tabla y no una lista de renglones: la fecha
+   * es una columna propia justamente para poder comparar entre filas.
+   */
+  it('tabula los borradores con las mismas columnas que las publicadas', async () => {
+    renderRoute();
+
+    const table = await screen.findByRole('table', { name: 'Your drafts' });
+
+    expect(
+      within(table)
+        .getAllByRole('columnheader')
+        .map((header) => header.textContent),
+    ).toEqual(['Name', 'Details', 'Last saved', 'Status', 'Actions']);
   });
 
   it('muestra la clave y el estado de cada borrador', async () => {

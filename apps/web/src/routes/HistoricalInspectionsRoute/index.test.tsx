@@ -103,9 +103,10 @@ describe('HistoricalInspectionsRoute', () => {
     renderRoute();
 
     const headings = await screen.findAllByRole('heading', { level: 2 });
+    // El conteo va dentro del `<h2>`, así que es parte del nombre con que se anuncia.
     expect(headings.map((heading) => heading.textContent)).toEqual([
-      'Monthly workplace inspection',
-      'Quarterly equipment inspection',
+      'Monthly workplace inspection (2)',
+      'Quarterly equipment inspection (1)',
     ]);
 
     const monthly = screen.getByRole('table', {
@@ -134,12 +135,14 @@ describe('HistoricalInspectionsRoute', () => {
 
     renderRoute();
 
-    expect(
-      await screen.findAllByRole('heading', {
-        name: 'Monthly workplace inspection',
-        level: 2,
-      }),
-    ).toHaveLength(2);
+    // Por `textContent` y no por `name`: el nombre accesible que calcula la librería de
+    // pruebas junta los nodos sin el espacio que el navegador sí conserva, y fijar eso
+    // acá sería fijar la rareza de la herramienta en vez de lo que se lee en pantalla.
+    const headings = await screen.findAllByRole('heading', { level: 2 });
+    expect(headings.map((heading) => heading.textContent)).toEqual([
+      'Monthly workplace inspection (1)',
+      'Monthly workplace inspection (1)',
+    ]);
     expect(screen.getAllByRole('table')).toHaveLength(2);
   });
 

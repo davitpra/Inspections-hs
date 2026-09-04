@@ -121,9 +121,10 @@ describe('FindingsRoute', () => {
     renderRoute();
 
     const headings = await screen.findAllByRole('heading', { level: 2 });
+    // El conteo va dentro del `<h2>`, así que es parte del nombre con que se anuncia.
     expect(headings.map((heading) => heading.textContent)).toEqual([
-      'Monthly workplace inspection',
-      'Quarterly equipment inspection',
+      'Monthly workplace inspection (2)',
+      'Quarterly equipment inspection (1)',
     ]);
 
     const monthly = screen.getByRole('table', {

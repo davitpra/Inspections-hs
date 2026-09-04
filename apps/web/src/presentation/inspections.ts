@@ -174,3 +174,24 @@ export function inspectionTypeGroups(
     left.templateName.localeCompare(right.templateName),
   );
 }
+
+/**
+ * El nombre de una plantilla acomodado DENTRO de una oración: minúscula inicial y plural.
+ *
+ * Lo comparten el historial y los hallazgos porque las dos pantallas describen sus grupos
+ * con una frase que TERMINA en el nombre del tipo ("All completed monthly electrical
+ * inspections."). La oración entera no se comparte —cada pantalla dice algo distinto de
+ * las mismas filas— y por eso acá vive solo la parte que sí es la misma.
+ *
+ * Baja SOLO el primer carácter: un nombre puede traer una sigla o el nombre de un sitio, y
+ * `toLowerCase()` entero se los comería. El plural es una `s` salvo que ya termine en una:
+ * es una regla pobre a propósito, y alcanza porque la UI es solo inglés
+ * (`openspec/config.yaml`) y un nombre de plantilla es un título, no texto libre.
+ */
+export function templateNamePhrase(templateName: string): string {
+  if (templateName === '') return '';
+
+  const lowered = templateName.charAt(0).toLowerCase() + templateName.slice(1);
+
+  return lowered.endsWith('s') ? lowered : `${lowered}s`;
+}

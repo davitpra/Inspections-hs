@@ -8,7 +8,11 @@ import { useAppSession } from '../../app/session-context';
 import { CompletedInspectionsTable } from '../../components/CompletedInspectionsTable';
 import { AlertCircleIcon } from '../../components/icons';
 import { inspectionsWithFindings } from '../../presentation/findings';
-import { completedInspections, inspectionTypeGroups } from '../../presentation/inspections';
+import {
+  completedInspections,
+  inspectionTypeGroups,
+  templateNamePhrase,
+} from '../../presentation/inspections';
 
 /**
  * Los recorridos en los que esta cuenta encontró algo que arreglar, separados por tipo.
@@ -105,7 +109,23 @@ export function FindingsRoute(): React.JSX.Element {
                 className="inspection-group"
                 aria-labelledby={headingId}
               >
-                <h2 id={headingId}>{group.templateName}</h2>
+                <div className="inspection-group__head">
+                  <h2 id={headingId}>
+                    {group.templateName}
+                    <span className="inspection-group__count">
+                      {` (${group.inspections.length})`}
+                    </span>
+                  </h2>
+                  <p className="inspection-group__blurb">
+                    {/*
+                      "Only" y no "All": esta pantalla esconde a propósito el recorrido
+                      limpio, y decirlo acá es lo que evita que la tabla se lea como el
+                      historial completo del tipo.
+                    */}
+                    Only the {templateNamePhrase(group.templateName)} that recorded a
+                    finding.
+                  </p>
+                </div>
                 <CompletedInspectionsTable
                   inspections={group.inspections}
                   siteName={siteName}

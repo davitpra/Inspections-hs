@@ -6,7 +6,11 @@ import { queryKeys } from '../../api/query-keys';
 import { useAppSession } from '../../app/session-context';
 import { CompletedInspectionsTable } from '../../components/CompletedInspectionsTable';
 import { CalendarIcon } from '../../components/icons';
-import { completedInspections, inspectionTypeGroups } from '../../presentation/inspections';
+import {
+  completedInspections,
+  inspectionTypeGroups,
+  templateNamePhrase,
+} from '../../presentation/inspections';
 
 /**
  * Todo lo que esta cuenta cerró, separado por la identidad estable de cada plantilla.
@@ -90,7 +94,17 @@ export function HistoricalInspectionsRoute(): React.JSX.Element {
                 className="inspection-group"
                 aria-labelledby={headingId}
               >
-                <h2 id={headingId}>{group.templateName}</h2>
+                <div className="inspection-group__head">
+                  <h2 id={headingId}>
+                    {group.templateName}
+                    <span className="inspection-group__count">
+                      {` (${group.inspections.length})`}
+                    </span>
+                  </h2>
+                  <p className="inspection-group__blurb">
+                    All completed {templateNamePhrase(group.templateName)}.
+                  </p>
+                </div>
                 <CompletedInspectionsTable
                   inspections={group.inspections}
                   siteName={siteName}

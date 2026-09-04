@@ -7,6 +7,7 @@ import {
   inspectionTypeGroups,
   opensCapture,
   readiness,
+  templateNamePhrase,
 } from './inspections';
 
 describe('readiness', () => {
@@ -178,4 +179,24 @@ describe('lo completado por este inspector', () => {
     expect(groups.map((group) => group.templateId)).toEqual(['b', 'a', 'z']);
   });
 
+});
+
+describe('templateNamePhrase', () => {
+  it('baja la inicial y pluraliza', () => {
+    expect(templateNamePhrase('Monthly electrical inspection')).toBe(
+      'monthly electrical inspections',
+    );
+  });
+
+  it('no toca las mayúsculas que no son la primera', () => {
+    expect(templateNamePhrase('Monthly JHSC walkthrough')).toBe('monthly JHSC walkthroughs');
+  });
+
+  it('no repite la ese de un nombre que ya viene en plural', () => {
+    expect(templateNamePhrase('Weekly checks')).toBe('weekly checks');
+  });
+
+  it('sin nombre no inventa una ese suelta', () => {
+    expect(templateNamePhrase('')).toBe('');
+  });
 });
