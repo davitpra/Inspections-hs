@@ -1894,8 +1894,7 @@ select:disabled {
   font-weight: var(--weight-strong);
 }
 
-.finding__next-step-eyebrow,
-.finding__next-step-owner {
+.finding__next-step-eyebrow {
   color: var(--muted);
   font-size: var(--text-sm);
 }

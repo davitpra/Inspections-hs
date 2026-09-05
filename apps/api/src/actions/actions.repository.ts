@@ -138,7 +138,10 @@ export interface ReplaceAssignmentInput {
   dueAt: Date;
 }
 
-/** Reemplaza la única asignación operativa; la guarda de 0043 la congela en `closed`. */
+/**
+ * Reemplaza la única asignación operativa; la guarda de 0044 la congela desde
+ * `awaiting_verification`.
+ */
 export async function replaceAssignment(
   client: PoolClient,
   actionId: string,

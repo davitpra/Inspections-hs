@@ -1,10 +1,9 @@
 import {
   ACTION_DESCRIPTION_MAX,
   ACTION_DESCRIPTION_MIN,
-  ASSIGNEE,
   createActionRequestSchema,
   FINDING_STATES,
-  ROLE_LABELS,
+  isAssignmentEditable,
   transitionsFrom,
   type ActionEvent,
   type ActionState,
@@ -15,7 +14,6 @@ import {
   type FindingState,
   type PersonOption,
   type Session,
-  type TransitionRequirement,
 } from '@hs/contracts';
 import {
   evaluateVisibility,
@@ -226,38 +224,17 @@ export function findingDeadline(
 
 export type FindingNextStep = {
   label: string;
-  requirement: string;
-  waitingOn: string;
   control: { kind: 'create' } | { kind: 'progress'; action: ActionSummary } | null;
   /**
-   * La acción cuya asignación todavía se puede corregir (ADR-020). Solo `closed` la retira.
+   * La acción cuya asignación todavía se puede corregir (ADR-021).
+   *
+   * **Se decide sobre el estado de la ACCIÓN, no sobre la etapa del hallazgo**, y con la
+   * misma lista que aplica el servidor: lo que se congela es la fila de la acción, y una
+   * etapa nombrada acá sería una segunda tabla que puede separarse de aquella. Declarar el
+   * trabajo hecho la retira; el rechazo de la verificación la devuelve.
    */
   editableAssignment: ActionSummary | null;
 };
-
-const REQUIREMENT_LABELS: Readonly<Record<TransitionRequirement, string>> = {
-  not_executor:
-    'A verifier other than the person who declared the work done must submit it, unless they are the HS coordinator.',
-  reason: 'A reason is required.',
-};
-
-function transitionRequirement(requirements: readonly TransitionRequirement[]): string {
-  return requirements.length === 0
-    ? 'No additional information is required.'
-    : requirements.map((requirement) => REQUIREMENT_LABELS[requirement]).join(' ');
-}
-
-function transitionOwner(action: ActionSummary): string {
-  const transition = transitionsFrom(action.state)[0];
-
-  if (!transition) return '';
-  if (transition.roles.includes(ASSIGNEE)) return action.assignee_name ?? 'Assigned person';
-
-  return transition.roles
-    .filter((role) => role !== ASSIGNEE)
-    .map((role) => ROLE_LABELS[role])
-    .join(', ');
-}
 
 /**
  * El único acto principal que sigue, consultado en la misma tabla que aplica el servidor.
@@ -275,8 +252,6 @@ export function nextStep(
   if (state === 'raised') {
     return {
       label: 'Create corrective action',
-      requirement: 'Assign a responsible person, describe the work, and set a deadline.',
-      waitingOn: `${ROLE_LABELS.hs_coordinator} or whoever raised the finding`,
       control: canCreateAction(session, finding) ? { kind: 'create' } : null,
       editableAssignment: null,
     };
@@ -293,10 +268,9 @@ export function nextStep(
 
   return {
     label: transitionLabel(action.state, transition.to),
-    requirement: transitionRequirement(transition.requires),
-    waitingOn: transitionOwner(action),
     control: allowed ? { kind: 'progress', action } : null,
-    editableAssignment: state !== 'closed' && canEditAssignment(session, finding) ? action : null,
+    editableAssignment:
+      isAssignmentEditable(action.state) && canEditAssignment(session, finding) ? action : null,
   };
 }
 
@@ -436,7 +410,7 @@ export type CommitmentResult =
  * Los tres campos del compromiso, comprobados en el orden en que se leen: responsable,
  * plazo, trabajo.
  *
- * **Una sola regla para crear y para editar**, que es lo que ADR-020 conserva: la misma
+ * **Una sola regla para crear y para editar**, que es lo que ADR-021 conserva: la misma
  * decisión escrita dos veces, una al asignar y otra al corregir. Con la comprobación copiada
  * en cada formulario, la primera vez que discreparan la edición aceptaría un compromiso que
  * crear rechaza —o al revés— sin que nada lo delate.

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import {
   ASSIGNEE,
+  isAssignmentEditable,
   transitionFor,
   type Action,
   type ActionState,
@@ -108,14 +109,19 @@ export class ActionsService {
   }
 
   /**
-   * Corrige la única asignación vigente hasta que la acción se cierra (ADR-020).
+   * Corrige la única asignación vigente mientras el trabajo no se declaró hecho (ADR-021).
    *
    * **Quién puede enmendar es quién podía abrir la acción (ADR-017):** el coordinador
    * para cualquiera, más la cuenta que reportó el hallazgo cuando el padre es un
    * hallazgo. Una acción de investigación es solo del coordinador.
    *
-   * El lock es el mismo que toma `transition`: una edición y el cierre se serializan, y
-   * el motor vuelve a imponer esa frontera aunque la escritura no pase por el servicio.
+   * **La frontera es `isAssignmentEditable`, no un estado escrito acá.** La misma lista
+   * decide qué ofrece la interfaz; corregir en verificación existe, pero por el rechazo
+   * —`awaiting_verification → in_progress`—, que deja el hecho en el stream.
+   *
+   * El lock es el mismo que toma `transition`: una edición y la declaración de trabajo
+   * hecho se serializan, y el motor vuelve a imponer esa frontera aunque la escritura no
+   * pase por el servicio.
    */
   async replaceAssignment(
     session: SessionScope,
@@ -146,7 +152,7 @@ export class ActionsService {
 
       const current = await currentState(client, actionId);
 
-      if (!current || current.state === 'closed') {
+      if (!current || !isAssignmentEditable(current.state)) {
         throw invalidActionState();
       }
 
@@ -497,7 +503,7 @@ export class ActionsService {
    * a los +3 días, que llega al supervisor.
    *
    * `dedupe_key` lo elige el llamador: el id de la acción al crearla y un id de operación
-   * al corregirla. La notificación siempre lee la única asignación vigente (ADR-020).
+   * al corregirla. La notificación siempre lee la única asignación vigente (ADR-021).
    */
   private async notifyAssignee(
     client: PoolClient,

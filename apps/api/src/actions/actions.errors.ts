@@ -57,12 +57,13 @@ export const invalidTransition = (message: string): ActionException =>
   new ActionException('invalid_transition', message, HttpStatus.CONFLICT);
 
 /**
- * Una corrección sobre una acción cerrada (ADR-020). El motor la rechaza con `HS014`.
+ * Una corrección sobre una acción cuyo trabajo ya se declaró hecho (ADR-021). El motor la
+ * rechaza con `HS014`.
  */
 export const invalidActionState = (): ActionException =>
   new ActionException(
     'invalid_action_state',
-    'A closed action assignment cannot be edited',
+    'An action assignment cannot be edited once the work is declared done; refuse the verification to correct it',
     HttpStatus.CONFLICT,
   );
 

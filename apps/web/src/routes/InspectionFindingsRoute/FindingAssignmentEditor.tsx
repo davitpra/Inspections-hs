@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { EditAssignmentForm } from './EditAssignmentForm';
 
 /**
- * Corregir la asignación vigente: quién, qué y para cuándo (ADR-020).
+ * Corregir la asignación vigente: quién, qué y para cuándo (ADR-021).
  *
  * **ES LO ÚNICO PLEGADO DEL PASO, y esa asimetría es la regla.** El acto principal de la etapa
  * Assigned es empezar el trabajo, y su formulario está a la vista porque un disclosure costaba
@@ -15,8 +15,10 @@ import { EditAssignmentForm } from './EditAssignmentForm';
  * Mientras está abierto hay algo escrito, y el ciclo se avisa —`onDraftChange`— para que
  * elegir otra etapa no se lleve el borrador puesto.
  *
- * Se retira al cerrar la acción. El servidor vuelve a exigir quién puede editar y la frontera
- * `closed`; esto es comodidad.
+ * Se retira al declarar el trabajo hecho: en Verification lo que hay que decidir es si se
+ * acepta, y corregir el compromiso ahí pasa por rechazar la verificación, que devuelve la
+ * acción a In progress y vuelve a ofrecer esto. El servidor exige lo mismo; esto es
+ * comodidad.
  */
 export function FindingAssignmentEditor({
   action,

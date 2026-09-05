@@ -13,8 +13,8 @@ import { queryKeys } from '../../api/query-keys';
 import { commitmentRequest, toDateTimeLocal } from './presentation';
 
 /**
- * El formulario que corrige responsable, trabajo y plazo mientras la acción siga
- * abierta (ADR-020), a la vista y sin nada modal.
+ * El formulario que corrige responsable, trabajo y plazo mientras el trabajo no se haya
+ * declarado hecho (ADR-021), a la vista y sin nada modal.
  *
  * Es un REEMPLAZO completo, no un PATCH: los tres campos viajan siempre, precargados con
  * la asignación vigente. Un envío correcto reemplaza esos valores sin cambiar el estado;
@@ -57,7 +57,7 @@ export function EditAssignmentForm({
 
   /*
     LA MISMA REGLA QUE AL ASIGNAR, y por eso no está escrita acá: editar es reemplazar la
-    asignación entera (ADR-020). Con la comprobación copiada, la edición terminaría aceptando
+    asignación entera (ADR-021). Con la comprobación copiada, la edición terminaría aceptando
     lo que crear rechaza.
   */
   const submit = (): void => {

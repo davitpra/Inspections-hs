@@ -1012,7 +1012,7 @@ describe('InspectionFindingsRoute — avance de la acción', () => {
   });
 });
 
-describe('InspectionFindingsRoute — Edit assignment (ADR-020)', () => {
+describe('InspectionFindingsRoute — Edit assignment (ADR-021)', () => {
   beforeEach(() => {
     getSubmittedInspection.mockResolvedValue(
       report({ findings: [finding({ state: 'assigned' })] }),
@@ -1058,7 +1058,9 @@ describe('InspectionFindingsRoute — Edit assignment (ADR-020)', () => {
   });
 
   it('conserva lo escrito cuando el servidor rechaza la edición', async () => {
-    replaceAssignment.mockRejectedValue(new Error('A closed action assignment cannot be edited'));
+    replaceAssignment.mockRejectedValue(
+      new Error('An action assignment cannot be edited once the work is declared done'),
+    );
 
     renderRoute();
     const next = await screen.findByRole('region', { name: 'Next step' });
@@ -1106,6 +1108,24 @@ describe('InspectionFindingsRoute — Edit assignment (ADR-020)', () => {
 
     await screen.findByRole('region', { name: 'Next step' });
     expect(screen.getByRole('button', { name: 'Edit assignment' })).toBeTruthy();
+  });
+
+  /**
+   * ADR-021: en Verification lo que hay que decidir es si el trabajo se acepta. Corregir el
+   * compromiso ahí pasa por `Send it back`, que devuelve la acción a In progress.
+   */
+  it('retira Edit assignment en verification y deja las dos salidas de la etapa', async () => {
+    getSubmittedInspection.mockResolvedValue(
+      report({ findings: [finding({ state: 'verification' })] }),
+    );
+    listActions.mockResolvedValue([action({ state: 'awaiting_verification' })]);
+
+    renderRoute();
+
+    const next = await screen.findByRole('region', { name: 'Next step' });
+    expect(within(next).queryByRole('button', { name: 'Edit assignment' })).toBeNull();
+    expect(within(next).getByRole('button', { name: 'Verify and close' })).toBeTruthy();
+    expect(within(next).getByRole('button', { name: 'Send it back' })).toBeTruthy();
   });
 
   it('presenta solamente la asignación vigente', async () => {
@@ -1343,6 +1363,22 @@ describe('InspectionFindingsRoute — navegación entre etapas', () => {
     expect(within(record).getByText(/1 before, 1 after/)).toBeTruthy();
     // El cierre es otra etapa y no se cuela en esta.
     expect(within(record).queryByText('Verified on the floor.')).toBeNull();
+  });
+
+  it('no presenta el cierre sin nota como una etapa sin registro', async () => {
+    const detail = history();
+    getAction.mockResolvedValue({
+      ...detail,
+      events: detail.events.map((event) =>
+        event.to_state === 'closed' ? { ...event, note: null } : event,
+      ),
+    });
+
+    renderRoute();
+
+    const record = await screen.findByRole('region', { name: 'Closed record' });
+    expect(within(record).getByText('Corrective action')).toBeTruthy();
+    expect(within(record).queryByText('Nothing was recorded here yet.')).toBeNull();
   });
 
   it('la etapa levantada muestra solo cuándo se registró sin consultar acciones', async () => {

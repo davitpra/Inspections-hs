@@ -115,7 +115,7 @@ export interface ActionTransition {
  *
  * **La creación escribe solamente la primera fila**. `open → in_progress` sigue siendo
  * la declaración explícita de que el trabajo empezó; no congela la asignación, que puede
- * corregirse hasta `closed` (ADR-020).
+ * corregirse mientras el trabajo no se haya declarado hecho (ADR-021).
  */
 export const TRANSITIONS: readonly ActionTransition[] = [
   { from: null, to: 'open', roles: ['hs_coordinator'], requires: [] },
@@ -232,12 +232,35 @@ export const createActionRequestSchema = z.strictObject({
 
 export type CreateActionRequest = z.infer<typeof createActionRequestSchema>;
 
-/** Reemplazo completo de la asignación vigente mientras la acción no esté cerrada (ADR-020). */
+/**
+ * Reemplazo completo de la asignación vigente mientras el trabajo no se declaró hecho
+ * (ADR-021).
+ */
 export const replaceActionAssignmentRequestSchema = createActionRequestSchema.omit({
   remediation_group_id: true,
 });
 
 export type ReplaceActionAssignmentRequest = z.infer<typeof replaceActionAssignmentRequestSchema>;
+
+/**
+ * **Los estados en que la asignación todavía es un compromiso y no un registro** (ADR-021).
+ *
+ * `awaiting_verification` congela: quien verifica compara la evidencia contra el enunciado
+ * que tiene delante, y cambiar el responsable de un trabajo YA DECLARADO HECHO nombraría en
+ * el cierre a quien no lo ejecutó. La corrección en esa etapa existe, pero pasa por
+ * `awaiting_verification → in_progress` —el rechazo—, que deja el hecho auditado en vez de
+ * una escritura silenciosa.
+ *
+ * **Es un dato compartido, no una comprobación copiada.** La misma lista decide qué ofrece
+ * la interfaz y qué acepta el servicio; la migración la vuelve a escribir como guarda, que
+ * es la misma duplicación deliberada que ya tiene `TRANSITIONS`.
+ */
+export const ASSIGNMENT_EDITABLE_STATES: readonly ActionState[] = ['open', 'in_progress'];
+
+/** Si la asignación de una acción en este estado todavía se puede reemplazar (ADR-021). */
+export function isAssignmentEditable(state: ActionState): boolean {
+  return ASSIGNMENT_EDITABLE_STATES.includes(state);
+}
 
 /** De qué momento del trabajo es una evidencia. R3 pide y conserva antes/después (ADR-016). */
 export const EVIDENCE_KINDS = ['before', 'after'] as const;
@@ -374,7 +397,8 @@ export type ActionSummary = z.infer<typeof actionSummarySchema>;
  * `due_at` con el reloj del servidor al leer, por el mismo motivo.
  *
  * Los tres campos de asignación son los valores vigentes de la única fila. El motor permite
- * corregirlos hasta que el estado derivado llega a `closed`, y los congela desde ahí (ADR-020).
+ * corregirlos mientras el estado derivado sea `open` o `in_progress`, y los congela desde
+ * `awaiting_verification` (ADR-021).
  *
  * **`finding_id` e `investigation_id` son los dos nulables y exactamente uno es no
  * nulo** (§4, etapa 6): una acción cuelga de un hallazgo o de una investigación, nunca

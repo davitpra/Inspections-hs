@@ -1370,7 +1370,7 @@ describe('el segundo padre de la acción correctiva', () => {
     ).resolves.toMatchObject({ state: 'closed' });
   });
 
-  it('la asignación de una acción de investigación solo la edita el coordinador (ADR-020)', async () => {
+  it('la asignación de una acción de investigación solo la edita el coordinador (ADR-021)', async () => {
     const incidentId = await investigated();
     const actionId = await openActionOn(incidentId);
 

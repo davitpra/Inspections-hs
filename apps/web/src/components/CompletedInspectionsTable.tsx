@@ -95,7 +95,11 @@ export function CompletedInspectionsTable({
               */}
               <div className="table__actions">
                 {item.inspection_id ? (
-                  <Link to={to} params={{ id: item.id }} className="list__action">
+                  <Link
+                    to={to}
+                    params={{ id: item.id }}
+                    className="list__action"
+                  >
                     {actionLabel} <ExternalLinkIcon size={16} />
                   </Link>
                 ) : null}

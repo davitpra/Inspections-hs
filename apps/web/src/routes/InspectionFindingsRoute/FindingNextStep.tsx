@@ -34,13 +34,7 @@ export function FindingNextStep({
   return (
     <section className="finding__next-step" aria-label="Next step" ref={ref}>
       <div className="finding__next-step-copy">
-        <p className="finding__next-step-eyebrow">Next step</p>
         <h3>{step.label}</h3>
-        <p>{step.requirement}</p>
-        <p className="finding__next-step-owner">
-          {step.control ? "Responsible" : "Waiting on"}:{" "}
-          <strong>{step.waitingOn}</strong>
-        </p>
       </div>
 
       {step.editableAssignment ? (

@@ -1738,6 +1738,21 @@ describe('la inmutabilidad', () => {
     expect(sqlstate(error)).toBe('42501');
   });
 
+  /** La guarda no distingue rol: FORCE ROW LEVEL SECURITY alcanza también al dueño. */
+  it('al rol de migración lo frena declarar el trabajo hecho', async () => {
+    const actionId = await openAction();
+    await awaitingVerification(actionId);
+
+    const error = await inScope(
+      db.migrator,
+      [SITE_A],
+      `UPDATE corrective_action SET description = 'nothing to see' WHERE id = $1`,
+      [actionId],
+    ).catch((caught: unknown) => caught);
+
+    expect(sqlstate(error)).toBe('HS014');
+  });
+
   it('al rol de migración también lo frena el cierre', async () => {
     const actionId = await openAction();
     await awaitingVerification(actionId);
@@ -1854,7 +1869,7 @@ describe('la inmutabilidad', () => {
   });
 });
 
-describe('la edición de la asignación vigente (ADR-020)', () => {
+describe('la edición de la asignación vigente (ADR-021)', () => {
   /** Una acción `open` sobre un hallazgo derivado, con el reportante a mano. */
   async function amendable(): Promise<{
     actionId: string;
@@ -1951,18 +1966,59 @@ describe('la edición de la asignación vigente (ADR-020)', () => {
     expect(second.events).toHaveLength(1);
   });
 
-  it('acepta editar después de declarar el trabajo hecho', async () => {
+  /**
+   * ADR-021: declarar el trabajo hecho congela el compromiso, y lo congela por los DOS
+   * caminos —el servicio y el motor—, que es como este repositorio afirma una frontera.
+   */
+  it('declarar el trabajo hecho rechaza la edición por servicio y por SQL directo', async () => {
     const { actionId } = await amendable();
 
     await awaitingVerification(actionId);
 
+    await expect(
+      actions.replaceAssignment(asCoordinator(), actionId, {
+        assignee_person_id: rosterPerson,
+        description: 'Reassign the work after it was already declared done',
+        due_at: LATER_DUE_AT,
+      }),
+    ).rejects.toMatchObject({ response: { code: 'invalid_action_state' } });
+
+    const error = await inScope(
+      db.app,
+      [SITE_A],
+      `UPDATE corrective_action
+          SET description = 'Reassign the work after it was already declared done'
+        WHERE id = $1`,
+      [actionId],
+    ).catch((caught: unknown) => caught);
+
+    expect(sqlstate(error)).toBe('HS014');
+
+    const reread = await actions.get(asCoordinator(), actionId);
+    expect(reread.description).toBe('Install a fixed guard on the infeed of line 3');
+  });
+
+  /**
+   * El único camino para corregir en verificación, y deja el hecho en el stream: rechazar
+   * devuelve la acción a `in_progress` y con eso la asignación vuelve a ser un compromiso.
+   */
+  it('el rechazo de la verificación reabre la edición', async () => {
+    const { actionId } = await amendable();
+
+    await awaitingVerification(actionId);
+    await actions.transition(asCoordinator(), actionId, {
+      to: 'in_progress',
+      evidence: [],
+      reason: 'The guard is fitted but the lockout procedure was not updated',
+    });
+
     const edited = await actions.replaceAssignment(asCoordinator(), actionId, {
       assignee_person_id: rosterPerson,
-      description: 'Reassign the work after it already started here',
+      description: 'Update the lockout procedure before declaring the work done again',
       due_at: LATER_DUE_AT,
     });
 
-    expect(edited.state).toBe('awaiting_verification');
+    expect(edited.state).toBe('in_progress');
     expect(edited.assignee_person_id).toBe(rosterPerson);
   });
 
@@ -2162,23 +2218,66 @@ describe('la edición de la asignación vigente (ADR-020)', () => {
     expect(sqlstate(error)).toBe('HS014');
   });
 
-  it('el cierre y una edición concurrente dejan un único snapshot final coherente', async () => {
+  /**
+   * La carrera que queda después de ADR-021. Ya no es contra el cierre —desde
+   * `awaiting_verification` no se edita—, es contra declarar el trabajo hecho: el lock que
+   * toma la transición y el que toma la edición son el mismo, así que gana una sola.
+   *
+   * Se reemplaza sin cambiar de responsable a propósito: cambiarlo dejaría al supervisor sin
+   * la relación que lo habilita a declarar el trabajo hecho, y el test estaría midiendo dos
+   * cosas.
+   */
+  it('declarar el trabajo hecho y una edición concurrente dejan una fila coherente', async () => {
     const { actionId } = await amendable();
-    await awaitingVerification(actionId);
+    await actions.transition(asSupervisor(), actionId, { to: 'in_progress', evidence: [] });
 
     const results = await Promise.allSettled([
       actions.replaceAssignment(asCoordinator(), actionId, {
-        assignee_person_id: rosterPerson,
-        description: 'Concurrent replacement visible only if it wins the closure lock',
+        assignee_person_id: supervisor.personId,
+        description: 'Concurrent replacement visible only if it wins the completion lock',
         due_at: LATER_DUE_AT,
       }),
-      actions.transition(asCoordinator(), actionId, { to: 'closed', evidence: [] }),
+      actions.transition(asSupervisor(), actionId, { to: 'awaiting_verification', evidence: [] }),
     ]);
 
     expect(results[1]?.status).toBe('fulfilled');
     if (results[0]?.status === 'rejected') {
       expect(results[0].reason).toMatchObject({ response: { code: 'invalid_action_state' } });
     }
+
+    // Uno de los dos compromisos enteros, nunca una mezcla, y ya congelado.
+    const current = await actions.get(asCoordinator(), actionId);
+
+    expect(current.state).toBe('awaiting_verification');
+    if (results[0]?.status === 'fulfilled') {
+      expect(current.description).toBe(
+        'Concurrent replacement visible only if it wins the completion lock',
+      );
+      expect(current.due_at).toBe(LATER_DUE_AT);
+    } else {
+      expect(current.description).toBe('Install a fixed guard on the infeed of line 3');
+      expect(current.due_at).toBe(DUE_AT);
+    }
+
+    await expect(
+      actions.replaceAssignment(asCoordinator(), actionId, {
+        assignee_person_id: rosterPerson,
+        description: 'A late correction that the frozen assignment refuses',
+        due_at: LATER_DUE_AT,
+      }),
+    ).rejects.toMatchObject({ response: { code: 'invalid_action_state' } });
+  });
+
+  /** El snapshot definitivo lo sigue escribiendo el cierre, con lo que quedó congelado. */
+  it('el cierre audita la asignación congelada', async () => {
+    const { actionId } = await amendable();
+    await actions.replaceAssignment(asCoordinator(), actionId, {
+      assignee_person_id: supervisor.personId,
+      description: 'The commitment as it stood when the work was declared done',
+      due_at: LATER_DUE_AT,
+    });
+    await awaitingVerification(actionId);
+    await actions.transition(asCoordinator(), actionId, { to: 'closed', evidence: [] });
 
     const current = await actions.get(asCoordinator(), actionId);
     const closing = (await auditEvents(SITE_A, 'action.transitioned')).find(
@@ -2187,7 +2286,7 @@ describe('la edición de la asignación vigente (ADR-020)', () => {
 
     expect(closing?.payload).toMatchObject({
       assignee_person_id: current.assignee_person_id,
-      description: current.description,
+      description: 'The commitment as it stood when the work was declared done',
     });
     expect(new Date(String(closing?.payload.due_at)).toISOString()).toBe(current.due_at);
   });

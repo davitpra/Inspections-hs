@@ -22,12 +22,16 @@ export function canCreateAction(
 }
 
 /**
- * Quién puede corregir la asignación de una acción de ESTE hallazgo hasta `closed` (ADR-020).
+ * Quién puede corregir la asignación de una acción de ESTE hallazgo (ADR-021).
  *
  * Se autoriza igual que abrir la acción (ADR-017): coordinador, más la cuenta que
  * reportó el hallazgo. Corregir un error de responsable, trabajo o fecha es de la misma
  * clase de decisión que la asignación original, no una nueva. La interfaz ofrece el
  * control; el servidor vuelve a autorizarlo en `ActionsService.replaceAssignment`.
+ *
+ * **Decide QUIÉN y no HASTA CUÁNDO.** La frontera —la asignación se congela al declarar el
+ * trabajo hecho— es `isAssignmentEditable` de contracts, la misma lista que aplica el
+ * servidor, y se consulta junto a esto en `nextStep`.
  */
 export function canEditAssignment(
   account: Session | null,

@@ -45,7 +45,8 @@ export async function transitionAction(id: string, body: TransitionRequest): Pro
 }
 
 /**
- * Reemplaza la asignación operativa completa hasta que la acción se cierra (ADR-020).
+ * Reemplaza la asignación operativa completa mientras el trabajo no se declaró hecho
+ * (ADR-021).
  */
 export async function replaceAssignment(
   id: string,

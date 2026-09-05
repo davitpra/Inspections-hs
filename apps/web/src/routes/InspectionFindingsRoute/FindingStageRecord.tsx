@@ -4,15 +4,11 @@ import { useQuery } from "@tanstack/react-query";
 import { getAction } from "../../api/actions";
 import { queryKeys } from "../../api/query-keys";
 import { formatDay } from "../../presentation/dates";
-import {
-  eventsInStage,
-  STAGE_LABELS,
-  type FindingStage,
-} from "./presentation";
+import { eventsInStage, STAGE_LABELS, type FindingStage } from "./presentation";
 
 /**
  * Lo que se decidió en UNA etapa, de solo lectura, en el mismo hueco donde la etapa vigente
- * ofrece su próximo paso (ADR-020).
+ * ofrece su próximo paso (ADR-021).
  *
  * Se ve distinto del paso a propósito —filete neutro y no azul—: el paso es el único llamado
  * a la acción de la ficha, y si los dos se dibujaran igual, elegir una etapa pasada parecería
@@ -97,8 +93,8 @@ export function FindingStageRecord({
  * Qué se comprometió, con quién y para cuándo, leído de los valores VIGENTES del resumen.
  *
  * Son los vigentes y no los de un evento a propósito: la asignación se puede corregir hasta
- * el cierre (ADR-020), y lo que hay que tener a la vista mientras se juzga un paso es el
- * compromiso que rige hoy, no el que regía cuando alguien pulsó el botón.
+ * que se declara el trabajo hecho (ADR-021), y lo que hay que tener a la vista mientras se
+ * juzga un paso es el compromiso que rige hoy, no el que regía cuando alguien pulsó el botón.
  *
  * El título lo pone quien la dibuja porque la etapa cambia lo que la asignación ES ahí:
  * bajo `Assigned` es lo único que se decidió, y bajo las demás es el encabezado de lo que
@@ -169,7 +165,7 @@ function StageEvents({
 }: {
   actionId: string;
   stage: FindingStage;
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   const detail = useQuery({
     queryKey: queryKeys.action(actionId),
     queryFn: () => getAction(actionId),
@@ -192,17 +188,21 @@ function StageEvents({
     leyendo— y con eso un paso sin razón, sin nota y sin evidencia no aporta ningún renglón:
     dibujarlo igual dejaría un hueco en blanco entre separadores.
   */
-  const events = eventsInStage(detail.data.events, stage).filter(
+  const stageEvents = eventsInStage(detail.data.events, stage);
+  const events = stageEvents.filter(
     (event) => event.reason || event.note || event.evidence.length > 0,
   );
 
-  if (events.length === 0) {
+  if (stageEvents.length === 0) {
     return (
       <p className="finding__stage-record-eyebrow">
         Nothing was recorded here yet.
       </p>
     );
   }
+
+  // La transición ya acredita la etapa; sus detalles son opcionales y pueden no dejar renglones.
+  if (events.length === 0) return null;
 
   return (
     <ol className="finding__stage-decisions">

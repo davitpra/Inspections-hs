@@ -29,9 +29,9 @@ import { appUser, person } from './identity';
  * `.sql` a partir de esto y se llevaría puesto el mecanismo. Si el SQL cambia, este
  * espejo se actualiza a mano.
  *
- * Avanzar una acción sigue siendo insertar un evento. ADR-020 permite reemplazar únicamente
- * responsable, trabajo y plazo hasta que ese stream llega a `closed`; 0043 limita ese UPDATE en
- * el privilegio y en una guarda del motor.
+ * Avanzar una acción sigue siendo insertar un evento. ADR-021 permite reemplazar únicamente
+ * responsable, trabajo y plazo mientras ese stream no llegó a `awaiting_verification`; 0043
+ * limita ese UPDATE en el privilegio y 0044 pone la frontera en la guarda del motor.
  */
 
 /**
@@ -75,7 +75,8 @@ export const correctiveAction = pgTable(
 
     description: text('description').notNull(),
 
-    // Fecha vigente, corregible junto con la asignación hasta `closed` (ADR-020).
+    // Fecha vigente, corregible junto con la asignación hasta que se declara el trabajo
+    // hecho (ADR-021).
     dueAt: timestamp('due_at', { withTimezone: true }).notNull(),
 
     // La remediación compartida de la pregunta cerrada 9: agrupa en la UI y en

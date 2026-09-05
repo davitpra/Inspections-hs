@@ -306,8 +306,6 @@ describe('el próximo paso del hallazgo', () => {
   it('ofrece la asignación al coordinador cuando todavía no hay acciones', () => {
     expect(nextStep([], 'raised', session('hs_coordinator'), itemFinding(GUARDS))).toEqual({
       label: 'Create corrective action',
-      requirement: 'Assign a responsible person, describe the work, and set a deadline.',
-      waitingOn: 'H&S coordinator or whoever raised the finding',
       control: { kind: 'create' },
       editableAssignment: null,
     });
@@ -336,7 +334,6 @@ describe('el próximo paso del hallazgo', () => {
       nextStep([action()], 'assigned', session('external_auditor'), itemFinding(GUARDS)),
     ).toMatchObject({
       label: 'Start work',
-      waitingOn: 'Dana Okafor',
       control: { kind: 'progress', action: action() },
     });
   });
@@ -355,7 +352,7 @@ describe('el próximo paso del hallazgo', () => {
     });
   });
 
-  it('nombra a quién espera cuando un miembro de JHSC no puede intentar nada', () => {
+  it('deja el paso sin control cuando un miembro de JHSC no puede intentar nada', () => {
     expect(
       nextStep(
         [action({ state: 'in_progress' })],
@@ -365,7 +362,6 @@ describe('el próximo paso del hallazgo', () => {
       ),
     ).toMatchObject({
       label: 'Declare the work done',
-      waitingOn: 'Dana Okafor',
       control: null,
     });
   });
@@ -381,7 +377,7 @@ describe('el próximo paso del hallazgo', () => {
     ).toBeNull();
   });
 
-  /** ADR-020: la corrección permanece disponible hasta el cierre. */
+  /** ADR-021: la corrección permanece disponible hasta que se declara el trabajo hecho. */
   it('ofrece Edit assignment junto a Start work en assigned', () => {
     const step = nextStep([action()], 'assigned', session('hs_coordinator'), itemFinding(GUARDS));
 
@@ -399,18 +395,34 @@ describe('el próximo paso del hallazgo', () => {
     ).toBeNull();
   });
 
-  it.each([
-    ['in_progress', 'in_progress'],
-    ['verification', 'awaiting_verification'],
-  ] as const)('mantiene Edit assignment en %s', (findingState, actionState) => {
+  it('mantiene Edit assignment mientras el trabajo está en curso', () => {
     expect(
       nextStep(
-        [action({ state: actionState })],
-        findingState,
+        [action({ state: 'in_progress' })],
+        'in_progress',
         session('hs_coordinator'),
         itemFinding(GUARDS),
       )?.editableAssignment,
-    ).toEqual(action({ state: actionState }));
+    ).toEqual(action({ state: 'in_progress' }));
+  });
+
+  /**
+   * ADR-021: declarar el trabajo hecho congela el compromiso. Quien verifica compara la
+   * evidencia contra ESE enunciado, y el cierre no puede nombrar a quien no ejecutó.
+   */
+  it('retira Edit assignment en verification, con el paso todavía ofrecido', () => {
+    const step = nextStep(
+      [action({ state: 'awaiting_verification' })],
+      'verification',
+      session('hs_coordinator'),
+      itemFinding(GUARDS),
+    );
+
+    expect(step?.editableAssignment).toBeNull();
+    expect(step?.control).toEqual({
+      kind: 'progress',
+      action: action({ state: 'awaiting_verification' }),
+    });
   });
 });
 
@@ -527,7 +539,7 @@ describe('el plazo del formulario', () => {
 });
 
 /**
- * LA MISMA REGLA PARA CREAR Y PARA EDITAR (ADR-020). Se prueba una vez porque es una sola:
+ * LA MISMA REGLA PARA CREAR Y PARA EDITAR (ADR-021). Se prueba una vez porque es una sola:
  * si el compromiso que se asigna y el que se corrige se comprobaran distinto, la edición
  * aceptaría lo que crear rechaza sin que nada lo delate.
  */

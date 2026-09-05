@@ -114,8 +114,10 @@ interface EscalatedRow extends Record<string, unknown> {
  *   - el plazo VIGENTE pasó el umbral del nivel (3 o 7 días);
  *   - no hay ya una escalada de este nivel.
  *
- * El plazo, responsable y trabajo salen de la única asignación vigente (ADR-020). Corregir
- * la fecha antes del cierre mueve lo todavía no emitido; las filas ya escritas no se tocan.
+ * El plazo, responsable y trabajo salen de la única asignación vigente (ADR-021). Corregir
+ * la fecha antes de declarar el trabajo hecho mueve lo todavía no emitido; las filas ya
+ * escritas no se tocan. Una acción retenida en `awaiting_verification` sigue escalando sobre
+ * un plazo congelado: moverlo exige rechazar la verificación, que es un hecho del stream.
  *
  * `days_overdue` se calcula y se guarda: el registro dice cuán tarde era CUANDO se
  * escaló, no cuán tarde es hoy.

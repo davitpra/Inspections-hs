@@ -14,8 +14,9 @@ import { ActionsService } from './actions.service';
 /**
  * Requisitos §3 R3 — El cierre verificado de la acción.
  *
- * Avanzar agrega un evento; la asignación operativa se reemplaza entera hasta `closed`,
- * cuando la guarda del motor la congela (ADR-020). DELETE no existe.
+ * Avanzar agrega un evento; la asignación operativa se reemplaza entera hasta que el
+ * trabajo se declara hecho, cuando la guarda del motor la congela (ADR-021). DELETE no
+ * existe.
  *
  * **Tampoco hay ruta para escalar.** El escalamiento es del planificador y no de una
  * persona: si existiera un `POST /actions/:id/escalate`, existiría la posibilidad de
@@ -75,7 +76,8 @@ export class ActionsController {
   }
 
   /**
-   * Reemplaza la asignación vigente completa hasta el cierre (ADR-020).
+   * Reemplaza la asignación vigente completa mientras el trabajo no se declaró hecho
+   * (ADR-021).
    */
   @Put('actions/:id/assignment')
   async replaceAssignment(

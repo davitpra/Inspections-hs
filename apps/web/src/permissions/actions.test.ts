@@ -76,7 +76,7 @@ describe('la creación de acciones (ADR-017)', () => {
   });
 });
 
-describe('la edición de la asignación (ADR-020)', () => {
+describe('la edición de la asignación (ADR-021)', () => {
   it('se autoriza igual que abrir la acción: coordinador o quien reportó', () => {
     for (const role of ROLES) {
       expect(canEditAssignment(session(role), finding())).toBe(role === 'hs_coordinator');

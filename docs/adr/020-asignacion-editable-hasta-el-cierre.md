@@ -2,10 +2,10 @@
 
 |                             |                                                                  |
 | --------------------------- | ---------------------------------------------------------------- |
-| **Estado**                  | Aceptada                                                         |
+| **Estado**                  | Superada                                                         |
 | **Fecha**                   | 2026-09-02                                                       |
 | **Supersede**               | ADR-018                                                          |
-| **Superada por**            | —                                                                |
+| **Superada por**            | ADR-021                                                          |
 | **Referencias**             | `docs/Requisitos_V1.2.md` §3 R2, §4, §7; ADR-002, ADR-004, ADR-014, ADR-017, ADR-019 |
 | **Changes que la consumen** | `edit-corrective-action-until-closed`                            |
 
