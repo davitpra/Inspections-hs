@@ -2002,6 +2002,16 @@ select:disabled {
   padding: 0;
 }
 
+/*
+ * LO QUE SE HIZO SE SEPARA DE LO QUE SE COMPROMETIÓ. La etapa abre nombrando la acción
+ * correctiva y sigue con los pasos que se dieron sobre ella; sin esta línea los dos bloques
+ * se leen como un solo listado de valores, y el trabajo comprometido parece un evento más.
+ */
+.finding__stage-decision-values + .finding__stage-decisions {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--line);
+}
+
 .finding__stage-decision {
   display: grid;
   gap: var(--space-3);
@@ -2022,8 +2032,6 @@ select:disabled {
 }
 
 .finding__stage-decision-values dt,
-.finding__stage-decision-action span,
-.finding__stage-decision-value span,
 .finding__stage-decision-note span,
 .finding__stage-decision-evidence span {
   display: block;
@@ -2036,8 +2044,6 @@ select:disabled {
 }
 
 .finding__stage-decision-values dd,
-.finding__stage-decision-action,
-.finding__stage-decision-value,
 .finding__stage-decision-note,
 .finding__stage-decision-evidence {
   margin: 0;

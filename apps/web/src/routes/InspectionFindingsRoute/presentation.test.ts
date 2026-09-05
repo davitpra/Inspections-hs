@@ -14,7 +14,6 @@ import {
   actionsByFinding,
   blockingActions,
   commitmentRequest,
-  eventLabel,
   eventsInStage,
   findingDeadline,
   futureDueAt,
@@ -655,13 +654,4 @@ describe('la lectura de una etapa', () => {
     ]);
   });
 
-  /** El PAR y no el destino: leer "Send it back" donde alguien pulsó "Send it back". */
-  it('nombra el evento con la etiqueta del botón que lo pidió', () => {
-    expect(eventLabel(event({ from_state: 'open', to_state: 'in_progress' }))).toBe('Start work');
-    expect(
-      eventLabel(event({ from_state: 'awaiting_verification', to_state: 'in_progress' })),
-    ).toBe('Send it back');
-    // La creación no la nombró ningún botón.
-    expect(eventLabel(event({ from_state: null, to_state: 'open' }))).toBe('Open');
-  });
 });

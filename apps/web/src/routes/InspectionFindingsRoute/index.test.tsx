@@ -1228,16 +1228,41 @@ describe('InspectionFindingsRoute — navegación entre etapas', () => {
     expectCurrentStage('Closed');
   });
 
-  /** El PAR y no el destino: "Send it back" y "Start work" llegan al mismo estado. */
-  it('nombra cada evento por la transición que alguien pulsó', async () => {
+  /**
+   * LA ETAPA CONSERVA LO QUE SE ESCRIBIÓ, NO CADA PASO QUE SE DIO. La transición ya no se
+   * nombra —`Start work` bajo `In progress` repetía la etapa que la tira encabeza—, así que
+   * el paso que empezó el trabajo sin razón, sin nota y sin evidencia no deja renglón, y el
+   * rechazo que sí trajo un motivo lo deja entero.
+   */
+  it('conserva lo escrito en la etapa y no la etiqueta de cada transición', async () => {
     renderRoute();
 
     fireEvent.click(await screen.findByRole('tab', { name: 'In progress' }));
 
     const record = await screen.findByRole('region', { name: 'In progress record' });
-    expect(within(record).getByText('Start work')).toBeTruthy();
-    expect(within(record).getByText('Send it back')).toBeTruthy();
     expect(within(record).getByText('The guard is not interlocked yet.')).toBeTruthy();
+    expect(within(record).queryByText('Start work')).toBeNull();
+    expect(within(record).queryByText('Send it back')).toBeNull();
+  });
+
+  /**
+   * QUÉ SE COMPROMETIÓ ES LO QUE SOSTIENE LA LECTURA DEL PASO. La etapa contestaba con la
+   * etiqueta del evento y el instante en que se registró, y ninguna de las dos dice qué
+   * trabajo se debe, quién lo debe ni para cuándo.
+   */
+  it('encabeza la etapa con la acción correctiva y no con el instante del evento', async () => {
+    renderRoute();
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'In progress' }));
+
+    const record = await screen.findByRole('region', { name: 'In progress record' });
+    expect(within(record).getByText('Corrective action')).toBeTruthy();
+    expect(within(record).getByText('Refit the guard on packaging line 3')).toBeTruthy();
+    expect(within(record).getByText('Ada Reid')).toBeTruthy();
+    expect(within(record).getByText('2027-08-30')).toBeTruthy();
+    // Ni el reloj del stream ni la etiqueta de la transición ocupan valores de la etapa.
+    expect(within(record).queryByText('Recorded')).toBeNull();
+    expect(within(record).queryByText('Action')).toBeNull();
   });
 
   it('cuenta la evidencia y conserva la nota de la etapa de verificación', async () => {

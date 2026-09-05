@@ -27,11 +27,7 @@ import {
 } from '@hs/forms';
 
 import { canAttempt, canCreateAction, canEditAssignment } from '../../permissions/actions';
-import {
-  STATE_LABELS,
-  transitionLabel,
-  transitionTakesNote,
-} from '../../presentation/actions';
+import { transitionLabel, transitionTakesNote } from '../../presentation/actions';
 import { formatDay } from '../../presentation/dates';
 import { dueIn } from '../../presentation/inspections';
 
@@ -215,19 +211,6 @@ export function eventsInStage(
   return events
     .filter((event) => STAGE_BY_ACTION_STATE[event.to_state] === stage)
     .toSorted((left, right) => left.position - right.position);
-}
-
-/**
- * Cómo se nombra un evento ya registrado: por el PAR, con la misma tabla que nombró el botón
- * que lo pidió. Leer "Send it back" donde alguien pulsó "Send it back" es lo que hace que el
- * registro y la pantalla que lo produjo se puedan comparar.
- *
- * Sin `from_state` es la creación de la acción, que ningún botón nombró: ahí sirve el estado.
- */
-export function eventLabel(event: Pick<ActionEvent, 'from_state' | 'to_state'>): string {
-  return event.from_state
-    ? transitionLabel(event.from_state, event.to_state)
-    : STATE_LABELS[event.to_state];
 }
 
 /** El plazo más cercano entre las acciones que retienen el hallazgo en su etapa. */
