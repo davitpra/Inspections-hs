@@ -150,49 +150,31 @@ audit chain has to be able to state.
 - **AND** the transitions recorded by the coordinator on their behalf name the coordinator's
   account as actor
 
-### Requirement: The deadline is stated by the HS coordinator and frozen at creation
+### Requirement: The deadline is stated when the action is created and frozen at closure
 
-The system SHALL require a `due_at` when a corrective action is created, for a finding and for an
-investigation alike, and SHALL store it unchanged on the row, so the record states what was
-promised the day it was promised. The system SHALL refuse a creation with no `due_at`, and SHALL
-refuse a `due_at` that is not later than the moment of creation with the code `invalid_due_at`,
-because an action born overdue escalates before anyone can act on it. That comparison reads the
-current time, so it SHALL be enforced when the request is served and not by a database check. The
-system SHALL NOT derive the deadline from any property of the parent and SHALL NOT store a severity
-on the action. The stored `due_at` column SHALL never move afterwards; while the action's derived
-state is `open` an accepted commitment amendment MAY supersede it for every reading, and once work
-has started a different deadline is obtained only by opening a new action.
+The system SHALL require a future `due_at` when a corrective action is created and whenever its
+assignment is replaced. The system SHALL store the current deadline directly on
+`corrective_action`, SHALL use it for subsequent deadline processing, and SHALL allow an authorized
+replacement while the derived state is not `closed`. Once the action reaches `closed`, the system
+SHALL refuse every change to `due_at`. The system SHALL NOT derive the deadline from its parent and
+SHALL NOT store severity on the action.
 
-#### Scenario: The stored deadline is the one the coordinator stated
+#### Scenario: A current deadline can be corrected before closure
 
-- **WHEN** the HS coordinator creates an action on `2026-08-10T09:00:00-04:00` stating `due_at`
-  `2026-09-30T17:00:00-04:00`
-- **THEN** the stored `due_at` is `2026-09-30T17:00:00-04:00`
+- **GIVEN** an action is `in_progress` with a future `due_at`
+- **WHEN** an authorized account replaces its assignment with a later future `due_at`
+- **THEN** the `corrective_action.due_at` value is replaced
 
-#### Scenario: An action of an investigation states its deadline the same way
+#### Scenario: A closed deadline cannot move
 
-- **WHEN** the HS coordinator creates an action for an investigation stating a `due_at` two weeks
-  out
-- **THEN** the stored `due_at` is that date
-- **AND** no `severity` is required and none is stored
+- **GIVEN** an action is `closed`
+- **WHEN** any role attempts to update `corrective_action.due_at`
+- **THEN** the database rejects the update and preserves the final value
 
-#### Scenario: A deadline already past is refused
+#### Scenario: A past replacement deadline is refused
 
-- **WHEN** an action is created with a `due_at` one day before the moment of creation
+- **WHEN** an authorized account replaces an assignment with a `due_at` before the request instant
 - **THEN** the request is rejected with the code `invalid_due_at`
-- **AND** no `corrective_action` row is created
-
-#### Scenario: An action with no deadline is refused
-
-- **WHEN** an action is created with no `due_at`
-- **THEN** the request is rejected
-- **AND** no `corrective_action` row is created
-
-#### Scenario: The deadline of an open action does not move
-
-- **GIVEN** an action created with a `due_at` fourteen days out
-- **WHEN** an `UPDATE` sets its `due_at` to a later date
-- **THEN** the engine rejects the update and the stored `due_at` is unchanged
 ### Requirement: The state of an action is derived from its events and is never stored as a column
 
 The system SHALL record every step of an action as a `corrective_action_event` row and SHALL NOT
@@ -249,7 +231,7 @@ deadline does not begin the work. The action SHALL stay in `open` until the assi
 The system SHALL create a corrective action with exactly one initial `corrective_action_event` whose
 `to_state` is `open`. The system SHALL NOT append `open` to `in_progress` during creation. Starting
 work SHALL remain the existing explicit state transition available to the assigned person or an
-`hs_coordinator`.
+`hs_coordinator`, and SHALL NOT freeze assignment editing.
 
 #### Scenario: Creation leaves the action assigned
 
@@ -257,52 +239,42 @@ work SHALL remain the existing explicit state transition available to the assign
 - **THEN** its derived state is `open`
 - **AND** no `in_progress` event exists until an authorized account starts work
 
-#### Scenario: Starting work closes the amendment window
+#### Scenario: Starting work keeps the assignment correctable
 
 - **GIVEN** an open action has its current commitment
 - **WHEN** the assigned person or an `hs_coordinator` moves it to `in_progress`
 - **THEN** the transition is accepted
-- **AND** later commitment amendments are refused
+- **AND** an authorized account can still replace the assignment
 
-### Requirement: An open action commitment can be amended without rewriting its past
+### Requirement: A corrective action assignment is replaceable until closure
 
 The system SHALL allow an authenticated `hs_coordinator`, or the account named by the parent
 finding's `reported_by`, to submit a complete replacement `assignee_person_id`, `description` and
-`due_at` while the corrective action's derived state is `open`. The system SHALL require the new
-assignee to be active and belong to the action's site, and SHALL require `due_at` to be later than
-the amendment instant. The system SHALL refuse every amendment after the action leaves `open`.
+`due_at` while the corrective action's derived state is `open`, `in_progress` or
+`awaiting_verification`. Each accepted request SHALL update those three columns on the same
+`corrective_action` row and SHALL NOT append an assignment version. The system SHALL require an
+active assignee from the action's site and a future `due_at`. It SHALL refuse replacement when the
+state is `closed` with `invalid_action_state`.
 
-The system SHALL append each accepted replacement with its actor and occurrence time and SHALL
-preserve the original commitment and every earlier amendment. Action summaries, action details,
-deadline processing and subsequent authorization SHALL use the latest accepted commitment.
+#### Scenario: Work in progress can be corrected
 
-#### Scenario: A finding reporter corrects an assigned action
+- **GIVEN** an action is `in_progress`
+- **WHEN** an authorized account submits valid replacement assignment fields
+- **THEN** the same `corrective_action` row exposes the replacement values
+- **AND** no new corrective action or assignment-history row is created
 
-- **GIVEN** a corrective action is `open` and belongs to a finding whose `reported_by` names the reader
-- **WHEN** the reader submits a valid `assignee_person_id`, `description` and future `due_at`
-- **THEN** an amendment is appended and the action remains `open`
-- **AND** subsequent reads expose those values as the current commitment
+#### Scenario: Verification can be corrected before closure
 
-#### Scenario: Work that has started cannot be reassigned
+- **GIVEN** an action is `awaiting_verification`
+- **WHEN** an authorized account submits valid replacement assignment fields
+- **THEN** the replacement is accepted without changing the action state
 
-- **GIVEN** a corrective action's current state is `in_progress`
-- **WHEN** an otherwise authorized account submits an amendment
-- **THEN** the request is rejected with the code `invalid_action_state`
-- **AND** no amendment is appended
+#### Scenario: Closure freezes the assignment
 
-#### Scenario: The original and corrected commitments remain readable
-
-- **GIVEN** an open action has two accepted amendments
-- **WHEN** its detail is read
-- **THEN** the original commitment and both amendments are returned in recorded order
-- **AND** the second amendment supplies the current `assignee_person_id`, `description` and `due_at`
-
-#### Scenario: Concurrent amendments do not fork the history
-
-- **GIVEN** an open action whose latest commitment position is known
-- **WHEN** two amendments are submitted concurrently
-- **THEN** at most one occupies the next `(action_id, position)`
-- **AND** the action has one unambiguous current commitment
+- **GIVEN** an action is `closed`
+- **WHEN** an otherwise authorized account submits replacement assignment fields
+- **THEN** the request is rejected with `invalid_action_state`
+- **AND** the final assignment remains unchanged
 
 ### Requirement: Only the transitions of the state machine are accepted
 
@@ -541,14 +513,10 @@ permission itself so that the response never discloses which is the case.
 
 ### Requirement: An overdue action escalates to the supervisor at three days and to management at seven
 
-The system SHALL run a daily job that finds every action whose current state is not `closed` and
-whose `due_at` is more than 3 days in the past, and escalate it to the `supervisor` accounts of
-its site; and every such action whose `due_at` is more than 7 days in the past, and escalate it to
-the `management` accounts of its site. Each escalation SHALL be recorded as one
-`corrective_action_escalation` row per action and `level`, and the row SHALL be unique on
-`(action_id, level)`, so that a job that runs every day of the month escalates once per level.
-A closed action SHALL NOT escalate, whatever its `due_at`. Escalation SHALL NOT be a state: it
-changes nothing in the event stream and adds no `corrective_action_event` row.
+The system SHALL use the current `corrective_action.due_at` to find every non-closed action more than
+3 or 7 days overdue and SHALL retain the existing supervisor and management escalation behavior.
+Each level SHALL still be emitted at most once. Replacing `due_at` SHALL affect future decisions but
+SHALL NOT delete, withdraw or repeat an escalation already emitted.
 
 #### Scenario: Three days past the deadline reaches the supervisor
 
@@ -557,6 +525,18 @@ changes nothing in the event stream and adds no `corrective_action_event` row.
 - **THEN** a `corrective_action_escalation` row with `level` `supervisor` exists for it
 - **AND** every active `supervisor` account of its site has a notification of kind
   `corrective_action_overdue_supervisor` naming the action
+
+#### Scenario: A replacement deadline governs future escalation
+
+- **GIVEN** a non-closed action has not escalated
+- **WHEN** its `due_at` is replaced with a later future value
+- **THEN** subsequent escalation runs use the replacement value
+
+#### Scenario: A past escalation survives a replacement
+
+- **GIVEN** an action already has a `corrective_action_escalation` row
+- **WHEN** its assignment is replaced with a later `due_at`
+- **THEN** the escalation row and its notifications remain unchanged
 
 #### Scenario: Seven days past the deadline reaches management
 
@@ -592,25 +572,26 @@ changes nothing in the event stream and adds no `corrective_action_event` row.
 - **THEN** its current state is unchanged by the escalation
 - **AND** no event of the stream refers to an escalation
 
-### Requirement: The assignee is notified when an action is created for them
+### Requirement: The effective assignee has one current assignment notification
 
-The system SHALL create, when an action is created and the assigned person has an active account,
-one `notification` row for that account with `kind` `corrective_action_assigned` and a payload
-naming the action, the finding, the `description` and the `due_at`. When the assigned person has
-no account, no notification SHALL be created and the action SHALL still be created. Notifications
-SHALL be delivered in the application; the system SHALL NOT depend on outbound email.
+The system SHALL create an in-application `corrective_action_assigned` notification when the current
+assignee has an active account. When an assignment replacement changes `assignee_person_id`, the
+system SHALL withdraw the previous action-assignment notification from its recipient's inbox and
+SHALL notify the new assignee. It SHALL NOT delete the withdrawn notification. A person without an
+account SHALL receive no notification and SHALL NOT prevent the replacement.
 
-#### Scenario: The assignee sees the assignment in their inbox
+#### Scenario: Correcting the assignee moves the inbox item
 
-- **WHEN** an action is created for a person who has an active account
-- **THEN** a `notification` row of kind `corrective_action_assigned` exists for that account
-- **AND** its payload names the action, its `due_at` and the finding it comes from
+- **GIVEN** an action assignment notified person A
+- **WHEN** an authorized account replaces `assignee_person_id` with person B
+- **THEN** person A no longer sees that assignment notification
+- **AND** person B sees the current assignment notification when they have an active account
 
-#### Scenario: An assignee with no account gets no notification
+#### Scenario: An assignee without an account gets no notification
 
-- **WHEN** an action is created for a person with no `app_user` row
-- **THEN** the action is created
-- **AND** no notification is created for it
+- **WHEN** an assignment names a person with no `app_user` row
+- **THEN** the assignment is accepted
+- **AND** no active assignment notification exists for that person
 
 ### Requirement: Actions are read within the reader's site scope
 

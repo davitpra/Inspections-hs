@@ -766,17 +766,16 @@ why it changed.
 
 The system SHALL append exactly one `audit_log` entry of type `action.created` for every
 `corrective_action` row, written by a database trigger rather than by application code, in the
-same transaction as the insert. Its `payload` SHALL name `action_id`, `finding_id`, `site_id`,
-`assignee_person_id`, `severity` and `due_at`, so that the record states what was promised, by
-when, and on what severity that deadline was based. Its `actor_user_id` SHALL be the account that
-created it.
+same transaction as the insert. Its `payload` SHALL name `action_id`, parent identifier and
+`site_id`, and its `actor_user_id` SHALL identify the creator. The payload SHALL NOT include
+provisional `assignee_person_id`, `description` or `due_at`, and replacing those fields before
+closure SHALL NOT append audit entries.
 
 #### Scenario: Creating an action appends one entry
 
 - **WHEN** the HS coordinator creates a corrective action
 - **THEN** one new `audit_log` entry of type `action.created` exists for that site
-- **AND** its `payload` names the `action_id`, the `finding_id`, the `assignee_person_id`, the
-  `severity` and the `due_at`
+- **AND** its payload omits `assignee_person_id`, `description` and `due_at`
 
 #### Scenario: An entry is written even when the insert bypasses the endpoint
 
@@ -786,12 +785,11 @@ created it.
 
 ### Requirement: Every transition of a corrective action is recorded in the chain
 
-The system SHALL append exactly one `audit_log` entry of type `action.transitioned` for every
-`corrective_action_event` row, written by the same trigger mechanism. Its `payload` SHALL name
-`action_id`, `site_id`, `from_state`, `to_state`, `position` and the `reason` when the event
-carries one. Its `actor_user_id` SHALL be the `actor_user_id` of the event, which for a closing
-event is the verifier and never the executor. The entry for the first event of an action SHALL
-carry a null `from_state` and `to_state` `open`.
+The system SHALL append one database-triggered `action.transitioned` entry for every
+`corrective_action_event`. Every payload SHALL identify the transition and actor as before. When
+`to_state` is `closed`, the same entry SHALL additionally include the final
+`assignee_person_id`, `description` and `due_at` read from the action in that transaction. No
+earlier transition SHALL include an assignment snapshot.
 
 #### Scenario: An action that runs its full course leaves four entries
 
@@ -806,6 +804,14 @@ carry a null `from_state` and `to_state` `open`.
 - **WHEN** an action is closed by an account other than the one that completed it
 - **THEN** the `action.transitioned` entry with `to_state` `closed` carries that verifier as
   `actor_user_id`
+
+#### Scenario: Closure records the final assignment once
+
+- **GIVEN** an action assignment changed while the action was active
+- **WHEN** a verifier closes the action
+- **THEN** the `action.transitioned` entry for `closed` contains the current `assignee_person_id`,
+  `description` and `due_at`
+- **AND** no audit entry contains an intermediate assignment version
 
 #### Scenario: A refused verification records its reason
 

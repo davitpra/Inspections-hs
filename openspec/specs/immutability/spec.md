@@ -296,23 +296,31 @@ no two of these tables can disagree about which workplace a record belongs to.
 - **WHEN** a `finding` row is inserted whose `inspection_id` belongs to another site
 - **THEN** the insert fails on the `(inspection_id, site_id)` foreign key
 
-### Requirement: A corrective action, its events, its evidence and its escalations cannot be modified or removed
+### Requirement: A corrective action freezes its assignment at closure and its records cannot be removed
 
-The system SHALL make `corrective_action`, `corrective_action_event`,
-`corrective_action_evidence` and `corrective_action_escalation` fully immutable: no column of any
-of the four tables SHALL be updatable by any role, and no row SHALL be deletable or truncatable.
-Both barriers of the mechanism SHALL apply — the revoked privilege for the application role and
-the guard trigger for every role including the table owner. Advancing an action SHALL be done by
-inserting an event, never by touching a row; while the action is `open`, its assignee, description
-and deadline SHALL be corrected only by inserting an append-only
-`corrective_action_commitment_amendment` row, never by updating `corrective_action`.
+The system SHALL permit only `assignee_person_id`, `description` and `due_at` to be updated on
+`corrective_action`, only while its derived state is not `closed`, and only through an explicit
+application-role column grant. A database guard SHALL enforce the allowed columns and state for
+every role including the owner. Every other action column and every column of
+`corrective_action_event`, `corrective_action_evidence` and `corrective_action_escalation` SHALL
+remain immutable. No role SHALL delete or truncate any of those tables.
 
-#### Scenario: The application role cannot move a deadline
+#### Scenario: The application role replaces active assignment fields
 
-- **WHEN** a session connected as the application role runs
-  `UPDATE corrective_action SET due_at = now() + interval '90 days' WHERE id = <existing id>`
-- **THEN** the statement fails with SQLSTATE `42501` (`insufficient_privilege`)
-- **AND** `due_at` is unchanged when read back
+- **GIVEN** a corrective action is not `closed`
+- **WHEN** the application role updates `assignee_person_id`, `description` and `due_at`
+- **THEN** the update succeeds within its declared site scope
+
+#### Scenario: The engine freezes a closed action
+
+- **GIVEN** a corrective action is `closed`
+- **WHEN** any role attempts to update an assignment field
+- **THEN** the guard rejects the update and the final values remain unchanged
+
+#### Scenario: An unrelated action column remains immutable
+
+- **WHEN** any role attempts to update `corrective_action.finding_id`
+- **THEN** the database rejects the update
 
 #### Scenario: The application role cannot rewrite an event
 
@@ -328,11 +336,10 @@ and deadline SHALL be corrected only by inserting an append-only
   error
 - **AND** the message names the table and states that it is append-only
 
-#### Scenario: None of the four tables can be deleted from or truncated
+#### Scenario: Action records cannot be removed
 
-- **WHEN** any role runs `DELETE` or `TRUNCATE` against `corrective_action`,
-  `corrective_action_event`, `corrective_action_evidence` or `corrective_action_escalation`
-- **THEN** every statement fails and every row is still present
+- **WHEN** any role attempts to delete or truncate an action, event, evidence or escalation table
+- **THEN** the database rejects the statement and preserves every row
 
 #### Scenario: An event cannot be removed to undo a transition
 
@@ -390,28 +397,6 @@ that no two of these tables can disagree about which workplace a record belongs 
 
 - **WHEN** a `corrective_action` row is inserted whose `finding_id` belongs to another site
 - **THEN** the insert fails on the `(finding_id, site_id)` foreign key
-
-### Requirement: Corrective action commitment amendments are immutable
-
-The system SHALL store each correction of `assignee_person_id`, `description` and `due_at` as a new
-`corrective_action_commitment_amendment` row. The application role SHALL have `SELECT` and `INSERT`
-but SHALL NOT have `UPDATE`, `DELETE` or `TRUNCATE`. A guard trigger SHALL refuse those mutations
-for every role including the table owner. The system SHALL isolate amendments by `site_id` through
-row level security and SHALL include every insertion in the site's audit chain.
-
-#### Scenario: An amendment cannot be rewritten
-
-- **GIVEN** a `corrective_action_commitment_amendment` has committed
-- **WHEN** an application or owner connection attempts to update, delete or truncate it
-- **THEN** the database refuses the mutation
-- **AND** the recorded commitment remains unchanged
-
-#### Scenario: An amendment is site isolated and audited
-
-- **GIVEN** an amendment belongs to Glencoe
-- **WHEN** a session scoped only to St. Thomas reads amendments
-- **THEN** the Glencoe row is not visible
-- **AND** its insertion remains represented in the Glencoe audit chain
 
 ### Requirement: An incident, its events, its witnesses, its investigation and its causes cannot be modified or removed
 

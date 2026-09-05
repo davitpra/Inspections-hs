@@ -599,7 +599,7 @@ an earlier one.
 Reading a reached state SHALL be read-only: it SHALL NOT offer any transition and SHALL NOT
 change the state the finding is reported to be in. The system SHALL NOT offer a state the finding
 has not reached, other than the Assigned state of an opened corrective action composition. The
-system SHALL NOT offer this navigation while a commitment amendment is being composed, whose
+system SHALL NOT offer this navigation while an assignment replacement is being composed, whose
 entered values would not survive changing panels; an unsubmitted corrective action composition
 SHALL NOT withdraw that navigation, and SHALL be presented with its entered values intact when its
 state is opened again. When the record of a reached state cannot be read, the system SHALL say so
@@ -811,47 +811,45 @@ action and every cached Finding reading whose persisted state may have changed.
 - **THEN** the response still carries its complete `events` and evidence in recorded order
 - **AND** no findings-only screen renders those records as an event timeline
 
-### Requirement: An assigned finding exposes its current commitment for correction
+### Requirement: An active finding exposes its current assignment for correction
 
-The system SHALL present an `Edit assignment` control in the current next step of an `assigned`
-finding to an authenticated `hs_coordinator` or the account named by `reported_by`, and to no other
-account. The control SHALL open an inline form populated with the current `assignee_person_id`,
-`description` and `due_at`. A successful submission SHALL keep the finding in `assigned`, refresh
-all affected readings and present the replacement values. A failed submission SHALL preserve the
-entered values for correction.
+The system SHALL present `Edit assignment` in the current next step of an `assigned`, `in_progress`
+or `verification` finding to an authenticated `hs_coordinator` or the account named by
+`reported_by`, and to no other account. The inline form SHALL contain the current
+`assignee_person_id`, `description` and `due_at`. A successful submission SHALL preserve the finding
+state, refresh affected readings and present only the replacement values. A failed submission SHALL
+preserve the entered values. A `closed` finding SHALL offer no assignment editing.
 
-#### Scenario: An authorized reader reopens all assignment fields
+#### Scenario: An authorized reader edits during verification
 
-- **GIVEN** a finding is `assigned` and the reader is allowed to create its corrective action
+- **GIVEN** a finding is `verification` and the reader may edit its action
 - **WHEN** the reader chooses `Edit assignment`
-- **THEN** the current responsible person, work and due date are available to edit inline
-- **AND** `Start work` has not been executed
+- **THEN** the current responsible person, work and due date are available inline
+
+#### Scenario: Closure removes assignment editing
+
+- **GIVEN** a finding exposes `Edit assignment`
+- **WHEN** its corrective action reaches `closed`
+- **THEN** `Edit assignment` is no longer offered
 
 #### Scenario: An unauthorized reader cannot edit an assignment
 
-- **GIVEN** a finding is `assigned` and the reader is neither an `hs_coordinator` nor its `reported_by`
+- **GIVEN** a non-closed finding whose reader is neither an `hs_coordinator` nor its `reported_by`
 - **WHEN** the current next step is presented
 - **THEN** no `Edit assignment` control is offered
 
-#### Scenario: Starting work removes assignment editing
+### Requirement: The Assigned record presents one current assignment
 
-- **GIVEN** an assigned finding exposes `Edit assignment` and `Start work`
-- **WHEN** an authorized account starts work
-- **THEN** the finding advances to `in_progress`
-- **AND** `Edit assignment` is no longer offered
+The system SHALL present only the effective responsible person, description and `due_at` when the
+reader opens the reached Assigned stage. It SHALL NOT present the original value, edit versions,
+amendment labels or an assignment-history list. Reading that record SHALL remain read-only.
 
-### Requirement: The Assigned record preserves every commitment version
+#### Scenario: A corrected assignment replaces the visible values
 
-The system SHALL present the original commitment and every accepted amendment in recorded order
-when the reader opens the reached Assigned stage. Each version SHALL present its responsible
-person, description, `due_at`, actor and occurrence time. Reading that record SHALL remain read-only.
-
-#### Scenario: A corrected assignment retains both decisions
-
-- **GIVEN** an action was assigned and then amended before work started
+- **GIVEN** an action assignment was corrected twice
 - **WHEN** the reader opens the Assigned stage record
-- **THEN** the original commitment is presented before the amendment
-- **AND** neither recorded decision offers an editing control
+- **THEN** only the latest responsible person, description and `due_at` are presented
+- **AND** no previous value or amendment label is presented
 
 ### Requirement: An inspector browses inspection-derived findings by inspection type
 
