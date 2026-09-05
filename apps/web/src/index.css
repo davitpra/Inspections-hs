@@ -7815,6 +7815,15 @@ button.schedule-cell:focus-visible {
   gap: var(--space-2);
 }
 
+/* Nombre y número son una sola identidad apilada; el avatar queda centrado contra las dos
+   líneas juntas y no contra el nombre solo. */
+.roster__identity {
+  display: inline-flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  line-height: 1.3;
+}
+
 .roster__avatar {
   flex: none;
   display: inline-grid;
@@ -7841,10 +7850,14 @@ button.schedule-cell:focus-visible {
   border-bottom: 0;
 }
 
-/* El número de empleado es lo que se compara columna abajo cuando dos personas se llaman
-   igual: cifras de ancho fijo o no se comparan. */
+/* El número de empleado es lo que desempata a dos personas que se llaman igual, así que
+   va pegado al nombre y en segundo plano: cifras de ancho fijo para poder compararlas
+   renglón a renglón sin que se lean como un segundo nombre. */
 .roster__number {
   font-variant-numeric: tabular-nums;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-normal);
+  color: var(--muted);
 }
 
 .roster__email {

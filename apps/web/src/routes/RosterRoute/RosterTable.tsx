@@ -95,8 +95,8 @@ export function RosterTable({
 
         {/*
           Una tabla y no una lista: el roster es la única pantalla donde se comparan filas
-          entre sí —qué número tiene cada quien, qué rol— y comparar necesita columnas
-          alineadas con su encabezado. El `<caption>` le dice a un lector de pantalla de qué
+          entre sí —qué rol tiene cada quien, quién entra a la app— y comparar necesita
+          columnas alineadas con su encabezado. El `<caption>` le dice a un lector de pantalla de qué
           planta es la tabla que va a recorrer.
 
           La fila va inline y no en su propio archivo: sin estado, sin hooks y sin mutación,
@@ -109,7 +109,6 @@ export function RosterTable({
               <thead>
                 <tr>
                   <th scope="col">Name</th>
-                  <th scope="col">Employee #</th>
                   <th scope="col">Role</th>
                   <th scope="col">Email</th>
                   <th scope="col">App access</th>
@@ -127,12 +126,17 @@ export function RosterTable({
                           <span className="roster__avatar" aria-hidden="true">
                             {personInitials(person)}
                           </span>
-                          <span>{personName(person)}</span>
+                          {/* El número va debajo del nombre y no en columna propia: es
+                              cómo se desempata a dos personas que se llaman igual, no un
+                              dato que se compare columna abajo por sí solo. */}
+                          <span className="roster__identity">
+                            <span>{personName(person)}</span>
+                            <span className="roster__number">
+                              {person.employee_number}
+                            </span>
+                          </span>
                         </span>
                       </th>
-                      <td className="roster__number">
-                        {person.employee_number}
-                      </td>
                       {/* La píldora ubica el rol en la escala del resto de la app sin
                           reemplazar la palabra — ver `roleCellLabel`, "Worker" incluido. */}
                       <td>

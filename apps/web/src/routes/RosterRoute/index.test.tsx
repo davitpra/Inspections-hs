@@ -522,16 +522,18 @@ describe('la lista', () => {
 
   /**
    * La tabla es lo que deja comparar filas, y comparar necesita que cada dato esté bajo
-   * su encabezado. Se prueba por rol accesible y no por clase: lo que importa es que un
-   * lector de pantalla anuncie "Employee #, 10472", no cómo se ve la celda.
+   * su encabezado. Se prueba por rol accesible y no por clase. El número de empleado no
+   * es columna: va dentro de la celda del nombre, que es a quién desempata.
    */
   it('muestra cada persona como una fila con nombre, número y rol', async () => {
     renderRoute();
     await screen.findByRole('rowheader', { name: 'Reid, Ada' });
 
-    for (const name of ['Name', 'Employee #', 'Role', 'Email', 'App access', 'Actions']) {
+    for (const name of ['Name', 'Role', 'Email', 'App access', 'Actions']) {
       expect(screen.getByRole('columnheader', { name })).toBeTruthy();
     }
+
+    expect(screen.getByText('10472')).toBeTruthy();
 
     // El encabezado más la fila de Ada.
     expect(screen.getAllByRole('row').length).toBe(2);
