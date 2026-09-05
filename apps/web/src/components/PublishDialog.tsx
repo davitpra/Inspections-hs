@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-import { CheckIcon } from '../../components/icons';
+import { CheckIcon } from './icons';
 
 /**
  * Confirmación del punto de no retorno de publicar un borrador.
@@ -9,6 +9,15 @@ import { CheckIcon } from '../../components/icons';
  * un punto de no retorno tiene derecho a saber qué registro está por escribir. El número lo
  * calcula el servidor al leer el borrador (`next_version`); es una lectura y no una reserva,
  * pero es la mejor respuesta que hay antes de publicar.
+ *
+ * **Vive acá y no en una ruta porque lo montan dos**: el builder, desde su botón «Publish»,
+ * y el listado de borradores, desde el «⋮» de la fila. El texto que describe lo que no se
+ * deshace tiene que ser UNO SOLO — dos copias se separan la primera vez que alguien corrige
+ * una, y entonces la misma acción promete dos cosas distintas según desde dónde se la pida.
+ *
+ * No trae la mutación: quién publica y qué invalida después depende de dónde se lo monte —el
+ * builder navega a `/templates`, el listado se queda y redibuja las dos tarjetas—, así que
+ * eso es del que lo abre.
  */
 export function PublishDialog({
   draftName,

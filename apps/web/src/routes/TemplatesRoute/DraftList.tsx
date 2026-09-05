@@ -11,9 +11,13 @@ import { DraftRow } from "./DraftRow";
  */
 export function DraftList({
   drafts,
+  canPublish,
+  onPublish,
   onDiscard,
 }: {
   drafts: readonly TemplateDraftSummary[];
+  canPublish: boolean;
+  onPublish: (draft: TemplateDraftSummary) => void;
   onDiscard: (draft: { id: string; name: string }) => void;
 }): React.JSX.Element {
   return (
@@ -29,7 +33,13 @@ export function DraftList({
       </thead>
       <tbody>
         {drafts.map((draft) => (
-          <DraftRow key={draft.id} draft={draft} onDiscard={onDiscard} />
+          <DraftRow
+            key={draft.id}
+            draft={draft}
+            canPublish={canPublish}
+            onPublish={onPublish}
+            onDiscard={onDiscard}
+          />
         ))}
       </tbody>
     </table>

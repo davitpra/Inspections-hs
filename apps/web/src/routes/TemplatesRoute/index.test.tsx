@@ -15,6 +15,7 @@ const listTemplateDrafts = vi.hoisted(() => vi.fn());
 const listPublishedTemplates = vi.hoisted(() => vi.fn());
 const createTemplateDraft = vi.hoisted(() => vi.fn());
 const discardTemplateDraft = vi.hoisted(() => vi.fn());
+const publishTemplateDraft = vi.hoisted(() => vi.fn());
 const reviseTemplate = vi.hoisted(() => vi.fn());
 const deactivateTemplate = vi.hoisted(() => vi.fn());
 const reactivateTemplate = vi.hoisted(() => vi.fn());
@@ -28,6 +29,7 @@ vi.mock('../../api/templates', () => ({
   listPublishedTemplates,
   createTemplateDraft,
   discardTemplateDraft,
+  publishTemplateDraft,
   reviseTemplate,
   deactivateTemplate,
   reactivateTemplate,
@@ -122,6 +124,17 @@ function renderRoute(): QueryClient {
   return queryClient;
 }
 
+/**
+ * Abrir el «⋮» de una fila de borrador, que es por donde se llega a todo lo que la fila
+ * ofrece. Devuelve el menú desplegado para poder buscar adentro: el de la fila publicada
+ * tiene sus propias entradas y el `getByRole('menuitem')` suelto las confundiría.
+ */
+async function openDraftMenu(name = 'Monthly electrical inspection'): Promise<HTMLElement> {
+  fireEvent.click(await screen.findByRole('button', { name: `More actions for ${name}` }));
+
+  return screen.getByRole('menu');
+}
+
 beforeEach(() => {
   useAppSession.mockReset().mockReturnValue(session('hs_coordinator'));
   listTemplateDrafts.mockReset().mockResolvedValue([draft()]);
@@ -132,6 +145,10 @@ beforeEach(() => {
     issues: [],
   });
   discardTemplateDraft.mockReset().mockResolvedValue(undefined);
+  publishTemplateDraft.mockReset().mockResolvedValue({
+    ...published(),
+    document: { sections: [] },
+  });
   reviseTemplate.mockReset().mockResolvedValue({
     ...draft({ id: OTHER_DRAFT, template_id: published().id, next_version: 2 }),
     document: { sections: [] },
@@ -633,11 +650,120 @@ describe('empezar una plantilla', () => {
   });
 });
 
+/**
+ * El «⋮» de un borrador, con las mismas entradas que la tabla de arriba resuelve así.
+ *
+ * Lo que estos tests fijan no es que exista un menú: es QUÉ ofrece y cuándo. Publicar
+ * aparece solo cuando el borrador está completo, porque el servidor rechaza el otro caso
+ * (`template_draft_not_publishable`) y un ítem que solo puede fallar no es una opción.
+ */
+describe('el menú de un borrador', () => {
+  it('abre el borrador para editarlo', async () => {
+    renderRoute();
+
+    const menu = await openDraftMenu();
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Edit draft' }));
+
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/templates/drafts/$id',
+      params: { id: DRAFT },
+    });
+  });
+
+  it('ofrece publicar el que ya está listo', async () => {
+    listTemplateDrafts.mockResolvedValue([draft({ publishable: true })]);
+
+    renderRoute();
+
+    expect(
+      within(await openDraftMenu()).getByRole('menuitem', { name: 'Publish' }),
+    ).toBeTruthy();
+  });
+
+  it('no lo ofrece mientras al borrador le falte algo', async () => {
+    renderRoute();
+
+    expect(
+      within(await openDraftMenu()).queryByRole('menuitem', { name: 'Publish' }),
+    ).toBeNull();
+  });
+});
+
+describe('publicar desde el listado', () => {
+  beforeEach(() => {
+    listTemplateDrafts.mockResolvedValue([draft({ publishable: true })]);
+  });
+
+  /**
+   * Publicar es un punto de no retorno y se confirma nombrando la versión que va a escribir:
+   * es el mismo diálogo del builder (`components/PublishDialog`), montado desde acá.
+   */
+  it('pide confirmación nombrando la versión', async () => {
+    renderRoute();
+
+    const menu = await openDraftMenu();
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Publish' }));
+
+    expect(screen.getByText('Publish “Monthly electrical inspection”?')).toBeTruthy();
+    expect(screen.getByText(/This creates version 1/)).toBeTruthy();
+    expect(publishTemplateDraft).not.toHaveBeenCalled();
+  });
+
+  /** Una revisión dice lo otro: la versión que reemplaza se sigue leyendo. */
+  it('dice qué pasa con la versión anterior cuando es una revisión', async () => {
+    listTemplateDrafts.mockResolvedValue([
+      draft({ publishable: true, template_id: published().id, next_version: 3 }),
+    ]);
+
+    renderRoute();
+
+    const menu = await openDraftMenu();
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Publish' }));
+
+    expect(screen.getByText(/This creates version 3/)).toBeTruthy();
+    expect(screen.getByText(/stays readable/)).toBeTruthy();
+  });
+
+  it('publica al confirmar', async () => {
+    renderRoute();
+
+    const menu = await openDraftMenu();
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Publish' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Publish template' }));
+
+    await waitFor(() => expect(publishTemplateDraft).toHaveBeenCalledWith(DRAFT));
+  });
+
+  it('no publica si se elige seguir editando', async () => {
+    renderRoute();
+
+    const menu = await openDraftMenu();
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Publish' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
+
+    expect(publishTemplateDraft).not.toHaveBeenCalled();
+  });
+
+  /** El rechazo se lee en el diálogo, que es donde está la decisión que se acaba de tomar. */
+  it('muestra el rechazo del servidor sin cerrar nada', async () => {
+    publishTemplateDraft.mockRejectedValue(new Error('The draft is not publishable'));
+
+    renderRoute();
+
+    const menu = await openDraftMenu();
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Publish' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Publish template' }));
+
+    expect(await screen.findByText(/not publishable/)).toBeTruthy();
+  });
+});
+
 describe('descartar', () => {
   it('pide confirmación antes de hacer nada', async () => {
     renderRoute();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Discard Monthly electrical inspection' }));
+    const menu = await openDraftMenu();
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Discard this draft' }));
 
     expect(screen.getByText('Discard “Monthly electrical inspection”?')).toBeTruthy();
     expect(discardTemplateDraft).not.toHaveBeenCalled();
@@ -646,7 +772,8 @@ describe('descartar', () => {
   it('aclara que no se borra nada', async () => {
     renderRoute();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Discard Monthly electrical inspection' }));
+    const menu = await openDraftMenu();
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Discard this draft' }));
 
     expect(screen.getByText(/Nothing is deleted/)).toBeTruthy();
   });
@@ -654,7 +781,8 @@ describe('descartar', () => {
   it('descarta al confirmar', async () => {
     renderRoute();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Discard Monthly electrical inspection' }));
+    const menu = await openDraftMenu();
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Discard this draft' }));
     fireEvent.click(screen.getByRole('button', { name: 'Discard draft' }));
 
     await waitFor(() => expect(discardTemplateDraft).toHaveBeenCalledWith(DRAFT));
@@ -663,7 +791,8 @@ describe('descartar', () => {
   it('no descarta si se elige conservarlo', async () => {
     renderRoute();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Discard Monthly electrical inspection' }));
+    const menu = await openDraftMenu();
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Discard this draft' }));
     fireEvent.click(screen.getByRole('button', { name: 'Keep it' }));
 
     expect(discardTemplateDraft).not.toHaveBeenCalled();

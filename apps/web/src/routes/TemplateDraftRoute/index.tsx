@@ -24,9 +24,9 @@ import {
 import { queryKeys } from "../../api/query-keys";
 import { useAppSession } from "../../app/session-context";
 import { InfoIcon } from "../../components/icons";
+import { PublishDialog } from "../../components/PublishDialog";
 import { canAuthorTemplates, canPublishTemplates } from "../../permissions/session";
 import { DraftHeader } from "./DraftHeader";
-import { PublishDialog } from "./PublishDialog";
 import { canPublish as canPublishDraft, hasUnsavedChanges, saveErrorNotice } from "./presentation";
 import { SectionList } from "./SectionList";
 import { TemplateIdentity } from "./TemplateIdentity";

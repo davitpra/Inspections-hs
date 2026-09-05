@@ -4,7 +4,11 @@ import { queryKeys } from "../../api/query-keys";
 import { listPublishedTemplates, listTemplateDrafts } from "../../api/templates";
 import { DocumentIcon, LockIcon } from "../../components/icons";
 import { useAppSession } from "../../app/session-context";
-import { canAuthorTemplates, canDeactivateTemplates } from "../../permissions/session";
+import {
+  canAuthorTemplates,
+  canDeactivateTemplates,
+  canPublishTemplates,
+} from "../../permissions/session";
 import { PublishedTemplates } from "./PublishedTemplates";
 import { TemplateCounts } from "./TemplateCounts";
 import { TemplateDrafts } from "./TemplateDrafts";
@@ -42,6 +46,14 @@ export function TemplatesRoute(): React.JSX.Element {
   const { account } = useAppSession();
   const canAuthor = canAuthorTemplates(account);
   const canManage = canDeactivateTemplates(account);
+
+  /**
+   * Publicar se pregunta aparte de escribir aunque hoy sean el mismo rol: escribir un
+   * borrador no es lo mismo que convertirlo en el documento contra el que se van a inspeccionar
+   * las plantas, y `permissions/session.ts` mantiene las dos preguntas separadas justamente
+   * para que el día que se separen los roles no haya que buscar dónde se confundieron.
+   */
+  const canPublish = canPublishTemplates(account);
 
   /**
    * Las dos consultas de la pantalla, ACÁ: cada una alimenta a la vez su tarjeta y su
@@ -112,7 +124,7 @@ export function TemplatesRoute(): React.JSX.Element {
             isError={published.isError}
             canManage={canManage}
           />
-          <TemplateDrafts />
+          <TemplateDrafts canPublish={canPublish} />
         </>
       ) : (
         // Y sin disparar ninguna consulta: pedir algo que el servidor va a negar solo sirve
