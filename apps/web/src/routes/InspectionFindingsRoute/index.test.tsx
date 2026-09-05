@@ -8,6 +8,7 @@ import { InspectionFindingsRoute } from './index';
 const getSubmittedInspection = vi.hoisted(() => vi.fn());
 const listActions = vi.hoisted(() => vi.fn());
 const getAction = vi.hoisted(() => vi.fn());
+const getEvidenceDownload = vi.hoisted(() => vi.fn());
 const createAction = vi.hoisted(() => vi.fn());
 const transitionAction = vi.hoisted(() => vi.fn());
 const replaceAssignment = vi.hoisted(() => vi.fn());
@@ -19,6 +20,7 @@ vi.mock('../../api/inspections', () => ({ getSubmittedInspection }));
 vi.mock('../../api/actions', () => ({
   listActions,
   getAction,
+  getEvidenceDownload,
   createAction,
   transitionAction,
   replaceAssignment,
@@ -240,6 +242,13 @@ afterEach(() => {
 beforeEach(() => {
   listActions.mockResolvedValue([]);
   getAction.mockResolvedValue(actionDetail());
+  getEvidenceDownload.mockImplementation((id: string) =>
+    Promise.resolve({
+      url: `https://bucket.test/${id}`,
+      object_key: `actions/${id}.jpg`,
+      expires_at: '2099-01-01T00:05:00.000Z',
+    }),
+  );
   listFindingRoster.mockResolvedValue([person()]);
   createAction.mockResolvedValue({});
   transitionAction.mockResolvedValue(actionDetail({ state: 'in_progress' }));
@@ -1236,6 +1245,37 @@ describe('InspectionFindingsRoute — navegación entre etapas', () => {
         {
           id: 'dddddddd-dddd-4ddd-8ddd-000000000004',
           position: 4,
+          from_state: 'in_progress',
+          to_state: 'awaiting_verification',
+          actor_user_id: PERSON,
+          note: 'Interlock installed and tested.',
+          reason: null,
+          occurred_at: '2027-08-05T11:00:00.000Z',
+          recorded_at: '2027-08-05T11:00:01.000Z',
+          evidence: [
+            {
+              id: 'eeeeeeee-eeee-4eee-8eee-000000000004',
+              kind: 'before',
+              object_key: 'actions/accepted-before.jpg',
+              created_at: '2027-08-05T11:00:00.000Z',
+            },
+            {
+              id: 'eeeeeeee-eeee-4eee-8eee-000000000005',
+              kind: 'after',
+              object_key: 'actions/accepted-after-1.jpg',
+              created_at: '2027-08-05T11:00:00.000Z',
+            },
+            {
+              id: 'eeeeeeee-eeee-4eee-8eee-000000000006',
+              kind: 'after',
+              object_key: 'actions/accepted-after-2.jpg',
+              created_at: '2027-08-05T11:00:00.000Z',
+            },
+          ],
+        },
+        {
+          id: 'dddddddd-dddd-4ddd-8ddd-000000000005',
+          position: 5,
           from_state: 'awaiting_verification',
           to_state: 'closed',
           actor_user_id: '88888888-8888-4888-8888-888888888888',
@@ -1317,20 +1357,66 @@ describe('InspectionFindingsRoute — navegación entre etapas', () => {
   });
 
   /**
-   * LA ETAPA CONSERVA LO QUE SE ESCRIBIÓ, NO CADA PASO QUE SE DIO. La transición ya no se
-   * nombra —`Start work` bajo `In progress` repetía la etapa que la tira encabeza—, así que
-   * el paso que empezó el trabajo sin razón, sin nota y sin evidencia no deja renglón, y el
-   * rechazo que sí trajo un motivo lo deja entero.
+   * LA IDA Y VUELTA ES UNA SOLA CONVERSACIÓN. Abrir `In progress` o `Verification` contesta lo
+   * mismo, en el orden del stream: repartida por el estado de destino de cada evento, los
+   * motivos quedaban sin la declaración que los provocó y las declaraciones sin el rechazo que
+   * las siguió, y el orden había que reconstruirlo saltando de pestaña.
    */
-  it('conserva lo escrito en la etapa y no la etiqueta de cada transición', async () => {
+  it('lee la misma conversación en In progress y en Verification', async () => {
+    renderRoute();
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'In progress' }));
+
+    const inProgress = await screen.findByRole('region', { name: 'In progress record' });
+    const thread = within(inProgress)
+      .getAllByRole('listitem')
+      .map((item) => item.textContent);
+
+    expect(thread).toHaveLength(4);
+    expect(thread[0]).toContain('Work started');
+    expect(thread[1]).toContain('Guard refitted on the infeed.');
+    expect(thread[2]).toContain('The guard is not interlocked yet.');
+    expect(thread[3]).toContain('Interlock installed and tested.');
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Verification' }));
+
+    const verification = await screen.findByRole('region', { name: 'Verification record' });
+    expect(
+      within(verification)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual(thread);
+  });
+
+  /**
+   * EL PASO SE NOMBRA POR LA DECISIÓN, NO POR EL BOTÓN. En un hilo donde se alternan
+   * declaraciones y rechazos, el nombre es lo único que dice en qué sentido va cada renglón
+   * —lo que hacían las dos pestañas— y por eso vuelve; el botón, que promete algo que ya
+   * ocurrió, no.
+   */
+  it('nombra la decisión de cada paso y no el botón que la daría', async () => {
     renderRoute();
 
     fireEvent.click(await screen.findByRole('tab', { name: 'In progress' }));
 
     const record = await screen.findByRole('region', { name: 'In progress record' });
     expect(within(record).getByText('The guard is not interlocked yet.')).toBeTruthy();
+    expect(within(record).getByText('Sent back')).toBeTruthy();
+    expect(within(record).getAllByText('Work declared done')).toHaveLength(2);
     expect(within(record).queryByText('Start work')).toBeNull();
     expect(within(record).queryByText('Send it back')).toBeNull();
+  });
+
+  /** El paso que empezó el trabajo no escribió nada, y aun así el hilo empieza en él. */
+  it('presenta el paso que no escribió nada con su nombre y nada debajo', async () => {
+    renderRoute();
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'In progress' }));
+
+    const record = await screen.findByRole('region', { name: 'In progress record' });
+    const started = within(record).getByText('Work started').closest('li');
+
+    expect(started?.textContent).toBe('Work started');
   });
 
   /**
@@ -1361,8 +1447,118 @@ describe('InspectionFindingsRoute — navegación entre etapas', () => {
     const record = await screen.findByRole('region', { name: 'Verification record' });
     expect(within(record).getByText('Guard refitted on the infeed.')).toBeTruthy();
     expect(within(record).getByText(/1 before, 1 after/)).toBeTruthy();
+    expect(within(record).queryByLabelText('Accepted evidence photographs')).toBeNull();
+    expect(within(record).queryByRole('img')).toBeNull();
+    // El rechazo que siguió a esa declaración se lee acá mismo: es el mismo hilo.
+    expect(within(record).getByText('The guard is not interlocked yet.')).toBeTruthy();
     // El cierre es otra etapa y no se cuela en esta.
     expect(within(record).queryByText('Verified on the floor.')).toBeNull();
+  });
+
+  it('muestra en Closed solo las fotos aceptadas, agrupadas y con sus URLs firmadas', async () => {
+    renderRoute();
+
+    const record = await screen.findByRole('region', { name: 'Closed record' });
+    const accepted = await within(record).findByLabelText('Accepted evidence photographs');
+    expect(within(accepted).getByRole('heading', { name: 'Before' })).toBeTruthy();
+    expect(within(accepted).getByRole('heading', { name: 'After' })).toBeTruthy();
+
+    const before = await within(accepted).findByRole('img', { name: 'Before evidence photo 1' });
+    const after = await within(accepted).findByRole('img', { name: 'After evidence photo 2' });
+    expect(before.getAttribute('src')).toBe(
+      'https://bucket.test/eeeeeeee-eeee-4eee-8eee-000000000004',
+    );
+    expect(after.getAttribute('src')).toBe(
+      'https://bucket.test/eeeeeeee-eeee-4eee-8eee-000000000006',
+    );
+    expect(before.closest('a')?.getAttribute('href')).toBe(before.getAttribute('src'));
+    expect(before.closest('a')?.getAttribute('target')).toBe('_blank');
+    expect(getEvidenceDownload).not.toHaveBeenCalledWith(
+      'eeeeeeee-eeee-4eee-8eee-000000000000',
+    );
+  });
+
+  it('mantiene separada la evidencia aceptada de cada acción cerrada', async () => {
+    const secondId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const secondEvidenceId = 'ffffffff-ffff-4fff-8fff-000000000007';
+    const second = history();
+
+    listActions.mockResolvedValue([
+      action({ state: 'closed' }),
+      action({ id: secondId, state: 'closed', description: 'Replace the emergency stop' }),
+    ]);
+    getAction.mockImplementation((id: string) =>
+      Promise.resolve(
+        id === secondId
+          ? {
+              ...second,
+              id: secondId,
+              events: second.events.map((event) =>
+                event.position === 4
+                  ? {
+                      ...event,
+                      evidence: [
+                        {
+                          id: secondEvidenceId,
+                          kind: 'after' as const,
+                          object_key: 'actions/second-accepted-after.jpg',
+                          created_at: '2027-08-05T11:00:00.000Z',
+                        },
+                      ],
+                    }
+                  : event,
+              ),
+            }
+          : history(),
+      ),
+    );
+
+    renderRoute();
+
+    const record = await screen.findByRole('region', { name: 'Closed record' });
+    await waitFor(() =>
+      expect(within(record).getAllByLabelText('Accepted evidence photographs')).toHaveLength(2),
+    );
+    expect(within(record).getByText('Refit the guard on packaging line 3')).toBeTruthy();
+    expect(within(record).getByText('Replace the emergency stop')).toBeTruthy();
+    await waitFor(() =>
+      expect(
+        within(record)
+          .getAllByRole('img')
+          .map((image) => image.getAttribute('src')),
+      ).toContain(`https://bucket.test/${secondEvidenceId}`),
+    );
+  });
+
+  it('mantiene Closed legible cuando la declaración aceptada no tiene evidencia', async () => {
+    const detail = history();
+    getAction.mockResolvedValue({
+      ...detail,
+      events: detail.events.map((event) =>
+        event.position === 4 ? { ...event, evidence: [] } : event,
+      ),
+    });
+
+    renderRoute();
+
+    const record = await screen.findByRole('region', { name: 'Closed record' });
+    await within(record).findByText('Verified on the floor.');
+    expect(within(record).getByText('Corrective action')).toBeTruthy();
+    expect(within(record).queryByLabelText('Accepted evidence photographs')).toBeNull();
+    expect(within(record).queryByRole('img')).toBeNull();
+    expect(getEvidenceDownload).not.toHaveBeenCalled();
+  });
+
+  it('deja reintentar solo la foto cuya URL no se pudo obtener', async () => {
+    getEvidenceDownload.mockRejectedValueOnce(new Error('offline'));
+
+    renderRoute();
+
+    const retry = await screen.findByRole('button', { name: 'Retry' });
+    expect(screen.getByRole('alert').textContent).toContain('Before photo 1 could not be loaded.');
+    fireEvent.click(retry);
+
+    expect(await screen.findByRole('img', { name: 'Before evidence photo 1' })).toBeTruthy();
   });
 
   it('no presenta el cierre sin nota como una etapa sin registro', async () => {

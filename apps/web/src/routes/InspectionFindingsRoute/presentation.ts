@@ -10,6 +10,7 @@ import {
   type ActionSummary,
   type ActionTransition,
   type CreateActionRequest,
+  type Evidence,
   type Finding,
   type FindingState,
   type PersonOption,
@@ -145,6 +146,30 @@ export const STAGE_BY_ACTION_STATE: Readonly<Record<ActionState, FindingStage>> 
   closed: 'closed',
 };
 
+/**
+ * Qué etapas se LEEN juntas, que no es lo mismo que en qué etapa cae cada estado.
+ *
+ * `In progress` y `Verification` son un solo hilo: declarar el trabajo hecho, devolverlo con un
+ * motivo, volver a declararlo. Repartido en dos paneles, cada mitad queda sin la otra —los
+ * motivos sin la declaración que los provocó, las declaraciones sin el rechazo que las siguió— y
+ * el orden en que ocurrió todo hay que reconstruirlo saltando de pestaña.
+ *
+ * **ES UNA TABLA APARTE Y NO UN `STAGE_BY_ACTION_STATE` MÁS ANCHO.** Mapear
+ * `awaiting_verification` a `in_progress` allá fundiría las dos etapas en todas partes: en la
+ * tira, en la etapa vigente y en el plazo que la retiene. Lo que se funde es la lectura, y esa
+ * es la única tabla que lo dice.
+ *
+ * `Closed` queda afuera a propósito: el cierre es la decisión sobre el hilo, no un mensaje más
+ * dentro de él, y arrastra su propia galería de evidencia aceptada.
+ */
+export const STAGES_READ_TOGETHER: Readonly<Record<FindingStage, readonly FindingStage[]>> = {
+  raised: ['raised'],
+  assigned: ['assigned'],
+  in_progress: ['in_progress', 'verification'],
+  verification: ['in_progress', 'verification'],
+  closed: ['closed'],
+};
+
 /** Las acciones que retienen la etapa vigente, primero la que vence antes. */
 export function blockingActions(
   actions: readonly ActionSummary[],
@@ -155,14 +180,23 @@ export function blockingActions(
     .sort((left, right) => left.due_at.localeCompare(right.due_at));
 }
 
-export type StageStatus = 'done' | 'current' | 'todo';
+export type StageStatus = 'done' | 'current' | 'complete' | 'todo';
 
-/** Qué dibuja un segmento con respecto a la etapa vigente. */
+/**
+ * Qué dibuja un segmento con respecto a la etapa vigente.
+ *
+ * **LA ETAPA TERMINAL ALCANZADA ES UN ESTADO PROPIO Y NO `current`**, porque el color de la
+ * etapa vigente dice «acá está el trabajo» y en `closed` no queda trabajo: leído en el mismo
+ * azul que `In progress`, el ciclo cerrado promete algo pendiente que no existe. Tampoco es
+ * `done`, que son las etapas que quedaron atrás: el hallazgo está en ella, y eso lo sigue
+ * diciendo `aria-current`.
+ */
 export function stageStatus(stage: FindingStage, current: FindingStage): StageStatus {
   const distance = FINDING_STAGES.indexOf(stage) - FINDING_STAGES.indexOf(current);
 
   if (distance < 0) return 'done';
-  return distance === 0 ? 'current' : 'todo';
+  if (distance > 0) return 'todo';
+  return stage === 'closed' ? 'complete' : 'current';
 }
 
 /**
@@ -196,19 +230,54 @@ export function openableStages(
 }
 
 /**
- * Los eventos que escribieron ESTA etapa, en el orden del stream.
+ * Los eventos que se LEEN al abrir esta etapa, en el orden del stream.
+ *
+ * No son los que la escribieron: `STAGES_READ_TOGETHER` decide de qué etapas viene el hilo, y
+ * abrir `In progress` o `Verification` devuelve la misma lista. Por eso el nombre habla de leer
+ * y no de escribir.
  *
  * Se ordena por `position` y no por `occurred_at`: el orden dentro de la acción es el que el
  * servidor conserva (design D1), y dos eventos del mismo segundo no pueden quedar dados
- * vuelta por el reloj.
+ * vuelta por el reloj. Con las dos etapas juntas eso pesa más que antes: la alternancia entre
+ * declarar y devolver ES lo que se está leyendo.
  */
-export function eventsInStage(
+export function eventsReadInStage(
   events: readonly ActionEvent[],
   stage: FindingStage,
 ): ActionEvent[] {
+  const thread = STAGES_READ_TOGETHER[stage];
+
   return events
-    .filter((event) => STAGE_BY_ACTION_STATE[event.to_state] === stage)
+    .filter((event) => thread.includes(STAGE_BY_ACTION_STATE[event.to_state]))
     .toSorted((left, right) => left.position - right.position);
+}
+
+export type AcceptedClosureEvidence = {
+  closureId: string;
+  evidence: readonly Evidence[];
+};
+
+/**
+ * La evidencia declarada en el paso que cada cierre aceptó.
+ *
+ * Se ordena por `position` antes de emparejar: el arreglo puede venir en cualquier orden, pero
+ * un cierre solo acepta la declaración que lo precede inmediatamente en el stream. Así, una
+ * declaración seguida de un rechazo nunca puede aportar fotos a un cierre posterior.
+ */
+export function acceptedClosureEvidence(
+  events: readonly ActionEvent[],
+): AcceptedClosureEvidence[] {
+  const ordered = events.toSorted((left, right) => left.position - right.position);
+
+  return ordered.flatMap((event, index) => {
+    if (event.to_state !== 'closed') return [];
+
+    const declaration = ordered[index - 1];
+
+    return declaration?.to_state === 'awaiting_verification'
+      ? [{ closureId: event.id, evidence: declaration.evidence }]
+      : [{ closureId: event.id, evidence: [] }];
+  });
 }
 
 /** El plazo más cercano entre las acciones que retienen el hallazgo en su etapa. */

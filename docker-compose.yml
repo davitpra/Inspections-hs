@@ -52,7 +52,7 @@ services:
   # El bucket, su versioning y la credencial de la aplicación. Corre una vez y sale.
   #
   # LO QUE ESTE CONTENEDOR HACE Y NO ES DECORATIVO: la credencial que recibe la API
-  # tiene `PutObject` sobre el prefijo del bucket, y **no tiene
+  # tiene `PutObject` y `GetObject` sobre el prefijo del bucket, y **no tiene
   # `DeleteObject`**. Es la mitad de ADR-006 que el código no puede aplicar: en
   # `apps/api` no hay método para borrar, y acá se hace que tampoco haya permiso. Con
   # versioning activado, ni siquiera una sobreescritura pierde la foto que respalda un
@@ -78,7 +78,7 @@ services:
         \"Statement\": [
           {
             \"Effect\": \"Allow\",
-            \"Action\": [\"s3:PutObject\"],
+            \"Action\": [\"s3:PutObject\", \"s3:GetObject\"],
             \"Resource\": [\"arn:aws:s3:::hs-platform-dev/*\"]
           }
         ]

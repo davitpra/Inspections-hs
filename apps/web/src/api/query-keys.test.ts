@@ -9,6 +9,11 @@ describe('claves del espacio de acciones', () => {
   it('mantiene una clave compartida y estable para los hallazgos', () => {
     expect(queryKeys.findings()).toEqual(['findings']);
   });
+
+  it('separa cada URL temporal por evidencia y conserva un prefijo invalidable', () => {
+    expect(queryKeys.actionEvidence('evidence-a')).toEqual(['action-evidence', 'evidence-a']);
+    expect(queryKeys.actionEvidence()).toEqual(['action-evidence']);
+  });
 });
 
 /** `invalidateQueries` empareja por prefijo: esta es la regla que las claves deben cumplir. */

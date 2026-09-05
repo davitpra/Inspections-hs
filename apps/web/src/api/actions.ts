@@ -1,8 +1,10 @@
 import {
   actionListSchema,
   actionSchema,
+  actionEvidenceDownloadResponseSchema,
   presignUploadResponseSchema,
   type Action,
+  type ActionEvidenceDownloadResponse,
   type ActionSummary,
   type CreateActionRequest,
   type EvidenceInput,
@@ -31,6 +33,14 @@ export async function listActions(): Promise<ActionSummary[]> {
 
 export async function getAction(id: string): Promise<Action> {
   return get(`/actions/${id}`, (value) => actionSchema.parse(value));
+}
+
+export async function getEvidenceDownload(
+  evidenceId: string,
+): Promise<ActionEvidenceDownloadResponse> {
+  return get(`/uploads/action-evidence/${evidenceId}`, (value) =>
+    actionEvidenceDownloadResponseSchema.parse(value),
+  );
 }
 
 export async function createAction(

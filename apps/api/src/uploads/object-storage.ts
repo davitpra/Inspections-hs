@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 
 import { Injectable } from '@nestjs/common';
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import type { UploadContentType } from '@hs/contracts';
+import type { ActionEvidenceDownloadResponse, UploadContentType } from '@hs/contracts';
 
 export interface PresignedUpload {
   url: string;
@@ -75,6 +75,20 @@ export class ObjectStorageService {
       input.content_type,
       input.content_length,
     );
+  }
+
+  async presignGet(objectKey: string): Promise<ActionEvidenceDownloadResponse> {
+    const url = await getSignedUrl(
+      this.client,
+      new GetObjectCommand({ Bucket: this.bucket, Key: objectKey }),
+      { expiresIn: this.ttlSeconds },
+    );
+
+    return {
+      url,
+      object_key: objectKey,
+      expires_at: new Date(Date.now() + this.ttlSeconds * 1000).toISOString(),
+    };
   }
 
   private async sign(

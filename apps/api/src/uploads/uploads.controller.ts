@@ -1,8 +1,10 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
 import {
+  actionEvidenceIdSchema,
   presignActionUploadRequestSchema,
   presignFindingUploadRequestSchema,
   presignUploadRequestSchema,
+  type ActionEvidenceDownloadResponse,
   type PresignUploadResponse,
 } from '@hs/contracts';
 
@@ -65,5 +67,14 @@ export class UploadsController {
     @Body() body: unknown,
   ): Promise<PresignUploadResponse> {
     return this.uploads.presignAction(session, presignActionUploadRequestSchema.parse(body));
+  }
+
+  /** Firma una lectura solo después de resolver la evidencia dentro del alcance RLS. */
+  @Get('action-evidence/:id')
+  async getActionEvidence(
+    @CurrentSession() session: SessionContext,
+    @Param('id') id: string,
+  ): Promise<ActionEvidenceDownloadResponse> {
+    return this.uploads.getActionEvidence(session, actionEvidenceIdSchema.parse(id));
   }
 }

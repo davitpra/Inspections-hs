@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type {
+  ActionEvidenceDownloadResponse,
   PresignActionUploadRequest,
   PresignFindingUploadRequest,
   PresignUploadRequest,
@@ -133,5 +134,30 @@ export class UploadsService {
       content_type: input.content_type,
       content_length: input.content_length,
     });
+  }
+
+  /**
+   * La key nunca entra desde el cliente: sale de la fila que RLS deja visible para la
+   * sesión. No se agrega un filtro por planta porque convertiría el endpoint en una
+   * segunda implementación del alcance.
+   */
+  async getActionEvidence(
+    session: SessionScope,
+    evidenceId: string,
+  ): Promise<ActionEvidenceDownloadResponse> {
+    const objectKey = await this.db.withSessionClient(session, async (client) => {
+      const { rows } = await client.query<{ object_key: string }>(
+        `SELECT object_key FROM corrective_action_evidence WHERE id = $1`,
+        [evidenceId],
+      );
+
+      return rows[0]?.object_key ?? null;
+    });
+
+    if (!objectKey) {
+      throw forbidden('No such action evidence within your scope');
+    }
+
+    return this.storage.presignGet(objectKey);
   }
 }

@@ -122,6 +122,7 @@ export const queryKeys = {
   findingRoster: (findingId?: string) => key('finding-roster', findingId),
   actions: () => key('actions'),
   action: (id?: string) => key('action', id),
+  actionEvidence: (id?: string) => key('action-evidence', id),
 
   // Incidentes.
   incidents: () => key('incidents'),

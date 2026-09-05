@@ -112,7 +112,7 @@ export function FindingStepper({
                   className="finding__stage-tab"
                   aria-selected={stage === selected}
                   aria-controls={panelId}
-                  aria-current={status === 'current' ? 'step' : undefined}
+                  aria-current={status === 'todo' || status === 'done' ? undefined : 'step'}
                   tabIndex={stage === selected ? 0 : -1}
                   disabled={locked}
                   ref={(node) => {

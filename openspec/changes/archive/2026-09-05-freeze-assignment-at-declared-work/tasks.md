@@ -17,4 +17,4 @@
 
 - [x] 4.1 Update integration tests for the engine and service refusal from `awaiting_verification`, the reopening of editing after refusal, and the race between editing and declaring the work done.
 - [x] 4.2 Update route and presentation tests for a Verification step with no assignment editor.
-- [ ] 4.3 Run OpenSpec validation, build before typecheck, lint, unit tests and focused PostgreSQL integration tests.
+- [x] 4.3 Run OpenSpec validation, build before typecheck, lint, unit tests and focused PostgreSQL integration tests.

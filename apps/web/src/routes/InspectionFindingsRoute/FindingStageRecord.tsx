@@ -1,49 +1,25 @@
-import type { ActionSummary, Finding } from "@hs/contracts";
+import type {
+  ActionSummary,
+  Evidence,
+  EvidenceKind,
+  Finding,
+} from "@hs/contracts";
 import { useQuery } from "@tanstack/react-query";
 
-import { getAction } from "../../api/actions";
+import { getAction, getEvidenceDownload } from "../../api/actions";
 import { queryKeys } from "../../api/query-keys";
+import { decisionLabel } from "../../presentation/actions";
 import { formatDay } from "../../presentation/dates";
-import { eventsInStage, STAGE_LABELS, type FindingStage } from "./presentation";
+import {
+  acceptedClosureEvidence,
+  eventsReadInStage,
+  STAGE_LABELS,
+  type FindingStage,
+} from "./presentation";
 
-/**
- * Lo que se decidió en UNA etapa, de solo lectura, en el mismo hueco donde la etapa vigente
- * ofrece su próximo paso (ADR-021).
- *
- * Se ve distinto del paso a propósito —filete neutro y no azul—: el paso es el único llamado
- * a la acción de la ficha, y si los dos se dibujaran igual, elegir una etapa pasada parecería
- * ofrecer algo que hacer en ella.
- *
- * Cada etapa contesta con lo que la conserva y no con el stream entero:
- *
- * - `raised` no consulta nada. El hallazgo ya viajó con la pantalla, y la etapa la abrió él.
- * - `assigned` presenta la única asignación vigente directamente desde el resumen.
- * - las demás abren esa MISMA asignación y debajo lo que se escribió en ellas: el motivo, la
- *   nota y la evidencia contada de cada paso.
- *
- * **TODA ETAPA CON ACCIONES EMPIEZA NOMBRANDO LA ACCIÓN**, y no el evento. `In progress`
- * contestaba «Start work» y el instante en que se registró, y ninguna de las dos cosas dice
- * qué trabajo se comprometió, quién lo debe ni para cuándo —que es contra lo que se juzga el
- * paso que se dio—. El instante se fue con ese renglón, y la etiqueta de la transición detrás:
- * las dos ocupaban los valores del registro para contestar algo que nadie estaba preguntando
- * ahí —`Start work` sobre la etapa `In progress` repite la etapa que ya nombra la tira—.
- *
- * Con varias acciones en la misma etapa, esa cabecera es además lo único que las distingue:
- * dos listas de eventos con las mismas etiquetas son indistinguibles.
- *
- * **La etapa vigente nunca sale vacía**: el paso se lee en la etapa desde la que se ejecuta, y
- * esa etapa ya ocurrió. La que SÍ sale vacía es la que una composición desplegada está por
- * escribir (`pending`), y lo dice: sin ese renglón el panel abriría con el encabezado
- * `Assigned`, nada, y «Next step» debajo, y quien completa el compromiso no tendría qué lo
- * ubique en la etapa.
- *
- * **NO HABER REGISTRADO NADA NO ES NO PODER LEER EL REGISTRO**, y por eso son dos ramas. La
- * segunda vale sobre una etapa alcanzada cuyas acciones no llegaron; anunciarla sobre un
- * hallazgo levantado, que no tiene ninguna, sería falso.
- *
- * El detalle se pide solo para las etapas que leen eventos. Assigned ya lleva sus valores vigentes
- * en `ActionSummary` y no paga otra consulta.
- */
+const EVIDENCE_URL_STALE_TIME_MS = 4 * 60 * 1000;
+const EVIDENCE_URL_EXPIRY_MARGIN_MS = 30 * 1000;
+
 export function FindingStageRecord({
   stage,
   finding,
@@ -53,7 +29,6 @@ export function FindingStageRecord({
   stage: FindingStage;
   finding: Finding;
   actions: readonly ActionSummary[];
-  /** La etapa todavía no ocurrió: es la que la composición a la vista va a escribir. */
   pending?: boolean;
 }): React.JSX.Element {
   return (
@@ -89,17 +64,6 @@ export function FindingStageRecord({
   );
 }
 
-/**
- * Qué se comprometió, con quién y para cuándo, leído de los valores VIGENTES del resumen.
- *
- * Son los vigentes y no los de un evento a propósito: la asignación se puede corregir hasta
- * que se declara el trabajo hecho (ADR-021), y lo que hay que tener a la vista mientras se
- * juzga un paso es el compromiso que rige hoy, no el que regía cuando alguien pulsó el botón.
- *
- * El título lo pone quien la dibuja porque la etapa cambia lo que la asignación ES ahí:
- * bajo `Assigned` es lo único que se decidió, y bajo las demás es el encabezado de lo que
- * se hizo con ella.
- */
 function ActionIdentity({
   action,
   title,
@@ -148,17 +112,6 @@ function ActionStageRecord({
   );
 }
 
-/**
- * Los pasos que se dieron sobre ESA acción dentro de la etapa.
- *
- * La consulta vive acá y no en `ActionStageRecord` porque es de los eventos y de nadie más:
- * `Assigned` no monta este componente, y así no necesita un `enabled` que apague una consulta
- * que igual se estaba pidiendo.
- *
- * **LA ACCIÓN YA SE NOMBRÓ ARRIBA**, antes de saber si el stream llegó: que los eventos no se
- * puedan leer no vuelve desconocido el compromiso del que se habla, y el aviso solo obligaría
- * a cambiar de etapa para averiguar a cuál pertenece.
- */
 function StageEvents({
   actionId,
   stage,
@@ -182,27 +135,20 @@ function StageEvents({
     );
   }
 
-  /*
-    SOLO LOS EVENTOS QUE ESCRIBIERON ALGO. La etapa dejó de nombrar cada paso por su
-    transición —`Action: Start work` sobre `In progress`, que es la etapa que se está
-    leyendo— y con eso un paso sin razón, sin nota y sin evidencia no aporta ningún renglón:
-    dibujarlo igual dejaría un hueco en blanco entre separadores.
-  */
-  const stageEvents = eventsInStage(detail.data.events, stage);
-  const events = stageEvents.filter(
-    (event) => event.reason || event.note || event.evidence.length > 0,
+  const events = eventsReadInStage(detail.data.events, stage);
+  const closureEvidence = new Map(
+    acceptedClosureEvidence(detail.data.events).map(
+      ({ closureId, evidence }) => [closureId, evidence],
+    ),
   );
 
-  if (stageEvents.length === 0) {
+  if (events.length === 0) {
     return (
       <p className="finding__stage-record-eyebrow">
         Nothing was recorded here yet.
       </p>
     );
   }
-
-  // La transición ya acredita la etapa; sus detalles son opcionales y pueden no dejar renglones.
-  if (events.length === 0) return null;
 
   return (
     <ol className="finding__stage-decisions">
@@ -216,6 +162,9 @@ function StageEvents({
 
         return (
           <li key={event.id} className="finding__stage-decision">
+            <p className="finding__stage-decision-step">
+              {decisionLabel(event.from_state, event.to_state)}
+            </p>
             {event.reason ? (
               <p className="finding__stage-decision-note">
                 <span>Reason</span>
@@ -234,9 +183,128 @@ function StageEvents({
                 {before} before, {after} after
               </p>
             ) : null}
+            {stage === "closed" ? (
+              <AcceptedEvidenceGallery
+                evidence={closureEvidence.get(event.id) ?? []}
+              />
+            ) : null}
           </li>
         );
       })}
     </ol>
+  );
+}
+
+function AcceptedEvidenceGallery({
+  evidence,
+}: {
+  evidence: readonly Evidence[];
+}): React.JSX.Element | null {
+  if (evidence.length === 0) return null;
+
+  return (
+    <div
+      className="finding__accepted-evidence"
+      aria-label="Accepted evidence photographs"
+    >
+      {(["before", "after"] as const).map((kind) => {
+        const photographs = evidence.filter((item) => item.kind === kind);
+
+        if (photographs.length === 0) return null;
+
+        const label = kind === "before" ? "Before" : "After";
+
+        return (
+          <section
+            key={kind}
+            className="finding__evidence-group"
+            aria-label={`${label} photos`}
+          >
+            <h4>{label}</h4>
+            <ul>
+              {photographs.map((item, index) => (
+                <li key={item.id}>
+                  <EvidencePhoto
+                    evidence={item}
+                    kind={kind}
+                    index={index + 1}
+                  />
+                </li>
+              ))}
+            </ul>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+function EvidencePhoto({
+  evidence,
+  kind,
+  index,
+}: {
+  evidence: Evidence;
+  kind: EvidenceKind;
+  index: number;
+}): React.JSX.Element {
+  const label = kind === "before" ? "Before" : "After";
+  const download = useQuery({
+    queryKey: queryKeys.actionEvidence(evidence.id),
+    queryFn: () => getEvidenceDownload(evidence.id),
+    retry: false,
+    staleTime: ({ state }) => {
+      if (!state.data) return 0;
+
+      return Math.min(
+        EVIDENCE_URL_STALE_TIME_MS,
+        Math.max(
+          0,
+          Date.parse(state.data.expires_at) -
+            Date.now() -
+            EVIDENCE_URL_EXPIRY_MARGIN_MS,
+        ),
+      );
+    },
+    gcTime: EVIDENCE_URL_STALE_TIME_MS,
+  });
+
+  if (download.isPending) {
+    return (
+      <div className="finding__evidence-tile-state">
+        Loading {label} photo {index}…
+      </div>
+    );
+  }
+
+  if (download.isError || !download.data) {
+    return (
+      <div
+        className="finding__evidence-tile-state finding__evidence-tile-state--error"
+        role="alert"
+      >
+        <span>
+          {label} photo {index} could not be loaded.
+        </span>
+        <button
+          type="button"
+          className="button--outline"
+          onClick={() => void download.refetch()}
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <a
+      className="finding__evidence-photo"
+      href={download.data.url}
+      target="_blank"
+      rel="noreferrer"
+    >
+      <img src={download.data.url} alt={`${label} evidence photo ${index}`} />
+    </a>
   );
 }

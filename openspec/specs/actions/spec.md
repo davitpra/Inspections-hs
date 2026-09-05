@@ -150,14 +150,15 @@ audit chain has to be able to state.
 - **AND** the transitions recorded by the coordinator on their behalf name the coordinator's
   account as actor
 
-### Requirement: The deadline is stated when the action is created and frozen at closure
+### Requirement: The deadline is stated when the action is created and frozen at declared work
 
 The system SHALL require a future `due_at` when a corrective action is created and whenever its
 assignment is replaced. The system SHALL store the current deadline directly on
 `corrective_action`, SHALL use it for subsequent deadline processing, and SHALL allow an authorized
-replacement while the derived state is not `closed`. Once the action reaches `closed`, the system
-SHALL refuse every change to `due_at`. The system SHALL NOT derive the deadline from its parent and
-SHALL NOT store severity on the action.
+replacement while the derived state is `open` or `in_progress`. Once the action reaches
+`awaiting_verification`, the system SHALL refuse every change to `due_at` until a refused
+verification returns it to `in_progress`, and SHALL refuse them permanently once it is `closed`. The
+system SHALL NOT derive the deadline from its parent and SHALL NOT store severity on the action.
 
 #### Scenario: A current deadline can be corrected before closure
 
@@ -170,6 +171,12 @@ SHALL NOT store severity on the action.
 - **GIVEN** an action is `closed`
 - **WHEN** any role attempts to update `corrective_action.due_at`
 - **THEN** the database rejects the update and preserves the final value
+
+#### Scenario: A deadline awaiting verification cannot move
+
+- **GIVEN** an action is `awaiting_verification`
+- **WHEN** any role attempts to update `corrective_action.due_at`
+- **THEN** the database rejects the update and preserves the value
 
 #### Scenario: A past replacement deadline is refused
 
@@ -231,7 +238,8 @@ deadline does not begin the work. The action SHALL stay in `open` until the assi
 The system SHALL create a corrective action with exactly one initial `corrective_action_event` whose
 `to_state` is `open`. The system SHALL NOT append `open` to `in_progress` during creation. Starting
 work SHALL remain the existing explicit state transition available to the assigned person or an
-`hs_coordinator`, and SHALL NOT freeze assignment editing.
+`hs_coordinator`, and SHALL NOT freeze assignment editing until the action reaches
+`awaiting_verification`.
 
 #### Scenario: Creation leaves the action assigned
 
@@ -246,15 +254,16 @@ work SHALL remain the existing explicit state transition available to the assign
 - **THEN** the transition is accepted
 - **AND** an authorized account can still replace the assignment
 
-### Requirement: A corrective action assignment is replaceable until closure
+### Requirement: A corrective action assignment is replaceable until declared work
 
 The system SHALL allow an authenticated `hs_coordinator`, or the account named by the parent
 finding's `reported_by`, to submit a complete replacement `assignee_person_id`, `description` and
-`due_at` while the corrective action's derived state is `open`, `in_progress` or
-`awaiting_verification`. Each accepted request SHALL update those three columns on the same
-`corrective_action` row and SHALL NOT append an assignment version. The system SHALL require an
-active assignee from the action's site and a future `due_at`. It SHALL refuse replacement when the
-state is `closed` with `invalid_action_state`.
+`due_at` while the corrective action's derived state is `open` or `in_progress`. Each accepted request
+SHALL update those three columns on the same `corrective_action` row and SHALL NOT append an
+assignment version. The system SHALL require an active assignee from the action's site and a future
+`due_at`. It SHALL refuse replacement when the state is `awaiting_verification` or `closed` with
+`invalid_action_state`. A refused verification that returns the action to `in_progress` SHALL make
+the assignment replaceable again.
 
 #### Scenario: Work in progress can be corrected
 
@@ -263,11 +272,18 @@ state is `closed` with `invalid_action_state`.
 - **THEN** the same `corrective_action` row exposes the replacement values
 - **AND** no new corrective action or assignment-history row is created
 
-#### Scenario: Verification can be corrected before closure
+#### Scenario: Declared work freezes the assignment
 
 - **GIVEN** an action is `awaiting_verification`
 - **WHEN** an authorized account submits valid replacement assignment fields
-- **THEN** the replacement is accepted without changing the action state
+- **THEN** the request is rejected with `invalid_action_state`
+- **AND** the assignment being verified remains unchanged
+
+#### Scenario: A refused verification reopens the assignment
+
+- **GIVEN** an action was returned from `awaiting_verification` to `in_progress` with a reason
+- **WHEN** an authorized account submits valid replacement assignment fields
+- **THEN** the replacement is accepted
 
 #### Scenario: Closure freezes the assignment
 
@@ -516,7 +532,9 @@ permission itself so that the response never discloses which is the case.
 The system SHALL use the current `corrective_action.due_at` to find every non-closed action more than
 3 or 7 days overdue and SHALL retain the existing supervisor and management escalation behavior.
 Each level SHALL still be emitted at most once. Replacing `due_at` SHALL affect future decisions but
-SHALL NOT delete, withdraw or repeat an escalation already emitted.
+SHALL NOT delete, withdraw or repeat an escalation already emitted. An action whose work is declared
+done SHALL keep escalating against the frozen `due_at`, which SHALL be movable only after a refused
+verification returns it to `in_progress`.
 
 #### Scenario: Three days past the deadline reaches the supervisor
 
@@ -531,6 +549,13 @@ SHALL NOT delete, withdraw or repeat an escalation already emitted.
 - **GIVEN** a non-closed action has not escalated
 - **WHEN** its `due_at` is replaced with a later future value
 - **THEN** subsequent escalation runs use the replacement value
+
+#### Scenario: An action awaiting verification escalates on its frozen deadline
+
+- **GIVEN** an action is `awaiting_verification` and its `due_at` was 4 days ago
+- **WHEN** the escalation job runs
+- **THEN** a `corrective_action_escalation` row with `level` `supervisor` exists for it
+- **AND** its `due_at` cannot be replaced while it stays in that state
 
 #### Scenario: A past escalation survives a replacement
 
@@ -571,6 +596,22 @@ SHALL NOT delete, withdraw or repeat an escalation already emitted.
 - **WHEN** its events are read
 - **THEN** its current state is unchanged by the escalation
 - **AND** no event of the stream refers to an escalation
+
+### Requirement: Recorded action evidence can be read within site scope
+
+The system SHALL issue a short-lived download URL for a recorded corrective-action evidence item
+only when that evidence row is visible within the authenticated reader's current site scope. The
+system SHALL NOT accept an object key from the reader to choose the object being signed.
+
+#### Scenario: In-scope evidence receives a download URL
+
+- **WHEN** an authenticated reader requests a download URL for an evidence `id` visible in their site scope
+- **THEN** the system returns a short-lived URL for that evidence row's `object_key`
+
+#### Scenario: Out-of-scope evidence reveals no object
+
+- **WHEN** an authenticated reader requests a download URL for an evidence `id` outside their site scope
+- **THEN** the request is rejected without returning an `object_key` or download URL
 
 ### Requirement: The effective assignee has one current assignment notification
 

@@ -34,6 +34,32 @@ export function transitionLabel(from: ActionState, to: ActionState): string {
 }
 
 /**
+ * Cómo se nombra el paso YA DADO cuando el registro lo lee.
+ *
+ * Son dos tablas y no una porque son dos tiempos: el botón promete —"Send it back"— y el
+ * registro cuenta lo que pasó —"Sent back"—. Un imperativo sobre un hecho consumado invita a
+ * pulsar algo que no está, y derivar un tiempo del otro pondría la conjugación en el código.
+ *
+ * Por PAR por el mismo motivo que las etiquetas de botón: `open → in_progress` y
+ * `awaiting_verification → in_progress` llegan al mismo estado y son dos actos distintos.
+ *
+ * **El nombre es la decisión, no el destino.** El registro dejó de nombrar el paso mientras
+ * cada etapa se leía sola, porque "Start work" sobre la etapa `In progress` repetía la etapa
+ * que ya nombraba la tira. Leídas `In progress` y `Verification` como un solo hilo, el nombre
+ * es lo único que distingue una declaración de una devolución: es lo que hacían las pestañas.
+ */
+export const DECISION_LABELS: Readonly<Record<string, string>> = {
+  'open->in_progress': 'Work started',
+  'in_progress->awaiting_verification': 'Work declared done',
+  'awaiting_verification->closed': 'Verified and closed',
+  'awaiting_verification->in_progress': 'Sent back',
+};
+
+export function decisionLabel(from: ActionState | null, to: ActionState): string {
+  return DECISION_LABELS[`${from}->${to}`] ?? STATE_LABELS[to];
+}
+
+/**
  * Qué transición admite una nota, por PAR y por el mismo motivo que las etiquetas.
  *
  * `open → in_progress` es la única que no. Empezar el trabajo no agrega al registro nada que

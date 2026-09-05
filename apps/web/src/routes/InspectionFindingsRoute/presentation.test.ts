@@ -11,10 +11,11 @@ import type { TemplateDocument } from '@hs/forms';
 
 import { canAttempt } from '../../permissions/actions';
 import {
+  acceptedClosureEvidence,
   actionsByFinding,
   blockingActions,
   commitmentRequest,
-  eventsInStage,
+  eventsReadInStage,
   findingDeadline,
   futureDueAt,
   nextStep,
@@ -255,6 +256,12 @@ describe('la presentación del estado propio del hallazgo', () => {
     expect(findingDeadline([], 'raised', '2026-08-28')).toBeNull();
     expect(stageStatus('raised', 'raised')).toBe('current');
     expect(stageStatus('assigned', 'raised')).toBe('todo');
+  });
+
+  it('distingue la etapa terminal alcanzada de una etapa vigente con trabajo por delante', () => {
+    expect(stageStatus('closed', 'closed')).toBe('complete');
+    expect(stageStatus('verification', 'closed')).toBe('done');
+    expect(stageStatus('verification', 'verification')).toBe('current');
   });
 
   it('elige las acciones que retienen el estado persistido', () => {
@@ -649,8 +656,11 @@ describe('la lectura de una etapa', () => {
     ]);
   });
 
-  /** Las dos entradas a `in_progress` son de la misma etapa: empezar y volver a empezar. */
-  it('reparte los eventos con la misma tabla que decide la etapa vigente', () => {
+  /**
+   * La ida y vuelta es una sola conversación: abrir cualquiera de las dos etapas devuelve el
+   * hilo entero, con las declaraciones y los rechazos alternándose en el orden del stream.
+   */
+  it('lee `In progress` y `Verification` como un solo hilo', () => {
     const started = event({ position: 1, from_state: 'open', to_state: 'in_progress' });
     const sentBack = event({
       id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
@@ -664,13 +674,34 @@ describe('la lectura de una etapa', () => {
       from_state: 'in_progress',
       to_state: 'awaiting_verification',
     });
+    const stream = [sentBack, declared, started];
 
-    expect(eventsInStage([sentBack, declared, started], 'in_progress')).toEqual([
-      started,
-      sentBack,
-    ]);
-    expect(eventsInStage([sentBack, declared, started], 'verification')).toEqual([declared]);
-    expect(eventsInStage([sentBack, declared, started], 'closed')).toEqual([]);
+    expect(eventsReadInStage(stream, 'in_progress')).toEqual([started, declared, sentBack]);
+    expect(eventsReadInStage(stream, 'verification')).toEqual(
+      eventsReadInStage(stream, 'in_progress'),
+    );
+  });
+
+  /** El hilo no se lleva puestas las otras etapas: el cierre y el alta se leen aparte. */
+  it('deja `Closed` y `Assigned` fuera del hilo', () => {
+    const created = event({ position: 0 });
+    const declared = event({
+      id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      position: 2,
+      from_state: 'in_progress',
+      to_state: 'awaiting_verification',
+    });
+    const closed = event({
+      id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+      position: 3,
+      from_state: 'awaiting_verification',
+      to_state: 'closed',
+    });
+    const stream = [created, declared, closed];
+
+    expect(eventsReadInStage(stream, 'in_progress')).toEqual([declared]);
+    expect(eventsReadInStage(stream, 'closed')).toEqual([closed]);
+    expect(eventsReadInStage(stream, 'assigned')).toEqual([created]);
   });
 
   it('ordena por la posición del stream y no por el reloj', () => {
@@ -683,8 +714,105 @@ describe('la lectura de una etapa', () => {
       occurred_at: '2020-01-01T00:00:00.000Z',
     });
 
-    expect(eventsInStage([early, late], 'in_progress').map((item) => item.position)).toEqual([
-      1, 3,
+    expect(
+      eventsReadInStage([early, late], 'in_progress').map((item) => item.position),
+    ).toEqual([1, 3]);
+  });
+
+  it('elige la declaración aceptada después de un ciclo rechazado', () => {
+    const rejected = event({
+      position: 2,
+      from_state: 'in_progress',
+      to_state: 'awaiting_verification',
+      evidence: [
+        {
+          id: '11111111-1111-4111-8111-111111111111',
+          kind: 'before',
+          object_key: 'actions/rejected.jpg',
+          created_at: '2026-08-02T12:00:00.000Z',
+        },
+      ],
+    });
+    const sentBack = event({
+      position: 3,
+      from_state: 'awaiting_verification',
+      to_state: 'in_progress',
+    });
+    const accepted = event({
+      position: 4,
+      from_state: 'in_progress',
+      to_state: 'awaiting_verification',
+      evidence: [
+        {
+          id: '22222222-2222-4222-8222-222222222222',
+          kind: 'after',
+          object_key: 'actions/accepted.jpg',
+          created_at: '2026-08-04T12:00:00.000Z',
+        },
+      ],
+    });
+    const closed = event({
+      id: '33333333-3333-4333-8333-333333333333',
+      position: 5,
+      from_state: 'awaiting_verification',
+      to_state: 'closed',
+    });
+
+    expect(
+      acceptedClosureEvidence([closed, rejected, accepted, sentBack])[0]?.evidence.map(
+        (item) => item.id,
+      ),
+    ).toEqual(['22222222-2222-4222-8222-222222222222']);
+  });
+
+  it('empareja por separado la evidencia inmediatamente anterior a cada cierre', () => {
+    const firstDeclaration = event({
+      id: '11111111-1111-4111-8111-000000000001',
+      position: 1,
+      to_state: 'awaiting_verification',
+      evidence: [
+        {
+          id: '11111111-1111-4111-8111-000000000011',
+          kind: 'before',
+          object_key: 'actions/first.jpg',
+          created_at: '2026-08-01T12:00:00.000Z',
+        },
+      ],
+    });
+    const firstClosure = event({
+      id: '11111111-1111-4111-8111-000000000002',
+      position: 2,
+      to_state: 'closed',
+    });
+    const secondDeclaration = event({
+      id: '11111111-1111-4111-8111-000000000003',
+      position: 3,
+      to_state: 'awaiting_verification',
+      evidence: [
+        {
+          id: '11111111-1111-4111-8111-000000000013',
+          kind: 'after',
+          object_key: 'actions/second.jpg',
+          created_at: '2026-08-03T12:00:00.000Z',
+        },
+      ],
+    });
+    const secondClosure = event({
+      id: '11111111-1111-4111-8111-000000000004',
+      position: 4,
+      to_state: 'closed',
+    });
+
+    expect(
+      acceptedClosureEvidence([
+        secondClosure,
+        firstDeclaration,
+        firstClosure,
+        secondDeclaration,
+      ]).map(({ closureId, evidence }) => [closureId, evidence[0]?.object_key]),
+    ).toEqual([
+      [firstClosure.id, 'actions/first.jpg'],
+      [secondClosure.id, 'actions/second.jpg'],
     ]);
   });
 

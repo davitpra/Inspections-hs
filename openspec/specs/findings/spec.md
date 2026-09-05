@@ -587,11 +587,16 @@ not reached SHALL be presented or offered.
 The system SHALL let the reader open any lifecycle state the finding has already reached and read
 the business decisions recorded there, without leaving the findings-only reading. Raised SHALL
 present the observation facts recorded with the finding. Assigned SHALL present each corrective
-action commitment with its responsible person, description and `due_at`. In progress SHALL present
-the decision that began or resumed the work. Verification SHALL present each declaration that the work was done,
-including its submitted note and before/after evidence counts when present. Closed SHALL present
-each verification decision and its submitted note when present. A decision that sent verification
-back to In progress SHALL be presented in In progress with its required reason and optional note.
+action commitment with its responsible person, description and `due_at`. In progress and Verification
+SHALL present one shared thread of every decision recorded in either of them — each decision that
+began or resumed the work, and each declaration that the work was done with its submitted note and
+before/after evidence counts when present — and opening either state SHALL present that same thread.
+A decision that sent verification back to In progress SHALL be presented in that thread with its
+required reason and optional note. Closed SHALL present each verification decision and its submitted
+note when present, and SHALL NOT be merged into that thread. The system SHALL name each decision in
+a record by the step that recorded it, and SHALL NOT name it by an event position or by a raw
+destination state. A step that recorded no reason, note or evidence SHALL be presented as its named
+decision alone rather than omitted.
 If several actions or repeated passes through a state contribute decisions, the system SHALL
 present every applicable decision in recorded order and SHALL NOT collapse a later decision into
 an earlier one.
@@ -684,12 +689,27 @@ and SHALL NOT report that nothing was recorded there.
 - **THEN** the decision to declare the work done is presented with that note and the two evidence counts
 - **AND** no event position or raw destination state is presented
 
-#### Scenario: A rejected verification is read where work resumed
+#### Scenario: A rejected verification is read beside the declaration it refused
 
 - **GIVEN** verification sent an action from `awaiting_verification` to `in_progress` with a required `reason` and an optional `note`
-- **WHEN** the reader opens the In progress state
+- **WHEN** the reader opens either the In progress state or the Verification state
 - **THEN** the decision to send the work back is presented with its `reason` and `note`
-- **AND** an earlier decision that began the work remains present before it
+- **AND** the declaration it refused is presented before it in the same thread
+- **AND** an earlier decision that began the work remains present before both
+
+#### Scenario: A step that recorded nothing else is still named
+
+- **GIVEN** an action moved from `open` to `in_progress` with no note and no evidence
+- **WHEN** the reader opens the In progress state
+- **THEN** that decision is presented, named as the step that started the work
+- **AND** no reason, note or evidence is presented for it
+
+#### Scenario: Closure is not merged into the work thread
+
+- **GIVEN** an action was closed with a submitted note
+- **WHEN** the reader opens the Verification state
+- **THEN** the closure note is not presented there
+- **AND** it is presented when the reader opens the Closed state
 
 #### Scenario: Repeated and parallel decisions are not collapsed
 
@@ -731,6 +751,29 @@ and SHALL NOT report that nothing was recorded there.
 - **THEN** the action list and detail are refreshed as applicable
 - **AND** cached finding lists and submitted-inspection readings are refreshed
 - **AND** the screen remains on the inspection and shows `finding.state` `verification`
+
+### Requirement: Closed findings present the evidence accepted by verification
+
+The system SHALL present, for each closed corrective action, the `before` and `after` photographs
+attached to the last work-completion declaration before the transition to `closed`. The system SHALL
+NOT present photographs attached to a work-completion declaration that was later sent back to
+`in_progress`. The Closed record SHALL remain readable when the accepted declaration contains no
+photographs.
+
+#### Scenario: Closed presents the accepted photographs
+
+- **WHEN** an action reaches `closed` after a completion declaration containing `before` and `after` evidence
+- **THEN** the Closed record presents those photographs grouped by `kind`
+
+#### Scenario: Rejected photographs are excluded
+
+- **WHEN** an earlier completion declaration was sent back to `in_progress` and a later declaration was accepted
+- **THEN** the Closed record presents only the evidence from the later accepted declaration
+
+#### Scenario: Closure without photographs remains readable
+
+- **WHEN** the accepted completion declaration has an empty `evidence` array
+- **THEN** the Closed record presents the corrective action without claiming that the stage was not recorded
 
 ### Requirement: A corrective action is advanced from the finding that justifies it
 
@@ -813,18 +856,33 @@ action and every cached Finding reading whose persisted state may have changed.
 
 ### Requirement: An active finding exposes its current assignment for correction
 
-The system SHALL present `Edit assignment` in the current next step of an `assigned`, `in_progress`
-or `verification` finding to an authenticated `hs_coordinator` or the account named by
-`reported_by`, and to no other account. The inline form SHALL contain the current
-`assignee_person_id`, `description` and `due_at`. A successful submission SHALL preserve the finding
-state, refresh affected readings and present only the replacement values. A failed submission SHALL
-preserve the entered values. A `closed` finding SHALL offer no assignment editing.
+The system SHALL present `Edit assignment` in the current next step of an `assigned` or
+`in_progress` finding to an authenticated `hs_coordinator` or the account named by `reported_by`, and
+to no other account. It SHALL decide that offer on the derived state of the corrective action that
+holds the finding in its stage, using the same editable-state rule the server applies. The inline form
+SHALL contain the current `assignee_person_id`, `description` and `due_at`. A successful submission
+SHALL preserve the finding state, refresh affected readings and present only the replacement values.
+A failed submission SHALL preserve the entered values. A `verification` or `closed` finding SHALL
+offer no assignment editing.
 
-#### Scenario: An authorized reader edits during verification
+#### Scenario: An authorized reader edits while the work is in progress
 
-- **GIVEN** a finding is `verification` and the reader may edit its action
+- **GIVEN** a finding is `in_progress` and the reader may edit its action
 - **WHEN** the reader chooses `Edit assignment`
 - **THEN** the current responsible person, work and due date are available inline
+
+#### Scenario: Verification presents its decision without an assignment editor
+
+- **GIVEN** a finding is `verification` and the reader may edit its action
+- **WHEN** the current next step is presented
+- **THEN** no `Edit assignment` control is offered
+- **AND** the verification outcomes of the step are still offered
+
+#### Scenario: A refused verification restores assignment editing
+
+- **GIVEN** a `verification` finding whose reader may edit its action
+- **WHEN** the reader sends the work back and the finding returns to `in_progress`
+- **THEN** `Edit assignment` is offered again
 
 #### Scenario: Closure removes assignment editing
 
@@ -834,7 +892,8 @@ preserve the entered values. A `closed` finding SHALL offer no assignment editin
 
 #### Scenario: An unauthorized reader cannot edit an assignment
 
-- **GIVEN** a non-closed finding whose reader is neither an `hs_coordinator` nor its `reported_by`
+- **GIVEN** an `assigned` or `in_progress` finding whose reader is neither an `hs_coordinator` nor
+  its `reported_by`
 - **WHEN** the current next step is presented
 - **THEN** no `Edit assignment` control is offered
 

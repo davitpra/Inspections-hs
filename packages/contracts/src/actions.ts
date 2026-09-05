@@ -313,6 +313,20 @@ export const evidenceSchema = z.strictObject({
 
 export type Evidence = z.infer<typeof evidenceSchema>;
 
+/** El identificador que autoriza la descarga solo después de resolverlo bajo RLS. */
+export const actionEvidenceIdSchema = z.uuid();
+
+/** Una URL temporal para leer evidencia de una acción desde el bucket privado. */
+export const actionEvidenceDownloadResponseSchema = z.strictObject({
+  url: z.url(),
+  object_key: objectKeySchema,
+  expires_at: z.iso.datetime({ offset: true }),
+});
+
+export type ActionEvidenceDownloadResponse = z.infer<
+  typeof actionEvidenceDownloadResponseSchema
+>;
+
 /**
  * Un evento del stream.
  *

@@ -9,6 +9,8 @@ const SITE_ID = '11111111-1111-4111-8111-111111111111';
 const OTHER_SITE_ID = '99999999-9999-4999-8999-999999999999';
 const INSPECTION_ID = '22222222-2222-4222-8222-222222222222';
 const USER_ID = '33333333-3333-4333-8333-333333333333';
+const EVIDENCE_ID = '44444444-4444-4444-8444-444444444444';
+const EVIDENCE_KEY = `${SITE_ID}/actions/${INSPECTION_ID}/evidence`;
 
 const session: SessionScope = {
   userId: USER_ID,
@@ -45,6 +47,16 @@ function storageSpy() {
   }));
 
   return { presignPut } as unknown as ObjectStorageService & { presignPut: typeof presignPut };
+}
+
+function evidenceStorageSpy() {
+  const presignGet = vi.fn(async (objectKey: string) => ({
+    url: 'https://bucket.example.com/signed-get',
+    object_key: objectKey,
+    expires_at: new Date(Date.now() + 300_000).toISOString(),
+  }));
+
+  return { presignGet } as unknown as ObjectStorageService & { presignGet: typeof presignGet };
 }
 
 describe('UploadsService.presign', () => {
@@ -101,6 +113,42 @@ describe('deriveObjectKey', () => {
   });
 });
 
+describe('UploadsService.getActionEvidence', () => {
+  it('firma la key de una evidencia visible dentro del alcance', async () => {
+    const query = vi.fn(async () => ({ rows: [{ object_key: EVIDENCE_KEY }] }));
+    const withSessionClient = vi.fn(async (_session, run) => run({ query }));
+    const db = { withSessionClient } as unknown as DbService;
+    const storage = evidenceStorageSpy();
+    const service = new UploadsService(db, storage);
+
+    const response = await service.getActionEvidence(session, EVIDENCE_ID);
+
+    expect(response.object_key).toBe(EVIDENCE_KEY);
+    expect(withSessionClient).toHaveBeenCalledWith(session, expect.any(Function));
+    expect(query).toHaveBeenCalledWith(
+      expect.not.stringMatching(/site_id/i),
+      [EVIDENCE_ID],
+    );
+    expect(storage.presignGet).toHaveBeenCalledWith(EVIDENCE_KEY);
+  });
+
+  it('rechaza con 403 una evidencia fuera del alcance sin revelar ni firmar su key', async () => {
+    const query = vi.fn(async () => ({ rows: [] }));
+    const db = {
+      withSessionClient: async (_session: SessionScope, run: (client: { query: typeof query }) => Promise<unknown>) =>
+        run({ query }),
+    } as unknown as DbService;
+    const storage = evidenceStorageSpy();
+    const service = new UploadsService(db, storage);
+
+    await expect(service.getActionEvidence(session, EVIDENCE_ID)).rejects.toMatchObject({
+      status: 403,
+      response: expect.not.objectContaining({ object_key: expect.anything(), url: expect.anything() }),
+    });
+    expect(storage.presignGet).not.toHaveBeenCalled();
+  });
+});
+
 describe('ObjectStorageService', () => {
   beforeEach(() => {
     vi.stubEnv('S3_BUCKET', 'hs-platform-test');
@@ -130,6 +178,22 @@ describe('ObjectStorageService', () => {
     expect(url.searchParams.get('X-Amz-Expires')).toBe('300');
     expect(url.searchParams.get('X-Amz-Signature')).toBeTruthy();
     expect(url.pathname).toContain(signed.object_key);
+
+    const expiresAt = Date.parse(signed.expires_at);
+    expect(expiresAt).toBeGreaterThan(before);
+    expect(expiresAt).toBeLessThanOrEqual(before + 300_000 + 5_000);
+  });
+
+  it('firma una lectura GET para la key recibida con el TTL configurado', async () => {
+    const before = Date.now();
+    const signed = await new ObjectStorageService().presignGet(EVIDENCE_KEY);
+    const url = new URL(signed.url);
+
+    expect(url.searchParams.get('X-Amz-Expires')).toBe('300');
+    expect(url.searchParams.get('X-Amz-Signature')).toBeTruthy();
+    expect(url.searchParams.get('x-id')).toBe('GetObject');
+    expect(url.pathname).toContain(EVIDENCE_KEY);
+    expect(signed.object_key).toBe(EVIDENCE_KEY);
 
     const expiresAt = Date.parse(signed.expires_at);
     expect(expiresAt).toBeGreaterThan(before);
