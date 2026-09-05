@@ -9,9 +9,6 @@ import { useAppSession } from "./session-context";
  * a que Android recicle memoria, y —lo que importa acá— es la forma en que un inspector
  * abre la aplicación en una planta sin señal: desde un ícono, no escribiendo una URL
  * que necesitaría resolver DNS.
- *
- * El estado del almacenamiento va al lado, y una denegación se dice en voz alta: el
- * inspector no puede arreglarla, pero sí puede decidir sincronizar más seguido.
  */
 
 interface InstallPromptEvent extends Event {
@@ -20,7 +17,7 @@ interface InstallPromptEvent extends Event {
 }
 
 export function InstallPrompt(): React.JSX.Element | null {
-  const { storage, ready } = useAppSession();
+  const { ready } = useAppSession();
   const [installEvent, setInstallEvent] = useState<InstallPromptEvent | null>(
     null,
   );
@@ -49,35 +46,22 @@ export function InstallPrompt(): React.JSX.Element | null {
     };
   }, []);
 
-  if (!ready) return null;
-
-  const degraded = storage.mode === "degraded";
-
-  if (!installEvent && !degraded) return null;
+  if (!ready || !installEvent || installed) return null;
 
   return (
     <section className="onboarding">
-      {installEvent && !installed ? (
-        <p>
-          <button
-            type="button"
-            onClick={() => {
-              void installEvent.prompt();
-              setInstallEvent(null);
-            }}
-          >
-            Add to home screen
-          </button>{" "}
-          Install the app before going out on a walkthrough.
-        </p>
-      ) : null}
-
-      {degraded ? (
-        <p className="onboarding__degraded">
-          This device may delete unsubmitted drafts if it runs low on space.
-          Nothing is lost
-        </p>
-      ) : null}
+      <p>
+        <button
+          type="button"
+          onClick={() => {
+            void installEvent.prompt();
+            setInstallEvent(null);
+          }}
+        >
+          Add to home screen
+        </button>{" "}
+        Install the app before going out on a walkthrough.
+      </p>
     </section>
   );
 }
