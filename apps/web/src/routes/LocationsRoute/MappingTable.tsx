@@ -1,15 +1,21 @@
 import type { Location, OrganizationLocation, Site } from '@hs/contracts';
 
 import { LocationRow } from './LocationRow';
-import { progressLabel, siteProgress, type SortDirection } from './presentation';
+import type { SortDirection } from './presentation';
 
 /**
  * La grilla: una fila por ubicación compartida y una columna por planta.
  *
- * Roles de tabla sobre la lista: es una tabla de datos dibujada con flex, y sin declararlo
- * `aria-sort` no significa nada —solo vale sobre un `columnheader`—. El encabezado tampoco
- * puede ser `aria-hidden`: tiene adentro un botón, y un foco dentro de algo escondido es un
- * foco que el lector de pantalla no anuncia.
+ * Es la tabla de la casa —`.table` pone el ancho, los bordes, el `thead` y el `<th>` de
+ * fila— y no una lista con roles escritos a mano: `<table>`, `<tr>`, `<th scope="col">` y
+ * `<td>` ya SON `table`, `row`, `columnheader` y `cell`, y `aria-sort` solo significa algo
+ * sobre un `columnheader` de verdad. Lo único propio es el número de columnas, que no está
+ * escrito en ningún lado: sale del alcance de la cuenta, y el algoritmo de tabla lo reparte
+ * mejor de lo que lo repartía un `flex-basis`.
+ *
+ * `sites` son las columnas QUE SE DIBUJAN: el toggle de la barra las apaga, y apagarlas no
+ * toca las filas. El alcance entero lo necesita la barra para ofrecer sus botones, no la
+ * tabla, que dibuja lo que le dan.
  *
  * Las dos notas de lista vacía viven acá y no en la ruta porque son la ALTERNATIVA de la
  * tabla: o hay filas, o hay una de las dos. Y son problemas distintos —un catálogo sin dar
@@ -38,66 +44,64 @@ export function MappingTable({
   return (
     <>
       {shared.length === 0 ? (
-        <p className="note">
-          No shared locations yet. Add one, then tick the plants where it exists.
-        </p>
+        <div className="schedule-empty">
+          <strong>No shared locations yet.</strong>
+          <span>Add one, then tick the plants where it exists.</span>
+        </div>
       ) : null}
 
       {shared.length > 0 && rows.length === 0 ? (
-        <p className="note">No locations match this filter. Try another name, or All.</p>
+        <div className="schedule-empty">
+          <strong>No locations match your search.</strong>
+          <span>Try another name, or clear the box.</span>
+        </div>
       ) : null}
 
       {rows.length > 0 ? (
-        <ul className="mapping__table" role="table" aria-label="Locations by plant">
-          <li className="mapping__row mapping__row--head" role="row">
-            <div
-              className="mapping__cell mapping__cell--name"
-              role="columnheader"
-              aria-sort={direction === 'asc' ? 'ascending' : 'descending'}
-            >
-              <button
-                type="button"
-                className="mapping__sort"
-                onClick={() => onDirection(direction === 'asc' ? 'desc' : 'asc')}
-              >
-                Location <span aria-hidden>{direction === 'asc' ? '↑' : '↓'}</span>
-                <span className="mapping__sr">
-                  {direction === 'asc' ? 'sorted A to Z' : 'sorted Z to A'}
-                </span>
-              </button>
-            </div>
-            {sites.map((site) => (
-              <div key={site.id} className="mapping__cell mapping__cell--plant" role="columnheader">
-                {site.name}
-                {/*
-                  El único número que importa, y va acá porque ya no hay una planta elegida a
-                  la que ponérselo arriba: sin él hay que contar los ticks de la columna a ojo
-                  para saber si falta algo.
-                */}
-                <span className="mapping__progress">
-                  {progressLabel(siteProgress(shared, locations, site.id))}
-                </span>
-              </div>
-            ))}
-            <div
-              className="mapping__cell mapping__cell--actions"
-              role="columnheader"
-              aria-label="Actions"
-            >
-              <span className="mapping__sr">Actions</span>
-            </div>
-          </li>
+        <div className="mapping__table-wrap">
+          <table className="table mapping__table" aria-label="Locations by plant">
+            <thead>
+              <tr>
+                <th
+                  scope="col"
+                  className="mapping__cell--name"
+                  aria-sort={direction === 'asc' ? 'ascending' : 'descending'}
+                >
+                  <button
+                    type="button"
+                    className="mapping__sort"
+                    onClick={() => onDirection(direction === 'asc' ? 'desc' : 'asc')}
+                  >
+                    Location <span aria-hidden>{direction === 'asc' ? '↑' : '↓'}</span>
+                    <span className="mapping__sr">
+                      {direction === 'asc' ? 'sorted A to Z' : 'sorted Z to A'}
+                    </span>
+                  </button>
+                </th>
+                {sites.map((site) => (
+                  <th key={site.id} scope="col" className="mapping__cell--plant">
+                    {site.name}
+                  </th>
+                ))}
+                <th scope="col" className="mapping__cell--actions">
+                  Actions
+                </th>
+              </tr>
+            </thead>
 
-          {rows.map((each) => (
-            <LocationRow
-              key={each.id}
-              shared={each}
-              locations={locations}
-              sites={sites}
-              onRetire={onRetire}
-            />
-          ))}
-        </ul>
+            <tbody>
+              {rows.map((each) => (
+                <LocationRow
+                  key={each.id}
+                  shared={each}
+                  locations={locations}
+                  sites={sites}
+                  onRetire={onRetire}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
       ) : null}
     </>
   );

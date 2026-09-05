@@ -199,14 +199,6 @@ describe('la tabla cruza las plantas', () => {
     ).toBe('true');
   });
 
-  it('cuenta cuántas faltan en cada columna', async () => {
-    renderRoute();
-
-    await screen.findByLabelText('Loading dock in St. Thomas');
-
-    expect(screen.getAllByText('1 of 2').length).toBe(2);
-  });
-
   /**
    * «Dock east» no se llama como la compartida: destildarla suelta ESA fila, y quien lo
    * hace tiene que poder verlo antes.
@@ -279,7 +271,7 @@ describe('ordenar por nombre', () => {
   });
 });
 
-describe('buscar y filtrar', () => {
+describe('buscar y elegir plantas', () => {
   it('el buscador deja solo lo que coincide, y el conteo lo acompaña', async () => {
     renderRoute();
 
@@ -292,23 +284,53 @@ describe('buscar y filtrar', () => {
     expect(screen.getByText('1 of 2 locations')).toBeTruthy();
   });
 
-  it('"Every plant" deja solo las que están en las dos', async () => {
+  /**
+   * EL TOGGLE ELIGE COLUMNAS, NO RECORTA FILAS: con Glencoe solo, «Cold storage» —que no está
+   * en ninguna planta— tiene que seguir a la vista, porque ese hueco es la pregunta de la
+   * pantalla.
+   */
+  it('una planta prendida deja solo esa columna, con todas las filas', async () => {
     renderRoute();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Every plant' }));
-
-    expect(screen.getByLabelText('Loading dock in St. Thomas')).toBeTruthy();
-    expect(screen.queryByLabelText('Cold storage in St. Thomas')).toBeNull();
-  });
-
-  /** «Solo acá» excluye tanto la que falta como la que también está en la otra planta. */
-  it('"Glencoe only" excluye la que está en las dos', async () => {
-    renderRoute();
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Glencoe only' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Glencoe' }));
 
     expect(screen.queryByLabelText('Loading dock in St. Thomas')).toBeNull();
-    expect(screen.getByText('No locations match this filter. Try another name, or All.')).toBeTruthy();
+    expect(screen.getByLabelText('Loading dock in Glencoe')).toBeTruthy();
+    expect(screen.getByLabelText('Cold storage in Glencoe')).toBeTruthy();
+    expect(screen.getByText('2 of 2 locations')).toBeTruthy();
+  });
+
+  it('prender la segunda devuelve las dos columnas', async () => {
+    renderRoute();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Glencoe' }));
+    fireEvent.click(screen.getByRole('button', { name: 'St. Thomas' }));
+
+    expect(screen.getByLabelText('Loading dock in Glencoe')).toBeTruthy();
+    expect(screen.getByLabelText('Loading dock in St. Thomas')).toBeTruthy();
+  });
+
+  /** Apagar la última no deja la grilla sin columnas. */
+  it('apagar la única prendida vuelve a mostrar todas', async () => {
+    renderRoute();
+
+    const glencoe = await screen.findByRole('button', { name: 'Glencoe' });
+    fireEvent.click(glencoe);
+    fireEvent.click(glencoe);
+
+    expect(glencoe.getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByLabelText('Loading dock in St. Thomas')).toBeTruthy();
+    expect(screen.getByLabelText('Loading dock in Glencoe')).toBeTruthy();
+  });
+
+  it('las huérfanas acompañan a las columnas visibles', async () => {
+    renderRoute();
+
+    expect(await screen.findByText('Spare room')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Glencoe' }));
+
+    expect(screen.queryByText('Spare room')).toBeNull();
   });
 });
 
@@ -395,7 +417,10 @@ describe('retirar una ubicación compartida', () => {
   it('abre la confirmación desde la columna de acciones', async () => {
     renderRoute();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Actions for Loading dock' }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'More actions for Loading dock' }),
+    );
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Retire location' }));
 
     expect(screen.getByRole('dialog')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Retire Loading dock?' })).toBeTruthy();
@@ -407,7 +432,10 @@ describe('retirar una ubicación compartida', () => {
   it('confirma y llama al endpoint', async () => {
     renderRoute();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Actions for Loading dock' }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'More actions for Loading dock' }),
+    );
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Retire location' }));
     fireEvent.click(screen.getByRole('button', { name: 'Retire this location' }));
 
     await waitFor(() =>
@@ -420,7 +448,10 @@ describe('retirar una ubicación compartida', () => {
 
     renderRoute();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Actions for Loading dock' }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'More actions for Loading dock' }),
+    );
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Retire location' }));
     fireEvent.click(screen.getByRole('button', { name: 'Retire this location' }));
 
     expect(await screen.findByText('The location was not found')).toBeTruthy();
@@ -430,7 +461,10 @@ describe('retirar una ubicación compartida', () => {
   it('Keep it cierra sin llamar al endpoint', async () => {
     renderRoute();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Actions for Loading dock' }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'More actions for Loading dock' }),
+    );
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Retire location' }));
     fireEvent.click(screen.getByRole('button', { name: 'Keep it' }));
 
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
@@ -475,6 +509,10 @@ describe('dar de alta', () => {
     expect(screen.getByRole('heading', { name: 'Add a location' })).toBeTruthy();
   });
 
+  /**
+   * El alta de planta no pide el código: sale del nombre. La corrección de un code repetido
+   * es corregir el nombre, así que el nombre tiene que seguir ahí después del rechazo.
+   */
   it('no vacía el formulario cuando el code de site ya está usado', async () => {
     createSite.mockRejectedValue(new Error('The code "north-plant" is already in use'));
 
@@ -485,7 +523,16 @@ describe('dar de alta', () => {
 
     expect(await screen.findByText(/already in use/)).toBeTruthy();
     expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('North plant');
-    expect((screen.getByLabelText('Code') as HTMLInputElement).value).toBe('north-plant');
+    expect(screen.queryByLabelText('Code')).toBeNull();
+  });
+
+  /** Un nombre que no produce ningún código no puede salir a viajar: el `CHECK` lo rechaza. */
+  it('deja el alta de planta deshabilitada cuando el nombre no produce código', async () => {
+    renderRoute();
+    fireEvent.click(await screen.findByRole('button', { name: 'Add site' }));
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: '???' } });
+
+    expect((screen.getByRole('button', { name: 'Add' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   /** Lo que se nombra es un lugar; el código es consecuencia del alta, no una decisión. */

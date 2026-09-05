@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post } from '@nestjs/common';
 import {
   createLocationSchema,
   createOrganizationLocationSchema,
@@ -58,7 +58,13 @@ export class LocationsController {
     return this.locations.createLocation(session, siteId, createLocationSchema.parse(body));
   }
 
+  /**
+   * La baja no devuelve cuerpo, y por eso declara el 204: con el 200 que Nest pone por
+   * default, la respuesta sale vacía pero rotulada como si trajera algo, y el cliente
+   * —que solo saltea el `json()` en 204— se rompe al parsearla.
+   */
   @Patch('organization-locations/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
   deactivateOrganizationLocation(
     @CurrentSession() session: SessionContext,
     @Param('id') organizationLocationId: string,

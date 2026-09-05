@@ -18,8 +18,9 @@ import { NewSiteForm } from "./NewSiteForm";
 import { Orphans } from "./Orphans";
 import { RetireLocationDialog } from "./RetireLocationDialog";
 import {
+  togglePlant,
   visibleLocations,
-  type CoverageFilter,
+  visibleSites,
   type SortDirection,
 } from "./presentation";
 
@@ -71,7 +72,8 @@ function LocationCatalog({
 }: {
   siteScope: readonly string[];
 }): React.JSX.Element {
-  const [filter, setFilter] = useState<CoverageFilter>("all");
+  // Las plantas cuyas columnas se miran. VACÍA ES «TODAS»: ver `togglePlant`.
+  const [plants, setPlants] = useState<readonly string[]>([]);
   const [direction, setDirection] = useState<SortDirection>("asc");
   const [query, setQuery] = useState("");
   const [adding, setAdding] = useState(false);
@@ -104,13 +106,10 @@ function LocationCatalog({
 
   const allShared = shared.data ?? [];
   const allLocations = locations.data ?? [];
-  const siteIds = columns.map((site) => site.id);
-  const rows = visibleLocations(allShared, allLocations, {
-    filter,
-    query,
-    siteIds,
-    direction,
-  });
+  // Las columnas que se dibujan. `columns` sigue siendo el alcance completo: lo necesitan los
+  // botones del toggle, que tienen que poder volver a prender la que se apagó.
+  const shownColumns = visibleSites(columns, plants);
+  const rows = visibleLocations(allShared, { query, direction });
 
   return (
     <>
@@ -156,24 +155,6 @@ function LocationCatalog({
         </div>
       </header>
 
-      {/*
-        Lo que el tick no puede decir por sí solo: que una compartida marcada en las dos
-        plantas es UN nombre con un lugar distinto en cada una, no un lugar compartido.
-      */}
-      <div className="notice-card">
-        <div className="notice-card__body">
-          <span className="notice-card__icon">
-            <InfoIcon size={20} />
-          </span>
-          <p className="notice-card__text">
-            A location ticked for every plant is one name with a separate
-            physical place at each site, so a template written for both can pair
-            them. A template section can only name a location where the plant it
-            runs in has ticked it.
-          </p>
-        </div>
-      </div>
-
       {addingSite ? <NewSiteForm /> : null}
 
       {adding ? <NewLocationForm /> : null}
@@ -193,8 +174,10 @@ function LocationCatalog({
         <section className="card mapping">
           <MappingToolbar
             sites={columns}
-            filter={filter}
-            onFilter={setFilter}
+            selected={plants}
+            onToggle={(siteId) =>
+              setPlants((current) => togglePlant(current, siteId))
+            }
             query={query}
             onQuery={setQuery}
             showing={rows.length}
@@ -202,7 +185,7 @@ function LocationCatalog({
           />
 
           <MappingTable
-            sites={columns}
+            sites={shownColumns}
             shared={allShared}
             rows={rows}
             locations={allLocations}
@@ -219,7 +202,7 @@ function LocationCatalog({
         hay forma de saber que está ahí. Es además donde caen las que se destildan.
       */}
       {shared.isSuccess && locations.isSuccess ? (
-        <Orphans sites={columns} locations={allLocations} />
+        <Orphans sites={shownColumns} locations={allLocations} />
       ) : null}
 
       {retiring ? (

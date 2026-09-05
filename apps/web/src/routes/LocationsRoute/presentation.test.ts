@@ -1,23 +1,20 @@
-import type { Location, OrganizationLocation } from '@hs/contracts';
+import type { Location, OrganizationLocation, Site } from '@hs/contracts';
 import { describe, expect, it } from 'vitest';
 
 import {
   assignedLocation,
   canCreate,
-  coverage,
-  matchesFilter,
-  progressLabel,
   reusableLocation,
-  siteProgress,
   sortShared,
   suggestCode,
+  togglePlant,
   unmappedLocations,
   visibleLocations,
+  visibleSites,
 } from './presentation';
 
 const ST_THOMAS = '11111111-1111-4111-8111-111111111111';
 const GLENCOE = '22222222-2222-4222-8222-222222222222';
-const BOTH = [ST_THOMAS, GLENCOE];
 
 let counter = 0;
 
@@ -100,53 +97,45 @@ describe('reusableLocation', () => {
   });
 });
 
-describe('coverage', () => {
-  it('distingue en todas, en algunas y en ninguna', () => {
-    const dock = shared('loading-dock');
-    const here = location({ organization_location_code: 'loading-dock' });
-    const there = location({ site_id: GLENCOE, organization_location_code: 'loading-dock' });
-
-    expect(coverage(dock, [here, there], BOTH)).toBe('every');
-    expect(coverage(dock, [here], BOTH)).toBe('some');
-    expect(coverage(dock, [], BOTH)).toBe('none');
+describe('togglePlant', () => {
+  it('prende y apaga sueltas', () => {
+    expect(togglePlant([], GLENCOE)).toEqual([GLENCOE]);
+    expect(togglePlant([GLENCOE], ST_THOMAS)).toEqual([GLENCOE, ST_THOMAS]);
+    expect(togglePlant([GLENCOE, ST_THOMAS], GLENCOE)).toEqual([ST_THOMAS]);
   });
 
-  /** Con una sola planta no hay «algunas»: o está o no está. */
-  it('con una sola planta nunca dice "some"', () => {
-    const dock = shared('loading-dock');
-    const here = location({ organization_location_code: 'loading-dock' });
-
-    expect(coverage(dock, [here], [ST_THOMAS])).toBe('every');
+  /** Apagar la última no deja la grilla sin columnas: la lista vacía es «todas». */
+  it('apagar la última vuelve a la lista vacía', () => {
+    expect(togglePlant([GLENCOE], GLENCOE)).toEqual([]);
   });
 });
 
-describe('matchesFilter', () => {
-  const dock = shared('loading-dock');
-  const here = location({ organization_location_code: 'loading-dock' });
-  const there = location({ site_id: GLENCOE, organization_location_code: 'loading-dock' });
+describe('visibleSites', () => {
+  const sites: Site[] = [
+    { id: GLENCOE, code: 'glencoe', name: 'Glencoe', deactivated_at: null },
+    { id: ST_THOMAS, code: 'st-thomas', name: 'St. Thomas', deactivated_at: null },
+  ];
 
-  it('"all" no filtra nada', () => {
-    expect(matchesFilter(dock, [], 'all', BOTH)).toBe(true);
+  it('sin ninguna seleccionada las dibuja todas', () => {
+    expect(visibleSites(sites, []).map((site) => site.name)).toEqual(['Glencoe', 'St. Thomas']);
   });
 
-  it('"every" pide todas las plantas', () => {
-    expect(matchesFilter(dock, [here, there], 'every', BOTH)).toBe(true);
-    expect(matchesFilter(dock, [here], 'every', BOTH)).toBe(false);
+  it('deja solo las seleccionadas', () => {
+    expect(visibleSites(sites, [GLENCOE]).map((site) => site.name)).toEqual(['Glencoe']);
   });
 
-  /** «Solo acá» es tan exigente en lo que EXCLUYE como en lo que pide. */
-  it('"solo esta planta" excluye la que también está en la otra', () => {
-    expect(matchesFilter(dock, [here], { only: ST_THOMAS }, BOTH)).toBe(true);
-    expect(matchesFilter(dock, [here, there], { only: ST_THOMAS }, BOTH)).toBe(false);
-    expect(matchesFilter(dock, [there], { only: ST_THOMAS }, BOTH)).toBe(false);
+  /** Prender en otro orden no reordena la grilla. */
+  it('conserva el orden de las plantas, no el de la selección', () => {
+    expect(visibleSites(sites, [ST_THOMAS, GLENCOE]).map((site) => site.name)).toEqual([
+      'Glencoe',
+      'St. Thomas',
+    ]);
   });
 });
 
 describe('visibleLocations', () => {
-  const view = (over: Partial<Parameters<typeof visibleLocations>[2]> = {}) => ({
-    filter: 'all' as const,
+  const view = (over: Partial<Parameters<typeof visibleLocations>[1]> = {}) => ({
     query: '',
-    siteIds: BOTH,
     direction: 'asc' as const,
     ...over,
   });
@@ -156,59 +145,27 @@ describe('visibleLocations', () => {
     const cold = shared('cold-storage', 'Cold storage');
     const rows = [dock, cold];
 
-    expect(visibleLocations(rows, [], view({ query: 'LOAD' })).map((s) => s.name)).toEqual([
+    expect(visibleLocations(rows, view({ query: 'LOAD' })).map((s) => s.name)).toEqual([
       'Loading dock',
     ]);
-    expect(visibleLocations(rows, [], view({ query: 'cold-st' })).map((s) => s.name)).toEqual([
+    expect(visibleLocations(rows, view({ query: 'cold-st' })).map((s) => s.name)).toEqual([
       'Cold storage',
     ]);
-  });
-
-  it('combina el filtro con la búsqueda', () => {
-    const dock = shared('loading-dock', 'Loading dock');
-    const here = location({ organization_location_code: 'loading-dock' });
-
-    expect(visibleLocations([dock], [here], view({ filter: 'every', query: 'loading' }))).toEqual(
-      [],
-    );
   });
 
   it('devuelve el resultado ordenado por nombre', () => {
     const rows = [shared('z', 'Zulu'), shared('a', 'Alpha')];
 
-    expect(visibleLocations(rows, [], view()).map((s) => s.name)).toEqual(['Alpha', 'Zulu']);
+    expect(visibleLocations(rows, view()).map((s) => s.name)).toEqual(['Alpha', 'Zulu']);
   });
 
   /** El orden se aplica sobre lo que quedó, no sobre el catálogo entero. */
-  it('ordena al revés lo que pasó el filtro', () => {
+  it('ordena al revés lo que pasó la búsqueda', () => {
     const rows = [shared('g', 'Grading area'), shared('z', 'Zulu'), shared('a', 'Alpha')];
 
     expect(
-      visibleLocations(rows, [], view({ direction: 'desc', query: 'l' })).map((s) => s.name),
+      visibleLocations(rows, view({ direction: 'desc', query: 'l' })).map((s) => s.name),
     ).toEqual(['Zulu', 'Alpha']);
-  });
-});
-
-describe('siteProgress', () => {
-  it('cuenta solo las compartidas que tienen lugar en esta planta', () => {
-    const a = shared('a');
-    const b = shared('b');
-    const mapped = location({ organization_location_code: 'a' });
-
-    expect(siteProgress([a, b], [mapped], ST_THOMAS)).toEqual({ mapped: 1, total: 2 });
-  });
-
-  it('un mapeo de la otra planta no cuenta para esta', () => {
-    const a = shared('a');
-    const elsewhere = location({ site_id: GLENCOE, organization_location_code: 'a' });
-
-    expect(siteProgress([a], [elsewhere], ST_THOMAS)).toEqual({ mapped: 0, total: 1 });
-  });
-});
-
-describe('progressLabel', () => {
-  it('dice cuántas sobre cuántas', () => {
-    expect(progressLabel({ mapped: 9, total: 11 })).toBe('9 of 11');
   });
 });
 

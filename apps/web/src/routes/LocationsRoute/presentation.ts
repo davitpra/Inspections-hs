@@ -1,4 +1,9 @@
-import { CATALOG_CODE_PATTERN, type Location, type OrganizationLocation } from '@hs/contracts';
+import {
+  CATALOG_CODE_PATTERN,
+  type Location,
+  type OrganizationLocation,
+  type Site,
+} from '@hs/contracts';
 
 /**
  * La lógica pura de la pantalla de mapeo.
@@ -48,59 +53,36 @@ export function reusableLocation(
   );
 }
 
-/** En cuántas de estas plantas existe la compartida. */
-export function coverage(
-  shared: OrganizationLocation,
-  locations: readonly Location[],
-  siteIds: readonly string[],
-): 'every' | 'some' | 'none' {
-  const present = siteIds.filter(
-    (siteId) => assignedLocation(shared, locations, siteId) !== undefined,
-  ).length;
-
-  if (present === 0) return 'none';
-
-  return present === siteIds.length ? 'every' : 'some';
-}
-
 /**
- * El filtro segmentado. `'all'`, `'every'` (está en todas), o el id de una planta —«solo
- * acá»—.
+ * Qué plantas se miran. La lista VACÍA es «todas», no «ninguna»: el toggle tiene que poder
+ * apagarse entero, y quedarse sin ninguna columna no es un estado que le sirva a nadie.
  *
- * El mock tiene cuatro botones fijos porque hay dos plantas. Acá el tercero en adelante sale
- * de `siteIds`, así que una tercera planta no toca este archivo.
+ * ELEGIR COLUMNAS NO RECORTA FILAS, y ahí se separa del filtro de cobertura que había antes
+ * —«All», «Every plant», «Solo acá»—: aquel escondía justo las filas donde estaba el hueco.
+ * Con una sola planta a la vista la compartida que le falta se sigue viendo, con su celda
+ * vacía, que es la pregunta para la que existe la pantalla.
  */
-export type CoverageFilter = 'all' | 'every' | { readonly only: string };
+export function togglePlant(selected: readonly string[], siteId: string): string[] {
+  return selected.includes(siteId)
+    ? selected.filter((each) => each !== siteId)
+    : [...selected, siteId];
+}
 
-export function matchesFilter(
-  shared: OrganizationLocation,
-  locations: readonly Location[],
-  filter: CoverageFilter,
-  siteIds: readonly string[],
-): boolean {
-  if (filter === 'all') return true;
-  if (filter === 'every') return coverage(shared, locations, siteIds) === 'every';
-
-  return siteIds.every((siteId) => {
-    const here = assignedLocation(shared, locations, siteId) !== undefined;
-
-    return siteId === filter.only ? here : !here;
-  });
+/** Las columnas a dibujar, en el orden de `sites`: prender una segunda no reordena la grilla. */
+export function visibleSites(sites: readonly Site[], selected: readonly string[]): Site[] {
+  return selected.length === 0 ? [...sites] : sites.filter((site) => selected.includes(site.id));
 }
 
 /**
- * Las compartidas que quedan tras el filtro y la búsqueda, en el orden pedido.
+ * Las compartidas que quedan tras la búsqueda, en el orden pedido.
  *
- * Los criterios van en un objeto y no sueltos: eran cinco parámetros y tres de ellos
- * cadenas, así que invertir dos en la llamada tipaba igual y ordenaba distinto.
+ * Los criterios van en un objeto y no sueltos: son dos cadenas seguidas, así que invertirlas
+ * en la llamada tipaba igual y ordenaba distinto.
  */
 export function visibleLocations(
   shared: readonly OrganizationLocation[],
-  locations: readonly Location[],
   view: {
-    filter: CoverageFilter;
     query: string;
-    siteIds: readonly string[];
     direction: SortDirection;
   },
 ): OrganizationLocation[] {
@@ -108,31 +90,8 @@ export function visibleLocations(
 
   return sortShared(shared, view.direction).filter(
     (each) =>
-      matchesFilter(each, locations, view.filter, view.siteIds) &&
-      (each.name.toLowerCase().includes(needle) || each.code.toLowerCase().includes(needle)),
+      each.name.toLowerCase().includes(needle) || each.code.toLowerCase().includes(needle),
   );
-}
-
-/**
- * Cuántas compartidas tienen lugar en ESTA planta, sobre el total.
- *
- * Es el único número que importa y por eso va en el encabezado de cada columna: sin él hay
- * que contar 21 ticks a ojo para saber si falta algo.
- */
-export function siteProgress(
-  shared: readonly OrganizationLocation[],
-  locations: readonly Location[],
-  siteId: string,
-): { mapped: number; total: number } {
-  return {
-    mapped: shared.filter((each) => assignedLocation(each, locations, siteId) !== undefined).length,
-    total: shared.length,
-  };
-}
-
-/** El «9 of 21» del encabezado de columna. */
-export function progressLabel(progress: { mapped: number; total: number }): string {
-  return `${progress.mapped} of ${progress.total}`;
 }
 
 /**

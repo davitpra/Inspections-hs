@@ -1,14 +1,7 @@
 import type { Location, OrganizationLocation, Site } from '@hs/contracts';
 
-import { MoreIcon } from '../../components/icons';
+import { RowMenu } from '../../components/RowMenu';
 import { PlantTick } from './PlantTick';
-import { coverage } from './presentation';
-
-const COVERAGE_PILL: Record<'every' | 'some' | 'none', string> = {
-  every: 'status-pill status-pill--ready',
-  some: 'status-pill status-pill--not-ready',
-  none: 'status-pill status-pill--not-ready',
-};
 
 /**
  * Una ubicación compartida, y en qué plantas existe.
@@ -17,9 +10,12 @@ const COVERAGE_PILL: Record<'every' | 'some' | 'none', string> = {
  * pantalla nueva. La versión anterior mostraba una planta por vez, así que «¿esto existe en
  * las dos?» costaba cambiar de planta y volver a contar.
  *
- * Bajo el nombre va el `code`, no cuántas plantillas lo usan: el `code` es lo que la sección
- * de una plantilla guarda y lo que sale en los reportes, y es el único de los dos que la API
- * ya devuelve.
+ * LA COBERTURA NO SE RESUME EN UNA ETIQUETA: la contestan las celdas, y decirla además en un
+ * badge es contarla dos veces —dos cuentas que pueden contradecirse, y una que además cambia
+ * de significado cuando el toggle apaga una columna—.
+ *
+ * Retirar está detrás del menú «⋮» de la casa y no en un botón directo: es lo que no se
+ * deshace —suelta las físicas de todas las plantas— y por eso cuesta un clic más a propósito.
  */
 export function LocationRow({
   shared,
@@ -32,31 +28,14 @@ export function LocationRow({
   sites: readonly Site[];
   onRetire: (location: OrganizationLocation) => void;
 }): React.JSX.Element {
-  const siteIds = sites.map((site) => site.id);
-  const where = coverage(shared, locations, siteIds);
-
-  const tag = ((): string => {
-    if (where === 'every') return sites.length === 1 ? 'Mapped' : 'Every plant';
-    if (where === 'none') return 'Not mapped';
-
-    const only = sites.filter(
-      (site) => locations.some((l) => l.site_id === site.id && l.organization_location_code === shared.code),
-    );
-
-    return `${only.map((site) => site.name).join(', ')} only`;
-  })();
-
   return (
-    <li className="mapping__row" role="row">
-      <div className="mapping__cell mapping__cell--name" role="cell">
-        <span className="mapping__name">
-          {shared.name} <span className={COVERAGE_PILL[where]}>{tag}</span>
-        </span>
-        <span className="mapping__code">{shared.code}</span>
-      </div>
+    <tr>
+      <th scope="row" className="mapping__cell--name">
+        <span className="mapping__name">{shared.name}</span>
+      </th>
 
       {sites.map((site) => (
-        <div key={site.id} className="mapping__cell mapping__cell--plant" role="cell">
+        <td key={site.id} className="mapping__cell--plant">
           {/* Visible sólo cuando la fila se apila y el encabezado de columna desaparece. */}
           <span className="mapping__plant-label">{site.name}</span>
           <PlantTick
@@ -65,19 +44,23 @@ export function LocationRow({
             siteId={site.id}
             siteName={site.name}
           />
-        </div>
+        </td>
       ))}
 
-      <div className="mapping__cell mapping__cell--actions" role="cell">
-        <button
-          type="button"
-          className="mapping__action"
-          aria-label={`Actions for ${shared.name}`}
-          onClick={() => onRetire(shared)}
-        >
-          <MoreIcon />
-        </button>
-      </div>
-    </li>
+      <td className="mapping__cell--actions">
+        <div className="table__actions">
+          <RowMenu
+            label={`More actions for ${shared.name}`}
+            actions={[
+              {
+                label: 'Retire location',
+                tone: 'danger',
+                onSelect: () => onRetire(shared),
+              },
+            ]}
+          />
+        </div>
+      </td>
+    </tr>
   );
 }

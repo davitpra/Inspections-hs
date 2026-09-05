@@ -1,50 +1,37 @@
 import type { Site } from '@hs/contracts';
 
 import { SearchIcon } from '../../components/icons';
-import type { CoverageFilter } from './presentation';
 
 /**
- * Buscar y filtrar por cobertura.
+ * Buscar, y elegir qué plantas se miran.
  *
- * El mock tiene cuatro botones fijos porque hay dos plantas. Acá salen del alcance: «All»,
- * «Every plant», y una por planta. CON UNA SOLA PLANTA NO SE DIBUJA — «All» y «Every plant»
- * dirían lo mismo y el tercero también, que es un control que no controla nada (mismo
- * criterio que `SitePicker`).
+ * UN BOTÓN POR PLANTA Y SE PRENDEN SUELTOS: Glencoe deja solo la columna de Glencoe, y
+ * sumarle St. Thomas devuelve las dos. Ninguno prendido es «todas» —el estado inicial y la
+ * forma de salir del toggle—, así que el botón «All» que había antes no hace falta.
+ *
+ * Lo que se fue con él es el filtro de cobertura («Every plant», «X only»): recortaba FILAS,
+ * y escondía justo aquella donde estaba el hueco. Acá elegir columnas no toca las filas.
+ *
+ * CON UNA SOLA PLANTA NO SE DIBUJA — un toggle único no controla nada, porque apagarlo
+ * también muestra esa planta (mismo criterio que `SitePicker`).
  */
 export function MappingToolbar({
   sites,
-  filter,
-  onFilter,
+  selected,
+  onToggle,
   query,
   onQuery,
   showing,
   total,
 }: {
   sites: readonly Site[];
-  filter: CoverageFilter;
-  onFilter: (next: CoverageFilter) => void;
+  selected: readonly string[];
+  onToggle: (siteId: string) => void;
   query: string;
   onQuery: (next: string) => void;
   showing: number;
   total: number;
 }): React.JSX.Element {
-  // «Todas», «en todas las plantas», y una por planta. Con una sola planta las dos primeras
-  // dicen lo mismo, así que el segmentado se reduce a nada útil y no se dibuja.
-  const segments: { key: string; label: string; value: CoverageFilter }[] = [
-    { key: 'all', label: 'All', value: 'all' },
-    { key: 'every', label: 'Every plant', value: 'every' },
-    ...sites.map((site) => ({
-      key: site.id,
-      label: `${site.name} only`,
-      value: { only: site.id } as CoverageFilter,
-    })),
-  ];
-
-  const isActive = (value: CoverageFilter): boolean =>
-    typeof value === 'string' || typeof filter === 'string'
-      ? value === filter
-      : value.only === filter.only;
-
   return (
     <div className="mapping__toolbar">
       <label className="mapping__search">
@@ -59,16 +46,16 @@ export function MappingToolbar({
       </label>
 
       {sites.length > 1 ? (
-        <div className="view-toggle" role="group" aria-label="Filter by plant">
-          {segments.map((segment) => (
+        <div className="view-toggle" role="group" aria-label="Plants shown">
+          {sites.map((site) => (
             <button
-              key={segment.key}
+              key={site.id}
               type="button"
               className="view-toggle__button"
-              aria-pressed={isActive(segment.value)}
-              onClick={() => onFilter(segment.value)}
+              aria-pressed={selected.includes(site.id)}
+              onClick={() => onToggle(site.id)}
             >
-              {segment.label}
+              {site.name}
             </button>
           ))}
         </div>
