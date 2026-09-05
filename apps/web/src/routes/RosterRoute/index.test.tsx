@@ -529,7 +529,7 @@ describe('la lista', () => {
     renderRoute();
     await screen.findByRole('rowheader', { name: 'Reid, Ada' });
 
-    for (const name of ['Name', 'Employee #', 'Role', 'Email', 'Access / Status', 'Actions']) {
+    for (const name of ['Name', 'Employee #', 'Role', 'Email', 'App access', 'Actions']) {
       expect(screen.getByRole('columnheader', { name })).toBeTruthy();
     }
 

@@ -42,6 +42,7 @@ import {
   scheduleMustBeRestored,
   scheduleRestoreConflict,
   templateNotPublishable,
+  visibilityNotAdvanceable,
   versionNotAdvanceable,
 } from './inspections.errors';
 
@@ -344,6 +345,27 @@ export class InspectionsService {
       await client.query('UPDATE scheduled_inspection SET inspector_id = $2 WHERE id = $1', [
         id,
         inspectorId,
+      ]);
+
+      return this.scheduledById(client, id);
+    });
+  }
+
+  async makeVisible(session: SessionScope, id: string): Promise<ScheduledInspection> {
+    this.requireCoordinator(session);
+
+    return this.db.withSiteScopeClient(sessionScope(session), async (client) => {
+      const current = await this.scheduledById(client, id);
+      const currentMonth = currentPeriodStart(new Date(), SITE_TIME_ZONE);
+
+      if (current.cancelled_at !== null) throw visibilityNotAdvanceable('cancelled');
+      if (current.status === 'completed') throw visibilityNotAdvanceable('submitted');
+      if (current.inspector_id === null) throw visibilityNotAdvanceable('not_assigned');
+      if (current.period_start <= currentMonth) throw visibilityNotAdvanceable('not_future');
+      if (current.visible_early) throw visibilityNotAdvanceable('already_visible');
+
+      await client.query('UPDATE scheduled_inspection SET visible_early = true WHERE id = $1', [
+        id,
       ]);
 
       return this.scheduledById(client, id);

@@ -75,7 +75,7 @@ export function OpenPeriodDialog({
           : `Version ${publishedVersion} will be frozen when this period opens. A later revision does not change it.`}
       </p>
 
-      <div className="modal__form">
+      <div className="modal__form modal__form--spaced">
         <label className="modal__check" htmlFor={`${id}-early`}>
           <input
             id={`${id}-early`}

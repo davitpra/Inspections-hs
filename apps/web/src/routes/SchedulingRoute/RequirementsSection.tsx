@@ -1,11 +1,11 @@
-import { useState } from 'react';
-import type { InspectionSchedule } from '@hs/contracts';
+import { useState } from "react";
+import type { InspectionSchedule } from "@hs/contracts";
 
-import { PlusIcon } from '../../components/icons';
-import { currentRules } from '../../presentation/scheduling';
-import { RequirementConfirmDialog } from './RequirementConfirmDialog';
-import { RequirementDialog } from './RequirementDialog';
-import { RequirementRow } from './RequirementRow';
+import { PlusIcon } from "../../components/icons";
+import { currentRules } from "../../presentation/scheduling";
+import { RequirementConfirmDialog } from "./RequirementConfirmDialog";
+import { RequirementDialog } from "./RequirementDialog";
+import { RequirementRow } from "./RequirementRow";
 
 /** Misma mesa que las plantillas publicadas: la tabla es el cuerpo de una sola tarjeta. */
 export function RequirementsSection({
@@ -22,11 +22,13 @@ export function RequirementsSection({
   const [adding, setAdding] = useState(false);
   const [confirming, setConfirming] = useState<{
     rule: InspectionSchedule;
-    kind: 'deactivate' | 'archive';
+    kind: "deactivate" | "archive";
   } | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const archived = rules.filter((rule) => rule.archived_at !== null);
-  const current = currentRules(rules.filter((rule) => rule.archived_at === null));
+  const current = currentRules(
+    rules.filter((rule) => rule.archived_at === null),
+  );
   const visible = canAdminister
     ? showArchived
       ? [...current, ...archived]
@@ -34,16 +36,21 @@ export function RequirementsSection({
     : [...current, ...archived];
 
   return (
-    <section className="requirements-section" aria-labelledby="requirements-heading">
+    <section
+      className="requirements-section"
+      aria-labelledby="requirements-heading"
+    >
       <div className="requirements-section__head">
         <div>
           <h2 id="requirements-heading">
-            Inspection requirements{' '}
+            Inspection requirements{" "}
             <span className="note" aria-hidden="true">
               ({visible.length})
             </span>
           </h2>
-          <p className="note">Each requirement creates the periods this site owes.</p>
+          <p className="note">
+            Each requirement creates the periods this site owes.
+          </p>
         </div>
         {canAdminister ? (
           <div className="requirements-section__controls">
@@ -53,7 +60,7 @@ export function RequirementsSection({
                   type="checkbox"
                   checked={showArchived}
                   onChange={(event) => setShowArchived(event.target.checked)}
-                />{' '}
+                />{" "}
                 Show archived
               </label>
             ) : null}
@@ -62,7 +69,7 @@ export function RequirementsSection({
               className="button--primary requirements-section__add"
               onClick={() => setAdding(true)}
             >
-              <PlusIcon /> Add requirement
+              <PlusIcon /> Add Inspection
             </button>
           </div>
         ) : null}
@@ -75,7 +82,10 @@ export function RequirementsSection({
       ) : null}
 
       {visible.length > 0 ? (
-        <table className="table requirements-table" aria-label="Inspection requirements">
+        <table
+          className="table requirements-table"
+          aria-label="Inspection requirements"
+        >
           <thead>
             <tr>
               <th scope="col">Requirement</th>
@@ -99,7 +109,11 @@ export function RequirementsSection({
       ) : null}
 
       {adding ? (
-        <RequirementDialog siteId={siteId} rules={rules} onClose={() => setAdding(false)} />
+        <RequirementDialog
+          siteId={siteId}
+          rules={rules}
+          onClose={() => setAdding(false)}
+        />
       ) : null}
       {confirming ? (
         <RequirementConfirmDialog

@@ -97,6 +97,15 @@ export class InspectionsController {
     return this.inspections.assignInspector(session, id, inspector_id);
   }
 
+  @Post('scheduled-inspections/:id/make-visible')
+  @HttpCode(HttpStatus.OK)
+  async makeVisible(
+    @CurrentSession() session: SessionContext,
+    @Param('id') id: string,
+  ): Promise<ScheduledInspection> {
+    return this.inspections.makeVisible(session, id);
+  }
+
   /**
    * Cancelar, con motivo obligatorio. No hay ruta para des-cancelar: el trigger de
    * guarda la rechazaría, y lo que corresponde es programar el período de nuevo.

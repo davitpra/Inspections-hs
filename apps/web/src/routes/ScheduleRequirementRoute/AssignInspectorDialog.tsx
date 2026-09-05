@@ -85,7 +85,7 @@ export function AssignInspectorDialog({
           : `${label} has no inspector and appears in nobody's pending list.`}
       </p>
 
-      <div className="modal__form">
+      <div className="modal__form modal__form--spaced">
         <label htmlFor={`${id}-assign`}>Inspector</label>
         <div className="field-select">
           <span className="field-select__icon"><PersonIcon /></span>

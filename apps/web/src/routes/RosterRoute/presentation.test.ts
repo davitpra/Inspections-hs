@@ -241,8 +241,8 @@ describe('estado de acceso de la fila', () => {
     const none = withAccount();
 
     expect([accessCellLabel(active), accessCellLabel(pending), accessCellLabel(none)]).toEqual([
-      'Can sign in',
-      'Invitation pending',
+      'Active',
+      'Invited',
       'No access',
     ]);
     expect(accessCellClass(active)).toContain('--active');

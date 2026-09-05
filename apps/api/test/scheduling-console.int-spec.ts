@@ -117,6 +117,109 @@ afterAll(async () => {
   await db.stop();
 });
 
+describe('la visibilidad anticipada de un período abierto', () => {
+  const asCoordinator = () => session(coordinator, 'hs_coordinator', [SITE_A, SITE_CLOSED]);
+  const asInspector = () => session(inspector, 'jhsc_member', [SITE_A]);
+
+  it('hace visible una asignación futura y audita al actor', async () => {
+    const scheduledId = await scheduleInspection(db.app, {
+      siteId: SITE_A,
+      periodStart: '2035-01-01',
+      templateId,
+      templateVersionId: templateV2,
+      inspectorId: inspector.accountId,
+      scheduledBy: coordinator.accountId,
+    });
+
+    const updated = await stack.inspections.makeVisible(asCoordinator(), scheduledId);
+
+    expect(updated.visible_early).toBe(true);
+    expect((await stack.inspections.pendingFor(asInspector())).map((row) => row.id)).toContain(scheduledId);
+
+    const entries = await inScope<{
+      actor_user_id: string | null;
+      payload: Record<string, unknown>;
+    }>(
+      db.app,
+      [SITE_A],
+      `SELECT actor_user_id, payload
+         FROM audit_log
+        WHERE event_type = 'inspection.visibility_advanced'
+          AND payload ->> 'scheduled_inspection_id' = $1`,
+      [scheduledId],
+    );
+    expect(entries).toEqual([
+      expect.objectContaining({
+        actor_user_id: coordinator.accountId,
+        payload: expect.objectContaining({ scheduled_inspection_id: scheduledId }),
+      }),
+    ]);
+  });
+
+  it('rechaza a otro rol, otra planta y un período sin asignar', async () => {
+    const scheduledId = await scheduleInspection(db.app, {
+      siteId: SITE_A,
+      periodStart: '2035-02-01',
+      templateId,
+      templateVersionId: templateV2,
+      scheduledBy: coordinator.accountId,
+    });
+
+    await expect(stack.inspections.makeVisible(asInspector(), scheduledId)).rejects.toMatchObject({
+      code: 'forbidden',
+    });
+    await expect(
+      stack.inspections.makeVisible(session(coordinatorB, 'hs_coordinator', [SITE_B]), scheduledId),
+    ).rejects.toMatchObject({ code: 'inspection_not_found' });
+    await expect(stack.inspections.makeVisible(asCoordinator(), scheduledId)).rejects.toMatchObject({
+      code: 'visibility_not_advanceable',
+    });
+  });
+
+  it('rechaza inspecciones canceladas o completadas', async () => {
+    const cancelledId = await scheduleInspection(db.app, {
+      siteId: SITE_A,
+      periodStart: '2035-03-01',
+      templateId,
+      templateVersionId: templateV2,
+      inspectorId: inspector.accountId,
+      scheduledBy: coordinator.accountId,
+    });
+    const submittedId = await scheduleInspection(db.app, {
+      siteId: SITE_A,
+      periodStart: '2035-04-01',
+      templateId,
+      templateVersionId: templateV2,
+      inspectorId: inspector.accountId,
+      scheduledBy: coordinator.accountId,
+    });
+    await inScope(
+      db.app,
+      [SITE_A],
+      `UPDATE scheduled_inspection
+          SET cancelled_at = now(), cancellation_reason = 'plant shutdown'
+        WHERE id = $1`,
+      [cancelledId],
+    );
+    await inScope(
+      db.app,
+      [SITE_A],
+      `INSERT INTO inspection
+         (site_id, scheduled_inspection_id, template_version_id, client_submission_id,
+          submitted_by, signed_at, answer_count)
+       VALUES ($1, $2, $3, gen_random_uuid(), $4, now(), 0)`,
+      [SITE_A, submittedId, templateV2, inspector.accountId],
+    );
+
+    await expect(stack.inspections.makeVisible(asCoordinator(), cancelledId)).rejects.toMatchObject({
+      code: 'visibility_not_advanceable',
+    });
+    await expect(stack.inspections.makeVisible(asCoordinator(), submittedId)).rejects.toMatchObject({
+      code: 'visibility_not_advanceable',
+    });
+  });
+});
+
 describe('los candidatos a inspector', () => {
   const asCoordinator = () => session(coordinator, 'hs_coordinator', [SITE_A, SITE_CLOSED]);
 

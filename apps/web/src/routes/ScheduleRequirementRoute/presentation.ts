@@ -11,19 +11,6 @@ import {
 
 export type RowControl = 'open' | 'assign' | 'read';
 
-/**
- * El tono de la nota de una fila.
- *
- * `warn` es lo que le falta algo a la fila; `info` es lo que solo describe cómo quedó
- * configurada. Van separados porque pintarlos igual gasta el ámbar: si «visible antes de
- * su período» —que es exactamente lo que el coordinador pidió— se lee como advertencia,
- * la advertencia de verdad deja de destacarse.
- */
-export interface RowNote {
-  text: string;
-  tone: 'warn' | 'info';
-}
-
 /** Proyecta solo una regla; la aritmética sigue siendo la del calendario anual. */
 export function requirementYear(
   rule: InspectionSchedule,
@@ -59,18 +46,47 @@ export function rowInspector(entry: YearEntry): string {
   return entry.kind === 'opened' ? inspectorLabel(entry.inspection) : 'Not opened yet';
 }
 
-export function rowNote(entry: YearEntry, today: string): RowNote | null {
+/** Si la inspección aparece ahora mismo en la lista de pendientes de su inspector. */
+export function rowVisibility(entry: YearEntry, today: string): 'Visible' | 'Not visible' {
+  if (entry.kind === 'unopened') return 'Not visible';
+  if (entry.inspection.inspector_id === null) return 'Not visible';
+  if (entry.inspection.cancelled_at !== null || entry.inspection.status === 'completed') return 'Not visible';
+
+  return entry.inspection.period_start <= today || entry.inspection.visible_early
+    ? 'Visible'
+    : 'Not visible';
+}
+
+export function canMakeVisible(
+  entry: YearEntry,
+  today: string,
+  canAdminister: boolean,
+): boolean {
+  if (!canAdminister || entry.kind === 'unopened') return false;
+
+  return (
+    entry.inspection.inspector_id !== null &&
+    entry.inspection.cancelled_at === null &&
+    entry.inspection.status !== 'completed' &&
+    !entry.inspection.visible_early &&
+    entry.inspection.period_start > today
+  );
+}
+
+/**
+ * Lo que le FALTA a la fila, y nada más.
+ *
+ * La nota supo describir también cómo quedó configurada —«visible antes de su período»—
+ * y por eso tenía dos tonos. Esa mitad ahora la dice la columna `Visibility` en su propia
+ * celda, así que queda un solo tono: la nota es ámbar porque siempre advierte.
+ */
+export function rowNote(entry: YearEntry): string | null {
   if (entry.kind === 'unopened') return null;
   if (entry.inspection.cancellation_reason) {
-    return { text: `Cancelled: ${entry.inspection.cancellation_reason}`, tone: 'warn' };
-  }
-  if (entry.inspection.visible_early && entry.inspection.period_start > today) {
-    return { text: 'Visible to the inspector ahead of its period', tone: 'info' };
+    return `Cancelled: ${entry.inspection.cancellation_reason}`;
   }
 
-  const missed = missedNote(entry.inspection);
-
-  return missed === null ? null : { text: missed, tone: 'warn' };
+  return missedNote(entry.inspection);
 }
 
 /**

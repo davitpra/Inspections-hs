@@ -14,7 +14,8 @@ export type SchedulingErrorCode =
   | 'schedule_must_be_restored'
   | 'schedule_restore_conflict'
   | 'template_not_publishable'
-  | 'version_not_advanceable';
+  | 'version_not_advanceable'
+  | 'visibility_not_advanceable';
 
 export class SchedulingException extends HttpException {
   constructor(
@@ -101,6 +102,31 @@ export const versionNotAdvanceable = (reason: VersionAdvanceReason): SchedulingE
 
   return new SchedulingException(
     'version_not_advanceable',
+    messages[reason],
+    HttpStatus.CONFLICT,
+  );
+};
+
+export type VisibilityAdvanceReason =
+  | 'already_visible'
+  | 'cancelled'
+  | 'not_assigned'
+  | 'not_future'
+  | 'submitted';
+
+export const visibilityNotAdvanceable = (
+  reason: VisibilityAdvanceReason,
+): SchedulingException => {
+  const messages: Record<VisibilityAdvanceReason, string> = {
+    already_visible: 'This inspection is already visible to its inspector',
+    cancelled: 'This inspection was cancelled and cannot change visibility',
+    not_assigned: 'Assign an inspector before making this inspection visible',
+    not_future: 'This inspection is already visible because its period has started',
+    submitted: 'This inspection was already submitted and cannot change visibility',
+  };
+
+  return new SchedulingException(
+    'visibility_not_advanceable',
     messages[reason],
     HttpStatus.CONFLICT,
   );

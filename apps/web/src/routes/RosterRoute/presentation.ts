@@ -322,10 +322,21 @@ export function emailCellLabel(person: PersonWithAccount): string {
   return showsAccountRole(person) ? person.account!.email : '';
 }
 
-/** Estado de acceso que acompaña al rol sin obligar a inferirlo por el color de la píldora. */
+/**
+ * Lo que dice la celda App access: si esta persona entra a la app, sin obligar a inferirlo
+ * por el color de la píldora.
+ *
+ * **"No access" y no "Not invited"**, aunque la fila de al lado ofrezca justamente invitar:
+ * `showsAccountRole` mete en este caso dos historias distintas —quien nunca tuvo cuenta y
+ * aquella a la que se le quitó el acceso (`remove-jhsc-access-from-roster`)—, y "Not
+ * invited" mentiría sobre la segunda. "No access" es cierto para las dos, que es lo único
+ * que la columna promete.
+ *
+ * Sustantivos y no frases: la columna se lee hacia abajo, comparando filas entre sí.
+ */
 export function accessCellLabel(person: PersonWithAccount): string {
   if (!showsAccountRole(person)) return 'No access';
-  return person.account!.can_sign_in ? 'Can sign in' : 'Invitation pending';
+  return person.account!.can_sign_in ? 'Active' : 'Invited';
 }
 
 export function accessCellClass(person: PersonWithAccount): string {

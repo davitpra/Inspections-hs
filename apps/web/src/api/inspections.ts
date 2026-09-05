@@ -130,6 +130,16 @@ export async function assignInspector(
   );
 }
 
+/** Adelanta de forma irreversible la visibilidad de un período futuro asignado. */
+export async function makeScheduledInspectionVisible(id: string): Promise<ScheduledInspection> {
+  return send(
+    'POST',
+    `/scheduled-inspections/${id}/make-visible`,
+    undefined,
+    (value) => scheduledInspectionSchema.parse(value),
+  );
+}
+
 /**
  * El documento congelado de una inspección programada, pedido POR RED.
  *

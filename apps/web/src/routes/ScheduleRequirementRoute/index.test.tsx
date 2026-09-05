@@ -21,6 +21,7 @@ const listSchedules = vi.hoisted(() => vi.fn());
 const listScheduled = vi.hoisted(() => vi.fn());
 const createScheduledInspection = vi.hoisted(() => vi.fn());
 const assignInspector = vi.hoisted(() => vi.fn());
+const makeScheduledInspectionVisible = vi.hoisted(() => vi.fn());
 const useAppSession = vi.hoisted(() => vi.fn());
 const useParams = vi.hoisted(() => vi.fn());
 
@@ -32,6 +33,7 @@ vi.mock('../../api/inspections', () => ({
   listScheduled,
   createScheduledInspection,
   assignInspector,
+  makeScheduledInspectionVisible,
 }));
 vi.mock('../../app/session-context', () => ({ useAppSession }));
 vi.mock('@tanstack/react-router', () => ({
@@ -104,6 +106,7 @@ beforeEach(() => {
   listScheduled.mockReset().mockResolvedValue([]);
   createScheduledInspection.mockReset().mockResolvedValue(inspection());
   assignInspector.mockReset().mockResolvedValue(inspection({ inspector_id: CANDIDATE, inspector_name: 'Dana Okafor' }));
+  makeScheduledInspectionVisible.mockReset().mockResolvedValue(inspection({ visible_early: true }));
 });
 
 afterEach(() => {
@@ -119,7 +122,7 @@ describe('plan anual enfocado', () => {
     expect(screen.getByText(/St\. Thomas/)).toBeTruthy();
     expect(screen.getByText(/starting in February/)).toBeTruthy();
     expect(screen.getByText(/cannot be changed here/)).toBeTruthy();
-    expect(screen.getAllByRole('columnheader').map((header) => header.textContent)).toEqual(['Period', 'Status', 'Inspector', 'Action']);
+    expect(screen.getAllByRole('columnheader').map((header) => header.textContent)).toEqual(['Period', 'Status', 'Inspector', 'Visibility', 'Action']);
     expect(screen.getAllByRole('row')).toHaveLength(5);
   });
 
@@ -147,8 +150,10 @@ describe('operaciones por fila', () => {
   it('abre sin selector y nombra la versión congelada', async () => {
     renderRoute();
 
-    const open = (await screen.findAllByRole('button', { name: /^Open / }))[0]!;
+    const menu = (await screen.findAllByRole('button', { name: /^More actions for / }))[0]!;
     expect(screen.queryByRole('combobox', { name: /Assign inspector/ })).toBeNull();
+    fireEvent.click(menu);
+    const open = screen.getByRole('menuitem', { name: 'Open period' });
     await waitFor(() => expect(open.hasAttribute('disabled')).toBe(false));
     fireEvent.click(open);
 
@@ -163,7 +168,8 @@ describe('operaciones por fila', () => {
   it('no asigna hasta confirmar explícitamente', async () => {
     listScheduled.mockResolvedValue([inspection()]);
     renderRoute();
-    fireEvent.click(await screen.findByRole('button', { name: /Assign inspector for/ }));
+    fireEvent.click((await screen.findAllByRole('button', { name: /^More actions for / }))[0]!);
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Assign inspector' }));
     const dialog = screen.getByRole('dialog', { name: 'Assign inspector' });
     const select = within(dialog).getByRole('combobox', { name: /Assign inspector for/ });
 
@@ -174,12 +180,52 @@ describe('operaciones por fila', () => {
     await waitFor(() => expect(assignInspector).toHaveBeenCalledWith(INSPECTION, CANDIDATE));
   });
 
+  it('hace visible una asignación futura solo después de confirmar', async () => {
+    listScheduled.mockResolvedValue([inspection({
+      period_start: '2026-11-01',
+      period_end: '2027-01-31',
+      inspector_id: CANDIDATE,
+      inspector_name: 'Dana Okafor',
+    })]);
+    renderRoute();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'More actions for Nov 2026–Jan 2027' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Make visible' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Make inspection visible' });
+    expect(within(dialog).getByText(/cannot be undone/)).toBeTruthy();
+    expect(makeScheduledInspectionVisible).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Make visible' }));
+
+    await waitFor(() => expect(makeScheduledInspectionVisible).toHaveBeenCalledWith(INSPECTION));
+  });
+
+  it('mantiene el error de visibilidad dentro de la confirmación', async () => {
+    listScheduled.mockResolvedValue([inspection({
+      period_start: '2026-11-01',
+      period_end: '2027-01-31',
+      inspector_id: CANDIDATE,
+      inspector_name: 'Dana Okafor',
+    })]);
+    makeScheduledInspectionVisible.mockRejectedValue(new Error('Inspection can no longer change visibility'));
+    renderRoute();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'More actions for Nov 2026–Jan 2027' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Make visible' }));
+    const dialog = screen.getByRole('dialog', { name: 'Make inspection visible' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Make visible' }));
+
+    expect((await within(dialog).findByRole('alert')).textContent).toContain('Inspection can no longer change visibility');
+    expect(screen.getAllByText('Not visible').length).toBeGreaterThan(0);
+  });
+
   it('mantiene el error de asignación en el diálogo del período que lo produjo', async () => {
     listScheduled.mockResolvedValue([inspection(), inspection({ id: '99999999-9999-4999-8999-999999999999', period_start: '2026-05-01', period_end: '2026-07-31' })]);
     assignInspector.mockRejectedValue(new Error('Inspector is no longer eligible'));
     renderRoute();
-    const buttons = await screen.findAllByRole('button', { name: /Assign inspector for/ });
-    fireEvent.click(buttons[0]!);
+    const menus = await screen.findAllByRole('button', { name: /^More actions for / });
+    fireEvent.click(menus[0]!);
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Assign inspector' }));
 
     const dialog = screen.getByRole('dialog', { name: 'Assign inspector' });
     const select = within(dialog).getByRole('combobox', { name: /Assign inspector for/ });
@@ -205,7 +251,7 @@ describe('operaciones por fila', () => {
     expect(rows).toHaveLength(2);
     for (const row of rows) {
       expect(within(row).queryByRole('combobox', { name: /Assign inspector for/ })).toBeNull();
-      expect(within(row).queryByRole('button', { name: /^Open / })).toBeNull();
+      expect(within(row).queryByRole('button', { name: /^More actions for / })).toBeNull();
     }
   });
 
@@ -214,7 +260,7 @@ describe('operaciones por fila', () => {
     renderRoute();
 
     expect(await screen.findAllByRole('row')).toHaveLength(5);
-    expect(screen.queryByRole('button', { name: /^Open / })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^More actions for / })).toBeNull();
     expect(screen.queryByRole('combobox', { name: /Assign inspector for/ })).toBeNull();
   });
 });

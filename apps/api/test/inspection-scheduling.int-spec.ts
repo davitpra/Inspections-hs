@@ -119,6 +119,100 @@ describe('el período', () => {
   });
 });
 
+describe('la transición monótona de visibilidad anticipada', () => {
+  it('permite false a true, pero rechaza volver a ocultar', async () => {
+    const actor = await createAccount(db.app, { siteIds: [SITE_A], role: 'hs_coordinator' });
+    const id = await scheduleInspection(db.app, {
+      siteId: SITE_A,
+      periodStart: '2036-01-01',
+      templateId: templateA,
+      templateVersionId: versionA1,
+      inspectorId: actor.accountId,
+    });
+
+    await inScopeAs(
+      db.app,
+      [SITE_A],
+      actor.accountId,
+      'UPDATE scheduled_inspection SET visible_early = true WHERE id = $1',
+      [id],
+    );
+    expect((await scheduledById(db.app, [SITE_A], id)).visible_early).toBe(true);
+
+    await expect(
+      inScopeAs(
+        db.app,
+        [SITE_A],
+        actor.accountId,
+        'UPDATE scheduled_inspection SET visible_early = false WHERE id = $1',
+        [id],
+      ),
+    ).rejects.toSatisfy((error) => sqlstate(error) === HS_FROZEN);
+  });
+
+  it('conserva RLS y rechaza registros cancelados o enviados', async () => {
+    const actor = await createAccount(db.app, { siteIds: [SITE_A], role: 'hs_coordinator' });
+    const outside = await scheduleInspection(db.app, {
+      siteId: SITE_A,
+      periodStart: '2036-02-01',
+      templateId: templateA,
+      templateVersionId: versionA1,
+      inspectorId: actor.accountId,
+    });
+    const cancelled = await scheduleInspection(db.app, {
+      siteId: SITE_A,
+      periodStart: '2036-03-01',
+      templateId: templateA,
+      templateVersionId: versionA1,
+      inspectorId: actor.accountId,
+    });
+    const submitted = await scheduleInspection(db.app, {
+      siteId: SITE_A,
+      periodStart: '2036-04-01',
+      templateId: templateA,
+      templateVersionId: versionA1,
+      inspectorId: actor.accountId,
+    });
+
+    const hidden = await inScope<{ id: string }>(
+      db.app,
+      [SITE_B],
+      'UPDATE scheduled_inspection SET visible_early = true WHERE id = $1 RETURNING id',
+      [outside],
+    );
+    expect(hidden).toEqual([]);
+
+    await inScope(
+      db.app,
+      [SITE_A],
+      `UPDATE scheduled_inspection
+          SET cancelled_at = now(), cancellation_reason = 'plant shutdown'
+        WHERE id = $1`,
+      [cancelled],
+    );
+    await inScope(
+      db.app,
+      [SITE_A],
+      `INSERT INTO inspection
+         (site_id, scheduled_inspection_id, template_version_id, client_submission_id,
+          submitted_by, signed_at, answer_count)
+       VALUES ($1, $2, $3, gen_random_uuid(), $4, now(), 0)`,
+      [SITE_A, submitted, versionA1, actor.accountId],
+    );
+
+    for (const id of [cancelled, submitted]) {
+      await expect(
+        inScope(
+          db.app,
+          [SITE_A],
+          'UPDATE scheduled_inspection SET visible_early = true WHERE id = $1',
+          [id],
+        ),
+      ).rejects.toSatisfy((error) => sqlstate(error) === HS_FROZEN);
+    }
+  });
+});
+
 describe('la versión congelada', () => {
   let inspectionId: string;
   let submittedInspectionId: string;

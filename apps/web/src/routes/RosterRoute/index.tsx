@@ -159,12 +159,12 @@ function RosterConsole({
             {
               icon: <CheckIcon size={20} />,
               number: counts.withAccess,
-              label: "Can sign in",
+              label: "With app access",
             },
             {
               icon: <ClockIcon size={20} />,
               number: counts.invited,
-              label: "Invitation pending",
+              label: "Invited",
             },
           ]}
         />

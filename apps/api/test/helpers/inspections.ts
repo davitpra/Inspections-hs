@@ -119,6 +119,7 @@ export interface ScheduledRow extends Record<string, unknown> {
   template_version_id: string;
   inspector_id: string | null;
   scheduled_by: string | null;
+  visible_early: boolean;
   cancelled_at: Date | null;
   cancellation_reason: string | null;
 }
@@ -135,7 +136,7 @@ export async function scheduledById(
     `SELECT id, site_id, period_start::text AS period_start, period_months,
             period_end::text AS period_end,
             template_id, template_version_id, inspector_id, scheduled_by,
-            cancelled_at, cancellation_reason
+            visible_early, cancelled_at, cancellation_reason
        FROM scheduled_inspection WHERE id = $1`,
     [id],
   );
@@ -155,7 +156,7 @@ export async function scheduledForPeriod(
     `SELECT id, site_id, period_start::text AS period_start, period_months,
             period_end::text AS period_end,
             template_id, template_version_id, inspector_id, scheduled_by,
-            cancelled_at, cancellation_reason
+            visible_early, cancelled_at, cancellation_reason
        FROM scheduled_inspection
       WHERE period_start = $1::date
       ORDER BY site_id`,

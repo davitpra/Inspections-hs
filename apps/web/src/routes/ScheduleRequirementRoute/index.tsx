@@ -11,6 +11,7 @@ import { canAdministerScheduling } from '../../permissions/session';
 import { currentCivilYear } from '../../presentation/dates';
 import { earliestEligibleYear, frequencyNote, type YearEntry } from '../../presentation/scheduling';
 import { AssignInspectorDialog } from './AssignInspectorDialog';
+import { MakeVisibleDialog } from './MakeVisibleDialog';
 import { OpenPeriodDialog } from './OpenPeriodDialog';
 import { RequirementPeriodRow } from './RequirementPeriodRow';
 import { entryKey, periodLabel, requirementYear } from './presentation';
@@ -36,7 +37,10 @@ export function ScheduleRequirementRoute(): React.JSX.Element {
     disparó la acción deja de existir mientras el diálogo todavía tiene que poder mostrar
     el error (misma razón que `SchedulingRoute/RequirementConfirmDialog`).
   */
-  const [acting, setActing] = useState<{ entry: YearEntry; kind: 'open' | 'assign' } | null>(null);
+  const [acting, setActing] = useState<{
+    entry: YearEntry;
+    kind: 'open' | 'assign' | 'visible';
+  } | null>(null);
 
   const changeYear = (nextYear: string) => {
     setYear(nextYear);
@@ -93,6 +97,7 @@ export function ScheduleRequirementRoute(): React.JSX.Element {
                   <th scope="col">Period</th>
                   <th scope="col">Status</th>
                   <th scope="col">Inspector</th>
+                  <th scope="col">Visibility</th>
                   <th scope="col">Action</th>
                 </tr>
               </thead>
@@ -129,6 +134,14 @@ export function ScheduleRequirementRoute(): React.JSX.Element {
           key={entryKey(acting.entry)}
           inspection={acting.entry.inspection}
           siteId={rule.site_id}
+          label={periodLabel(acting.entry, year)}
+          onClose={() => setActing(null)}
+        />
+      ) : null}
+      {acting?.kind === 'visible' && acting.entry.kind === 'opened' ? (
+        <MakeVisibleDialog
+          key={entryKey(acting.entry)}
+          inspection={acting.entry.inspection}
           label={periodLabel(acting.entry, year)}
           onClose={() => setActing(null)}
         />

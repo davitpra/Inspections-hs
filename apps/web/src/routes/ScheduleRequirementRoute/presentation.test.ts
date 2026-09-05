@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { InspectionSchedule, ScheduledInspection } from '@hs/contracts';
 
-import { requirementYear, rowNote } from './presentation';
+import { canMakeVisible, requirementYear, rowNote, rowVisibility } from './presentation';
 import type { YearEntry } from '../../presentation/scheduling';
 
 const SITE = '11111111-1111-4111-8111-111111111111';
@@ -92,18 +92,62 @@ function opened(inspection: ScheduledInspection): YearEntry {
 }
 
 describe('la nota de una fila abierta', () => {
-  it('avisa cuando el coordinador la adelantó y el período todavía no llegó', () => {
-    expect(rowNote(opened(period('2026-12-01', true)), '2026-08-25')).toEqual({
-      text: 'Visible to the inspector ahead of its period',
-      tone: 'info',
-    });
+  it('avisa la cancelación con su motivo', () => {
+    const cancelled = { ...period('2026-12-01'), cancelled_at: '2026-08-10T00:00:00.000Z', cancellation_reason: 'Plant shutdown' };
+
+    expect(rowNote(opened(cancelled))).toBe('Cancelled: Plant shutdown');
   });
 
-  it('no avisa una vez que el mes corriente alcanza al período, aunque siga marcada', () => {
-    expect(rowNote(opened(period('2026-08-01', true)), '2026-08-25')).toBeNull();
+  it('avisa el período que cerró sin inspección', () => {
+    expect(rowNote(opened({ ...period('2026-02-01'), status: 'missed' }))).toContain('The period closed without an inspection');
   });
 
-  it('no avisa un período futuro que el coordinador no adelantó', () => {
-    expect(rowNote(opened(period('2026-12-01', false)), '2026-08-25')).toBeNull();
+  it('no avisa nada sobre la visibilidad, que tiene su propia columna', () => {
+    expect(rowNote(opened(period('2026-12-01', true)))).toBeNull();
+    expect(rowNote(opened(period('2026-12-01', false)))).toBeNull();
+  });
+});
+
+describe('la visibilidad actual de una fila', () => {
+  it('muestra una inspección asignada cuando el período ya empezó', () => {
+    const inspection = { ...period('2026-08-01'), inspector_id: '66666666-6666-4666-8666-666666666666' };
+
+    expect(rowVisibility(opened(inspection), '2026-08-25')).toBe('Visible');
+  });
+
+  it('muestra antes de tiempo solo cuando se pidió visibilidad anticipada', () => {
+    const inspector_id = '66666666-6666-4666-8666-666666666666';
+
+    expect(rowVisibility(opened({ ...period('2026-12-01'), inspector_id }), '2026-08-25')).toBe('Not visible');
+    expect(rowVisibility(opened({ ...period('2026-12-01', true), inspector_id }), '2026-08-25')).toBe('Visible');
+  });
+
+  it('no muestra períodos sin abrir, sin asignar, cancelados o completados', () => {
+    const inspector_id = '66666666-6666-4666-8666-666666666666';
+    const unopened = requirementYear(rule(), [], '2026')[0]!;
+
+    expect(rowVisibility(unopened, '2026-08-25')).toBe('Not visible');
+    expect(rowVisibility(opened(period('2026-08-01')), '2026-08-25')).toBe('Not visible');
+    expect(rowVisibility(opened({ ...period('2026-08-01'), inspector_id, cancelled_at: '2026-08-10T00:00:00.000Z' }), '2026-08-25')).toBe('Not visible');
+    expect(rowVisibility(opened({ ...period('2026-08-01'), inspector_id, status: 'completed' }), '2026-08-25')).toBe('Not visible');
+  });
+});
+
+describe('la acción de adelantar visibilidad', () => {
+  const inspector_id = '66666666-6666-4666-8666-666666666666';
+
+  it('se ofrece al coordinador para una asignación futura todavía oculta', () => {
+    expect(canMakeVisible(opened({ ...period('2026-12-01'), inspector_id }), '2026-08-25', true)).toBe(true);
+  });
+
+  it('no se ofrece sin permiso, asignación, futuro o registro activo', () => {
+    const future = opened({ ...period('2026-12-01'), inspector_id });
+
+    expect(canMakeVisible(future, '2026-08-25', false)).toBe(false);
+    expect(canMakeVisible(opened(period('2026-12-01')), '2026-08-25', true)).toBe(false);
+    expect(canMakeVisible(opened({ ...period('2026-08-01'), inspector_id }), '2026-08-25', true)).toBe(false);
+    expect(canMakeVisible(opened({ ...period('2026-12-01', true), inspector_id }), '2026-08-25', true)).toBe(false);
+    expect(canMakeVisible(opened({ ...period('2026-12-01'), inspector_id, status: 'completed' }), '2026-08-25', true)).toBe(false);
+    expect(canMakeVisible(opened({ ...period('2026-12-01'), inspector_id, cancelled_at: '2026-08-10T00:00:00.000Z' }), '2026-08-25', true)).toBe(false);
   });
 });

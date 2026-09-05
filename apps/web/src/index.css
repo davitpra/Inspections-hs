@@ -3557,6 +3557,14 @@ select:disabled {
   border-radius: var(--radius);
 }
 
+/* La excepción al anclaje de arriba, que la aplica el componente al medir: en la última
+   fila de una tabla con `overflow` no hay nada debajo contra lo que desplegar, y la lista
+   le sumaría alto al contenedor y le sacaría una barra de scroll. */
+.row-menu__list--up {
+  top: auto;
+  bottom: 100%;
+}
+
 .row-menu__item {
   width: 100%;
   text-align: left;
@@ -4287,6 +4295,10 @@ button.schedule-cell:focus-visible {
   font-weight: var(--weight-strong);
 }
 
+.modal__form--spaced {
+  margin-bottom: var(--space-4);
+}
+
 .requirement-dialog__preview {
   margin: var(--space-3) 0 0;
   padding: var(--space-3);
@@ -4419,12 +4431,13 @@ button.schedule-cell:focus-visible {
 }
 
 /*
- * La columna de acción se encoge hasta su botón en vez de reservar un ancho fijo: cada
- * fila ofrece UN control o ninguno, y las tres columnas que se leen —período, estado,
- * inspector— se reparten todo lo que sobra.
+ * La columna de acción se encoge hasta su menú en vez de reservar un ancho fijo: cada
+ * fila ofrece UN control o ninguno, y las cuatro columnas que se leen —período, estado,
+ * inspector y visibilidad— se reparten todo lo que sobra.
  */
 .annual-plan__table th:last-child,
 .annual-plan-row__action-cell {
+  position: relative;
   width: 1%;
   white-space: nowrap;
 }
@@ -4443,23 +4456,16 @@ button.schedule-cell:focus-visible {
   width: fit-content;
 }
 
+/*
+ * El ámbar es para lo que le falta algo a la fila, y la nota ya no dice otra cosa: que un
+ * período esté visible antes de su mes es exactamente lo que el coordinador pidió, y lo
+ * cuenta la columna `Visibility` sin gastar el color que destaca el período omitido.
+ */
 .annual-plan-row__note {
   margin-top: var(--space-2);
+  color: var(--warn-ink);
   font-size: var(--text-sm);
   font-weight: var(--weight-normal);
-}
-
-/*
- * El ámbar es para lo que le falta algo a la fila. Que un período esté visible antes de
- * su mes es exactamente lo que el coordinador pidió al abrirlo, y pintarlo de advertencia
- * —como se hacía— gasta el color que tiene que destacar el período omitido de al lado.
- */
-.annual-plan-row__note--warn {
-  color: var(--warn-ink);
-}
-
-.annual-plan-row__note--info {
-  color: var(--muted);
 }
 
 .annual-plan__foot {

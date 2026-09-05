@@ -1,8 +1,8 @@
-import { useId, useState } from 'react';
-import type { PersonWithAccount } from '@hs/contracts';
+import { useId, useState } from "react";
+import type { PersonWithAccount } from "@hs/contracts";
 
-import { SearchIcon, UploadIcon } from '../../components/icons';
-import { RowMenu } from '../../components/RowMenu';
+import { SearchIcon, UploadIcon } from "../../components/icons";
+import { RowMenu } from "../../components/RowMenu";
 import {
   accessCellClass,
   accessCellLabel,
@@ -15,7 +15,7 @@ import {
   roleCellLabel,
   rowActions,
   type RosterDialog,
-} from './presentation';
+} from "./presentation";
 
 /**
  * La tarjeta del roster: el buscador, el contador y las filas son una sola unidad —qué
@@ -44,7 +44,7 @@ export function RosterTable({
   onAct: (dialog: RosterDialog) => void;
 }): React.JSX.Element {
   const searchId = useId();
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState("");
   const visible = people.filter((person) => matchesSearch(person, search));
 
   return (
@@ -66,7 +66,7 @@ export function RosterTable({
           <button
             ref={importTriggerRef}
             type="button"
-            className="button--outline roster__import"
+            className="button--primary roster__import"
             onClick={onImport}
           >
             <UploadIcon /> Import people
@@ -112,7 +112,7 @@ export function RosterTable({
                   <th scope="col">Employee #</th>
                   <th scope="col">Role</th>
                   <th scope="col">Email</th>
-                  <th scope="col">Access / Status</th>
+                  <th scope="col">App access</th>
                   <th scope="col">Actions</th>
                 </tr>
               </thead>
@@ -130,18 +130,27 @@ export function RosterTable({
                           <span>{personName(person)}</span>
                         </span>
                       </th>
-                      <td className="roster__number">{person.employee_number}</td>
+                      <td className="roster__number">
+                        {person.employee_number}
+                      </td>
                       {/* La píldora ubica el rol en la escala del resto de la app sin
                           reemplazar la palabra — ver `roleCellLabel`, "Worker" incluido. */}
                       <td>
-                        <span className={roleCellClass(person)}>{roleCellLabel(person)}</span>
+                        <span className={roleCellClass(person)}>
+                          {roleCellLabel(person)}
+                        </span>
                       </td>
                       {/* El guión y no el vacío: en una tabla donde la mayoría de las filas no
                           tiene cuenta, la columna en blanco se lee como una columna rota. */}
-                      <td className="roster__email">{emailCellLabel(person) || '—'}</td>
+                      <td className="roster__email">
+                        {emailCellLabel(person) || "—"}
+                      </td>
                       <td>
                         <span className={accessCellClass(person)}>
-                          <span className="roster__access-dot" aria-hidden="true" />
+                          <span
+                            className="roster__access-dot"
+                            aria-hidden="true"
+                          />
                           {accessCellLabel(person)}
                         </span>
                       </td>
@@ -156,10 +165,12 @@ export function RosterTable({
                               actions={actions.map((action) => ({
                                 label: action.text,
                                 tone:
-                                  action.kind === 'remove' || action.kind === 'deactivate'
-                                    ? 'danger'
+                                  action.kind === "remove" ||
+                                  action.kind === "deactivate"
+                                    ? "danger"
                                     : undefined,
-                                onSelect: () => onAct(dialogFor(person, action)),
+                                onSelect: () =>
+                                  onAct(dialogFor(person, action)),
                               }))}
                             />
                           </div>

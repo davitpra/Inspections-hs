@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { MoreIcon } from './icons';
 
@@ -8,6 +8,25 @@ export interface RowAction {
   tone?: 'danger';
   disabled?: boolean;
   onSelect: () => void;
+}
+
+/**
+ * El borde inferior contra el que compite la lista abierta: el del ancestro que recorta
+ * —una tabla con `overflow-x` recorta también hacia abajo, porque en CSS un eje `auto`
+ * obliga al otro a serlo— y, si no hay ninguno, el de la ventana.
+ */
+function clippingBox(node: HTMLElement): { top: number; bottom: number } {
+  for (let parent = node.parentElement; parent; parent = parent.parentElement) {
+    const { overflow, overflowX, overflowY } = getComputedStyle(parent);
+
+    if (`${overflow}${overflowX}${overflowY}`.includes('visible')) continue;
+
+    const rect = parent.getBoundingClientRect();
+
+    return { top: rect.top, bottom: rect.bottom };
+  }
+
+  return { top: 0, bottom: window.innerHeight };
 }
 
 /**
@@ -37,7 +56,9 @@ export function RowMenu({
   actions: readonly RowAction[];
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
+  const [up, setUp] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -52,6 +73,34 @@ export function RowMenu({
     document.addEventListener('keydown', onKeyDown);
 
     return () => document.removeEventListener('keydown', onKeyDown);
+  }, [open]);
+
+  /*
+   * HACIA ABAJO SALVO QUE ABAJO NO HAYA LUGAR. La última fila de una tabla con `overflow`
+   * no tiene dónde desplegar: la lista le suma alto al contenedor y le saca una barra de
+   * scroll. Se mide después de montarla y antes de pintar (`useLayoutEffect`), así que el
+   * vuelco no parpadea, y se vuelve a medir en cada apertura porque la fila se mueve —una
+   * búsqueda, un scroll—. Solo se vuelca si arriba sobra más que abajo: cambiar un recorte
+   * por uno peor no es un arreglo.
+   */
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    const button = buttonRef.current;
+
+    if (!open || !list || !button) {
+      setUp(false);
+
+      return;
+    }
+
+    const box = clippingBox(list);
+    const listRect = list.getBoundingClientRect();
+    const buttonRect = button.getBoundingClientRect();
+
+    setUp(
+      listRect.bottom > box.bottom &&
+        buttonRect.top - box.top > box.bottom - buttonRect.bottom,
+    );
   }, [open]);
 
   return (
@@ -76,7 +125,11 @@ export function RowMenu({
       </button>
 
       {open ? (
-        <div className="row-menu__list" role="menu">
+        <div
+          ref={listRef}
+          className={up ? 'row-menu__list row-menu__list--up' : 'row-menu__list'}
+          role="menu"
+        >
           {actions.map((action) => (
             <button
               key={action.label}
