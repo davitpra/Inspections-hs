@@ -2092,6 +2092,35 @@ select:disabled {
   margin-top: var(--space-4);
 }
 
+/*
+ * LA SALIDA QUE EXIGE ALGO ESCRITO SE REVELA, y reemplaza a lo que estaba a la vista: sus
+ * campos son suyos —`Reason` no rotula a `Verify and close`, que no lo pide— y el paso sigue
+ * teniendo un solo formulario en pantalla. El marco es el de lo que se revela en esta ficha
+ * (`.finding__assignment-editor`); los campos y el error son el vocabulario `finding__step-*`
+ * del resto del paso.
+ */
+.finding__step-folded {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px dashed var(--line);
+}
+
+/* Confirmar y cancelar comparten renglón y se miden por su contenido: son dos salidas del
+   mismo borrador, igual que en `.finding__create-actions`, y el ancho va calificado por el
+   bloque porque `button--primary` y `button--outline` declaran `width: 100%`. */
+.finding__step-folded-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.finding__step-folded-actions .button--primary,
+.finding__step-folded-actions .button--outline {
+  width: auto;
+  padding-inline: var(--space-6);
+}
+
 /* El fieldset de evidencia pierde el chrome default del navegador —borde y legend
    indentada— y cada input de archivo queda separado de su etiqueta y del otro kind. */
 .finding__evidence {

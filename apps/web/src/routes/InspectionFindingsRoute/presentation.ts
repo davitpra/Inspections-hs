@@ -300,31 +300,45 @@ export function nextStep(
   };
 }
 
-/** Una salida del paso: el estado al que lleva y el texto del botón que la pide. */
-export type StepChoice = { to: ActionState; label: string };
+/** Los campos que ESTA salida escribe. */
+export type StepFields = { evidence: boolean; reason: boolean; note: boolean };
+
+/** Una salida del paso: el estado al que lleva, el texto del botón y lo que escribe. */
+export type StepChoice = { to: ActionState; label: string; fields: StepFields };
 
 /**
  * Qué pide y qué ofrece el paso de avance, ya recortado a lo que ESTA cuenta puede pedir.
  *
- * Las salidas van en el orden de `TRANSITIONS`; la primera es la principal y se dibuja como
- * `button--primary`.
+ * Las salidas van en el orden de `TRANSITIONS`; la primera de `choices` es la principal y se
+ * dibuja como `button--primary`.
  */
 export type StepForm = {
-  evidence: boolean;
-  reason: boolean;
-  note: boolean;
+  /** Los campos a la vista: los de las salidas que se ejecutan de una pulsación. */
+  fields: StepFields;
+  /** Las salidas de una sola pulsación. */
   choices: StepChoice[];
+  /** Las salidas que exigen algo escrito: se ofrecen plegadas, con sus propios campos. */
+  folded: StepChoice[];
 };
+
+/** Lo que una transición escribe, leído de su fila y de `transitionTakesNote`. */
+function stepFields(from: ActionState, transition: ActionTransition): StepFields {
+  return {
+    evidence: transition.to === 'awaiting_verification',
+    reason: transition.requires.includes('reason'),
+    note: transitionTakesNote(from, transition.to),
+  };
+}
 
 /**
  * Lo que el formulario del paso muestra, ETAPA POR ETAPA. `null` cuando no queda ninguna
  * transición que esta cuenta pueda pedir: no hay formulario, hay que decir que espera a otro.
  *
- * | etapa            | acción en               | campos                    | salidas                            |
- * | ---------------- | ----------------------- | ------------------------- | ---------------------------------- |
- * | Assigned         | `open`                  | ninguno                   | Start work                         |
- * | In progress      | `in_progress`           | evidencia + nota          | Declare the work done              |
- * | Verification     | `awaiting_verification` | razón + nota              | Verify and close · Send it back    |
+ * | etapa        | acción en               | a la vista                               | plegada                     |
+ * | ------------ | ----------------------- | ---------------------------------------- | --------------------------- |
+ * | Assigned     | `open`                  | ningún campo · Start work                | —                           |
+ * | In progress  | `in_progress`           | evidencia + nota · Declare the work done | —                           |
+ * | Verification | `awaiting_verification` | nota · Verify and close                  | Send it back → razón + nota |
  *
  * Y por qué cada uno:
  *
@@ -336,13 +350,21 @@ export type StepForm = {
  * - **La nota la admite todo menos empezar el trabajo** (`transitionTakesNote`): ese paso se
  *   anuncia como "No additional information is required", y un campo debajo la desmiente.
  *
- * ES UNA LECTURA DE `TRANSITIONS`, NO UNA SEGUNDA TABLA. Las cuatro respuestas se derivan de
- * lo que ya trae cada fila —a dónde va, qué exige— más `transitionTakesNote`, que es
- * vocabulario. Escrita como `switch` por etapa sería la máquina de estados copiada en la UI,
- * que es la forma en que cliente y servidor empiezan a discrepar (ADR-008).
+ * **LOS CAMPOS PERTENECEN A LA SALIDA, y por eso la que exige algo escrito se pliega.** Una
+ * transición con `requires: ['reason']` no se puede ejecutar de una pulsación, y su campo
+ * obligatorio a la vista miente sobre las salidas que no lo piden: en Verification, `Reason`
+ * quedaba rotulando `Verify and close`, que no lo usa. Se pliega la que exige, no "la segunda"
+ * ni "la de Verification" —una transición futura que pida una razón se pliega sola—, y las
+ * demás siguen a la vista porque revelarlas costaría dos pulsaciones para el único acto que la
+ * pantalla propone (la misma asimetría de `FindingAssignmentEditor`).
  *
- * Aparte del componente porque es una decisión: "en Verification se pide una razón y hay dos
- * salidas" se comprueba sin renderizar, o no lo comprueba nadie.
+ * ES UNA LECTURA DE `TRANSITIONS`, NO UNA SEGUNDA TABLA. Las respuestas se derivan de lo que ya
+ * trae cada fila —a dónde va, qué exige— más `transitionTakesNote`, que es vocabulario. Escrita
+ * como `switch` por etapa sería la máquina de estados copiada en la UI, que es la forma en que
+ * cliente y servidor empiezan a discrepar (ADR-008).
+ *
+ * Aparte del componente porque es una decisión: "en Verification se ofrece una salida plegada
+ * que pide una razón" se comprueba sin renderizar, o no lo comprueba nadie.
  */
 export function stepForm(
   from: ActionState,
@@ -350,14 +372,23 @@ export function stepForm(
 ): StepForm | null {
   if (available.length === 0) return null;
 
+  const choices = available.map((transition) => ({
+    to: transition.to,
+    label: transitionLabel(from, transition.to),
+    fields: stepFields(from, transition),
+  }));
+
+  const inline = choices.filter((choice) => !choice.fields.reason);
+
   return {
-    evidence: available.some((transition) => transition.to === 'awaiting_verification'),
-    reason: available.some((transition) => transition.requires.includes('reason')),
-    note: available.some((transition) => transitionTakesNote(from, transition.to)),
-    choices: available.map((transition) => ({
-      to: transition.to,
-      label: transitionLabel(from, transition.to),
-    })),
+    fields: {
+      evidence: inline.some((choice) => choice.fields.evidence),
+      // A la vista no hay razón por construcción: la salida que la exige está plegada.
+      reason: false,
+      note: inline.some((choice) => choice.fields.note),
+    },
+    choices: inline,
+    folded: choices.filter((choice) => choice.fields.reason),
   };
 }
 

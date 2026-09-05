@@ -518,6 +518,9 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
 
     const next = await screen.findByRole('region', { name: 'Next step' });
     expect(within(next).getByRole('button', { name: 'Verify and close' })).toBeTruthy();
+    expect(within(next).getByRole('button', { name: 'Send it back' })).toBeTruthy();
+    // La razón es del rechazo: no rotula al botón que cierra.
+    expect(within(next).queryByLabelText('Reason')).toBeNull();
   });
 
   it('el lector sin permiso ve a quién espera y ningún control principal', async () => {
@@ -849,6 +852,19 @@ describe('InspectionFindingsRoute — avance de la acción', () => {
     fireEvent.click(await screen.findByRole('button', { name }));
   }
 
+  /** La etapa donde el paso tiene dos salidas, con la cuenta que puede pedir las dos. */
+  async function verificationStep(): Promise<HTMLElement> {
+    getSubmittedInspection.mockResolvedValue(
+      report({ findings: [finding({ state: 'verification' })] }),
+    );
+    listActions.mockResolvedValue([action({ state: 'awaiting_verification' })]);
+    useAppSession.mockReturnValue({ account: session('supervisor') });
+
+    renderRoute();
+
+    return await screen.findByRole('region', { name: 'Next step' });
+  }
+
   it('el responsable registra progreso sin salir de la lectura del hallazgo', async () => {
     let reads = 0;
     let findingReads = 0;
@@ -905,6 +921,9 @@ describe('InspectionFindingsRoute — avance de la acción', () => {
    * transición están dibujados desde que se lee el hallazgo. Nada revela el formulario, así que
    * tampoco hay nada que replegar. Empezar el trabajo no pide ninguno —se anuncia como "No
    * additional information is required", y un campo debajo lo desmentiría (`stepForm`)—.
+   *
+   * La única excepción es la salida que EXIGE algo escrito —devolver el trabajo pide una
+   * razón—, que no puede ejecutarse de una pulsación y por eso se pliega. Acá no hay ninguna.
    */
   it('dibuja los campos del paso sin pulsar nada, y no ofrece un control que lo pliegue', async () => {
     renderRoute();
@@ -915,6 +934,55 @@ describe('InspectionFindingsRoute — avance de la acción', () => {
     expect(screen.queryByRole('button', { name: 'Collapse' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
     expect(transitionAction).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Devolver el trabajo se escribe detrás de su propio botón: la razón que exige aparece con
+   * él y no antes, y mientras esté vacía no hay nada que enviar —el servidor la vuelve a
+   * exigir igual (`requires: ['reason']`), esto es comodidad—.
+   */
+  it('el rechazo revela la razón, espera a que diga algo y devuelve la acción a In progress', async () => {
+    const next = await verificationStep();
+
+    fireEvent.click(within(next).getByRole('button', { name: 'Send it back' }));
+
+    // Lo revelado reemplaza a lo que estaba a la vista: cerrar no se ofrece a medias.
+    expect(within(next).queryByRole('button', { name: 'Verify and close' })).toBeNull();
+    expect(
+      (within(next).getByRole('button', { name: 'Send it back' }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+
+    fireEvent.change(within(next).getByLabelText('Reason'), {
+      target: { value: 'The guard is still loose.' },
+    });
+    fireEvent.change(within(next).getByLabelText(/Note/), {
+      target: { value: 'Photo shows the old bracket.' },
+    });
+    fireEvent.click(within(next).getByRole('button', { name: 'Send it back' }));
+
+    await waitFor(() => expect(transitionAction).toHaveBeenCalledWith(action().id, {
+      to: 'in_progress',
+      note: 'Photo shows the old bracket.',
+      reason: 'The guard is still loose.',
+      evidence: [],
+    }));
+  });
+
+  it('cancelar el rechazo devuelve las dos salidas y no deja la razón escrita', async () => {
+    const next = await verificationStep();
+
+    fireEvent.click(within(next).getByRole('button', { name: 'Send it back' }));
+    fireEvent.change(within(next).getByLabelText('Reason'), {
+      target: { value: 'Pressed it by mistake.' },
+    });
+    fireEvent.click(within(next).getByRole('button', { name: 'Cancel' }));
+
+    expect(within(next).getByRole('button', { name: 'Verify and close' })).toBeTruthy();
+    expect(within(next).queryByLabelText('Reason')).toBeNull();
+    expect(transitionAction).not.toHaveBeenCalled();
+
+    fireEvent.click(within(next).getByRole('button', { name: 'Send it back' }));
+    expect((within(next).getByLabelText('Reason') as HTMLTextAreaElement).value).toBe('');
   });
 
   it('una acción cerrada no ofrece ningún paso', async () => {

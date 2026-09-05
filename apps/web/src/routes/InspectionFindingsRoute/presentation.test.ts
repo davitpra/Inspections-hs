@@ -426,35 +426,57 @@ describe('los campos y las salidas del paso, etapa por etapa', () => {
 
   it('en Assigned no pide nada y ofrece una sola salida', () => {
     expect(stepForm('open', offered('open', session('external_auditor')))).toEqual({
-      evidence: false,
-      reason: false,
-      note: false,
-      choices: [{ to: 'in_progress', label: 'Start work' }],
+      fields: { evidence: false, reason: false, note: false },
+      choices: [
+        {
+          to: 'in_progress',
+          label: 'Start work',
+          fields: { evidence: false, reason: false, note: false },
+        },
+      ],
+      folded: [],
     });
   });
 
   it('en In progress pide la evidencia y la nota antes de declarar el trabajo hecho', () => {
     expect(stepForm('in_progress', offered('in_progress', session('external_auditor')))).toEqual({
-      evidence: true,
-      reason: false,
-      note: true,
-      choices: [{ to: 'awaiting_verification', label: 'Declare the work done' }],
+      fields: { evidence: true, reason: false, note: true },
+      choices: [
+        {
+          to: 'awaiting_verification',
+          label: 'Declare the work done',
+          fields: { evidence: true, reason: false, note: true },
+        },
+      ],
+      folded: [],
     });
   });
 
-  it('en Verification pide la razón y ofrece las dos salidas, cerrar primero', () => {
+  /**
+   * Cerrar queda a la vista con su nota y de una pulsación; devolver el trabajo se pliega
+   * porque exige una razón, y esa razón no rotula al botón que no la pide.
+   */
+  it('en Verification deja cerrar a la vista y pliega la salida que exige una razón', () => {
     expect(
       stepForm(
         'awaiting_verification',
         offered('awaiting_verification', session('supervisor')),
       ),
     ).toEqual({
-      evidence: false,
-      reason: true,
-      note: true,
+      fields: { evidence: false, reason: false, note: true },
       choices: [
-        { to: 'closed', label: 'Verify and close' },
-        { to: 'in_progress', label: 'Send it back' },
+        {
+          to: 'closed',
+          label: 'Verify and close',
+          fields: { evidence: false, reason: false, note: true },
+        },
+      ],
+      folded: [
+        {
+          to: 'in_progress',
+          label: 'Send it back',
+          fields: { evidence: false, reason: true, note: true },
+        },
       ],
     });
   });
