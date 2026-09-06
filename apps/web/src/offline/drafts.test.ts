@@ -9,6 +9,7 @@ import {
   documentForDraft,
   findDraft,
   listDrafts,
+  listUnsent,
   loadDraft,
   openDraft,
   saveAnswer,
@@ -113,6 +114,34 @@ describe('openDraft', () => {
     const draftOfB = await openDraft(input(ACCOUNT_B), database);
     expect(draftOfB.client_submission_id).not.toBe(draftOfA.client_submission_id);
     expect(await listDrafts(ACCOUNT_A, database)).toHaveLength(1);
+  });
+});
+
+/**
+ * El conjunto que el indicador de ADR-010 cuenta y que `/outbox` lista. Existe como una
+ * sola función para que las dos respuestas no puedan divergir: un indicador no descartable
+ * que anuncia trabajo que su pantalla no muestra no es verificable.
+ */
+describe('listUnsent', () => {
+  it('deja fuera lo aceptado y conserva lo firmado', async () => {
+    database = freshDatabase();
+    const draft = await openDraft(input(), database);
+
+    expect(await listUnsent(ACCOUNT_A, database)).toHaveLength(1);
+
+    // Firmar no saca nada del dispositivo: el punto de no retorno es la aceptación.
+    await database.drafts.update(draft.client_submission_id, { status: 'signed' });
+    expect(await listUnsent(ACCOUNT_A, database)).toHaveLength(1);
+
+    await database.drafts.update(draft.client_submission_id, { status: 'accepted' });
+    expect(await listUnsent(ACCOUNT_A, database)).toEqual([]);
+  });
+
+  it('no cruza cuentas en un dispositivo compartido', async () => {
+    database = freshDatabase();
+    await openDraft(input(ACCOUNT_A), database);
+
+    expect(await listUnsent(ACCOUNT_B, database)).toEqual([]);
   });
 });
 

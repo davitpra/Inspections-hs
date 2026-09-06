@@ -4,7 +4,7 @@ import { sessionClient } from '../api/client';
 import type { SessionClient } from '../auth/session-client';
 import { readAccount } from './account';
 import { db, type DraftRow, type OfflineDatabase, type OutboxRow } from './db';
-import { toAnswerSet } from './drafts';
+import { listUnsent, toAnswerSet } from './drafts';
 import { uploadPendingPhotos, uploadedKeysByItem, type UploadDeps } from './photos';
 
 /**
@@ -390,6 +390,51 @@ export async function outboxFor(
   }
 
   return entries;
+}
+
+/**
+ * Un borrador sin enviar, con su entrada de cola si ya la tiene.
+ *
+ * `row` es `null` para lo que todavía no se firmó: no hay fila de cola que mirar porque
+ * firmar es lo que la crea.
+ */
+export interface DeviceWork {
+  draft: DraftRow;
+  row: OutboxRow | null;
+}
+
+/**
+ * TODO lo que no salió de este dispositivo, y no solo lo que ya está en la cola.
+ *
+ * Es la consulta de la PANTALLA, y por eso parte de `listUnsent` —el mismo conjunto que
+ * cuenta el indicador de ADR-010— en vez de recorrer la tabla `outbox`. La diferencia no
+ * es cosmética: un borrador en `capturing` nunca tuvo fila de cola, así que `outboxFor`
+ * no lo puede devolver nunca, y hasta acá tampoco lo mostraba ninguna otra pantalla —las
+ * dos que listan borradores lo hacen colgando de la inspección pendiente que devuelve el
+ * servidor, y esa lista deja de traerla si se cancela, se reasigna o desaparece—. El
+ * inspector quedaba con un aviso permanente sobre trabajo que no podía abrir ni descartar.
+ *
+ * `outboxFor` sigue siendo la de ENVIAR y no se toca: `runOutbox` recorre la cola, esto
+ * recorre el trabajo. Mezclarlas haría que el envío intentara mandar borradores sin firmar.
+ *
+ * No pregunta por la red: si la inspección todavía existe del lado del servidor es asunto
+ * de la pantalla que se abra después, no de esta lista. Sin conexión —que es cuando esta
+ * pantalla más importa— esa pregunta no tiene respuesta y todo parecería huérfano.
+ */
+export async function deviceWork(
+  accountId: string,
+  database: OfflineDatabase = db,
+): Promise<DeviceWork[]> {
+  const drafts = await listUnsent(accountId, database);
+  const work: DeviceWork[] = [];
+
+  for (const draft of drafts) {
+    const row = await database.outbox.get(draft.client_submission_id);
+
+    work.push({ draft, row: row ?? null });
+  }
+
+  return work;
 }
 
 /**

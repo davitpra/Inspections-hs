@@ -1,13 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { DiscardRefusedError } from '../../offline/drafts';
-import {
-  discardRefusalMessage,
-  driftMessage,
-  pendingDraft,
-  statusLabel,
-  versionHints,
-} from './presentation';
+import { driftMessage, pendingDraft, statusLabel, versionHints } from './presentation';
 
 function draft(status: 'capturing' | 'signed' | 'accepted') {
   return {
@@ -80,11 +73,5 @@ describe('presentación del borrador local', () => {
     expect(statusLabel('capturing')).toBe('Draft');
     expect(statusLabel('signed')).toBe('Signed, waiting to send');
     expect(statusLabel('accepted')).toBe('Submitted');
-  });
-
-  it('explica que un descarte rechazado conserva el borrador', () => {
-    expect(discardRefusalMessage(new DiscardRefusedError('not_owner'))).toMatch(/another account/);
-    expect(discardRefusalMessage(new DiscardRefusedError('already_queued'))).toMatch(/on its way/);
-    expect(discardRefusalMessage(new Error('boom'))).toMatch(/still on this device/);
   });
 });

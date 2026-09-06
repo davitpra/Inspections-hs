@@ -1,4 +1,5 @@
 import { db, type OfflineDatabase } from './db';
+import { listUnsent } from './drafts';
 
 /**
  * Lo que el inspector siempre ve: cuánto de su trabajo no salió del teléfono.
@@ -43,10 +44,10 @@ export async function unsyncedStatus(
   database: OfflineDatabase = db,
   now: number = Date.now(),
 ): Promise<UnsyncedStatus> {
-  const drafts = (await database.drafts.where('account_id').equals(accountId).toArray())
-    // El indicador se limpia para una inspección SOLO cuando el servidor aceptó su
-    // envío. Ni al firmar, ni al encolar, ni al terminar de subir las fotos: aceptado.
-    .filter((draft) => draft.status !== 'accepted');
+  // El indicador se limpia para una inspección SOLO cuando el servidor aceptó su envío.
+  // Ni al firmar, ni al encolar, ni al terminar de subir las fotos: aceptado. Ese
+  // predicado lo define `listUnsent`, y lo comparte con la pantalla que lista lo mismo.
+  const drafts = await listUnsent(accountId, database);
 
   if (drafts.length === 0) return emptyStatus();
 

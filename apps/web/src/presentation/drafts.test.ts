@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { draftStatusLabel, draftStatusPill, draftSubtitle } from './drafts';
+import { DiscardRefusedError } from '../offline/drafts';
+import {
+  discardRefusalMessage,
+  draftStatusLabel,
+  draftStatusPill,
+  draftSubtitle,
+} from './drafts';
 
 describe('draftStatusLabel', () => {
   it('nombra los tres estados del borrador', () => {
@@ -42,5 +48,23 @@ describe('draftSubtitle', () => {
    */
   it('deja solo la fecha cuando el paquete guardado no trae nombre', () => {
     expect(draftSubtitle(undefined, '2026-08-26T14:42:00.000Z')).toBe('Started Aug 26, 2026');
+  });
+});
+
+describe('discardRefusalMessage', () => {
+  it('explica que un descarte rechazado conserva el borrador', () => {
+    expect(discardRefusalMessage(new DiscardRefusedError('not_owner'))).toMatch(/another account/);
+    expect(discardRefusalMessage(new DiscardRefusedError('already_queued'))).toMatch(/on its way/);
+    expect(discardRefusalMessage(new Error('boom'))).toMatch(/still on this device/);
+  });
+
+  /**
+   * Las dos negativas del envío dicen lo mismo a propósito: son dos comprobaciones —la
+   * columna y la fila de cola— sobre una sola conclusión para el inspector.
+   */
+  it('no distingue lo firmado de lo encolado', () => {
+    expect(discardRefusalMessage(new DiscardRefusedError('already_signed'))).toBe(
+      discardRefusalMessage(new DiscardRefusedError('already_queued')),
+    );
   });
 });

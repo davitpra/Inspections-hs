@@ -1,5 +1,4 @@
 import type { DraftRow } from '../../offline/db';
-import { DiscardRefusedError, type DiscardRefusal } from '../../offline/drafts';
 import type { PackageDrift } from '../../offline/prefetch';
 import { formatInstant } from '../../presentation/dates';
 
@@ -79,19 +78,4 @@ export function statusLabel(status: DraftRow['status']): string {
   if (status === 'signed') return 'Signed, waiting to send';
 
   return 'Draft';
-}
-
-export function discardRefusalMessage(error: unknown): string {
-  const reason: DiscardRefusal | 'unknown' =
-    error instanceof DiscardRefusedError ? error.reason : 'unknown';
-
-  switch (reason) {
-    case 'not_owner':
-      return 'This draft belongs to another account on this device. Sign in as its owner to discard it.';
-    case 'already_signed':
-    case 'already_queued':
-      return 'This inspection is signed and waiting to be sent. It cannot be discarded — it is on its way.';
-    default:
-      return 'The draft could not be discarded. It is still on this device.';
-  }
 }

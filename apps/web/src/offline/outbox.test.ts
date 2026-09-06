@@ -8,6 +8,7 @@ import { capturePhoto } from './photos';
 import {
   BACKOFF_CAP_MS,
   backoffMs,
+  deviceWork,
   enqueue,
   isQueued,
   outboxFor,
@@ -577,6 +578,64 @@ describe('outboxFor', () => {
 
     expect(await outboxFor(ACCOUNT, database)).toEqual([]);
     expect(await database.outbox.get(id)).toBeDefined();
+  });
+});
+
+/**
+ * Lo que ve la PANTALLA, que no es lo mismo que lo que recorre el envío.
+ */
+describe('deviceWork', () => {
+  /**
+   * EL REQUISITO ENTERO DE ESTA FUNCIÓN. Un borrador sin firmar no tiene fila de cola, y
+   * hasta que esto existió no lo mostraba ninguna pantalla: `outboxFor` no lo puede
+   * devolver, y las dos que listan borradores los cuelgan de la inspección pendiente que
+   * devuelve el servidor. El indicador de ADR-010 —que no se puede descartar— lo contaba
+   * igual, así que el inspector quedaba con un aviso permanente sobre trabajo inalcanzable.
+   */
+  it('incluye el borrador que todavía no se firmó, con la cola en null', async () => {
+    database = freshDatabase();
+    const draft = await openDraft(draftInput(), database);
+    await saveAnswer(draft.client_submission_id, 'guarding.installed', true, TEST_DOCUMENT, database);
+
+    expect(await outboxFor(ACCOUNT, database)).toEqual([]);
+
+    const work = await deviceWork(ACCOUNT, database);
+
+    expect(work).toHaveLength(1);
+    expect(work[0]?.draft.client_submission_id).toBe(draft.client_submission_id);
+    expect(work[0]?.row).toBeNull();
+  });
+
+  it('trae la fila de cola de lo que ya se firmó', async () => {
+    database = freshDatabase();
+    const id = await readyDraft(database);
+
+    const work = await deviceWork(ACCOUNT, database);
+
+    expect(work).toHaveLength(1);
+    expect(work[0]?.row?.client_submission_id).toBe(id);
+  });
+
+  /**
+   * El mismo corte que el indicador: se limpia con la ACEPTACIÓN del servidor y no con la
+   * firma. Las dos preguntas salen de `listUnsent` justamente para no poder divergir.
+   */
+  it('sale de la lista solo cuando el servidor aceptó el envío', async () => {
+    database = freshDatabase();
+    const id = await readyDraft(database);
+
+    await database.drafts.update(id, { status: 'signed' });
+    expect(await deviceWork(ACCOUNT, database)).toHaveLength(1);
+
+    await database.drafts.update(id, { status: 'accepted' });
+    expect(await deviceWork(ACCOUNT, database)).toEqual([]);
+  });
+
+  it('no muestra el trabajo de otra cuenta del mismo dispositivo', async () => {
+    database = freshDatabase();
+    await readyDraft(database);
+
+    expect(await deviceWork('account-b', database)).toEqual([]);
   });
 });
 

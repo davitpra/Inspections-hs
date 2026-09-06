@@ -5,6 +5,7 @@ import { useState } from "react";
 import { listPendingInspections, listSites } from "../../api/inspections";
 import { queryKeys } from "../../api/query-keys";
 import { useAppSession } from "../../app/session-context";
+import { DiscardInspectionDraftDialog } from "../../components/DiscardInspectionDraftDialog";
 import { CheckIcon, InfoIcon } from "../../components/icons";
 import type { DraftRow } from "../../offline/db";
 import { listDrafts } from "../../offline/drafts";
@@ -12,7 +13,6 @@ import { civilToday } from "../../presentation/dates";
 import { AssignmentChecklist } from "./AssignmentChecklist";
 import { AssignmentHero } from "./AssignmentHero";
 import { DeviceDrafts } from "./DeviceDrafts";
-import { DiscardDraftDialog } from "./DiscardDraftDialog";
 import { pendingDraft } from "./presentation";
 
 export function InspectionAssignmentRoute(): React.JSX.Element {
@@ -118,7 +118,7 @@ export function InspectionAssignmentRoute(): React.JSX.Element {
           />
 
           {discarding ? (
-            <DiscardDraftDialog
+            <DiscardInspectionDraftDialog
               clientSubmissionId={discarding.client_submission_id}
               scheduledInspectionId={discarding.scheduled_inspection_id}
               accountId={account.userId}

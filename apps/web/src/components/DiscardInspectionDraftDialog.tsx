@@ -1,10 +1,10 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 
-import { queryKeys } from '../../api/query-keys';
-import { CalendarIcon, TrashIcon } from '../../components/icons';
-import { discardDraft } from '../../offline/drafts';
-import { discardRefusalMessage } from './presentation';
+import { queryKeys } from '../api/query-keys';
+import { discardDraft } from '../offline/drafts';
+import { discardRefusalMessage } from '../presentation/drafts';
+import { CalendarIcon, TrashIcon } from './icons';
 
 /**
  * Confirmar antes de descartar un borrador.
@@ -19,11 +19,19 @@ import { discardRefusalMessage } from './presentation';
  * hallazgos y las fotos de ese recorrido, y que no se recuperan. El inspector no puede
  * decidir sobre una pregunta que no le informa nada.
  *
- * Vive fuera de la fila, montado por `index.tsx`: descartar invalida la lista de
- * borradores y el borrador de esta asignación, así que el progreso que se lee al lado
+ * Vive fuera de la fila, montado por la ruta: descartar invalida la lista de borradores y
+ * el borrador de esa asignación, así que el progreso que se lee al lado
  * —`AssignmentChecklist`— no queda mostrando lo que ya no existe.
+ *
+ * Está en `components/` y no en una ruta porque lo montan dos: la página de la asignación
+ * y `/outbox`, que es la única puerta cuando la asignación ya no vuelve del servidor.
+ *
+ * Se llama `Inspection` y no solo `Draft` porque hay OTRO diálogo de descartar un borrador
+ * —`TemplatesRoute/DiscardDraftDialog`— y aquél descarta un borrador de PLANTILLA en la
+ * consola del coordinador. Son la misma palabra sobre dos cosas sin nada en común, y este
+ * vive en `components/`, donde el nombre se lee sin la carpeta que lo desambigüe.
  */
-export function DiscardDraftDialog({
+export function DiscardInspectionDraftDialog({
   clientSubmissionId,
   scheduledInspectionId,
   accountId,
@@ -52,6 +60,11 @@ export function DiscardDraftDialog({
       void queryClient.invalidateQueries({
         queryKey: queryKeys.draft(scheduledInspectionId),
       });
+      // `outbox` NO cuelga de `drafts`, y desde que `/outbox` lista borradores sin firmar
+      // es una de las pantallas que muestra lo que esto acaba de borrar. Sin esta línea la
+      // fila descartada se queda dibujada sin un solo error en consola, que es exactamente
+      // el fallo que `query-keys.ts` existe para evitar.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.outbox() });
 
       dialogRef.current?.close();
     },

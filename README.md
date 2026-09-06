@@ -6,6 +6,9 @@ del JHSC, hallazgos, acciones correctivas e incidentes.
 - `apps/api` — NestJS + Postgres (RLS por planta, ADR-002) + pg-boss (ADR-005).
 - `apps/web` — PWA offline-first: React, TanStack Router/Query, Dexie.
 - `packages/contracts` — los esquemas Zod que comparten los dos.
+- `packages/forms` — el motor de formularios isomórfico: corre igual en el dispositivo y
+  en el servidor sobre la misma entrada, y viaja dentro del bundle del service worker
+  (ADR-007).
 - `docs/adr` — las decisiones y por qué.
 
 ## Arranque local
@@ -159,6 +162,38 @@ cuenta es real y puede tener ya la suya:
 DEMO_COORDINATOR_PASSWORD='la que tenga' pnpm demo:content
 ```
 
+### Con qué entrar
+
+Corridos los dos comandos, en http://localhost:5173 entran estas dos cuentas y ninguna
+más:
+
+| Email | Contraseña | Rol | Alcance | Persona |
+|---|---|---|---|---|
+| `coordinator@example.com` | `DEMO_COORDINATOR_PASSWORD` | `hs_coordinator` | St. Thomas + Glencoe | Health and Safety Coordinator (`BOOTSTRAP-0001`) |
+| `demo.inspector@example.com` | `DEMO_PASSWORD` | `jhsc_member` | St. Thomas | Dana Inspector (`DEMO-0001`) |
+
+Sin esas variables en el entorno la contraseña de las dos es `demo-inspector-2026`, el
+`DEFAULT_PASSWORD` de `scripts/demo-data.mjs`. **Es una contraseña de desarrollo y nada
+más**: los dos comandos se niegan a correr con `NODE_ENV=production`, y ninguno de los
+dos corre en CI.
+
+El coordinador sale del seed y **no tiene contraseña hasta que alguien se la pone**:
+`demo:content` no la cambia —ver arriba—, así que la primera vez hay que emitirle la
+credencial con `pnpm auth:bootstrap` o fijarla con
+`pnpm auth:reset-password coordinator@example.com --password '…'`. El inspector no
+necesita ese paso: `demo:data` crea la cuenta y acepta su propia invitación.
+
+El resto del roster que siembra `demo:data` son **cinco personas sin cuenta**, que es el
+caso normal (§4) y lo que hace que `/roster` tenga algo que mostrar y a quién invitar:
+
+| Persona | Legajo | Sitio |
+|---|---|---|
+| Alex Boivin | `DEMO-1001` | St. Thomas |
+| Priya Raman | `DEMO-1002` | St. Thomas |
+| Sam Okafor | `DEMO-1003` | St. Thomas |
+| Marie Tremblay | `DEMO-1004` | Glencoe |
+| Chen Wu | `DEMO-1005` | Glencoe |
+
 ### Cuando te quedás afuera
 
 ```bash
@@ -180,6 +215,70 @@ No corre con `NODE_ENV=production`, y ahí la ausencia es la respuesta: el bloqu
 espera, y la credencial la revoca el coordinador desde la aplicación
 (`POST /auth/credentials/revoke`).
 
+## Las pantallas
+
+**Quién ve qué lo decide el rol, y lo garantiza RLS y no el menú.** Las tablas de abajo
+están agrupadas por función y no por rol a propósito: varias pantallas devuelven distinto
+según quién mire —`/incidents` es el caso claro— y describirlas por rol haría parecer que
+el filtro está en el componente.
+
+**El recorrido de una inspección.** Solo lo hace un `jhsc_member`: §4 dice que los
+miembros del JHSC son los únicos que ejecutan inspecciones, y `requireInspector()` lo
+comprueba.
+
+| Ruta | Qué es |
+| --- | --- |
+| `/` | Lo que esta cuenta debe y cuándo. No lista borradores ni cerrados: cada borrador vive en la página de su asignación y lo cerrado está en `/historical`. |
+| `/inspections/$id` | La asignación, y el borrador de ESTE dispositivo si lo hay: donde se retoma y donde se descarta. |
+| `/inspections/$id/capture` | La captura. |
+| `/inspections/$id/review` | Revisar y firmar — el momento en que un borrador deja de serlo. Valida con `validateAnswers` de `@hs/forms`, la misma función que corre el servidor. |
+| `/inspections/$id/report` | Una inspección enviada, leída de vuelta: el documento **congelado** con el que se contestó, no la versión publicada hoy. |
+| `/historical` | Todo lo que esta cuenta cerró, separado por la identidad estable de cada plantilla. |
+| `/outbox` | Lo que no salió de este dispositivo, con el motivo del servidor si fue rechazado. |
+
+**Lo que sale del recorrido.**
+
+| Ruta | Qué es |
+| --- | --- |
+| `/findings` | Los recorridos en los que esta cuenta encontró algo que arreglar, separados por tipo. |
+| `/findings/$id` | El hilo de un hallazgo: su ciclo y la corrección leídos como una sola cosa, no como dos listas al lado. |
+| `/incidents` | Los que esta cuenta puede ver. **La lista no filtra nada**: un supervisor ve los suyos porque la política RLS de la migración `0012` no le devuelve los demás. |
+| `/incidents/report` | Reportar uno. |
+| `/incidents/$id` | El incidente, sus relojes regulatorios y su investigación. |
+| `/incidents/$id/form7` | Los valores mapeados a los campos del Form 7 del WSIB. Solo lectura y con copiar al portapapeles: **sin PDF, a propósito** (riesgo H, cerrado en v1.2). |
+
+**Administración.**
+
+| Ruta | Qué es |
+| --- | --- |
+| `/scheduling` | El año por planta: qué requisitos hay y qué períodos abrieron. |
+| `/scheduling/$scheduleId` | Un requisito año por año — abrir un período, asignarle inspector, adelantarle la visibilidad. |
+| `/roster` | Quién está en cada planta, con filtro de estado y búsqueda. Ver "Dar de alta a alguien" y "Corregir el roster". |
+| `/templates` | Las plantillas publicadas como referencia y las que se están escribiendo. |
+| `/templates/drafts/$id` | El editor del borrador. |
+| `/templates/versions/$versionId` | Una versión publicada, de solo lectura. |
+| `/catalog/locations` | Una fila por ubicación compartida y una columna por planta: la pregunta es «¿cada lugar que mis plantillas nombran existe en cada planta?». |
+
+**Sin sesión:** `/accept-invitation`, donde el titular de una invitación elige su contraseña.
+
+### Los tres ciclos
+
+Ninguno es una columna: los tres se calculan de eventos inmutables y reglas puras
+(ADR-008). Las máquinas viven **como dato y no como `switch`** en `packages/contracts`, y
+la misma tabla está escrita como guarda en la migración — hay un test de integración que
+evalúa los pares por los dos caminos y los compara.
+
+| | Estados | Dónde está la máquina |
+| --- | --- | --- |
+| Hallazgo | `raised` → `assigned` → `in_progress` → `verification` → `closed` | `packages/contracts/src/findings.ts` |
+| Acción correctiva | `open` → `in_progress` → `awaiting_verification` → `closed` | `packages/contracts/src/actions.ts` |
+| Incidente | `reported` → `under_investigation` → `closed` | `packages/contracts/src/incidents.ts` |
+
+Dos reglas del ciclo de la acción que explican la mitad de las pantallas: `closed` no
+aparece nunca como origen —que el trabajo cerrado se haya deshecho es un hallazgo nuevo,
+con su propia fecha— y `awaiting_verification → closed` exige `not_executor`, así que
+quien declara hecho el trabajo no puede ser quien lo verifica.
+
 ## Comandos
 
 | Comando | Qué hace |
@@ -195,7 +294,7 @@ espera, y la credencial la revoca el coordinador desde la aplicación
 | `pnpm auth:create-account` | Crea la cuenta de una persona del roster. El único `auth:*` que corre en producción. |
 | `pnpm auth:bootstrap [userId]` | Emite la invitación de una cuenta sin credencial. |
 | `pnpm auth:reset-password <userId\|email>` | Contraseña nueva, o `--unlock` para destrabar. Solo fuera de producción. |
-| `pnpm roster:import <csv>` | Importa el roster de ADP. |
+| `pnpm roster:import <csv>` | Importa el roster de ADP. El mismo CSV entra por el botón de `/roster`. |
 | `pnpm test` | Unitarios. |
 | `pnpm --filter api test:int` | Integración, contra Postgres real (testcontainers). |
 | `pnpm typecheck` / `pnpm lint` | Lo de siempre. |
@@ -216,7 +315,10 @@ el botón de `/roster` (o `pnpm auth:create-account` para los otros roles) y
 —cuatro columnas, solo activas— para esa pantalla. **No sirve `GET /people`**, que es del
 coordinador y devuelve el perfil completo; colgar el selector de ahí rompería §4 R4.
 
-**Corregir el roster.** `/roster` ya deja *ver* quién está en cada planta —con filtro de
-estado y búsqueda—, pero es de solo lectura: corregir un apellido, transferir de planta o
-dar de baja se siguen haciendo con `pnpm roster:import`, que es la fuente de verdad del
-roster.
+**Renombrar, transferir y reactivar a alguien del roster.** `/roster` ya no es de solo
+lectura: da de alta a **una** persona (`POST /people`, tres campos y nada de email — dar
+acceso es otro acto), da de baja (`PATCH /people/:personId`) e importa el CSV desde la
+misma pantalla (`POST /people/import`). Lo que sigue sin ruta es corregir un apellido,
+transferir de planta y reactivar a quien se dio de baja: eso se hace con el CSV, que para
+esas tres cosas sigue siendo la fuente de verdad — `pnpm roster:import <csv>` o el botón
+de importar.

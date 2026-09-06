@@ -5250,6 +5250,17 @@ button.schedule-cell:focus-visible {
   padding-bottom: 0;
 }
 
+/* Abrir y descartar en la misma línea, separados y no pegados: son la acción que se toma
+   sin pensar y la que destruye tres horas de recorrido, y en un teléfono con guantes la
+   distancia entre los dos objetivos es lo que evita el error de puntería. Envuelve antes
+   que comprimir, por lo mismo. */
+.outbox__row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-5);
+}
+
 /* Reintentar no toma el ancho entero como `button--outline` en una tarjeta del
    calendario: en 64rem, un botón de borde a borde se lee como el paso que hay que dar, y
    acá la cola se envía sola. Sigue siendo un objetivo de toque cómodo con guantes. */

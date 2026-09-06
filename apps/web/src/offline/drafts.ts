@@ -118,6 +118,25 @@ export async function listDrafts(
 }
 
 /**
+ * El trabajo que el servidor todavía no aceptó: EL CONJUNTO QUE CUENTA EL INDICADOR.
+ *
+ * Existe como una función y no como dos consultas parecidas porque tiene exactamente dos
+ * lectores —`unsyncedStatus`, que lo cuenta, y `deviceWork`, que lo lista en `/outbox`— y
+ * el requisito de ADR-010 es que digan lo mismo. Un indicador no descartable que anuncia
+ * trabajo que su propia pantalla no muestra no es verificable: es ruido que el inspector
+ * no puede resolver. Con un solo predicado, divergir deja de ser posible.
+ *
+ * El corte es `accepted` y no `signed`: firmar no saca nada del dispositivo (ADR-001, el
+ * envío es el punto de no retorno, y el punto es la aceptación del servidor).
+ */
+export async function listUnsent(
+  accountId: string,
+  database: OfflineDatabase = db,
+): Promise<DraftRow[]> {
+  return (await listDrafts(accountId, database)).filter((draft) => draft.status !== 'accepted');
+}
+
+/**
  * Se puede descartar lo que todavía no salió del dispositivo, y nada más.
  *
  * ADR-001 — **el envío es el punto de no retorno**. Firmar encola, y una entrada del

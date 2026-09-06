@@ -476,11 +476,19 @@ async function ensureScheduledInspection(pool, periodStart, references) {
       return existing[0];
     }
 
+    // `period_months` sale de la regla y no de un literal, igual que en `openPeriod()`
+    // de `src/inspections/open-period.service.ts`: es la frecuencia declarada la que
+    // define el período, y `period_end` es una columna generada a partir de ella. Un 1
+    // escrito acá a mano sería correcto solo mientras la regla siga siendo mensual.
     const { rows } = await client.query(
       `INSERT INTO scheduled_inspection
-         (site_id, period_start, template_id, template_version_id, inspector_id,
-          scheduled_at, scheduled_by)
-       VALUES ($1, $2, $3, $4, $5, $2::date + INTERVAL '1 day', $6)
+         (site_id, period_start, period_months, template_id, template_version_id,
+          inspector_id, scheduled_at, scheduled_by)
+       SELECT $1, $2, s.frequency_months, $3, $4, $5, $2::date + INTERVAL '1 day', $6
+         FROM inspection_schedule s
+        WHERE s.site_id = $1
+          AND s.template_id = $3
+          AND s.deactivated_at IS NULL
        RETURNING id, cancelled_at`,
       [
         ST_THOMAS,
@@ -491,6 +499,13 @@ async function ensureScheduledInspection(pool, periodStart, references) {
         COORDINATOR_ID,
       ],
     );
+
+    if (!rows[0]) {
+      throw new Error(
+        `No hay regla activa para la plantilla ${references.templateId} en St. Thomas: ` +
+          'corré `pnpm db:seed` antes de sembrar el historial.',
+      );
+    }
 
     await client.query('COMMIT');
 
@@ -618,8 +633,10 @@ async function ensureManualFinding(token, references) {
 }
 
 /**
- * Una acción por cada estado del camino normal: abierta, esperando verificación y cerrada.
- * `in_progress` no está porque solo se alcanza devolviendo un trabajo (ADR-020).
+ * Una acción por cada estado del camino normal: abierta, en curso, esperando verificación
+ * y cerrada. `in_progress` está en el camino desde ADR-021: dejó de ser el estado al que
+ * solo se llegaba devolviendo un trabajo y pasó a ser la declaración explícita de que el
+ * trabajo empezó, así que `open → awaiting_verification` ya no existe como par.
  *
  * QUIÉN HACE CADA PASO IMPORTA Y NO ES DECORATIVO. `awaiting_verification → closed` exige
  * `not_executor` —§3 R3, "una persona distinta del ejecutor"— y el motor lo comprueba en
@@ -643,6 +660,10 @@ async function seedActions(tokens) {
 
   const plan = [
     { state: 'open', description: 'Mark the aisle bay with floor tape and brief the line crew.' },
+    {
+      state: 'in_progress',
+      description: 'Refit the missing guard on packaging line 2 and test the interlock.',
+    },
     {
       state: 'awaiting_verification',
       description: 'Lag the exposed steam line and post a hot-surface sign at the doorway.',
@@ -676,6 +697,15 @@ async function seedActions(tokens) {
     created.push({ id: action.id, state: step.state });
 
     if (step.state === 'open') continue;
+
+    // Lo declara el asignado, que es quien empezó el trabajo. `open → in_progress` no
+    // pide evidencia: la evidencia es del trabajo terminado, no del empezado.
+    await request('POST', `/actions/${action.id}/transitions`, {
+      token: tokens.inspector,
+      body: { to: 'in_progress', note: 'Parts on hand; work started on the floor.' },
+    });
+
+    if (step.state === 'in_progress') continue;
 
     const objectKey = await uploadPhoto(tokens.inspector, '/uploads/presign/action', {
       action_id: action.id,

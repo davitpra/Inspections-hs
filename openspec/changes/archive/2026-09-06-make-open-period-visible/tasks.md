@@ -13,4 +13,4 @@
 
 ## 3. Verification
 
-- [ ] 3.1 Build packages before typecheck, run lint and unit tests, and run the relevant Postgres integration suites.
+- [x] 3.1 Build packages before typecheck, run lint and unit tests, and run the relevant Postgres integration suites.
