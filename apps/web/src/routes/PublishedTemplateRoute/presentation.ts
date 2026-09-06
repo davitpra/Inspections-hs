@@ -116,6 +116,18 @@ function choiceLabel(option: { label: string; value: string }): string {
   return `${option.label} (${option.value})`;
 }
 
+/**
+ * Todo lo que la pregunta declara sobre su respuesta, en un panel y no en dos lugares.
+ *
+ * El tipo de respuesta estaba en una fila de `<dl>` arriba y la configuración en la caja de
+ * abajo, y son el mismo dato leído a dos alturas: qué se le va a pedir al inspector. Va
+ * primero porque el resto de las líneas solo se entienden sabiéndolo — un "Range: 0 to 100"
+ * no dice lo mismo bajo `Number` que bajo `Rating scale`.
+ */
+export function answerSettings(item: TemplateItem): string[] {
+  return [`Answer type: ${responseTypeLabel(item)}`, ...responseConfiguration(item)];
+}
+
 /** La prescripción de fallo, sin decidir ni evaluar si una respuesta falla. */
 export function findingConfiguration(item: TemplateItem): string[] {
   if (!item.finding) return [];

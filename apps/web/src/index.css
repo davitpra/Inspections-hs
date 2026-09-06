@@ -7306,8 +7306,12 @@ button.schedule-cell:focus-visible {
 /* ---------------------------------------------------------------------------
    La lectura de una versión publicada.
 
-   Es un registro congelado, no una variante del editor: tarjetas y filas de lectura tienen
-   su propia silueta para que ningún borde o control sugiera que el documento se puede tocar.
+   Es un registro congelado, no una variante del editor: nada de lo que se dibuja acá es un
+   control, y ningún borde tiene que sugerir que el documento se puede tocar. La silueta que
+   sí comparte es la del DOCUMENTO — la tarjeta de sección con la captura y el reporte, y la
+   ficha de pregunta con `.capture__item` y `.report__item`—, porque es la misma plantilla
+   vista en tres momentos y quien la recorrió tiene que reconocerla acá.
+
    Todo color pasa por los tokens semánticos, también en los avisos de condición y hallazgo.
    --------------------------------------------------------------------------- */
 
@@ -7432,27 +7436,53 @@ button.schedule-cell:focus-visible {
 
 .published-template__items {
   display: grid;
-  gap: 0;
+  gap: var(--space-3);
   margin: var(--space-4) 0 0;
   padding: 0;
   list-style: none;
 }
 
+/*
+ * Cada pregunta, su propia ficha — la misma de la recorrida (`.capture__item`) y de la
+ * inspección leída de vuelta (`.report__item`), con los mismos valores y no unos parecidos.
+ * Esta pantalla era la única de las tres que dibujaba la pregunta como fila con filete, y el
+ * filete deja de alcanzar en cuanto la de arriba abre su prescripción entera: se ve una
+ * columna de texto corrido y no dónde termina una pregunta y empieza la siguiente.
+ *
+ * El número va en su propia columna de la grilla y no dentro del cuerpo, para que los
+ * paneles de abajo arranquen alineados con el enunciado; alineados con el número se leerían
+ * como si fueran otra pregunta.
+ */
 .published-template__item {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: var(--space-3);
-  border-top: 1px solid var(--line);
-  padding: var(--space-4) 0 0;
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
 }
 
-.published-template__item + .published-template__item {
-  margin-top: var(--space-4);
-}
-
+/* El mismo cuadrado tenue de la captura y del reporte, y por la misma razón: entre cuarenta
+   preguntas el número sirve para nombrar una en voz alta, no para jerarquizarla. El círculo
+   `--brand` es de la sección, que es lo que sí ordena la pantalla. */
 .published-template__item-number {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--radius);
+  background: var(--tint-bg);
   color: var(--muted);
+  font-size: var(--text-sm);
   font-weight: var(--weight-strong);
+}
+
+/* Sin esto, un enunciado largo sin espacios estira la columna y saca la ficha de la
+   tarjeta. */
+.published-template__item-body {
+  min-width: 0;
 }
 
 .published-template__item-head {
@@ -7462,38 +7492,22 @@ button.schedule-cell:focus-visible {
   gap: var(--space-3);
 }
 
+/* El enunciado pesa, no agranda: dentro de la ficha ya está dicho que es el título, y a
+   tamaño de `h3` competía con el de la sección que lo contiene. */
 .published-template__item-head h3 {
   margin: 0;
+  font-size: var(--text-base);
 }
 
-.published-template__facts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2) var(--space-5);
-  margin: var(--space-3) 0 0;
-}
-
-.published-template__facts div {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1) var(--space-2);
-}
-
-.published-template__facts dt {
-  color: var(--muted);
-}
-
-.published-template__facts dd {
-  margin: 0;
-  font-weight: var(--weight-strong);
-}
-
+/* Relleno y sin borde. Adentro de una ficha que ya tiene el suyo, un segundo borde a tres
+   milímetros del primero dibuja una caja dentro de otra caja; el fondo separa igual y no
+   agrega una línea que no delimita nada nuevo. */
 .published-template__details,
 .published-template__finding {
   margin-top: var(--space-3);
-  border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: var(--space-3);
+  background: var(--tint-bg);
 }
 
 .published-template__details ul,
@@ -7502,9 +7516,23 @@ button.schedule-cell:focus-visible {
   padding-left: var(--space-5);
 }
 
+/* Ámbar, que es lo que en esta aplicación significa «falta algo» (`--warn-*`), y no rojo:
+   la prescripción describe lo que habrá que hacer si la respuesta falla, no un error. */
 .published-template__finding {
-  border-color: var(--line-control);
   background: var(--warn-bg);
+}
+
+/* Después de `.published-template__detail-label` a propósito: hereda de él el tamaño, la
+   caja alta y el peso, y le gana el color. El ícono es el mismo de `.finding__title`. */
+.published-template__finding-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--warn-ink);
+}
+
+.published-template__finding-title svg {
+  flex: none;
 }
 
 @media (max-width: 48rem) {

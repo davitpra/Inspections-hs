@@ -175,6 +175,8 @@ describe('PublishedTemplateRoute', () => {
     ]);
     expect(screen.getByText('Both plants')).toBeTruthy();
     expect(screen.getAllByText('Required')).toHaveLength(2);
+    // El tipo de respuesta abre el panel de ajustes; ya no es una fila aparte.
+    expect(screen.getByText('Answer type: Number')).toBeTruthy();
     expect(screen.getByText('Range: 0 to 100')).toBeTruthy();
     expect(screen.getByText('Decimal places: 1')).toBeTruthy();
     expect(screen.getByText('Corrective action: Stop the machine and investigate the temperature.')).toBeTruthy();

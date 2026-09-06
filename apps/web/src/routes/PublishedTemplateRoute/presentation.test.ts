@@ -2,6 +2,7 @@ import type { Location, Site, TemplateDocument, TemplateItem, TemplateSection, V
 import { describe, expect, it } from 'vitest';
 
 import {
+  answerSettings,
   failureThresholdLabel,
   findingConfiguration,
   responseConfiguration,
@@ -155,6 +156,24 @@ describe('PublishedTemplateRoute presentation', () => {
       ['Fails on: No or N/A'],
       ['Fails on: N/A only'],
       ['Fails on: Yes or N/A'],
+    ]);
+  });
+
+  it('abre el panel de ajustes con el tipo de respuesta', () => {
+    const item: TemplateItem = {
+      ...document.sections[0]!.items[0]!,
+      response_type: 'number',
+      min: 0,
+      max: 100,
+      decimals: 1,
+    };
+
+    // El tipo primero y la configuración detrás, sin duplicar lo que ya dice
+    // `responseConfiguration`: el panel es la concatenación, no una lista nueva.
+    expect(answerSettings(item)).toEqual([
+      'Answer type: Number',
+      'Range: 0 to 100',
+      'Decimal places: 1',
     ]);
   });
 
