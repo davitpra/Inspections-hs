@@ -6041,9 +6041,8 @@ button.schedule-cell:focus-visible {
   gap: var(--space-2);
 }
 
-/* Las tres opciones a la vista y la elegida pintada: es la decisión que condiciona qué
-   ubicaciones ofrece cada sección, y detrás de un desplegable habría que abrirlo para
-   saber en qué se está parado. */
+/* Un toggle por planta a la vista y los elegidos pintados: cada planta nueva entra en el
+   mismo flujo sin agregar combinaciones especiales al control. */
 .builder__scope-option {
   display: inline-flex;
   align-items: center;
@@ -6278,9 +6277,13 @@ button.schedule-cell:focus-visible {
   min-width: 0;
 }
 
-.builder__section-title h2 {
+.builder__section-title input {
+  width: 100%;
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
   margin: 0;
   font-size: var(--text-lg);
+  font-weight: var(--weight-strong);
 }
 
 .builder__section-title-row {

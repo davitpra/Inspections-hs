@@ -1,10 +1,10 @@
 import { InviteDialog } from './InviteDialog';
 import { DeactivateWorkerDialog } from './DeactivateWorkerDialog';
-import { JhscSeatDialog } from './JhscSeatDialog';
 import type { RosterDialog } from './presentation';
 import { ReissueDialog } from './ReissueDialog';
 import { RemoveAccessDialog } from './RemoveAccessDialog';
 import { PromoteDialog } from './PromoteDialog';
+import { DemoteDialog } from './DemoteDialog';
 
 /**
  * El modal que un acto de fila abrió, montado FUERA de la tabla — ver `RosterDialog`: la
@@ -62,19 +62,18 @@ export function RosterDialogs({
           onClose={onClose}
         />
       );
-    case 'seat':
+    case 'promote':
       return (
-        <JhscSeatDialog
+        <PromoteDialog
           userId={dialog.userId}
           personLabel={dialog.label}
-          action={dialog.action}
           siteId={siteId}
           onClose={onClose}
         />
       );
-    case 'promote':
+    case 'demote':
       return (
-        <PromoteDialog
+        <DemoteDialog
           userId={dialog.userId}
           personLabel={dialog.label}
           siteId={siteId}

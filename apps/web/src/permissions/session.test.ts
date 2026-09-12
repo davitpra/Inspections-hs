@@ -8,6 +8,7 @@ import {
   canAdministerScheduling,
   canAuthorTemplates,
   canDeactivateTemplates,
+  canDemote,
   canPublishTemplates,
   canInviteFromRoster,
   canImportRoster,
@@ -61,5 +62,14 @@ describe('canPromote', () => {
     expect(canPromote(session('hs_coordinator'))).toBe(false);
     expect(canPromote(session('jhsc_member'))).toBe(false);
     expect(canPromote(null)).toBe(false);
+  });
+});
+
+describe('canDemote', () => {
+  it('se lo concede solo a management', () => {
+    expect(canDemote(session('management'))).toBe(true);
+    expect(canDemote(session('hs_coordinator'))).toBe(false);
+    expect(canDemote(session('jhsc_member'))).toBe(false);
+    expect(canDemote(null)).toBe(false);
   });
 });

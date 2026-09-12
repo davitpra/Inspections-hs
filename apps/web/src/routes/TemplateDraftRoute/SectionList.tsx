@@ -21,6 +21,7 @@ import {
   removeItem,
   removeOption,
   removeSection,
+  renameSection,
   setConfig,
   setFinding,
   setOption,
@@ -102,16 +103,25 @@ export function SectionList({
           siteIds={siteIds}
           stranded={stranded.has(sectionIndex)}
           sortable={sortable}
-          onLocation={(code) =>
+          onTitle={(title) => write(renameSection(document, sectionIndex, title))}
+          onLocation={(code) => {
+            const nextCatalogName =
+              organizationLocations.find((each) => each.code === code)?.name ?? "";
+            const currentCatalogName =
+              organizationLocations.find(
+                (each) => each.code === section.organization_location_code,
+              )?.name ?? "";
+
             write(
               setSectionLocation(
                 document,
                 sectionIndex,
                 code,
-                organizationLocations.find((each) => each.code === code)?.name ?? "",
+                nextCatalogName,
+                currentCatalogName,
               ),
-            )
-          }
+            );
+          }}
           onMove={(delta) => write(moveSection(document, sectionIndex, delta))}
           onDuplicate={() => {
             const taken = [

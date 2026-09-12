@@ -1,5 +1,4 @@
 import {
-  isAdministrator,
   ROLE_LABELS,
   type Person,
   type PersonWithAccount,
@@ -125,17 +124,10 @@ export function sortRoster<T extends Person>(people: readonly T[]): T[] {
  * el acceso no llega hasta acá. Para el roster esa persona no tiene cuenta, y su fila se
  * dibuja igual que la de quien nunca tuvo una (`remove-jhsc-access-from-roster`).
  *
- * `· JHSC seat` cuando la cuenta se sienta en el comité (`coordinator-jhsc-seat`). Va
- * PEGADO al rol y no en una columna nueva porque no es otra pregunta: la columna Role
- * existe para leer hacia abajo quién está en el comité, y la coordinadora sentada lo está
- * tanto como los siete miembros. Solo aparece sobre un rol administrativo —los únicos a
- * los que el motor les deja el asiento—, así que la celda de un `jhsc_member` no gana un sufijo
- * que repetiría lo que su rol ya dice.
+  * La membresía del comité sigue al rol, así que la etiqueta no necesita un estado adicional.
  */
 export function accountRoleLabel(account: NonNullable<PersonWithAccount['account']>): string {
-  const label = account.jhsc_seat
-    ? `${ROLE_LABELS[account.role]} · JHSC seat`
-    : ROLE_LABELS[account.role];
+  const label = ROLE_LABELS[account.role];
 
   return account.can_sign_in ? label : `${label} (invited)`;
 }
@@ -219,52 +211,6 @@ export function removeButtonText(person: PersonWithAccount): string {
   return person.account?.can_sign_in ? 'Remove' : 'Cancel invitation';
 }
 
-/**
- * Si esta fila puede ofrecer sentarse en el JHSC, o levantarse
- * (`coordinator-jhsc-seat`).
- *
- * **Un solo predicado con la dirección adentro**, y no dos funciones: la fila ofrece
- * siempre exactamente un acto —el que su estado admite— y preguntarlo dos veces obligaría
- * a la pantalla a comprobar que las dos no dieran `true` a la vez.
- *
- * Los dos roles administrativos pueden ocupar un asiento: un `jhsc_member` ya está en el
- * comité por su rol. Es la misma regla que el servidor aplica, y acá está para no ofrecer
- * un botón que el servidor va a negar.
- *
- * La cuenta tiene que estar activa: sentar a alguien a quien se le quitó el acceso sería
- * darle un lugar en el comité sin poder entrar a hacerlo.
- *
- * **NO pregunta por `can_sign_in`**, al revés que `canReissueInvitation`: una coordinadora
- * invitada que todavía no puso su contraseña puede quedar sentada en el comité desde ya, y
- * la inspección la va a esperar en su pantalla el día que entre.
- */
-export function jhscSeatAction(person: PersonWithAccount): 'grant' | 'withdraw' | null {
-  const account = person.account;
-
-  if (account === null || !account.active || !isAdministrator(account.role)) return null;
-
-  return account.jhsc_seat ? 'withdraw' : 'grant';
-}
-
-/** El texto corto del botón del asiento. Ver `jhscSeatAction`. */
-export function jhscSeatButtonText(action: 'grant' | 'withdraw'): string {
-  return action === 'grant' ? 'Join JHSC' : 'Leave JHSC';
-}
-
-/**
- * El nombre accesible del botón del asiento — la persona nombrada, por la misma razón que
- * `inviteButtonLabel`: un botón que solo dice "Join JHSC" se anuncia igual en las
- * doscientas filas.
- */
-export function jhscSeatButtonLabel(
-  person: PersonWithAccount,
-  action: 'grant' | 'withdraw',
-): string {
-  return action === 'grant'
-    ? `Seat ${personLabel(person)} on the JHSC`
-    : `Remove ${personLabel(person)} from the JHSC seat`;
-}
-
 /** La promoción solo aplica a una cuenta activa que todavía es miembro del JHSC. */
 export function canPromoteAccount(person: PersonWithAccount): boolean {
   return person.account !== null && person.account.active && person.account.role === 'jhsc_member';
@@ -272,6 +218,15 @@ export function canPromoteAccount(person: PersonWithAccount): boolean {
 
 export function promoteButtonLabel(person: PersonWithAccount): string {
   return `Promote ${personLabel(person)} to H&S coordinator`;
+}
+
+/** La degradación solo aplica a una cuenta activa que actualmente es coordinador. */
+export function canDemoteAccount(person: PersonWithAccount): boolean {
+  return person.account !== null && person.account.active && person.account.role === 'hs_coordinator';
+}
+
+export function demoteButtonLabel(person: PersonWithAccount): string {
+  return `Demote ${personLabel(person)} to JHSC member`;
 }
 
 /**
@@ -400,7 +355,13 @@ export function rosterCounts(people: readonly PersonWithAccount[]): {
   };
 }
 
-export type RosterActionKind = 'invite' | 'reissue' | 'remove' | 'deactivate' | 'seat' | 'promote';
+export type RosterActionKind =
+  | 'invite'
+  | 'reissue'
+  | 'remove'
+  | 'deactivate'
+  | 'promote'
+  | 'demote';
 
 /** Un acto que una fila ofrece: cómo se dibuja el botón, sin decir cómo se ejecuta. */
 export interface RosterRowAction {
@@ -408,7 +369,6 @@ export interface RosterRowAction {
   text: string;
   label: string;
   className: string;
-  seat?: 'grant' | 'withdraw';
 }
 
 /**
@@ -417,12 +377,9 @@ export interface RosterRowAction {
  * Cada fila ofrece SOLO los actos que su estado admite: sin cuenta y activa → invitar o dar
  * de baja; con
  * cuenta que todavía no entra → reemitir el link y cancelar la invitación; con cuenta que
- * ya entra → quitar del JHSC y, para management, promover. Nada para quien no tiene acceso y está dado de baja —
+  * ya entra → quitar del JHSC y, para management, promover o degradar. Nada para quien no tiene acceso y está dado de baja —
  * invitar a esa fila es exactamente lo que 4.5 no ofrece, y su celda queda vacía a
  * propósito: la columna existe porque OTRAS filas tienen un acto.
- *
- * El asiento (`jhscSeatAction`) se resuelve una sola vez acá: la afordancia y la etiqueta
- * del botón tienen que hablar de la misma dirección.
  *
  * `mayInvite` entra como parámetro y no se comprueba fila por fila en la pantalla: es la
  * misma pregunta para las doscientas filas, y repetirla en cada botón era lo que hacía que
@@ -432,6 +389,7 @@ export function rowActions(
   person: PersonWithAccount,
   mayInvite: boolean,
   mayPromote = false,
+  mayDemote = false,
 ): RosterRowAction[] {
   if (!mayInvite) return [];
 
@@ -482,17 +440,12 @@ export function rowActions(
     });
   }
 
-  const seat = jhscSeatAction(person);
-
-  if (seat !== null) {
+  if (mayDemote && canDemoteAccount(person)) {
     actions.push({
-      kind: 'seat',
-      text: jhscSeatButtonText(seat),
-      label: jhscSeatButtonLabel(person, seat),
-      // Sin la clase de peligro que lleva "Remove": levantarse del comité no quita ningún
-      // acceso, y por eso tampoco compite visualmente con ella.
+      kind: 'demote',
+      text: 'Demote',
+      label: demoteButtonLabel(person),
       className: 'button--outline roster__action',
-      seat,
     });
   }
 
@@ -514,8 +467,8 @@ export type RosterDialog =
   | { kind: 'deactivate'; personId: string; label: string }
   | { kind: 'reissue'; userId: string; label: string }
   | { kind: 'remove'; userId: string; label: string; canSignIn: boolean }
-  | { kind: 'seat'; userId: string; label: string; action: 'grant' | 'withdraw' }
-  | { kind: 'promote'; userId: string; label: string };
+  | { kind: 'promote'; userId: string; label: string }
+  | { kind: 'demote'; userId: string; label: string };
 
 /** Ver `RosterDialog`. Los actos de cuenta se resuelven después de los dos de persona. */
 export function dialogFor(person: PersonWithAccount, action: RosterRowAction): RosterDialog {
@@ -533,6 +486,7 @@ export function dialogFor(person: PersonWithAccount, action: RosterRowAction): R
   }
 
   if (action.kind === 'promote') return { kind: 'promote', userId, label };
+  if (action.kind === 'demote') return { kind: 'demote', userId, label };
 
-  return { kind: 'seat', userId, label, action: action.seat! };
+  throw new Error('Accion de roster desconocida.');
 }

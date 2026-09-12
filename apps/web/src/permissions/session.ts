@@ -110,7 +110,12 @@ export function canAdministerCatalog(account: Session | null): account is Sessio
   return canAdminister(account);
 }
 
-/** La promoción es la única asimetría entre los dos roles administrativos. */
+/** Quién decide quién es coordinador: management puede promover y degradar. */
 export function canPromote(account: Session | null): account is Session {
+  return account?.role === 'management';
+}
+
+/** Quién puede devolver un coordinador a miembro del JHSC. */
+export function canDemote(account: Session | null): account is Session {
   return account?.role === 'management';
 }

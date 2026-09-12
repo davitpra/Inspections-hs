@@ -143,7 +143,7 @@ export async function removeJhscAccess(input: { userId: string }): Promise<Creat
   );
 }
 
-/** Promueve un miembro del JHSC a coordinador; no modifica su asiento ni su acceso. */
+/** Promueve un miembro del JHSC a coordinador sin modificar su acceso. */
 export async function promoteToCoordinator(input: {
   userId: string;
 }): Promise<CreateAccountResponse> {
@@ -155,26 +155,14 @@ export async function promoteToCoordinator(input: {
   );
 }
 
-
-/**
- * Sienta a una cuenta administrativa en el JHSC, o la levanta (`coordinator-jhsc-seat`).
- *
- * **UNA función con un booleano, y no dos como invitar/quitar el acceso.** Aquellas son
- * dos rutas porque del lado del servidor son dos escrituras distintas —un alta que revive
- * una cuenta, y una baja que revoca credencial e invitación—; el asiento es una columna
- * que se prende y se apaga, y partirlo en dos funciones inventaría una asimetría que el
- * acto no tiene.
- *
- * **No da ni quita acceso**: la cuenta entra igual antes y después, con la misma
- * credencial y la misma sesión. Lo que cambia es si la pantalla de programación la ofrece
- * como inspectora. Levantar a alguien del comité tampoco reasigna las inspecciones que ya
- * tiene: siguen siendo suyas.
- */
-export async function setJhscSeat(input: {
+/** Devuelve un coordinador a miembro del JHSC sin modificar su acceso. */
+export async function demoteToJhscMember(input: {
   userId: string;
-  granted: boolean;
 }): Promise<CreateAccountResponse> {
-  return send('PATCH', `/accounts/${input.userId}`, { jhsc_seat: input.granted }, (value) =>
-    createAccountResponseSchema.parse(value),
+  return send(
+    'PATCH',
+    `/accounts/${input.userId}`,
+    { demote_to: 'jhsc_member' },
+    (value) => createAccountResponseSchema.parse(value),
   );
 }

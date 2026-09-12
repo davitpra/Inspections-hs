@@ -9,9 +9,7 @@ inspector can see what they still owe. It further guarantees that a submission i
 once however many times a device retries it, that a rejected submission leaves no partial state,
 and that every answer is stored as its own row keyed by the stable identity of the concept it
 answers.
-
 ## Requirements
-
 ### Requirement: A scheduled inspection binds a site, a period of a stated length and a frozen template version
 
 The system SHALL store every scheduled inspection in `scheduled_inspection` with `site_id`,
@@ -879,21 +877,15 @@ error inside the confirmation when the request fails.
 
 The system SHALL restrict creating and deactivating schedule rules, scheduling an inspection
 outside the automatic calendar, reassigning `inspector_id` and cancelling a scheduled inspection to
-accounts whose role is `hs_coordinator`. `inspector_id` SHALL reference an account that sits on the
-JHSC — one whose role is `jhsc_member`, or one whose role is administrative, `hs_coordinator` or
-`management`, and whose
-`jhsc_seat_granted_at` is non-null — and whose active site scope includes the inspection's
-`site_id`. Every one of these operations SHALL be recorded in the audit log with the acting
-account.
+accounts whose role is `hs_coordinator`. `inspector_id` SHALL reference an account that is not
+deactivated and whose active site scope includes the inspection's `site_id`. The role SHALL NOT be
+part of that question: every account of the closed set is on the committee, so there is no role a
+scheduled inspection can be refused for. Every one of these operations SHALL be recorded in the
+audit log with the acting account.
 
-An administrative account that holds no JHSC seat SHALL be refused as `inspector_id`, and the refusal
-SHALL say that the account holds no seat rather than name the role, because the role is not what is
-missing.
-
-Withdrawing an account's JHSC seat SHALL NOT change the `inspector_id` of any scheduled inspection
-already assigned to it, and SHALL NOT remove those inspections from what that account still owes:
-the seat governs what is offered and what is accepted from that moment on, not what was already
-decided.
+An account refused as `inspector_id` SHALL be refused for one of exactly two reasons, and the
+refusal SHALL say which: the account does not exist or is deactivated, or it has no active scope
+over the inspection's site.
 
 #### Scenario: A JHSC member cannot reassign an inspection
 
@@ -913,40 +905,31 @@ decided.
   whose active site scope does not include the inspection's `site_id`
 - **THEN** the request is rejected and names the site the account lacks
 
-#### Scenario: An administrative account without a seat is rejected as inspector
+#### Scenario: A deactivated account is rejected as inspector
 
-- **WHEN** the coordinator assigns as `inspector_id` an account whose role is `management` and
-  whose `jhsc_seat_granted_at` is null
-- **THEN** the request is rejected and says the account holds no JHSC seat
+- **WHEN** the coordinator assigns as `inspector_id` an account whose `deactivated_at` is non-null
+- **THEN** the request is rejected and says the account does not exist or is deactivated
 
-#### Scenario: A manager who holds a seat can be assigned an inspection
+#### Scenario: A manager can be assigned an inspection
 
-- **WHEN** the coordinator assigns as `inspector_id` a `management` account whose
-  `jhsc_seat_granted_at` is non-null and whose active site scope includes the inspection's
-  `site_id`
+- **WHEN** the coordinator assigns as `inspector_id` a `management` account whose active site scope
+  includes the inspection's `site_id`
 - **THEN** the assignment is accepted
 - **AND** the inspection appears among what that account still owes
 
-#### Scenario: A coordinator who holds a seat can be assigned an inspection
+#### Scenario: A coordinator can be assigned an inspection
 
-- **WHEN** the coordinator assigns as `inspector_id` an `hs_coordinator` account whose
-  `jhsc_seat_granted_at` is non-null and whose active site scope includes the inspection's
-  `site_id`
+- **WHEN** the coordinator assigns as `inspector_id` an `hs_coordinator` account whose active site
+  scope includes the inspection's `site_id`
 - **THEN** the assignment is accepted
 - **AND** the inspection appears among what that account still owes
 
-#### Scenario: A coordinator who holds no seat is rejected as inspector
+#### Scenario: A promoted member stays assignable
 
-- **WHEN** the coordinator assigns as `inspector_id` an `hs_coordinator` account whose
-  `jhsc_seat_granted_at` is null
-- **THEN** the request is rejected and says the account holds no JHSC seat
-
-#### Scenario: Leaving the committee does not reassign what was already assigned
-
-- **GIVEN** a scheduled inspection assigned to an `hs_coordinator` account that holds a seat
-- **WHEN** that account's seat is withdrawn
-- **THEN** the inspection's `inspector_id` is unchanged
-- **AND** the inspection is still among what that account still owes
+- **GIVEN** a `jhsc_member` account with active scope for the site
+- **WHEN** that account is promoted to `hs_coordinator`
+- **AND** the coordinator assigns it as `inspector_id` of an inspection at that site
+- **THEN** the assignment is accepted, with no act between the promotion and the assignment
 
 #### Scenario: A reassignment is audited
 
@@ -957,10 +940,9 @@ decided.
 ### Requirement: The accounts eligible to be assigned an inspection at a site can be listed
 
 The system SHALL expose, for a site, the accounts eligible to be named as `inspector_id` of a
-scheduled inspection at that site: accounts that are not deactivated, that sit on the JHSC — role
-`jhsc_member`, or an administrative role, `hs_coordinator` or `management`, with a non-null
-`jhsc_seat_granted_at` — and whose
-`user_site_scope` for that `site_id` has not been revoked.
+scheduled inspection at that site: accounts that are not deactivated and whose `user_site_scope` for
+that `site_id` has not been revoked. No role SHALL be excluded, because every account of the closed
+set is on the committee.
 
 The system SHALL determine that list with **the same predicate** it uses to validate an
 assignment, so that every account the list offers is an account a reassignment accepts, and an
@@ -987,28 +969,24 @@ row is outside the reader's scope SHALL still be listed, without its name, rathe
 
 #### Scenario: An account refused as inspector is never offered
 
-- **GIVEN** an account whose role is `management` and that holds no JHSC seat, and one whose role
-  is `jhsc_member` but whose scope for the site has been revoked, and one that has been
-  deactivated, and an `hs_coordinator` account that holds no JHSC seat
+- **GIVEN** an account whose role is `jhsc_member` but whose scope for the site has been revoked,
+  and one that has been deactivated
 - **WHEN** the eligible accounts for that site are listed
-- **THEN** none of the four appears
-- **AND** assigning any of them is refused with the code `inspector_invalid`
+- **THEN** neither appears
+- **AND** assigning either of them is refused with the code `inspector_invalid`
 
-#### Scenario: A management account with a seat is offered
+#### Scenario: A management account is offered
 
-- **GIVEN** a `management` account with active scope for the site and a non-null
-  `jhsc_seat_granted_at`
+- **GIVEN** a `management` account with active scope for the site
 - **WHEN** the eligible accounts for that site are listed
 - **THEN** the account appears
-- **AND** it stops appearing once its seat is withdrawn
+- **AND** it stops appearing once its scope for that site is revoked
 
-#### Scenario: A coordinator with a seat is offered
+#### Scenario: A coordinator is offered
 
-- **GIVEN** an `hs_coordinator` account with active scope for the site and a non-null
-  `jhsc_seat_granted_at`
+- **GIVEN** an `hs_coordinator` account with active scope for the site
 - **WHEN** the eligible accounts for that site are listed
 - **THEN** the account appears
-- **AND** it stops appearing once its seat is withdrawn
 
 #### Scenario: An eligible account whose person row is out of scope is still offered
 

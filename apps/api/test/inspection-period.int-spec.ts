@@ -265,8 +265,30 @@ describe('los permisos de la programación', () => {
     ).rejects.toMatchObject({ status: 403 });
   });
 
-  it('rechaza como inspector a una cuenta administrativa sin asiento', async () => {
+  it('acepta como inspector a una cuenta management con alcance vigente', async () => {
     const manager = await createAccount(db.app, { siteIds: [SITE_A], role: 'management' });
+    const current = (await stack.inspections.listSchedules(
+      session(coordinator.accountId, 'hs_coordinator'),
+    )).find((rule) => rule.site_id === SITE_A && rule.deactivated_at === null);
+
+    expect(current).toBeDefined();
+
+    const schedule = await stack.inspections.updateSchedule(
+      session(coordinator.accountId, 'hs_coordinator'),
+      current!.id,
+      {
+        default_inspector_id: manager.accountId,
+      },
+    );
+
+    expect(schedule.default_inspector_id).toBe(manager.accountId);
+  });
+
+  it('rechaza una cuenta desactivada como inspector', async () => {
+    const manager = await createAccount(db.app, { siteIds: [SITE_A], role: 'management' });
+    await inScope(db.app, [SITE_A], 'UPDATE app_user SET deactivated_at = now() WHERE id = $1', [
+      manager.accountId,
+    ]);
 
     await expect(
       stack.inspections.createSchedule(session(coordinator.accountId, 'hs_coordinator'), {
@@ -274,7 +296,7 @@ describe('los permisos de la programación', () => {
         template_id: templateId,
         default_inspector_id: manager.accountId,
       }),
-    ).rejects.toThrow(/seat on the JHSC/);
+    ).rejects.toThrow(/does not exist or is deactivated/);
   });
 
   it('rechaza como inspector a quien no tiene alcance en la planta, y nombra el sitio', async () => {

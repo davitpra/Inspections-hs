@@ -10,7 +10,6 @@ import {
   type PendingInspection,
   type PeriodMonths,
   type PeriodStatus,
-  type Role,
   type RosterPackage,
   type ScheduledInspection,
   type SubmittedInspection,
@@ -28,7 +27,6 @@ import { findActiveInspection, type ActiveInspection } from './active-inspection
 import { SITE_TIME_ZONE } from '../jobs/job-registry';
 import { LATEST_PUBLISHED_VERSION_CTE } from '../templates/published-version.sql';
 import {
-  ACCOUNT_HOLDS_JHSC_SEAT,
   ACCOUNT_IS_ACTIVE,
   isEligibleInspector,
   siteScopeIsActive,
@@ -765,21 +763,15 @@ export class InspectionsService {
   }
 
   /**
-   * Un inspector válido se sienta en el JHSC —rol `jhsc_member`, o asiento otorgado a una
-   * cuenta administrativa— y tiene alcance VIGENTE en esa planta.
+   * Un inspector válido es una cuenta activa con alcance VIGENTE en esa planta.
    *
    * Las condiciones salen de `inspector-eligibility.ts`, compartidas con el listado de
    * candidatos, para que no pueda ofrecerse una cuenta que después se rechace acá.
    *
-   * PERO LA FORMA SE CONSERVA: se proyectan el rol, el asiento y el alcance por separado en
-   * vez de preguntar un booleano, porque cada motivo de rechazo da un mensaje distinto y
-   * son ellos los que hacen accionable el error. `inspection-period.int-spec` los afirma.
-   * Un `WHERE isEligibleInspector(...)` devolvería cero filas y todas las causas
-   * colapsarían en «no existe».
-   *
-   * El coordinador sin asiento tiene mensaje propio, y no es un lujo: decirle «el rol
-   * hs_coordinator no puede recibir una inspección» sería mentira —puede, sentándose en el
-   * comité— y lo mandaría a buscar la solución donde no está.
+   * La forma se conserva: se proyectan actividad y alcance por separado en vez de preguntar
+   * un booleano, porque cada motivo de rechazo da un mensaje distinto y son ellos los que
+   * hacen accionable el error. Un `WHERE isEligibleInspector(...)` devolvería cero filas y
+   * todas las causas colapsarían en «no existe».
    *
    * **Sin join a `person`**, y no es un olvido: la persona de una cuenta puede estar en
    * otra planta que su alcance, `person` está aislada por sitio, y el join convertiría
@@ -791,10 +783,8 @@ export class InspectionsService {
     inspectorId: string,
     siteId: string,
   ): Promise<void> {
-    const { rows } = await client.query<{ role: Role; holds_seat: boolean; in_scope: boolean }>(
-      `SELECT u.role,
-              ${ACCOUNT_HOLDS_JHSC_SEAT} AS holds_seat,
-              ${siteScopeIsActive('$2')} AS in_scope
+    const { rows } = await client.query<{ in_scope: boolean }>(
+      `SELECT ${siteScopeIsActive('$2')} AS in_scope
          FROM app_user u
         WHERE u.id = $1 AND ${ACCOUNT_IS_ACTIVE}`,
       [inspectorId, siteId],
@@ -802,14 +792,6 @@ export class InspectionsService {
 
     const row = rows[0];
     if (!row) throw inspectorInvalid('The account does not exist or is deactivated');
-
-    if (row.role !== 'jhsc_member' && !row.holds_seat) {
-      throw inspectorInvalid(
-        isAdministrator(row.role)
-          ? 'The account holds no seat on the JHSC'
-          : `Role ${row.role} cannot be assigned an inspection`,
-      );
-    }
 
     if (!row.in_scope) {
       throw inspectorInvalid(`The account has no active access to site ${siteId}`);

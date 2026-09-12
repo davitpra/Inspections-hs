@@ -307,7 +307,7 @@ describe('scopeOptions', () => {
       { ...SITES[1]!, deactivated_at: '2026-08-21T00:00:00.000Z' },
     ]);
 
-    expect(options).toEqual([{ label: 'St. Thomas', siteIds: [ST_THOMAS] }]);
+    expect(options).toEqual([{ label: 'St. Thomas', siteId: ST_THOMAS }]);
   });
 });
 

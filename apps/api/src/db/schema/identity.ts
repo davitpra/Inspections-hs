@@ -92,12 +92,6 @@ export const appUser = pgTable(
     // Exactamente uno de ROLES, forzado por CHECK en el motor.
     role: text('role').notNull().$type<Role>(),
 
-    // El asiento en el JHSC (0035): el momento en que esta cuenta se sentó en el
-    // comité, o nulo. Es una POSICIÓN que la cuenta ocupa, no un rol que lleva — el
-    // `CHECK` de abajo la reserva para los roles administrativos, porque un
-    // `jhsc_member` ya está en el comité por su rol.
-    jhscSeatGrantedAt: timestamp('jhsc_seat_granted_at', { withTimezone: true }),
-
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 
     deactivatedAt: timestamp('deactivated_at', { withTimezone: true }),
@@ -105,7 +99,6 @@ export const appUser = pgTable(
   (table) => [
     check('app_user_role_check', sql`${table.role} IN ('hs_coordinator', 'jhsc_member', 'management')`),
 
-    check('app_user_jhsc_seat_check', sql`${table.jhscSeatGrantedAt} IS NULL OR ${table.role} IN ('hs_coordinator', 'management')`),
   ],
 );
 
@@ -232,7 +225,7 @@ export type PersonUpdate = Partial<
  * se reasigna de una persona a otra.
  */
 export type AppUserUpdate = Partial<
-  Pick<AppUser, 'email' | 'role' | 'deactivatedAt' | 'jhscSeatGrantedAt'>
+  Pick<AppUser, 'email' | 'role' | 'deactivatedAt'>
 >;
 
 /** Lo único mutable de una fila de alcance. Revocar es esto. */

@@ -4,7 +4,7 @@ const request = vi.hoisted(() => vi.fn());
 
 vi.mock('./client', () => ({ sessionClient: { request } }));
 
-const { importRoster } = await import('./roster');
+const { demoteToJhscMember, importRoster } = await import('./roster');
 
 describe('importRoster', () => {
   beforeEach(() => request.mockReset());
@@ -36,5 +36,31 @@ describe('importRoster', () => {
     request.mockResolvedValue({ ok: true, value: { rows_read: '2' } });
 
     await expect(importRoster({ file: new File(['x'], 'people.csv') })).rejects.toThrow();
+  });
+});
+
+describe('demoteToJhscMember', () => {
+  beforeEach(() => request.mockReset());
+
+  it('envía el acto literal a PATCH /accounts/:id', async () => {
+    const response = {
+      account: {
+        id: '33333333-3333-4333-8333-333333333333',
+        role: 'jhsc_member',
+        active: true,
+        can_sign_in: true,
+        email: 'ada.reid@example.com',
+      },
+    };
+    request.mockResolvedValue({ ok: true, value: response });
+
+    await expect(
+      demoteToJhscMember({ userId: '33333333-3333-4333-8333-333333333333' }),
+    ).resolves.toEqual(response);
+
+    expect(request).toHaveBeenCalledWith(
+      '/accounts/33333333-3333-4333-8333-333333333333',
+      expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ demote_to: 'jhsc_member' }) }),
+    );
   });
 });

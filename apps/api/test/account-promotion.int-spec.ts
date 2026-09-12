@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { AccountException } from '../src/auth/account.errors';
 import { AccountService } from '../src/auth/account.service';
+import { InspectionsService } from '../src/inspections/inspections.service';
 import { registerSite } from './helpers/catalog';
 import { auditEntries, createAuthStack, type AuthStack } from './helpers/auth';
 import { createAccount } from './helpers/identity';
@@ -83,6 +84,22 @@ describe('promoción de una cuenta a hs_coordinator', () => {
       expect(entry?.payload['previous_role']).toBe('jhsc_member');
       expect(entry?.payload['role']).toBe('hs_coordinator');
     }
+  });
+
+  it('un miembro promovido sigue siendo candidato sin un acto de asiento', async () => {
+    const inspections = new InspectionsService(stack.db);
+    const target = await createAccount(db.app, { role: 'jhsc_member', siteIds: [SITE_A] });
+    const session = { userId: managerId, role: 'management' as const, siteIds: [SITE_A] };
+
+    expect(
+      (await inspections.listInspectorCandidates(session, SITE_A)).map((row) => row.id),
+    ).toContain(target.accountId);
+
+    await accounts.update(asManager(), target.accountId, promotion);
+
+    expect(
+      (await inspections.listInspectorCandidates(session, SITE_A)).map((row) => row.id),
+    ).toContain(target.accountId);
   });
 
   it('rechaza la promoción al coordinador y al miembro', async () => {

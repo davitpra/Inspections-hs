@@ -57,8 +57,8 @@ export const inspectionSchedule = pgTable(
       .references(() => template.id),
 
     // Nulable: una regla puede existir antes de que el coordinador decida quién la
-    // ejecuta. Que el inspector sea `jhsc_member` y tenga alcance vigente en el sitio
-    // lo valida el servicio: depende de `user_site_scope`, y una FK no sabe expresar
+    // ejecuta. Que el inspector sea una cuenta activa con alcance vigente en el sitio lo
+    // valida el servicio: depende de `user_site_scope`, y una FK no sabe expresar
     // "y además su alcance vigente incluye este sitio".
     defaultInspectorId: uuid('default_inspector_id').references(() => appUser.id),
 

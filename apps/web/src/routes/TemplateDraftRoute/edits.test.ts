@@ -21,6 +21,7 @@ import {
   setOption,
   setPrompt,
   setRequired,
+  setSectionLocation,
 } from './edits';
 import { newKey, newKeys } from './newKey';
 
@@ -44,6 +45,18 @@ function document(): TemplateDraftDocument {
         ],
       },
     ],
+  };
+}
+
+function locatedDocument(title: string, code: string): TemplateDraftDocument {
+  const draft = document();
+
+  return {
+    sections: draft.sections.map((section, index) =>
+      index === 0
+        ? { ...section, section_title: title, organization_location_code: code }
+        : section,
+    ),
   };
 }
 
@@ -367,6 +380,63 @@ describe('los campos que no dependen del tipo', () => {
 
     expect(renamed.sections[0]?.section_title).toBe('Receiving');
     expect(renamed.sections[0]?.section_key).toBe('intake');
+  });
+
+  it('siembra el nombre elegido cuando el título está vacío', () => {
+    const changed = setSectionLocation(
+      locatedDocument('', 'dock'),
+      0,
+      'boiler',
+      'Boiler room',
+      'Shipping dock',
+    );
+
+    expect(changed.sections[0]).toMatchObject({
+      organization_location_code: 'boiler',
+      section_title: 'Boiler room',
+    });
+  });
+
+  it('re-siembra el nombre elegido cuando el título sigue siendo el anterior', () => {
+    const changed = setSectionLocation(
+      locatedDocument('Shipping dock', 'dock'),
+      0,
+      'boiler',
+      'Boiler room',
+      'Shipping dock',
+    );
+
+    expect(changed.sections[0]?.section_title).toBe('Boiler room');
+  });
+
+  it('preserva un título escrito por el autor al cambiar la ubicación', () => {
+    const changed = setSectionLocation(
+      locatedDocument('Docks and aisles', 'dock'),
+      0,
+      'boiler',
+      'Boiler room',
+      'Shipping dock',
+    );
+
+    expect(changed.sections[0]).toMatchObject({
+      organization_location_code: 'boiler',
+      section_title: 'Docks and aisles',
+    });
+  });
+
+  it('preserva un título escrito por el autor al quitar la ubicación', () => {
+    const changed = setSectionLocation(
+      locatedDocument('Docks and aisles', 'dock'),
+      0,
+      '',
+      '',
+      'Shipping dock',
+    );
+
+    expect(changed.sections[0]).toMatchObject({
+      organization_location_code: '',
+      section_title: 'Docks and aisles',
+    });
   });
 
   it('setFinding escribe y elimina el bloque sin mutar el documento', () => {

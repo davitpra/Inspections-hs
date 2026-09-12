@@ -332,18 +332,21 @@ como superado. No es edición: es entrada adicional.
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Miembro JHSC**      | Ejecuta inspecciones de su sitio y las acciones que tiene asignadas. No administra la plataforma ni reporta incidentes en tercera persona.             |
 | **Coordinador de HS** | Administra roster, cuentas, plantillas, catálogo y programación. Reporta incidentes y hallazgos manuales. Recibe el primer escalamiento de una acción. |
-| **Gerencia**          | Tiene la misma autoridad administrativa que el coordinador, lectura completa y dashboards. Ejecuta las acciones que tiene asignadas, puede promover un miembro JHSC a coordinador y recibe el escalamiento final. |
+| **Gerencia**          | Tiene la misma autoridad administrativa que el coordinador, lectura completa y dashboards. Ejecuta las acciones que tiene asignadas, puede promover un miembro JHSC a coordinador, degradar un coordinador a miembro JHSC y recibe el escalamiento final. |
 
-La promoción de `jhsc_member` a `hs_coordinator` es el único cambio de rol expuesto y
-pertenece exclusivamente a `management`. No concede un asiento en el JHSC como efecto lateral.
+La promoción de `jhsc_member` a `hs_coordinator` y su inversa, la degradación a
+`jhsc_member`, son los únicos cambios de rol expuestos y pertenecen exclusivamente a
+`management`. La membresía del JHSC sigue al rol: las cuentas
+activas `jhsc_member`, `hs_coordinator` y `management` pertenecen al comité.
 
 **No existe un permiso de "no editar".** Nadie edita nada: la inmutabilidad es una propiedad
 global del sistema, no un atributo de rol. Eliminar esa frase del vocabulario del proyecto.
 
 ### Nota de vocabulario
 
-Los 7 miembros del JHSC son todos **worker reps certificados** y son los únicos que ejecutan
-inspecciones. Por lo tanto "inspector" y "miembro del JHSC" son la misma cosa en este sistema.
+Los 7 miembros del JHSC son todos **worker reps certificados**. Las cuentas activas de los tres
+roles pueden ejecutar inspecciones cuando tienen alcance vigente sobre el sitio. Por lo tanto
+"inspector" nombra a la cuenta asignada y "miembro del JHSC" nombra su pertenencia derivada del rol.
 **Elegir un solo término y usarlo en tablas, endpoints y UI.** Recomendación: `jhsc_member`
 como rol, `inspector_id` como campo dentro de la inspección.
 

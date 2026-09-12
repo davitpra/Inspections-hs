@@ -22,11 +22,14 @@ export type AccountErrorCode =
   | 'account_already_active'
   | 'account_role_not_removable'
   | 'account_already_inactive'
-  | 'account_role_without_jhsc_seat'
   | 'account_promotion_forbidden'
   | 'account_role_not_promotable'
   | 'account_promotion_inactive'
-  | 'account_promotion_self';
+  | 'account_promotion_self'
+  | 'account_demotion_forbidden'
+  | 'account_role_not_demotable'
+  | 'account_demotion_inactive'
+  | 'account_demotion_self';
 
 export class AccountException extends HttpException {
   constructor(
@@ -126,23 +129,6 @@ export const accountAlreadyInactive = (): AccountException =>
     HttpStatus.CONFLICT,
   );
 
-/**
- * `PATCH /accounts/:id` con `jhsc_seat` sobre un rol que no puede ocupar un asiento
- * (`coordinator-jhsc-seat`): el `CHECK` de 0035 ya frena la escritura, y esto es lo que la
- * traduce a algo que el coordinador pueda leer — un 23514 crudo no dice qué se pidió mal.
- *
- * Un `jhsc_member` no necesita asiento porque su rol YA es el asiento. Los dos roles
- * administrativos sí pueden llevarlo.
- */
-export const accountRoleWithoutJhscSeat = (role: string): AccountException =>
-  new AccountException(
-    'account_role_without_jhsc_seat',
-    role === 'jhsc_member'
-      ? 'A JHSC member already sits on the committee by role'
-      : `Role ${role} cannot hold a seat on the JHSC`,
-    HttpStatus.CONFLICT,
-  );
-
 export const accountPromotionForbidden = (): AccountException =>
   new AccountException(
     'account_promotion_forbidden',
@@ -168,5 +154,33 @@ export const accountPromotionSelf = (): AccountException =>
   new AccountException(
     'account_promotion_self',
     'You cannot promote your own account to hs_coordinator',
+    HttpStatus.FORBIDDEN,
+  );
+
+export const accountDemotionForbidden = (): AccountException =>
+  new AccountException(
+    'account_demotion_forbidden',
+    'Only management can demote an account to jhsc_member',
+    HttpStatus.FORBIDDEN,
+  );
+
+export const accountRoleNotDemotable = (role: string): AccountException =>
+  new AccountException(
+    'account_role_not_demotable',
+    `Role ${role} cannot be demoted to jhsc_member`,
+    HttpStatus.CONFLICT,
+  );
+
+export const accountDemotionInactive = (): AccountException =>
+  new AccountException(
+    'account_demotion_inactive',
+    'An inactive account cannot be demoted to jhsc_member',
+    HttpStatus.CONFLICT,
+  );
+
+export const accountDemotionSelf = (): AccountException =>
+  new AccountException(
+    'account_demotion_self',
+    'You cannot demote your own account to jhsc_member',
     HttpStatus.FORBIDDEN,
   );

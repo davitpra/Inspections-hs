@@ -193,7 +193,6 @@ describe('accountSchema', () => {
       role: 'management',
       deactivated_at: null,
       active: true,
-      jhsc_seat: false,
       scope: [{ site_id: SITE_ID, granted_at: '2026-08-07T12:00:00Z', revoked_at: null }],
     });
 
@@ -208,7 +207,6 @@ describe('accountSchema', () => {
       role: 'management',
       deactivated_at: null,
       active: true,
-      jhsc_seat: false,
       scope: [],
       password_hash: 'no',
     });
@@ -257,7 +255,6 @@ describe('personWithAccountSchema', () => {
         role: 'jhsc_member',
         active: true,
         can_sign_in: false,
-        jhsc_seat: false,
         email: 'ada.reid@example.com',
       },
     });
@@ -271,7 +268,6 @@ describe('personWithAccountSchema', () => {
       role: 'jhsc_member',
       active: true,
       can_sign_in: false,
-      jhsc_seat: false,
     });
 
     expect(result.success).toBe(false);
@@ -283,7 +279,6 @@ describe('personWithAccountSchema', () => {
       role: 'jhsc_member',
       active: true,
       can_sign_in: false,
-      jhsc_seat: false,
       email: 'ada.reid@example.com',
       scope: [],
     });
@@ -333,7 +328,6 @@ describe('createAccountResponseSchema', () => {
         role: 'jhsc_member',
         active: true,
         can_sign_in: false,
-        jhsc_seat: false,
         email: 'ada.reid@example.com',
       },
     });
@@ -348,7 +342,6 @@ describe('createAccountResponseSchema', () => {
         role: 'jhsc_member',
         active: true,
         can_sign_in: false,
-        jhsc_seat: false,
         email: 'ada.reid@example.com',
       },
       invitation: { token: 'a-one-time-token', expiresAt: '2026-08-17T12:00:00Z' },
@@ -434,7 +427,6 @@ describe('accountDetailSchema — la lectura de una cuenta (reissue-invitation-l
       role: 'jhsc_member',
       active: true,
       can_sign_in: false,
-      jhsc_seat: false,
       email: 'ada.reid@example.com',
     });
 
@@ -447,7 +439,6 @@ describe('accountDetailSchema — la lectura de una cuenta (reissue-invitation-l
       role: 'jhsc_member',
       active: true,
       can_sign_in: false,
-      jhsc_seat: false,
       email: 'ada.reid@example.com',
       scope: [],
     });
@@ -488,15 +479,32 @@ describe('updateAccountRequestSchema — el pedido de PATCH /accounts/:id (desig
     expect(updateAccountRequestSchema.safeParse({ promote_to: 'management' }).success).toBe(false);
   });
 
+  it('acepta únicamente la degradación literal a miembro del JHSC', () => {
+    expect(updateAccountRequestSchema.safeParse({ demote_to: 'jhsc_member' }).success).toBe(true);
+    expect(updateAccountRequestSchema.safeParse({ demote_to: 'hs_coordinator' }).success).toBe(false);
+  });
+
   it('rechaza combinar la promoción con otro acto', () => {
     for (const other of [
       { deactivated: true as const },
       { email: 'ada.reid@example.com' },
       { invite: true },
-      { jhsc_seat: true },
     ]) {
       expect(
         updateAccountRequestSchema.safeParse({ promote_to: 'hs_coordinator', ...other }).success,
+      ).toBe(false);
+    }
+  });
+
+  it('rechaza combinar la degradación con otro acto', () => {
+    for (const other of [
+      { promote_to: 'hs_coordinator' as const },
+      { deactivated: true as const },
+      { email: 'ada.reid@example.com' },
+      { invite: true },
+    ]) {
+      expect(
+        updateAccountRequestSchema.safeParse({ demote_to: 'jhsc_member', ...other }).success,
       ).toBe(false);
     }
   });
@@ -535,29 +543,9 @@ describe('updateAccountRequestSchema — el pedido de PATCH /accounts/:id (desig
     expect(result.success).toBe(false);
   });
 
-  /**
-   * El asiento en el JHSC va en los DOS sentidos, y ahí está la diferencia con
-   * `deactivated`: sentarse y levantarse son el mismo acto reversible sobre la misma
-   * columna, no dos intenciones con rutas distintas.
-   */
-  it('acepta sentarse en el JHSC, solo', () => {
-    expect(updateAccountRequestSchema.safeParse({ jhsc_seat: true }).success).toBe(true);
-  });
-
-  it('acepta levantarse del JHSC, solo', () => {
-    expect(updateAccountRequestSchema.safeParse({ jhsc_seat: false }).success).toBe(true);
-  });
-
-  it('rechaza el asiento combinado con la baja, el correo o el link', () => {
-    for (const other of [
-      { deactivated: true as const },
-      { email: 'ada.reid@example.com' },
-      { invite: true },
-    ]) {
-      const result = updateAccountRequestSchema.safeParse({ jhsc_seat: true, ...other });
-
-      expect(result.success).toBe(false);
-    }
+  it('rechaza pedir o retirar un asiento JHSC', () => {
+    expect(updateAccountRequestSchema.safeParse({ jhsc_seat: true }).success).toBe(false);
+    expect(updateAccountRequestSchema.safeParse({ jhsc_seat: false }).success).toBe(false);
   });
 });
 

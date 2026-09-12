@@ -35,10 +35,10 @@ import { useSortable } from "./useSortable";
  * cambiar a qué parte del recorrido pertenece la pregunta, y para eso está duplicarla donde
  * va y quitarla de acá.
  *
- * EL TÍTULO NO SE ESCRIBE, SE ELIGE. Sale del catálogo al elegir la ubicación, y por eso no
- * hay campo de texto ni el lápiz que dibuja el mockup: dos secciones con el mismo lugar y
- * distinto nombre serían dos nombres para un lugar que el catálogo definió una sola vez, y
- * el hallazgo que sale de acá se agrupa por la ubicación, no por el texto.
+ * EL TÍTULO SE PUEDE ESCRIBIR. Al elegir la ubicación, el catálogo propone un valor inicial,
+ * pero el autor puede reemplazarlo: dos secciones con el mismo lugar pueden describir tramos
+ * distintos del recorrido. El hallazgo que sale de acá se agrupa por la ubicación, no por el
+ * texto.
  *
  * LAS DOS CAJAS POR PLANTA SON DE SOLO LECTURA, y esa es la lectura correcta del mockup.
  * Una sección nombra UNA ubicación compartida; que en St. Thomas eso sea «Shipping dock» y
@@ -56,6 +56,7 @@ export function SectionCard({
   siteIds,
   stranded,
   sortable,
+  onTitle,
   onLocation,
   onMove,
   onDuplicate,
@@ -72,6 +73,7 @@ export function SectionCard({
   siteIds: readonly string[];
   stranded: boolean;
   sortable: ReturnType<typeof useSortable>;
+  onTitle: (title: string) => void;
   onLocation: (code: string) => void;
   onMove: (delta: number) => void;
   onDuplicate: () => void;
@@ -137,7 +139,7 @@ export function SectionCard({
         .join(" ")}
       data-sortable-group={sortable.group}
       data-sortable-index={index}
-      aria-labelledby={`${controlId}-section-title`}
+      aria-label={label}
     >
       <div className="builder__section-head">
         <button
@@ -155,9 +157,15 @@ export function SectionCard({
 
         <div className="builder__section-title">
           <div className="builder__section-title-row">
-            <h2 id={`${controlId}-section-title`}>
-              {section.section_title.trim() || `Section ${index + 1}`}
-            </h2>
+            <input
+              id={`${controlId}-section-title`}
+              type="text"
+              maxLength={120}
+              aria-label={`Section title for ${label}`}
+              value={section.section_title}
+              placeholder={`Section ${index + 1}`}
+              onChange={(event) => onTitle(event.target.value)}
+            />
             {stranded ? (
               <span className="status-pill status-pill--not-ready">
                 Needs mapping

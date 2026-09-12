@@ -66,8 +66,8 @@ pnpm demo:data
 Deja el entorno listo y dice con qué credenciales entrar. Concretamente: crea un
 `jhsc_member` con contraseña conocida, siembra roster, abre el período corriente
 —encolando el trabajo real, `inspections.open-period`— y le asigna la inspección de St.
-Thomas. El rol importa: `requireInspector()` rechaza cualquier otro, porque §4 dice que
-los miembros del JHSC son los únicos que ejecutan inspecciones.
+Thomas. La cuenta está activa y tiene alcance en el sitio: `requireInspector()` comprueba
+esas dos condiciones para cualquier rol vigente.
 
 Es idempotente: se corre las veces que haga falta.
 
@@ -151,7 +151,7 @@ Necesita `pnpm demo:data` corrido antes, la API arriba y MinIO arriba (sube foto
 verdad). Es idempotente.
 
 Usa las dos cuentas y hacen falta las dos: el coordinador abre acciones,
-investiga y genera el reporte, y el `jhsc_member` es el único que ejecuta inspecciones.
+investiga y genera el reporte, y la cuenta de demo `jhsc_member` ejecuta las inspecciones.
 **No cambia ninguna contraseña.** La del inspector sale de `DEMO_PASSWORD` —es la cuenta
 que crea `demo:data`—; la del coordinador, de `DEMO_COORDINATOR_PASSWORD`, porque esa
 cuenta es real y puede tener ya la suya:
@@ -220,9 +220,8 @@ están agrupadas por función y no por rol a propósito: varias pantallas devuel
 según quién mire —`/incidents` es el caso claro— y describirlas por rol haría parecer que
 el filtro está en el componente.
 
-**El recorrido de una inspección.** Solo lo hace un `jhsc_member`: §4 dice que los
-miembros del JHSC son los únicos que ejecutan inspecciones, y `requireInspector()` lo
-comprueba.
+**El recorrido de una inspección.** Lo hace cualquier cuenta activa con alcance en el sitio:
+la membresía del JHSC sigue al rol y `requireInspector()` comprueba actividad y alcance.
 
 | Ruta                       | Qué es                                                                                                                                                  |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |

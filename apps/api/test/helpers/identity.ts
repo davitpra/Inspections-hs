@@ -32,8 +32,6 @@ export interface AccountSpec {
   personSiteId?: string;
   /** El alcance vigente de la cuenta. */
   siteIds: readonly string[];
-  /** El asiento en el JHSC. Solo válido para un rol administrativo. */
-  jhscSeat?: boolean;
 }
 
 export interface SeededAccount {
@@ -80,16 +78,14 @@ export async function createAccount(pool: Pool, spec: AccountSpec): Promise<Seed
     const personId = one(person.rows).id;
 
     const account = await client.query<{ id: string }>(
-      `INSERT INTO app_user (id, person_id, email, role, jhsc_seat_granted_at)
-       VALUES (coalesce($1::uuid, gen_random_uuid()), $2, $3, $4,
-               CASE WHEN $5 THEN now() ELSE NULL END)
+      `INSERT INTO app_user (id, person_id, email, role)
+       VALUES (coalesce($1::uuid, gen_random_uuid()), $2, $3, $4)
        RETURNING id`,
       [
         spec.id ?? null,
         personId,
         email,
         spec.role ?? 'hs_coordinator',
-        spec.jhscSeat ?? false,
       ],
     );
 

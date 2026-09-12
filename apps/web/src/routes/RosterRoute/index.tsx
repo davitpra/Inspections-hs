@@ -17,6 +17,7 @@ import {
   canAdministerRoster,
   canImportRoster,
   canInviteFromRoster,
+  canDemote,
   canPromote,
 } from "../../permissions/session";
 import { resolveSiteId } from "../../presentation/sites";
@@ -68,6 +69,7 @@ export function RosterRoute(): React.JSX.Element {
       canImportRoster={canImportRoster(account)}
       canAddPersonToRoster={canAddPersonToRoster(account)}
       canPromote={canPromote(account)}
+      canDemote={canDemote(account)}
     />
   );
 }
@@ -83,12 +85,14 @@ function RosterConsole({
   canImportRoster: mayImport,
   canAddPersonToRoster: mayAddPerson,
   canPromote: mayPromote,
+  canDemote: mayDemote,
 }: {
   siteScope: readonly string[];
   canInviteFromRoster: boolean;
   canImportRoster: boolean;
   canAddPersonToRoster: boolean;
   canPromote: boolean;
+  canDemote: boolean;
 }): React.JSX.Element {
   const importTriggerRef = useRef<HTMLButtonElement>(null);
   const addTriggerRef = useRef<HTMLButtonElement>(null);
@@ -181,6 +185,7 @@ function RosterConsole({
         mayInvite={mayInvite}
         mayImport={mayImport}
         mayPromote={mayPromote}
+        mayDemote={mayDemote}
         importTriggerRef={importTriggerRef}
         onImport={() => setImporting(true)}
         onAct={setDialog}

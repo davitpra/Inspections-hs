@@ -998,7 +998,7 @@ async function main() {
         '    hallazgos, acciones e incidentes.',
         '',
         `  ${INSPECTOR.email} / ${password}`,
-        '    jhsc_member. Es el único rol que ejecuta inspecciones: `/` tiene la del mes',
+         '    jhsc_member. La cuenta tiene la inspección del mes: `/` tiene la del mes',
         '    corriente, y de ahí salen preparar, capturar y revisar.',
         '',
         'La bandeja de espera (`/outbox`) vive en el dispositivo y no se puede sembrar:',

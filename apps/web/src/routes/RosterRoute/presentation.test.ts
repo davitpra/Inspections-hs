@@ -6,6 +6,7 @@ import {
   accessCellLabel,
   accountRoleLabel,
   canPromoteAccount,
+  canDemoteAccount,
   canInvite,
   canDeactivateWorker,
   dialogFor,
@@ -14,9 +15,6 @@ import {
   canRemoveJhscAccess,
   emailCellLabel,
   inviteButtonLabel,
-  jhscSeatAction,
-  jhscSeatButtonLabel,
-  jhscSeatButtonText,
   matchesSearch,
   personLabel,
   personInitials,
@@ -24,6 +22,7 @@ import {
   reissueButtonLabel,
   removeButtonLabel,
   removeButtonText,
+  demoteButtonLabel,
   roleCellClass,
   roleCellLabel,
   rosterCounts,
@@ -56,21 +55,17 @@ function person(overrides: Partial<Person> = {}): Person {
  * mira esa columna es `emailCellLabel`. Repetirlo en las treinta filas de abajo escondería
  * los pocos casos donde el correo es el asunto.
  *
- * `jhsc_seat` va por el mismo camino, con default en `false`: es el estado de todas las
- * cuentas menos las de los casos que hablan del asiento, y ponerlo en cada fila diría que
- * importa donde no importa.
  */
 function withAccount(
   overrides: Partial<Person> = {},
-  account: Omit<NonNullable<PersonWithAccount['account']>, 'email' | 'jhsc_seat'> &
-    { jhsc_seat?: boolean } | null = null,
+  account: Omit<NonNullable<PersonWithAccount['account']>, 'email'> | null = null,
 ): PersonWithAccount {
   return {
     ...person(overrides),
     account:
       account === null
         ? null
-        : { ...account, email: EMAIL, jhsc_seat: account.jhsc_seat ?? false },
+        : { ...account, email: EMAIL },
   };
 }
 
@@ -184,7 +179,6 @@ describe('accountRoleLabel', () => {
       active: true,
       can_sign_in: true,
       email: EMAIL,
-      jhsc_seat: false,
     });
 
     expect(label).toBe('JHSC member');
@@ -198,7 +192,6 @@ describe('accountRoleLabel', () => {
       active: true,
       can_sign_in: false,
       email: EMAIL,
-      jhsc_seat: false,
     });
 
     expect(label).toBe('JHSC member (invited)');
@@ -438,6 +431,22 @@ describe('canPromoteAccount', () => {
   });
 });
 
+describe('canDemoteAccount', () => {
+  it('acepta solo una cuenta activa de hs_coordinator', () => {
+    expect(canDemoteAccount(withAccount({}, { id: ACCOUNT_ID, role: 'hs_coordinator', active: true, can_sign_in: true }))).toBe(true);
+    expect(canDemoteAccount(withAccount({}, { id: ACCOUNT_ID, role: 'hs_coordinator', active: false, can_sign_in: true }))).toBe(false);
+    expect(canDemoteAccount(withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true }))).toBe(false);
+    expect(canDemoteAccount(withAccount({}, { id: ACCOUNT_ID, role: 'management', active: true, can_sign_in: true }))).toBe(false);
+    expect(canDemoteAccount(withAccount())).toBe(false);
+  });
+
+  it('nombra la transición y a la persona', () => {
+    expect(demoteButtonLabel(withAccount({}, { id: ACCOUNT_ID, role: 'hs_coordinator', active: true, can_sign_in: true }))).toBe(
+      'Demote Reid, Ada (10472) to JHSC member',
+    );
+  });
+});
+
 describe('removeButtonLabel / removeButtonText', () => {
   it('habla de cancelar la invitación cuando la persona todavía no entró', () => {
     const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: false });
@@ -588,90 +597,21 @@ describe('rosterCounts', () => {
   });
 });
 
-describe('jhscSeatAction — el asiento en el comité (coordinator-jhsc-seat)', () => {
-  const administrator = (role: 'hs_coordinator' | 'management', jhsc_seat: boolean, active = true) =>
-    withAccount({}, { id: ACCOUNT_ID, role, active, can_sign_in: true, jhsc_seat });
-
-  it('ofrece sentarse a la coordinadora que no está en el comité', () => {
-    expect(jhscSeatAction(administrator('hs_coordinator', false))).toBe('grant');
-  });
-
-  it('ofrece levantarse a la coordinadora que sí está', () => {
-    expect(jhscSeatAction(administrator('hs_coordinator', true))).toBe('withdraw');
-  });
-
-  /**
-   * Los dos roles administrativos admiten asiento; un `jhsc_member` ya está en el comité
-   * por su rol.
-   */
-  it('management admite las dos direcciones', () => {
-    expect(jhscSeatAction(administrator('management', false))).toBe('grant');
-    expect(jhscSeatAction(administrator('management', true))).toBe('withdraw');
-  });
-
-  it('no ofrece asiento a un miembro del JHSC', () => {
-    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true });
-    expect(jhscSeatAction(row)).toBeNull();
-  });
-
-  it('no ofrece nada sobre una cuenta a la que se le quitó el acceso', () => {
-    expect(jhscSeatAction(administrator('hs_coordinator', false, false))).toBeNull();
-  });
-
-  it('no ofrece nada sobre una persona sin cuenta', () => {
-    expect(jhscSeatAction(withAccount())).toBeNull();
-  });
-
-  /**
-   * A diferencia de reemitir el link, el asiento NO pregunta por `can_sign_in`: una
-   * coordinadora invitada que todavía no puso su contraseña puede quedar sentada desde ya.
-   */
-  it('ofrece el asiento aunque la cuenta todavía no pueda entrar', () => {
-    const row = withAccount(
-      {},
-      { id: ACCOUNT_ID, role: 'hs_coordinator', active: true, can_sign_in: false, jhsc_seat: false },
-    );
-
-    expect(jhscSeatAction(row)).toBe('grant');
-  });
-});
-
-describe('jhscSeatButtonText / jhscSeatButtonLabel', () => {
-  it('el texto corto dice la dirección', () => {
-    expect(jhscSeatButtonText('grant')).toBe('Join JHSC');
-    expect(jhscSeatButtonText('withdraw')).toBe('Leave JHSC');
-  });
-
-  it('el nombre accesible identifica a la persona, como el de invitar', () => {
-    const row = withAccount();
-
-    expect(jhscSeatButtonLabel(row, 'grant')).toBe('Seat Reid, Ada (10472) on the JHSC');
-    expect(jhscSeatButtonLabel(row, 'withdraw')).toBe(
-      'Remove Reid, Ada (10472) from the JHSC seat',
-    );
-  });
-});
-
-describe('accountRoleLabel — el asiento en la celda Role', () => {
-  const coordinator = (jhsc_seat: boolean, can_sign_in = true) => ({
+describe('accountRoleLabel — la membresía sigue al rol', () => {
+  const coordinator = (can_sign_in = true) => ({
     id: ACCOUNT_ID,
     role: 'hs_coordinator' as const,
     active: true,
     can_sign_in,
     email: EMAIL,
-    jhsc_seat,
   });
 
-  it('nombra el asiento pegado al rol: la columna se lee hacia abajo', () => {
-    expect(accountRoleLabel(coordinator(true))).toBe('H&S coordinator · JHSC seat');
+  it('nombra a la coordinadora con su etiqueta de rol', () => {
+    expect(accountRoleLabel(coordinator())).toBe('H&S coordinator');
   });
 
-  it('la coordinadora sin asiento se lee como siempre', () => {
-    expect(accountRoleLabel(coordinator(false))).toBe('H&S coordinator');
-  });
-
-  it('el asiento no se come el "(invited)"', () => {
-    expect(accountRoleLabel(coordinator(true, false))).toBe('H&S coordinator · JHSC seat (invited)');
+  it('conserva "(invited)" cuando todavía no puede iniciar sesión', () => {
+    expect(accountRoleLabel(coordinator(false))).toBe('H&S coordinator (invited)');
   });
 
   // `jhsc_member` ya dice que está en el comité; un sufijo repetiría lo mismo.
@@ -682,7 +622,6 @@ describe('accountRoleLabel — el asiento en la celda Role', () => {
       active: true,
       can_sign_in: true,
       email: EMAIL,
-      jhsc_seat: false,
     });
 
     expect(label).toBe(ROLE_LABELS.jhsc_member);
@@ -756,23 +695,11 @@ describe('rowActions', () => {
     ]);
   });
 
-  // La dirección del asiento la resuelve `jhscSeatAction` una sola vez, y el botón la
-  // hereda: afordancia y etiqueta no pueden hablar de direcciones distintas.
-  it('la coordinadora ofrece sentarse, y levantarse si ya está sentada', () => {
-    const seated = withAccount(
-      {},
-      { id: ACCOUNT_ID, role: 'hs_coordinator', active: true, can_sign_in: true, jhsc_seat: true },
-    );
-    const unseated = withAccount(
-      {},
-      { id: ACCOUNT_ID, role: 'hs_coordinator', active: true, can_sign_in: true },
-    );
+  it('management ofrece degradar al coordinador activo', () => {
+    const coordinator = withAccount({}, { id: ACCOUNT_ID, role: 'hs_coordinator', active: true, can_sign_in: true });
 
-    expect(rowActions(seated, true)).toEqual([
-      expect.objectContaining({ kind: 'seat', seat: 'withdraw', text: 'Leave JHSC' }),
-    ]);
-    expect(rowActions(unseated, true)).toEqual([
-      expect.objectContaining({ kind: 'seat', seat: 'grant', text: 'Join JHSC' }),
+    expect(rowActions(coordinator, true, false, true)).toEqual([
+      expect.objectContaining({ kind: 'demote', text: 'Demote' }),
     ]);
   });
 
@@ -806,7 +733,7 @@ describe('rowActions', () => {
 /**
  * Lo que el modal se lleva de la fila al abrirse. Es un snapshot a propósito: la mutación
  * invalida el roster y la fila vuelve con otro estado, así que lo que decide el TEXTO de la
- * pregunta —`canSignIn`, la dirección del asiento— no se puede releer después.
+ * pregunta —por ejemplo `canSignIn`— no se puede releer después.
  */
 describe('dialogFor', () => {
   const only = (row: PersonWithAccount) => dialogFor(row, rowActions(row, true)[0]!);
@@ -857,20 +784,6 @@ describe('dialogFor', () => {
     });
   });
 
-  it('el asiento copia la dirección que la fila ofrecía', () => {
-    const seated = withAccount(
-      {},
-      { id: ACCOUNT_ID, role: 'hs_coordinator', active: true, can_sign_in: true, jhsc_seat: true },
-    );
-
-    expect(only(seated)).toEqual({
-      kind: 'seat',
-      userId: ACCOUNT_ID,
-      label: personLabel(seated),
-      action: 'withdraw',
-    });
-  });
-
   it('la promoción viaja con el id de la cuenta', () => {
     const member = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true });
     const promotion = rowActions(member, true, true).find((action) => action.kind === 'promote')!;
@@ -879,6 +792,17 @@ describe('dialogFor', () => {
       kind: 'promote',
       userId: ACCOUNT_ID,
       label: personLabel(member),
+    });
+  });
+
+  it('la degradación viaja con el id de la cuenta', () => {
+    const coordinator = withAccount({}, { id: ACCOUNT_ID, role: 'hs_coordinator', active: true, can_sign_in: true });
+    const demotion = rowActions(coordinator, true, false, true).find((action) => action.kind === 'demote')!;
+
+    expect(dialogFor(coordinator, demotion)).toEqual({
+      kind: 'demote',
+      userId: ACCOUNT_ID,
+      label: personLabel(coordinator),
     });
   });
 });

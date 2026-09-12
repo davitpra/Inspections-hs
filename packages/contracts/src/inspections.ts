@@ -7,7 +7,7 @@ import { periodMonthsSchema, periodStatusSchema } from './periods.js';
  *
  * Este archivo es la mitad que ve el cliente. Lo que NO puede validar es todo lo que
  * depende del estado de la base: que la plantilla tenga una versión publicada, que el
- * inspector sea `jhsc_member` con alcance vigente en la planta, que el período no esté
+ * inspector sea una cuenta activa con alcance vigente en la planta, que el período no esté
  * ya abierto. Eso son claves foráneas, únicos parciales y triggers en
  * `apps/api/drizzle/0008_inspection_scheduling.sql`, más las comprobaciones del
  * servicio. Zod valida la forma; el motor valida las referencias.
@@ -259,8 +259,8 @@ export const pendingInspectionSchema = z.strictObject({
 export type PendingInspection = z.infer<typeof pendingInspectionSchema>;
 
 /**
- * Una cuenta elegible para recibir una inspección en una planta: `jhsc_member`, no
- * desactivada, con alcance vigente en ese sitio.
+ * Una cuenta elegible para recibir una inspección en una planta: activa y con alcance
+ * vigente en ese sitio, sin excluir ningún rol.
  *
  * **`id` es `app_user.id`, NO `person.id`.** Es lo que viaja como `inspector_id`, y es
  * la razón entera de que este esquema exista al lado de `personOptionSchema`, que tiene
@@ -268,9 +268,8 @@ export type PendingInspection = z.infer<typeof pendingInspectionSchema>;
  * asignación, y el error no diría por qué. Los dos esquemas se parecen; lo que
  * identifican no.
  *
- * Sin `email` y sin `role`: el rol ya está implícito —si está en esta lista es
- * `jhsc_member`— y el correo no hace falta para elegir a alguien. Mismo criterio de
- * divulgación mínima que el roster del paquete de campo, que tampoco lleva perfil.
+ * Sin `email` y sin `role`: el correo no hace falta para elegir a alguien. Mismo criterio
+ * de divulgación mínima que el roster del paquete de campo, que tampoco lleva perfil.
  *
  * Los tres campos de nombre son NULOS cuando la fila de `person` no es visible para
  * quien lee. La elegibilidad se define sobre `user_site_scope` y el nombre vive en

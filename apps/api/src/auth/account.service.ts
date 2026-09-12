@@ -17,6 +17,9 @@ import {
   accountAlreadyActive,
   accountAlreadyExists,
   accountAlreadyInactive,
+  accountDemotionForbidden,
+  accountDemotionInactive,
+  accountDemotionSelf,
   accountEmailTaken,
   accountForbidden,
   accountNotFound,
@@ -25,9 +28,10 @@ import {
   accountPromotionForbidden,
   accountPromotionInactive,
   accountPromotionSelf,
+  accountRoleNotDemotable,
   accountRoleNotPromotable,
   accountRoleNotRemovable,
-  accountRoleWithoutJhscSeat,
+  type AccountException,
 } from './account.errors';
 import { revokeCredentials } from './credential.service';
 import { InvitationService, revokePending } from './invitation.service';
@@ -104,10 +108,6 @@ export class AccountService {
         active: true,
         can_sign_in: false,
         email: request.email,
-        // Un alta nunca sienta a nadie en el comité, y una cuenta que revive vuelve sin
-        // asiento: `revive()` no lo restituye porque quitar el acceso lo dejó donde estaba
-        // y el rol que revive es `jhsc_member`, que no puede llevarlo.
-        jhsc_seat: false,
       };
 
       if (!request.invite) return { account };
@@ -147,19 +147,14 @@ export class AccountService {
       active: row.active,
       can_sign_in: row.can_sign_in,
       email: row.email,
-      jhsc_seat: row.jhsc_seat,
     };
   }
 
   /**
-   * `PATCH /accounts/:id` — administrar el ACCESO de una cuenta que ya tiene su rol.
-   * Tres actos que comparten transacción y guardas: reemitir el link corrigiendo el correo
-   * (design D5), quitar el acceso (`remove-jhsc-access-from-roster`) y sentar a una cuenta
-   * de coordinador en el JHSC o levantarla (`coordinator-jhsc-seat`).
-   *
-   * **El asiento va PRIMERO junto con la baja, antes de la guarda de `can_sign_in`**: los
-   * dos actúan sobre cuentas que entran todos los días, que es justo lo que aquella guarda
-   * niega para el correo y el link.
+   * `PATCH /accounts/:id` — administrar el ACCESO y el rol de una cuenta existente.
+   * Cuatro actos que comparten transacción y guardas: reemitir el link corrigiendo el correo
+   * (design D5), quitar el acceso (`remove-jhsc-access-from-roster`), promover a coordinador y
+   * devolver un coordinador a miembro del JHSC.
    *
    * **Por acá NO se devuelve el acceso.** Volver a darle acceso a alguien es invitarlo, y
    * eso es `POST /accounts`, que revive la cuenta que la persona ya tenía. Un
@@ -174,7 +169,7 @@ export class AccountService {
    * email y al `invite`, que son los que la necesitan.
    *
    * Un solo `COMMIT`, mismo criterio que `create()` con `invite: true` (design D4 de la
-   * change archivada): ninguno de los tres actos deja un estado a medias si otro falla.
+     * change archivada): ninguno de los dos actos deja un estado a medias si otro falla.
    */
   async update(
     actor: SessionScope & { role: Role },
@@ -185,18 +180,22 @@ export class AccountService {
     if (request.promote_to !== undefined && actor.role !== 'management') {
       throw accountPromotionForbidden();
     }
+    if (request.demote_to !== undefined && actor.role !== 'management') {
+      throw accountDemotionForbidden();
+    }
 
     const result = await asAdministrator(this.db, actor.userId, async (client) => {
       if (request.promote_to !== undefined) {
         return promote(client, actor.userId, actor.siteIds, accountId);
+      }
+      if (request.demote_to !== undefined) {
+        return demote(client, actor.userId, actor.siteIds, accountId);
       }
 
       const existing = await findAccountDetail(client, accountId);
       if (!existing) throw accountNotFound();
 
       if (request.deactivated) return withdraw(client, existing);
-
-      if (request.jhsc_seat !== undefined) return seat(client, existing, request.jhsc_seat);
 
       if (request.email !== undefined || request.invite) {
         if (existing.can_sign_in) throw accountAlreadyActive();
@@ -215,7 +214,6 @@ export class AccountService {
         role: existing.role as CreateAccountResponse['account']['role'],
         active: existing.active,
         can_sign_in: existing.can_sign_in,
-        jhsc_seat: existing.jhsc_seat,
         // El email que la cuenta tiene DESPUÉS de este PATCH: `existing` se leyó antes
         // del UPDATE de arriba, así que devolverlo tal cual reportaría el viejo.
         email: request.email ?? existing.email,
@@ -294,9 +292,6 @@ async function withdraw(
         active: false,
         can_sign_in: false,
         email: existing.email,
-        // Literal y no `existing.jhsc_seat`: acá el rol es `jhsc_member` —lo acaba de
-        // comprobar la guarda de arriba— y el `CHECK` de 0035 le prohíbe llevar asiento.
-        jhsc_seat: false,
       },
     },
     withdrawn: true,
@@ -304,67 +299,7 @@ async function withdraw(
 }
 
 /**
- * Sentar a una cuenta administrativa en el JHSC, o levantarla
- * (`coordinator-jhsc-seat`, design D4/D5).
- *
- * **UN acto reversible sobre UNA columna, en los dos sentidos**, y por eso es una sola
- * función con un booleano y no dos como `withdraw`/`revive`. La asimetría de aquellas es
- * real —devolver el acceso es invitar de nuevo, con su alcance y su link—, y acá no la
- * hay: la coordinadora se sienta y se levanta del mismo comité.
- *
- * **NO revoca sesiones ni credenciales**, al revés que `withdraw`, y esa diferencia es el
- * punto entero del asiento: no da ni quita acceso. Revocar la sesión al sentarse echaría a
- * la coordinadora de la pantalla desde la que apretó el botón.
- *
- * **NO reasigna nada al levantarse.** Las inspecciones ya asignadas conservan su
- * `inspector_id` y siguen en los pendientes de esa cuenta: el asiento gobierna lo que se
- * ofrece y lo que se acepta de acá en más, no lo que ya se decidió (design D7).
- *
- * `CASE WHEN ... THEN now() ELSE NULL END` en una sola escritura: el UPDATE no corre si el
- * asiento ya está como se pide, y así `jhsc_seat_granted_at` conserva el momento en que la
- * cuenta se sentó de verdad, en vez de correrse con cada clic repetido.
- */
-async function seat(
-  client: PoolClient,
-  existing: {
-    id: string;
-    role: Role;
-    active: boolean;
-    can_sign_in: boolean;
-    email: string;
-    jhsc_seat: boolean;
-  },
-  granted: boolean,
-): Promise<{ response: CreateAccountResponse; withdrawn: boolean }> {
-  if (!isAdministrator(existing.role)) throw accountRoleWithoutJhscSeat(existing.role);
-  if (!existing.active) throw accountAlreadyInactive();
-
-  if (existing.jhsc_seat !== granted) {
-    await client.query(
-      `UPDATE app_user
-          SET jhsc_seat_granted_at = CASE WHEN $2 THEN now() ELSE NULL END
-        WHERE id = $1`,
-      [existing.id, granted],
-    );
-  }
-
-  return {
-    response: {
-      account: {
-        id: existing.id,
-        role: existing.role as CreateAccountResponse['account']['role'],
-        active: existing.active,
-        can_sign_in: existing.can_sign_in,
-        email: existing.email,
-        jhsc_seat: granted,
-      },
-    },
-    withdrawn: false,
-  };
-}
-
-/**
- * La única mutación de rol expuesta. Corre dentro de `asAdministrator`, por lo que el
+ * Las mutaciones de rol expuestas. Corren dentro de `asAdministrator`, por lo que el
  * trigger existente firma el cambio y lo distribuye a cada cadena alcanzada por la
  * cuenta objetivo; el endpoint no escribe auditoría por su cuenta.
  */
@@ -374,37 +309,13 @@ async function promote(
   actorSiteIds: readonly string[],
   accountId: string,
 ): Promise<{ response: CreateAccountResponse; withdrawn: boolean }> {
-  const { rows } = await client.query<{
-    id: string;
-    role: Role;
-    active: boolean;
-    can_sign_in: boolean;
-    email: string;
-    jhsc_seat: boolean;
-    in_scope: boolean;
-  }>(
-    `SELECT u.id, u.role, hs_account_is_active(u) AS active, u.email,
-            EXISTS (
-              SELECT 1 FROM app_credential c WHERE c.user_id = u.id AND c.revoked_at IS NULL
-            ) AS can_sign_in,
-            u.jhsc_seat_granted_at IS NOT NULL AS jhsc_seat,
-            NOT EXISTS (
-              SELECT 1
-                FROM user_site_scope target_scope
-               WHERE target_scope.user_id = u.id
-                 AND target_scope.revoked_at IS NULL
-                  AND NOT (target_scope.site_id = ANY($2::uuid[]))
-             ) AS in_scope
-       FROM app_user u
-      WHERE u.id = $1
-      FOR UPDATE OF u`,
-    [accountId, actorSiteIds],
+  const existing = await roleChangeTarget(
+    client,
+    actorUserId,
+    actorSiteIds,
+    accountId,
+    accountPromotionSelf,
   );
-
-  const existing = rows[0];
-  if (!existing) throw accountNotFound();
-  if (!existing.in_scope) throw accountOutOfScope();
-  if (existing.id === actorUserId) throw accountPromotionSelf();
   if (existing.role !== 'jhsc_member') throw accountRoleNotPromotable(existing.role);
   if (!existing.active) throw accountPromotionInactive();
 
@@ -418,11 +329,84 @@ async function promote(
         active: true,
         can_sign_in: existing.can_sign_in,
         email: existing.email,
-        jhsc_seat: existing.jhsc_seat,
       },
     },
     withdrawn: false,
   };
+}
+
+async function demote(
+  client: PoolClient,
+  actorUserId: string,
+  actorSiteIds: readonly string[],
+  accountId: string,
+): Promise<{ response: CreateAccountResponse; withdrawn: boolean }> {
+  const existing = await roleChangeTarget(
+    client,
+    actorUserId,
+    actorSiteIds,
+    accountId,
+    accountDemotionSelf,
+  );
+  if (existing.role !== 'hs_coordinator') throw accountRoleNotDemotable(existing.role);
+  if (!existing.active) throw accountDemotionInactive();
+
+  await client.query("UPDATE app_user SET role = 'jhsc_member' WHERE id = $1", [accountId]);
+
+  return {
+    response: {
+      account: {
+        id: existing.id,
+        role: 'jhsc_member',
+        active: true,
+        can_sign_in: existing.can_sign_in,
+        email: existing.email,
+      },
+    },
+    withdrawn: false,
+  };
+}
+
+interface RoleChangeTarget {
+  id: string;
+  role: Role;
+  active: boolean;
+  can_sign_in: boolean;
+  email: string;
+  in_scope: boolean;
+}
+
+async function roleChangeTarget(
+  client: PoolClient,
+  actorUserId: string,
+  actorSiteIds: readonly string[],
+  accountId: string,
+  selfError: () => AccountException,
+): Promise<RoleChangeTarget> {
+  const { rows } = await client.query<RoleChangeTarget>(
+    `SELECT u.id, u.role, hs_account_is_active(u) AS active, u.email,
+            EXISTS (
+              SELECT 1 FROM app_credential c WHERE c.user_id = u.id AND c.revoked_at IS NULL
+            ) AS can_sign_in,
+            NOT EXISTS (
+              SELECT 1
+                FROM user_site_scope target_scope
+               WHERE target_scope.user_id = u.id
+                 AND target_scope.revoked_at IS NULL
+                  AND NOT (target_scope.site_id = ANY($2::uuid[]))
+              ) AS in_scope
+       FROM app_user u
+      WHERE u.id = $1
+      FOR UPDATE OF u`,
+    [accountId, actorSiteIds],
+  );
+
+  const existing = rows[0];
+  if (!existing) throw accountNotFound();
+  if (!existing.in_scope) throw accountOutOfScope();
+  if (existing.id === actorUserId) throw selfError();
+
+  return existing;
 }
 
 /**

@@ -5,11 +5,10 @@
 -- días, no encuentra nada que abrir y no produce nada — en silencio, que es la peor
 -- forma de no funcionar. Un entorno recién levantado tiene que tener algo que abrir.
 --
--- SIN INSPECTOR POR DEFECTO, y no es un olvido. El único usuario que siembra
--- `004_bootstrap_coordinator.sql` es el coordinador de HS, y un coordinador no es un
--- `jhsc_member`: §4 dice que los 7 miembros del JHSC son los únicos que ejecutan
--- inspecciones. Sembrar un inspector inventado crearía una asignación que ninguna
--- persona real puede cumplir. El coordinador asigna cuando existan las cuentas.
+-- SIN INSPECTOR POR DEFECTO, y no es un olvido. El usuario que siembra
+-- `004_bootstrap_coordinator.sql` es el coordinador de HS, pero esta regla no debe
+-- inventar una asignación durante el bootstrap. El coordinador asigna cuando existan las
+-- cuentas y confirme quién tiene el alcance vigente para ejecutar la inspección.
 --
 -- Consecuencia: las inspecciones que abra el calendario nacen con `inspector_id` NULL
 -- y no aparecen en el pendiente de nadie hasta que se asignen. Eso es correcto — la

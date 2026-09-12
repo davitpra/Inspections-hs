@@ -15,11 +15,10 @@ import { COORDINATOR_ID, issueInvitation } from './bootstrap-invitation.mjs';
  * corran los seeds". `pnpm db:seed` corre en CI y en cualquier entorno; esto se corre a
  * mano, en la máquina de quien desarrolla, y por eso puede hacer lo que un seed no.
  *
- * POR QUÉ UN `jhsc_member` Y NO EL COORDINADOR SEMBRADO. `requireInspector()` rechaza
- * cualquier otro rol —§4: los 7 miembros del JHSC son los únicos que ejecutan
- * inspecciones—, así que es el único rol al que se le puede asignar una. Desbloquear al
- * coordinador le daría una cuenta que entra pero cuyo pendiente sigue vacío, que es
- * exactamente el estado del que este script existe para salir.
+ * POR QUÉ UNA CUENTA SEPARADA Y NO EL COORDINADOR SEMBRADO. La cuenta de demo necesita una
+ * credencial conocida y un alcance propio; el coordinador del seed se reserva para el
+ * bootstrap de la aplicación. `jhsc_member` es la identidad de campo de la demo, pero las
+ * cuentas activas de los tres roles son elegibles cuando tienen alcance vigente.
  *
  * Corre como `hs_app`, igual que `bootstrap-invitation.mjs`: los GRANT alcanzan
  * (`0005_identity.sql` concede INSERT sobre `person`, `app_user` y `user_site_scope`;

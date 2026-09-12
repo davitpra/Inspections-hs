@@ -7,6 +7,7 @@ import { TemplateDraftRoute } from './index';
 
 const ST_THOMAS = '11111111-1111-4111-8111-111111111111';
 const GLENCOE = '11111111-1111-4111-8111-111111111112';
+const WINDSOR = '11111111-1111-4111-8111-111111111113';
 const USER = '22222222-2222-4222-8222-222222222222';
 const PERSON = '33333333-3333-4333-8333-333333333333';
 const DRAFT = '44444444-4444-4444-8444-444444444444';
@@ -135,7 +136,7 @@ async function ready(): Promise<void> {
   // El alcance depende de `listSites`, que llega en su propia consulta: sin esperarla, el
   // selector todavía no existe y las aserciones sobre el recorte miran una pantalla a medio
   // resolver.
-  await screen.findByRole('button', { name: /Both plants/ });
+  await screen.findByRole('button', { name: /^St\. Thomas$/ });
 }
 
 /** Abre el menú «⋮» que se llama `name` y devuelve su contenedor. */
@@ -240,20 +241,23 @@ describe('escribir la plantilla', () => {
 });
 
 describe('el alcance de plantas', () => {
-  it('ofrece una opción por planta más las dos juntas', async () => {
+  it('ofrece un toggle por planta sin combinaciones fijas', async () => {
     renderRoute();
     await ready();
 
-    expect(screen.getByRole('button', { name: /St\. Thomas only/ })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Glencoe only/ })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Both plants/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^St\. Thomas$/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Glencoe$/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Both plants/ })).toBeNull();
   });
 
-  it('marca el alcance que el borrador ya tiene', async () => {
+  it('marca cada planta que el borrador ya tiene', async () => {
     renderRoute();
     await ready();
 
-    expect(screen.getByRole('button', { name: /Both plants/ }).getAttribute('aria-pressed')).toBe(
+    expect(
+      screen.getByRole('button', { name: /^St\. Thomas$/ }).getAttribute('aria-pressed'),
+    ).toBe('true');
+    expect(screen.getByRole('button', { name: /^Glencoe$/ }).getAttribute('aria-pressed')).toBe(
       'true',
     );
   });
@@ -262,7 +266,7 @@ describe('el alcance de plantas', () => {
     renderRoute();
     await ready();
 
-    fireEvent.click(screen.getByRole('button', { name: /St\. Thomas only/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Glencoe$/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
 
     await waitFor(() => expect(saveTemplateDraft).toHaveBeenCalled());
@@ -276,12 +280,52 @@ describe('el alcance de plantas', () => {
 
     expect(screen.getByRole('button', { name: 'Saved' })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: /Glencoe only/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Glencoe$/ }));
 
     expect(screen.getByRole('button', { name: 'Save draft' })).toBeTruthy();
   });
 
-  /** Con una sola planta administrada no hay nada que elegir, y «only» sería una mentira. */
+  it('no permite apagar la última planta elegida', async () => {
+    getTemplateDraft.mockResolvedValue(draft({ site_ids: [ST_THOMAS] }));
+
+    renderRoute();
+    await ready();
+
+    const stThomas = screen.getByRole('button', {
+      name: /^St\. Thomas$/,
+    }) as HTMLButtonElement;
+    expect(stThomas.disabled).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: /^Glencoe$/ }));
+
+    expect(stThomas.disabled).toBe(false);
+    fireEvent.click(stThomas);
+    expect((screen.getByRole('button', { name: /^Glencoe$/ }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+  });
+
+  it('agrega automáticamente un toggle para una planta nueva', async () => {
+    useAppSession.mockReturnValue({
+      account: { ...session('hs_coordinator').account, siteScope: [ST_THOMAS, GLENCOE, WINDSOR] },
+    });
+    listSites.mockResolvedValue([
+      ...SITES,
+      { id: WINDSOR, code: 'windsor', name: 'Windsor', deactivated_at: null },
+    ]);
+
+    renderRoute();
+    await ready();
+
+    const windsor = screen.getByRole('button', { name: /^Windsor$/ });
+    expect(windsor.getAttribute('aria-pressed')).toBe('false');
+
+    fireEvent.click(windsor);
+
+    expect(windsor.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  /** Con una sola planta administrada no hay nada que elegir. */
   it('no se dibuja cuando la cuenta administra una sola planta', async () => {
     useAppSession.mockReturnValue({
       account: { ...session('hs_coordinator').account, siteScope: [ST_THOMAS] },
@@ -291,8 +335,7 @@ describe('el alcance de plantas', () => {
     renderRoute();
     await screen.findByLabelText('Template name');
 
-    expect(screen.queryByRole('button', { name: /Both plants/ })).toBeNull();
-    expect(screen.queryByRole('button', { name: /St\. Thomas only/ })).toBeNull();
+    expect(screen.queryByText('Template scope')).toBeNull();
   });
 });
 
@@ -313,7 +356,7 @@ describe('las ubicaciones que una sección puede nombrar', () => {
     renderRoute();
     await ready();
 
-    fireEvent.click(screen.getByRole('button', { name: /St\. Thomas only/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Glencoe$/ }));
 
     expect(codes()).toEqual(['guarding', 'storage', 'machines']);
   });
@@ -349,9 +392,9 @@ describe('las ubicaciones que una sección puede nombrar', () => {
 
     renderRoute();
     await screen.findByLabelText('Template name');
-    await screen.findByRole('button', { name: /Both plants/ });
+    await screen.findByRole('button', { name: /^St\. Thomas$/ });
 
-    fireEvent.click(screen.getByRole('button', { name: /Both plants/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Glencoe$/ }));
 
     expect((screen.getAllByLabelText('Location')[0] as HTMLSelectElement).value).toBe('machines');
     expect(screen.getByText(/not mapped at every plant in scope/)).toBeTruthy();
@@ -370,9 +413,9 @@ describe('las ubicaciones que una sección puede nombrar', () => {
     renderRoute();
     await ready();
 
-    fireEvent.click(screen.getByRole('button', { name: /St\. Thomas only/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Glencoe$/ }));
     fireEvent.change(screen.getAllByLabelText('Location')[0]!, { target: { value: 'machines' } });
-    fireEvent.click(screen.getByRole('button', { name: /Both plants/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Glencoe$/ }));
 
     expect(screen.getByText('Not mapped here')).toBeTruthy();
   });
@@ -682,7 +725,7 @@ describe('el panel de resumen', () => {
     renderRoute();
     await ready();
 
-    fireEvent.click(screen.getByRole('button', { name: /Glencoe only/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^St\. Thomas$/ }));
 
     const summary = screen.getByText('Template summary').closest('section') as HTMLElement;
 
@@ -706,6 +749,31 @@ describe('guardar', () => {
 
     const body = lastSave();
     expect(JSON.stringify(body.document)).toContain('"section_title":"Storage"');
+  });
+
+  it('guarda el título escrito y lo conserva al cambiar la ubicación', async () => {
+    renderRoute();
+    await ready();
+
+    fireEvent.change(
+      screen.getByRole('textbox', { name: 'Section title for section Guarding' }),
+      { target: { value: 'Docks and aisles' } },
+    );
+    fireEvent.change(screen.getAllByLabelText('Location')[0]!, {
+      target: { value: 'storage' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+
+    await waitFor(() => expect(saveTemplateDraft).toHaveBeenCalledWith(DRAFT, expect.anything()));
+
+    expect(lastSave().document).toMatchObject({
+      sections: [
+        expect.objectContaining({
+          organization_location_code: 'storage',
+          section_title: 'Docks and aisles',
+        }),
+      ],
+    });
   });
 
   it('el botón dice "Saved" mientras no haya cambios', async () => {

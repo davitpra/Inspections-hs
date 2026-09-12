@@ -20,8 +20,8 @@ const inviteAsJhscMember = vi.hoisted(() => vi.fn());
 const getAccount = vi.hoisted(() => vi.fn());
 const reissueInvitation = vi.hoisted(() => vi.fn());
 const removeJhscAccess = vi.hoisted(() => vi.fn());
-const setJhscSeat = vi.hoisted(() => vi.fn());
 const promoteToCoordinator = vi.hoisted(() => vi.fn());
+const demoteToJhscMember = vi.hoisted(() => vi.fn());
 const importRoster = vi.hoisted(() => vi.fn());
 const createPerson = vi.hoisted(() => vi.fn());
 const deactivatePerson = vi.hoisted(() => vi.fn());
@@ -34,8 +34,8 @@ vi.mock('../../api/roster', () => ({
   getAccount,
   reissueInvitation,
   removeJhscAccess,
-  setJhscSeat,
   promoteToCoordinator,
+  demoteToJhscMember,
   importRoster,
   createPerson,
   deactivatePerson,
@@ -59,8 +59,7 @@ function site(id = SITE, name = 'St. Thomas'): Site {
 
 /**
  * Una cuenta del roster. Los defaults son los de la fila que más aparece —un miembro del
- * JHSC que ya entra— y cada caso deforma lo que su prueba mira. `jhsc_seat` vive acá y no
- * en cada literal: solo importa en el describe del asiento.
+ * JHSC que ya entra— y cada caso deforma lo que su prueba mira.
  */
 function account(
   overrides: Partial<NonNullable<PersonWithAccount['account']>> = {},
@@ -71,7 +70,6 @@ function account(
     active: true,
     can_sign_in: true,
     email: EMAIL,
-    jhsc_seat: false,
     ...overrides,
   };
 }
@@ -118,8 +116,8 @@ beforeEach(() => {
   getAccount.mockReset();
   reissueInvitation.mockReset();
   removeJhscAccess.mockReset();
-  setJhscSeat.mockReset();
   promoteToCoordinator.mockReset();
+  demoteToJhscMember.mockReset();
   importRoster.mockReset();
   createPerson.mockReset();
   deactivatePerson.mockReset();
@@ -974,7 +972,7 @@ describe('quitar el acceso (remove-jhsc-access-from-roster)', () => {
     renderRoute();
     await screen.findByRole('rowheader', { name: 'Reid, Ada' });
 
-    expect(within(openRowMenu('Reid, Ada')).queryByRole('menuitem', { name: 'Remove' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'More actions for Reid, Ada' })).toBeNull();
   });
 
   it('confirma antes de quitar, y solo llama al servidor al confirmar', async () => {
@@ -1090,11 +1088,11 @@ describe('quitar el acceso (remove-jhsc-access-from-roster)', () => {
 });
 
 describe('promover a coordinador', () => {
-  it('management confirma, promueve y refresca el rol sin tocar el asiento', async () => {
+  it('management confirma, promueve y refresca el rol', async () => {
     useAppSession.mockReturnValue(session('management'));
-    listPeople.mockResolvedValue([person({ account: account({ jhsc_seat: false }) })]);
+    listPeople.mockResolvedValue([person({ account: account() })]);
     promoteToCoordinator.mockResolvedValue({
-      account: account({ role: 'hs_coordinator', jhsc_seat: false }),
+      account: account({ role: 'hs_coordinator' }),
     });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const invalidate = vi.spyOn(client, 'invalidateQueries');
@@ -1102,13 +1100,12 @@ describe('promover a coordinador', () => {
     await screen.findByRole('rowheader', { name: 'Reid, Ada' });
 
     clickRowAction('Reid, Ada', 'Promote');
-    expect(screen.getByText(/This does not grant a JHSC seat/i)).toBeTruthy();
+    expect(screen.getByText(/JHSC membership follows the account role/i)).toBeTruthy();
     expect(promoteToCoordinator).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: 'Promote to coordinator' }));
 
     await waitFor(() => expect(promoteToCoordinator).toHaveBeenCalledWith({ userId: ACCOUNT }));
-    expect(setJhscSeat).not.toHaveBeenCalled();
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['roster', SITE] });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['account', ACCOUNT] });
   });
@@ -1122,84 +1119,45 @@ describe('promover a coordinador', () => {
   });
 });
 
-describe('el asiento en el JHSC (coordinator-jhsc-seat)', () => {
-  const coordinator = (jhsc_seat: boolean) => account({ role: 'hs_coordinator', jhsc_seat });
-
-  it('la fila de la coordinadora ofrece sentarse, y la del miembro no ofrece nada', async () => {
-    listPeople.mockResolvedValue([
-      person({ id: ADA, account: coordinator(false) }),
-      person({
-        id: BRUNO,
-        first_name: 'Bruno',
-        last_name: 'Alvarez',
-        employee_number: '10473',
-        account: account(),
-      }),
-    ]);
-
-    renderRoute();
-    await screen.findByRole('rowheader', { name: 'Reid, Ada' });
-
-    expect(within(openRowMenu('Reid, Ada')).getByRole('menuitem', { name: 'Join JHSC' })).toBeTruthy();
-    expect(within(openRowMenu('Alvarez, Bruno')).queryByRole('menuitem', { name: 'Join JHSC' })).toBeNull();
-  });
-
-  it('management también puede ocupar un asiento', async () => {
+describe('degradar a miembro del JHSC', () => {
+  it('management confirma, degrada y refresca el rol', async () => {
     useAppSession.mockReturnValue(session('management'));
-    listPeople.mockResolvedValue([
-      person({ account: account({ role: 'management', jhsc_seat: false }) }),
-    ]);
-    renderRoute();
+    listPeople.mockResolvedValue([person({ account: account({ role: 'hs_coordinator' }) })]);
+    demoteToJhscMember.mockResolvedValue({
+      account: account({ role: 'jhsc_member' }),
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+    renderRoute(client);
     await screen.findByRole('rowheader', { name: 'Reid, Ada' });
-    expect(within(openRowMenu('Reid, Ada')).getByRole('menuitem', { name: 'Join JHSC' })).toBeTruthy();
+
+    clickRowAction('Reid, Ada', 'Demote');
+    expect(screen.getByRole('heading', { name: /Demote Reid, Ada \(10472\) to JHSC member\?/i })).toBeTruthy();
+    expect(screen.getByText(/administrative access from their next action/i)).toBeTruthy();
+    expect(screen.getByText(/stay on the JHSC/i)).toBeTruthy();
+    expect(demoteToJhscMember).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Demote to JHSC member' }));
+
+    await waitFor(() => expect(demoteToJhscMember).toHaveBeenCalledWith({ userId: ACCOUNT }));
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['roster', SITE] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['account', ACCOUNT] });
   });
 
-  it('la celda Role dice el asiento de quien lo tiene', async () => {
-    listPeople.mockResolvedValue([person({ id: ADA, account: coordinator(true) })]);
-
+  it('un coordinador no recibe la acción de degradación', async () => {
+    listPeople.mockResolvedValue([person({ account: account({ role: 'hs_coordinator' }) })]);
     renderRoute();
+    await screen.findByRole('rowheader', { name: 'Reid, Ada' });
 
-    expect(await screen.findByText('H&S coordinator · JHSC seat')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'More actions for Reid, Ada' })).toBeNull();
   });
 
-  it('sentarse pide confirmación y recién ahí escribe', async () => {
-    listPeople.mockResolvedValue([person({ id: ADA, account: coordinator(false) })]);
-    setJhscSeat.mockResolvedValue({ account: { ...coordinator(true) } });
-
+  it('una fila jhsc_member no recibe la acción de degradación', async () => {
+    useAppSession.mockReturnValue(session('management'));
+    listPeople.mockResolvedValue([person({ account: account({ role: 'jhsc_member' }) })]);
     renderRoute();
-
     await screen.findByRole('rowheader', { name: 'Reid, Ada' });
-    clickRowAction('Reid, Ada', 'Join JHSC');
 
-    // El diálogo está abierto y todavía no se escribió nada.
-    expect(screen.getByRole('heading', { name: /Seat Reid, Ada \(10472\) on the JHSC\?/i })).toBeTruthy();
-    expect(setJhscSeat).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole('button', { name: /^Seat on the JHSC$/i }));
-
-    await waitFor(() => expect(setJhscSeat).toHaveBeenCalledWith({ userId: ACCOUNT, granted: true }));
-  });
-
-  /**
-   * Lo que el coordinador podría creer que este botón resuelve, y no: las inspecciones ya
-   * asignadas siguen siendo suyas. Si esa frase desaparece, alguien va a levantar a alguien
-   * del comité esperando que se reasignen solas.
-   */
-  it('levantarse avisa que lo ya asignado sigue asignado', async () => {
-    listPeople.mockResolvedValue([person({ id: ADA, account: coordinator(true) })]);
-    setJhscSeat.mockResolvedValue({ account: { ...coordinator(false) } });
-
-    renderRoute();
-
-    await screen.findByRole('rowheader', { name: 'Reid, Ada' });
-    clickRowAction('Reid, Ada', 'Leave JHSC');
-
-    expect(screen.getByText(/Inspections already assigned to them stay assigned/i)).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('button', { name: /^Remove from the seat$/i }));
-
-    await waitFor(() =>
-      expect(setJhscSeat).toHaveBeenCalledWith({ userId: ACCOUNT, granted: false }),
-    );
+    expect(within(openRowMenu('Reid, Ada')).queryByRole('menuitem', { name: 'Demote' })).toBeNull();
   });
 });

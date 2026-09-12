@@ -48,7 +48,7 @@ export function PromoteDialog({
         They will gain the same administrative access as an H&amp;S coordinator.
       </p>
       <p className="jhsc-seat-dialog__note">
-        <strong>This does not grant a JHSC seat.</strong>{' '}
+        <strong>JHSC membership follows the account role.</strong>{' '}
         Their credential, sessions, email, and site access stay the same.
       </p>
 

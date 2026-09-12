@@ -103,13 +103,20 @@ export function setSectionLocation(
   document: TemplateDraftDocument,
   index: number,
   code: string,
-  title: string,
+  nextCatalogName: string,
+  currentCatalogName: string,
 ): TemplateDraftDocument {
-  return withSection(document, index, (section) => ({
-    ...section,
-    organization_location_code: code,
-    section_title: title,
-  }));
+  return withSection(document, index, (section) => {
+    const currentTitle = section.section_title.trim();
+    const catalogTitle = currentCatalogName.trim();
+    const shouldSeed = currentTitle === "" || currentTitle === catalogTitle;
+
+    return {
+      ...section,
+      organization_location_code: code,
+      section_title: shouldSeed ? nextCatalogName : section.section_title,
+    };
+  });
 }
 
 /**

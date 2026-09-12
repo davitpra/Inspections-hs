@@ -57,9 +57,16 @@ Any document that does not conform SHALL be rejected at load time rather than at
 New sections and items authored in the editor SHALL receive an opaque 12-character lower-case
 alphanumeric `section_key` or `item_key` at creation time. The editor SHALL NOT expose either key
 as an editable field or derive it from user-entered text. A newly authored section SHALL also carry
-the `organization_location_code` selected from the organization catalog; its `section_title` SHALL
-be copied from that catalog entry. Historical documents created before the organization catalog
-may omit that field and remain readable.
+the `organization_location_code` selected from the organization catalog. Historical documents
+created before the organization catalog may omit that field and remain readable.
+
+A section's `section_title` SHALL be offered to the author as editable text. Selecting an
+organization location SHALL seed that title with the catalog entry's name, and the editor SHALL
+NOT overwrite a title the author wrote: when a section's `organization_location_code` changes,
+the new catalog name SHALL be written only if the current `section_title` is empty or still
+equals the catalog name of the code the section named before. A section SHALL still name at most
+one `organization_location_code`, and findings SHALL continue to be grouped by that code rather
+than by the title text.
 
 #### Scenario: Rewording does not change an opaque item identity
 
@@ -69,9 +76,44 @@ may omit that field and remain readable.
 
 #### Scenario: A section uses a catalog location
 
-- **WHEN** an author selects an organization location for a section
-- **THEN** the draft stores its code and the catalog name as `section_title`
-- **AND** the author is not offered a free-text section title
+- **WHEN** an author selects an organization location for a section whose `section_title` is empty
+- **THEN** the draft stores its code as `organization_location_code`
+- **AND** the draft stores the catalog name as `section_title`
+
+#### Scenario: An author writes a section title of their own
+
+- **WHEN** an author replaces a section's `section_title` with text of their own
+- **THEN** the draft stores that text as `section_title`
+- **AND** the section's `organization_location_code` is unchanged
+
+#### Scenario: Changing the location keeps a title the author wrote
+
+- **GIVEN** a section naming an organization location whose catalog name is `Shipping dock`
+- **AND** whose `section_title` the author has rewritten as `Docks and aisles`
+- **WHEN** the author selects a different organization location for that section
+- **THEN** the section's `organization_location_code` becomes the newly selected code
+- **AND** its `section_title` remains `Docks and aisles`
+
+#### Scenario: Changing the location re-seeds a title that was still the catalog name
+
+- **GIVEN** a section naming an organization location whose catalog name is `Shipping dock`
+- **AND** whose `section_title` is `Shipping dock`
+- **WHEN** the author selects an organization location whose catalog name is `Boiler room`
+- **THEN** its `section_title` becomes `Boiler room`
+
+#### Scenario: Clearing the location keeps a title the author wrote
+
+- **GIVEN** a section whose `section_title` the author has rewritten as `Docks and aisles`
+- **WHEN** the author clears the section's organization location
+- **THEN** the section no longer names an `organization_location_code`
+- **AND** its `section_title` remains `Docks and aisles`
+
+#### Scenario: A section left with no title is reported and cannot be published
+
+- **WHEN** an author empties a section's `section_title`
+- **THEN** the draft is saved with that empty `section_title`
+- **AND** the draft reports that section as having no title
+- **AND** publication of that draft is refused
 
 #### Scenario: A malformed seed document fails the build
 
@@ -1502,6 +1544,15 @@ The authoring interface SHALL offer, as scope choices for a draft, only the plan
 account's scope that are still active. A removed plant SHALL NOT appear among them, whether
 or not the draft being edited already names it.
 
+Each offered plant SHALL be an independent toggle labelled with that plant's name. Turning a
+toggle on SHALL add that plant to `site_ids`, and turning a toggle off SHALL remove that plant
+without changing the other selected plants. The interface SHALL NOT allow the author to turn
+off the final selected active plant.
+
+The choices SHALL be derived from the available active plants rather than from predefined
+plant combinations, so an additional active plant in the account's scope appears as another
+toggle without replacing or combining the existing choices.
+
 The interface SHALL keep naming a removed plant wherever it is describing a scope that
 already names it — the scope summary, the scope notice, and the per-plant location resolution
 of a section — so that a stored `site_ids` always reads as a plant name and never as a bare
@@ -1514,6 +1565,32 @@ configured with one plant: there is nothing left to choose.
 
 This is an interface affordance, not a guarantee. The authoritative refusal is the save, which
 rejects a `site_ids` naming a removed plant.
+
+#### Scenario: Each active plant is an independent scope choice
+
+- **GIVEN** an account whose scope covers St. Thomas and Glencoe
+- **WHEN** the author opens a draft scoped to both plants
+- **THEN** the scope control shows pressed toggles named St. Thomas and Glencoe
+- **AND** no combined scope choice is shown
+
+#### Scenario: One plant is removed from a multi-plant scope
+
+- **GIVEN** a draft whose `site_ids` names St. Thomas and Glencoe
+- **WHEN** the author turns off the Glencoe scope toggle
+- **THEN** the edited `site_ids` names only St. Thomas
+
+#### Scenario: The final selected plant cannot be removed
+
+- **GIVEN** a draft whose `site_ids` names only St. Thomas while another active plant is available
+- **WHEN** the author views the scope control
+- **THEN** the St. Thomas toggle cannot be turned off
+- **AND** the author can turn on another plant before turning off St. Thomas
+
+#### Scenario: A newly available plant becomes a scope choice
+
+- **GIVEN** an account whose active scope covers St. Thomas, Glencoe, and Windsor
+- **WHEN** the author opens a draft
+- **THEN** the scope control shows one independent toggle for each of the three plants
 
 #### Scenario: A removed plant is not among the scope choices
 

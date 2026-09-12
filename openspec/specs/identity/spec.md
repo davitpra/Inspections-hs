@@ -11,8 +11,8 @@ endpoints agree on.
 ### Requirement: Administrative authority is held by the coordinator and by management
 
 The system SHALL treat `hs_coordinator` and `management` as the two administrative roles, holding
-the same permissions as each other with exactly one asymmetry: promoting an account, which is
-management's alone.
+the same permissions as each other with exactly one asymmetry: deciding who holds the coordinator
+role — promoting an account to it and demoting an account from it — which is management's alone.
 
 Where a requirement of this or of any other capability names `hs_coordinator` as the account
 permitted to perform an administrative act — or restricts such an act to `hs_coordinator` alone,
@@ -46,6 +46,168 @@ account and the person, not against the role.
   roster of `glencoe`
 - **THEN** the request is refused, and the refusal does not disclose whether `glencoe` exists
 
+#### Scenario: A coordinator does not decide who holds the coordinator role
+
+- **WHEN** an account whose `role` is `hs_coordinator` promotes a `jhsc_member` account or demotes
+  an `hs_coordinator` account
+- **THEN** the request is refused, and the target account's `role` is unchanged
+
+### Requirement: Management can demote a coordinator to JHSC member
+
+The system SHALL let an account whose `role` is `management` change the `role` of an active account
+from `hs_coordinator` to `jhsc_member`, and SHALL refuse that request to every other role, including
+`hs_coordinator`. A coordinator SHALL NOT be able to remove another coordinator, for the same reason
+it cannot appoint one: the account that holds every administrative permission is never the account
+that decides who else holds them.
+
+The demotion SHALL be refused when the target account's current `role` is not `hs_coordinator`,
+when the target account is inactive, when the target account is outside the requesting account's
+site scope, and when the requesting account is the target. A `management` account SHALL NOT be
+demotable. Refusing it SHALL leave `app_user.role` unchanged.
+
+The demotion SHALL be recorded as a `user.role_changed` entry naming the previous role, the new role
+and the acting account, in the audit chain of every site in the demoted account's scope, written by
+the database rather than by the endpoint.
+
+Demoting SHALL NOT touch the account's `person_id`, `email`, site scope, credential, sessions or
+invitations: the account is the same account, carrying a different role from that moment on. The
+account SHALL lose its administrative authority on its next request, because the role of a session
+is resolved from `app_user` at each request.
+
+Demoting SHALL NOT interrupt the account's membership of the JHSC. A coordinator who was eligible as
+`inspector_id` SHALL continue to be eligible as `jhsc_member`, without any further act, because both
+roles are on the committee.
+
+Demoting SHALL NOT alter any record related to the account rather than to its role: an action
+assigned to its person, a finding it raised and an inspection it holds as `inspector_id` SHALL remain
+as they were.
+
+The roster SHALL offer the demotion to a `management` account on the row of an active
+`hs_coordinator` account, and SHALL confirm it before it is executed.
+
+#### Scenario: Management demotes a coordinator
+
+- **WHEN** an account whose `role` is `management` and whose scope contains `st-thomas` demotes an
+  active `hs_coordinator` account of `st-thomas`
+- **THEN** that account's `role` is `jhsc_member`
+- **AND** a `user.role_changed` entry naming both roles and the acting account exists in the chain
+  of every site in the demoted account's scope
+- **AND** its `person_id`, `email` and site scope are unchanged
+
+#### Scenario: A demoted coordinator keeps signing in
+
+- **GIVEN** an active `hs_coordinator` account holding an active credential and a live session
+- **WHEN** an account whose `role` is `management` demotes it
+- **THEN** its credential carries a null `revoked_at` and its `app_session` row carries a null
+  `revoked_at`
+- **AND** its next request with that session token is accepted
+
+#### Scenario: A demoted coordinator loses administration on the next request
+
+- **GIVEN** an active `hs_coordinator` account whose scope contains `st-thomas`, holding a live
+  session
+- **WHEN** an account whose `role` is `management` demotes it
+- **AND** that session requests the roster of `st-thomas`
+- **THEN** the request is refused
+- **AND** no `person` row is returned
+
+#### Scenario: A coordinator cannot demote
+
+- **WHEN** an account whose `role` is `hs_coordinator` demotes another `hs_coordinator` account
+- **THEN** the request is refused
+- **AND** the target account's `role` is unchanged
+
+#### Scenario: A JHSC member cannot demote
+
+- **WHEN** an account whose `role` is `jhsc_member` demotes an `hs_coordinator` account
+- **THEN** the request is refused
+- **AND** the target account's `role` is unchanged
+
+#### Scenario: An account that is not a coordinator cannot be demoted
+
+- **WHEN** an account whose `role` is `management` demotes an account whose `role` is `jhsc_member`
+  or `management`
+- **THEN** the request is refused with a reason naming the current role
+- **AND** that account's `role` is unchanged
+
+#### Scenario: An inactive account cannot be demoted
+
+- **WHEN** an account whose `role` is `management` demotes an `hs_coordinator` account whose
+  `deactivated_at` is non-null
+- **THEN** the request is refused
+- **AND** the account stays inactive with its `role` unchanged
+
+#### Scenario: A demotion outside the site scope is refused
+
+- **WHEN** an account whose `role` is `management` and whose scope is `st-thomas` only demotes an
+  `hs_coordinator` account scoped to `glencoe` alone
+- **THEN** the request is refused
+- **AND** that account's `role` is unchanged
+
+#### Scenario: An account cannot demote itself
+
+- **WHEN** an account whose `role` is `management` demotes its own account
+- **THEN** the request is refused
+- **AND** its `role` is unchanged
+
+#### Scenario: A demoted coordinator keeps inspecting
+
+- **GIVEN** an active `hs_coordinator` account listed among the accounts eligible to be assigned an
+  inspection at its site
+- **WHEN** that account is demoted to `jhsc_member`
+- **THEN** it is still listed among the eligible accounts of that site
+- **AND** assigning it as `inspector_id` of an inspection at that site is accepted
+
+#### Scenario: The roster offers the demotion to management only
+
+- **WHEN** the roster of a site is shown to an account whose `role` is `management`
+- **THEN** the row of an active `hs_coordinator` account offers the demotion, and no row of a
+  `jhsc_member` or `management` account does
+- **AND** when the same roster is shown to an account whose `role` is `hs_coordinator`, no row
+  offers it
+
+### Requirement: Committee membership follows the account role
+
+The system SHALL derive membership of the Joint Health and Safety Committee from `app_user.role`
+alone. Every account of the closed set — `jhsc_member`, `hs_coordinator` and `management` — SHALL be
+on the committee for as long as it holds that role and is not deactivated.
+
+The system SHALL NOT store, expose or accept any separate record of committee membership. There
+SHALL be no column, request field, endpoint or console control that grants a seat, withdraws one, or
+reports whether an account holds one, because there is nothing an account can be missing.
+
+A change of `role` SHALL NOT interrupt membership, and SHALL NOT require a second act to restore it.
+
+Audit entries of type `user.jhsc_seat_granted` and `user.jhsc_seat_withdrawn` already written to a
+site's chain SHALL remain readable and unchanged: they record acts that happened. No new entry of
+either type SHALL be written.
+
+#### Scenario: Every role is on the committee
+
+- **WHEN** an account whose `role` is `jhsc_member`, one whose `role` is `hs_coordinator` and one
+  whose `role` is `management` are each considered for committee membership
+- **THEN** all three are on the committee, with no further condition than an active account
+
+#### Scenario: No account carries a seat value
+
+- **WHEN** the accounts of a site are read
+- **THEN** no account carries a record of a JHSC seat, held or not held, nor the moment one was
+  granted
+
+#### Scenario: A request to grant a seat is rejected
+
+- **WHEN** a request to update an account asks to grant or withdraw a JHSC seat
+- **THEN** the request is rejected as malformed before it reaches the account
+- **AND** nothing about the account changes
+
+#### Scenario: Past seat entries stay in the chain
+
+- **GIVEN** a site whose audit chain contains a `user.jhsc_seat_granted` entry written before this
+  change
+- **WHEN** that chain is read
+- **THEN** the entry is present and unchanged
+- **AND** the chain verifies
+
 ### Requirement: Management can promote a JHSC member to coordinator
 
 The system SHALL let an account whose `role` is `management` change the `role` of an active account
@@ -54,7 +216,8 @@ from `jhsc_member` to `hs_coordinator`, and SHALL refuse that request to every o
 account that holds every administrative permission is never the account that decides who else holds
 them.
 
-The promotion SHALL be the only role change the system exposes. It SHALL be refused when the target
+The promotion and its inverse, the demotion of a coordinator to `jhsc_member`, SHALL be the only
+role changes the system exposes. The promotion SHALL be refused when the target
 account's current `role` is not `jhsc_member`, when the target account is inactive, when the target
 account is outside the requesting account's site scope, and when the requesting account is the
 target. Refusing it SHALL leave `app_user.role` unchanged.
@@ -66,9 +229,9 @@ written by the database rather than by the endpoint.
 Promoting SHALL NOT touch the account's `person_id`, `email`, site scope, credential, sessions or
 invitations: the account is the same account, carrying a different role from that moment on.
 
-A promoted account SHALL NOT carry a JHSC seat as a side effect. The seat SHALL be granted as its
-own recorded act, so that a member who inspected as `jhsc_member` and continues to inspect as
-`hs_coordinator` has a seat that was granted deliberately.
+Promoting SHALL NOT interrupt the account's membership of the JHSC. A member who inspected as
+`jhsc_member` SHALL continue to be eligible as `inspector_id` as `hs_coordinator`, without any
+further act, because both roles are on the committee.
 
 #### Scenario: Management promotes a JHSC member
 
@@ -112,11 +275,21 @@ own recorded act, so that a member who inspected as `jhsc_member` and continues 
 - **THEN** the request is refused
 - **AND** that account's `role` is unchanged
 
-#### Scenario: Promotion grants no seat
+#### Scenario: A promoted member keeps inspecting
 
-- **WHEN** a `jhsc_member` account is promoted to `hs_coordinator`
-- **THEN** its `jhsc_seat_granted_at` is null
-- **AND** no `user.jhsc_seat_granted` entry is written
+- **GIVEN** an active `jhsc_member` account listed among the accounts eligible to be assigned an
+  inspection at its site
+- **WHEN** that account is promoted to `hs_coordinator`
+- **THEN** it is still listed among the eligible accounts of that site
+- **AND** assigning it as `inspector_id` of an inspection at that site is accepted
+
+#### Scenario: A promoted member can be demoted back
+
+- **GIVEN** a `jhsc_member` account that management promoted to `hs_coordinator`
+- **WHEN** an account whose `role` is `management` demotes it
+- **THEN** its `role` is `jhsc_member` again
+- **AND** two `user.role_changed` entries, one per change, exist in the chain of every site in its
+  scope
 
 ### Requirement: A person is a roster record, not an account
 
@@ -453,157 +626,6 @@ or by hand.
 - **THEN** the request is refused
 - **AND** the existing person keeps her `first_name`, `last_name`, `site_id` and
   `deactivated_at`
-
-### Requirement: An `hs_coordinator` account can hold a seat on the JHSC
-
-The system SHALL record on `app_user` whether the account holds a seat on the Joint Health and
-Safety Committee, as `jhsc_seat_granted_at`: null when the account holds no seat, and the moment
-the seat was granted when it does.
-
-The seat SHALL be a position an account occupies, not a role: taking or leaving a seat SHALL NOT
-change `app_user.role`, and the closed set of three roles SHALL be unaffected.
-
-The database SHALL restrict a non-null `jhsc_seat_granted_at` to accounts whose `role` is
-`hs_coordinator` or `management` — the two administrative roles, which are the accounts that may sit
-on the committee without already being it. A `jhsc_member` SHALL NOT carry a seat value, because
-that role already IS the seat, and no other role SHALL be able to acquire one.
-
-Granting and withdrawing a seat SHALL each be recorded in the audit log of every site in the
-account's scope, as `user.jhsc_seat_granted` and `user.jhsc_seat_withdrawn`, naming the acting
-account.
-
-Holding or losing a seat SHALL NOT change what the account may sign in to: it SHALL NOT create,
-revoke or expire a credential, a session or an invitation.
-
-#### Scenario: A seat on a JHSC member's account is rejected
-
-- **WHEN** an `app_user` row whose `role` is `jhsc_member` is written with a non-null
-  `jhsc_seat_granted_at`
-- **THEN** the write fails with a check violation
-
-#### Scenario: A seat on a management account is accepted
-
-- **WHEN** an `app_user` row whose `role` is `management` is written with a non-null
-  `jhsc_seat_granted_at`
-- **THEN** the write succeeds
-
-#### Scenario: An account without a seat carries none
-
-- **WHEN** an `hs_coordinator` account is created
-- **THEN** its `jhsc_seat_granted_at` is null
-
-#### Scenario: Taking a seat is audited in every site of the scope
-
-- **WHEN** a seat is granted on an `hs_coordinator` account scoped to `st-thomas` and `glencoe`
-- **THEN** its `jhsc_seat_granted_at` is non-null
-- **AND** a `user.jhsc_seat_granted` entry naming the acting account exists in the audit chain of
-  both sites
-
-#### Scenario: Leaving a seat is audited as its own event
-
-- **WHEN** the seat of an account that holds one is withdrawn
-- **THEN** its `jhsc_seat_granted_at` is null
-- **AND** a `user.jhsc_seat_withdrawn` entry exists in the audit chain of every site in the
-  account's scope
-
-#### Scenario: The role is untouched by either act
-
-- **WHEN** a seat is granted on an `hs_coordinator` account and then withdrawn
-- **THEN** the account's `role` is `hs_coordinator` throughout
-- **AND** no `user.role_changed` entry is written
-
-#### Scenario: A seat does not touch access
-
-- **WHEN** the seat of an account that holds an active credential and a live session is granted
-  and then withdrawn
-- **THEN** the credential and the `app_session` row both still carry a null `revoked_at`
-
-### Requirement: A coordinator can take and leave a seat on the JHSC from the roster
-
-The system SHALL let an `hs_coordinator` grant and withdraw a JHSC seat on an `hs_coordinator`
-account from the roster of the site the account is scoped to, including **their own** account: the
-roster already administers who sits on the committee, and there is no other role to ask.
-
-The seat SHALL be a solitary act. A request SHALL NOT combine it with withdrawing the account's
-access, with correcting the account's email or with issuing an invitation link, because those
-either contradict it or belong to a different decision.
-
-The request SHALL be refused, leaving `jhsc_seat_granted_at` unchanged, when the target account's
-role is not `hs_coordinator`, and when the target account is inactive.
-
-Granting a seat to an account that already holds one, and withdrawing the seat of an account that
-holds none, SHALL leave the recorded moment unchanged, so that `jhsc_seat_granted_at` stays the
-moment the seat was actually taken.
-
-Both acts SHALL be confirmed before they are executed. Withdrawing SHALL state that inspections
-already assigned to that account stay assigned to it.
-
-Neither act SHALL deactivate the account, revoke its scope, or touch the referenced `person` row.
-
-#### Scenario: The coordinator seats herself
-
-- **WHEN** an `hs_coordinator` grants the JHSC seat on their own account
-- **THEN** the request succeeds and the account is reported as holding a seat
-- **AND** the audit entry names that same account as the actor
-
-#### Scenario: The seat is given up
-
-- **WHEN** an `hs_coordinator` withdraws the JHSC seat of an account that holds one
-- **THEN** the account is reported as holding no seat
-- **AND** the account stays active and can still sign in
-
-#### Scenario: A role that cannot hold a seat is refused
-
-- **WHEN** an `hs_coordinator` grants a JHSC seat on an account whose role is `jhsc_member`
-- **THEN** the request is refused and names the role
-- **AND** that account's `jhsc_seat_granted_at` is still null
-
-#### Scenario: An inactive account is refused
-
-- **WHEN** an `hs_coordinator` grants a JHSC seat on an account whose access has been withdrawn
-- **THEN** the request is refused
-
-#### Scenario: The seat is not combined with another act
-
-- **WHEN** a request asks for a JHSC seat together with withdrawing the account's access,
-  correcting its email or issuing an invitation link
-- **THEN** the request is rejected before it reaches the account
-- **AND** neither the seat nor the email nor the invitation changes
-
-#### Scenario: Someone who is not the coordinator cannot grant a seat
-
-- **WHEN** an account whose role is `jhsc_member` or `management` requests a JHSC seat on any account
-- **THEN** the request is rejected as forbidden
-
-### Requirement: The roster reports whether an account holds a JHSC seat
-
-The system SHALL report, for every account the roster returns, whether it holds a seat on the
-JHSC, so that the console can name who sits on the committee today without a second read.
-
-The roster SHALL report the seat as a fact — held or not held — and SHALL NOT disclose the moment
-it was granted: the console asks who is on the committee, not since when. The moment stays in the
-audit chain.
-
-An account whose role is not `hs_coordinator` SHALL be reported as holding no seat, whatever its
-role: for a `jhsc_member` the committee membership is already its role.
-
-#### Scenario: A coordinator with a seat is reported as holding one
-
-- **WHEN** the roster of `st-thomas` is read
-- **AND** one of its people is referenced by an `hs_coordinator` account whose
-  `jhsc_seat_granted_at` is non-null
-- **THEN** that row carries an account reported as holding a JHSC seat
-
-#### Scenario: A JHSC member is reported as holding no seat
-
-- **WHEN** the roster of `st-thomas` is read
-- **AND** one of its people is referenced by an account whose `role` is `jhsc_member`
-- **THEN** that row carries an account reported as holding no seat
-
-#### Scenario: The roster does not disclose when the seat was taken
-
-- **WHEN** the roster of a site is read
-- **THEN** no account in the result carries the moment its seat was granted
 
 ### Requirement: The H&S coordinator can create an account over HTTP
 

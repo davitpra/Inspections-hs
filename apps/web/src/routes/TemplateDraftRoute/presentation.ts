@@ -323,7 +323,7 @@ export function scopeNotice(
 }
 
 /**
- * Las opciones del selector de alcance: una por planta, más «todas» cuando hay más de una.
+ * Las opciones del selector de alcance: una por planta activa.
  *
  * La baja no saca la planta de `user_site_scope`, así que el selector filtra por su cuenta —
  * mismo criterio que `SitePicker`, que tampoco ofrece plantas cerradas (ver
@@ -331,34 +331,17 @@ export function scopeNotice(
  * de `scopeLabel` y dejaría un `site_ids` viejo sin nombre. Lo que se recorta es qué se
  * puede ELEGIR; los nombres de un alcance viejo se siguen resolviendo con la lista completa.
  *
- * El orden es «cada planta sola» y después «las dos», que es el del mockup y también el
- * orden en que se decide: primero se pregunta si esto es de una planta, y «las dos» es la
- * respuesta por descarte. Con una sola planta configurada devuelve una sola opción, y el
- * componente entonces no se dibuja: no hay nada que elegir.
+ * El nombre viene del catálogo y no de combinaciones fijas, así una planta nueva entra al
+ * control sin cambiar esta interfaz. Con una sola planta configurada devuelve una sola opción,
+ * y el componente entonces no se dibuja: no hay nada que elegir.
  */
 export function scopeOptions(
   sites: readonly Site[],
-): { label: string; siteIds: readonly string[] }[] {
-  const ordered = sites
+): { label: string; siteId: string }[] {
+  return sites
     .filter((site) => site.deactivated_at === null)
-    .sort((a, b) => a.name.localeCompare(b.name));
-  const single = ordered.map((site) => ({
-    label: scopeLabel([site.id], ordered),
-    siteIds: [site.id],
-  }));
-
-  if (ordered.length < 2) return single;
-
-  return [
-    ...single,
-    {
-      label: scopeLabel(
-        ordered.map((site) => site.id),
-        ordered,
-      ),
-      siteIds: ordered.map((site) => site.id),
-    },
-  ];
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((site) => ({ label: site.name, siteId: site.id }));
 }
 
 /**

@@ -177,21 +177,6 @@ export const personAccountSchema = z.strictObject({
   active: z.boolean(),
   can_sign_in: z.boolean(),
   email: emailSchema,
-
-  /**
-   * Si esta cuenta se sienta en el JHSC (`coordinator-jhsc-seat`, design D6).
-   *
-   * **Booleano derivado, no la fecha en que se sentó.** La columna del motor es
-   * `app_user.jhsc_seat_granted_at`, pero la consola pregunta «¿está en el comité?», no
-   * «¿desde cuándo?»: el momento se lee en la cadena de auditoría, que es donde vive un
-   * registro que se defiende ante un regulador. De paso, doscientas filas no cargan una
-   * fecha que ninguna pantalla muestra.
-   *
-   * Solo un rol administrativo puede tenerlo en `true` —el `CHECK` de 0046 lo fuerza—,
-   * y para `jhsc_member` es SIEMPRE `false`: ese rol ya ES el comité, y un segundo dato
-   * diciendo lo mismo obligaría a cada lectura a decidir cuál de los dos gana.
-   */
-  jhsc_seat: z.boolean(),
 });
 
 export type PersonAccount = z.infer<typeof personAccountSchema>;
@@ -226,7 +211,6 @@ export const accountSchema = z.strictObject({
   role: roleSchema,
   deactivated_at: z.iso.datetime({ offset: true }).nullable(),
   active: z.boolean(),
-  jhsc_seat: z.boolean(),
   scope: z.array(siteScopeSchema),
 });
 
@@ -312,16 +296,14 @@ export type AccountDetail = z.infer<typeof accountDetailSchema>;
 /**
  * El pedido de `PATCH /accounts/:id` (design D5, ampliado por
  * `remove-jhsc-access-from-roster`). Sigue aparte de `updateAccountSchema` y no expone
- * un rol libre: la única modificación de rol es la promoción literal declarada abajo.
+ * un rol libre: las dos modificaciones de rol son literales y están declaradas abajo.
  *
  * Cuatro actos, y el contrato dice que no se piden juntos:
  *
  * - corregir el `email` y reemitir el link (`invite`), que van juntos o sueltos;
- * - `deactivated: true` — quitar el acceso, que es lo que cancela una invitación pendiente
- *   y lo que saca del JHSC a quien ya entra: la misma escritura para los dos.
- * - `jhsc_seat` — sentar a una cuenta administrativa en el comité, o levantarla
- *   (`coordinator-jhsc-seat`). No es acceso: la cuenta entra igual antes y después.
+ * - `deactivated: true` — quitar el acceso, que es lo que cancela una invitación pendiente.
  * - `promote_to` — promover a coordinador, como acto exclusivo de gerencia.
+ * - `demote_to` — devolver un coordinador a miembro del JHSC, como acto exclusivo de gerencia.
  *
  * **`z.literal(true)` y no un booleano**, y eso es lo que el tipo dice de más: por esta ruta
  * una cuenta solo se da de baja. Devolverle el acceso a alguien no es un `deactivated:
@@ -341,23 +323,8 @@ export const updateAccountRequestSchema = z
 
     /** Literal porque esta operación es una promoción concreta, no un cambio libre de rol. */
     promote_to: z.literal('hs_coordinator').optional(),
-
-    /**
-     * Sentarse en el JHSC, o levantarse (`coordinator-jhsc-seat`, design D4).
-     *
-     * **Booleano en los dos sentidos, al revés que `deactivated`, y la asimetría entre los
-     * dos es la decisión.** Aquel es `z.literal(true)` porque devolver el acceso NO es su
-     * inverso: es invitar de nuevo, y eso es `POST /accounts`, que revive la cuenta que la
-     * persona ya tenía. Un `false` habría abierto un segundo camino a una intención que ya
-     * tenía el suyo. Acá no hay tal cosa — otorgar y quitar el asiento son el mismo acto
-     * reversible sobre la misma columna, y partirlos inventaría una asimetría que el
-     * dominio no tiene.
-     *
-     * El servidor lo acepta solo sobre una cuenta administrativa ACTIVA: para
-     * `jhsc_member` el asiento es el rol. Eso no se
-     * valida acá porque depende de la fila — es el `CHECK` de 0035, y un 409 legible antes.
-     */
-    jhsc_seat: z.boolean().optional(),
+    /** Literal porque esta operación es una degradación concreta, no un cambio libre de rol. */
+    demote_to: z.literal('jhsc_member').optional(),
   })
   .refine(
     (value) => Object.values(value).some((entry) => entry !== undefined),
@@ -369,21 +336,21 @@ export const updateAccountRequestSchema = z
   )
   .refine(
     (value) =>
-      value.jhsc_seat === undefined ||
-      (value.deactivated === undefined &&
-        value.email === undefined &&
-        !value.invite &&
-        value.promote_to === undefined),
-    'el asiento en el JHSC es un acto solo: no se combina con la baja, el correo ni el link',
-  )
-  .refine(
-    (value) =>
       value.promote_to === undefined ||
       (value.deactivated === undefined &&
         value.email === undefined &&
-        !value.invite &&
-        value.jhsc_seat === undefined),
-    'la promoción es un acto solo: no se combina con la baja, el correo, el link ni el asiento',
+        value.invite === undefined &&
+        value.demote_to === undefined),
+    'la promoción es un acto solo: no se combina con la baja, el correo ni el link',
+  )
+  .refine(
+    (value) =>
+      value.demote_to === undefined ||
+      (value.promote_to === undefined &&
+        value.deactivated === undefined &&
+        value.email === undefined &&
+        value.invite === undefined),
+    'la degradación es un acto solo: no se combina con la promoción, la baja, el correo ni el link',
   );
 
 export type UpdateAccountRequest = z.infer<typeof updateAccountRequestSchema>;
