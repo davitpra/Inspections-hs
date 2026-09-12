@@ -755,13 +755,13 @@ describe('dar de alta desde la consola', () => {
     expect(otherSiteEntries).toHaveLength(0);
   });
 
-  it('rechaza al supervisor, el code duplicado y no deja una fila sin alcance', async () => {
+  it('rechaza al miembro, el code duplicado y no deja una fila sin alcance', async () => {
     const code = uniqueCode('site-duplicate');
     await sites.create(asCoordinator(), { code, name: 'First plant' });
 
     await expect(
-      sites.create({ userId: ACTOR, role: 'supervisor', siteIds: [SITE_A, SITE_B] }, {
-        code: uniqueCode('site-supervisor'),
+      sites.create({ userId: ACTOR, role: 'jhsc_member', siteIds: [SITE_A, SITE_B] }, {
+        code: uniqueCode('site-member'),
         name: 'Forbidden plant',
       }),
     ).rejects.toThrow(/coordinator/);
@@ -877,8 +877,8 @@ describe('dar de alta desde la consola', () => {
     expect(created.site_id).toBe(SITE_B);
   });
 
-  it('se lo niega a todo rol que no sea el coordinador', async () => {
-    for (const role of ['supervisor', 'jhsc_member', 'management', 'external_auditor']) {
+  it('se lo niega al miembro del JHSC', async () => {
+    for (const role of ['jhsc_member']) {
       const other = { userId: ACTOR, role, siteIds: [SITE_A] };
 
       await expect(
@@ -940,15 +940,15 @@ describe('retirar una ubicación compartida desde la consola', () => {
     );
   });
 
-  it('rechaza al supervisor y deja activa la compartida', async () => {
+  it('rechaza al miembro y deja activa la compartida', async () => {
     const shared = await locations.createOrganizationLocation(asCoordinator(), {
-      code: uniqueCode('supervisor-retire'),
-      name: 'Supervisor cannot retire',
+      code: uniqueCode('member-retire'),
+      name: 'Member cannot retire',
     });
 
     await expect(
       locations.deactivateOrganizationLocation(
-        { userId: ACTOR, role: 'supervisor', siteIds: [SITE_A] },
+        { userId: ACTOR, role: 'jhsc_member', siteIds: [SITE_A] },
         shared.id,
       ),
     ).rejects.toThrow(/coordinator/);
@@ -989,7 +989,7 @@ describe('gestionar una planta desde la consola de ubicaciones', () => {
     });
 
     await expect(
-      sites.update({ ...coordinator, role: 'supervisor' }, SITE_A, { name: 'Not allowed' }),
+      sites.update({ ...coordinator, role: 'jhsc_member' }, SITE_A, { name: 'Not allowed' }),
     ).rejects.toThrow(/coordinator/);
 
     await expect(
@@ -1149,7 +1149,7 @@ describe('gestionar una planta desde la consola de ubicaciones', () => {
     });
   });
 
-  it('rechaza reactivar una planta activa, fuera de alcance o como supervisor', async () => {
+  it('rechaza reactivar una planta activa, fuera de alcance o como miembro', async () => {
     const before = await inScope<{ deactivated_at: Date | null }>(
       db.migrator,
       [],
@@ -1161,7 +1161,7 @@ describe('gestionar una planta desde la consola de ubicaciones', () => {
     await expect(sites.reactivate({ ...coordinator, siteIds: [SITE_A] }, SITE_B)).rejects.toThrow(
       /not found/,
     );
-    await expect(sites.reactivate({ ...coordinator, role: 'supervisor' }, SITE_A)).rejects.toThrow(
+    await expect(sites.reactivate({ ...coordinator, role: 'jhsc_member' }, SITE_A)).rejects.toThrow(
       /coordinator/,
     );
 

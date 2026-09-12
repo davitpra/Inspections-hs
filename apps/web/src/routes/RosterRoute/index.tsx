@@ -17,6 +17,7 @@ import {
   canAdministerRoster,
   canImportRoster,
   canInviteFromRoster,
+  canPromote,
 } from "../../permissions/session";
 import { resolveSiteId } from "../../presentation/sites";
 import { AddPersonDialog } from "./AddPersonDialog";
@@ -30,7 +31,7 @@ import { RosterTable } from "./RosterTable";
  * §6 — La consola del roster: quién trabaja en esta planta.
  *
  * **ESTO NO ES EL SELECTOR DE SUJETO, Y LA DISTINCIÓN ES LA QUE SOSTIENE LA PANTALLA.** §4
- * dice que el supervisor elige a una persona *sin poder ver su perfil*, y eso ata al
+ * dice que el reporte de incidentes elige a una persona *sin mostrar su perfil*, y eso ata al
  * selector —cuatro columnas, `GET /scheduled-inspections/:id/roster`—, no a la
  * administración que §6 le pide al coordinador. Por eso acá el rol se comprueba en la
  * LECTURA, al revés que la consola de programación, que deja mirar a cualquiera: esta ruta
@@ -54,7 +55,7 @@ export function RosterRoute(): React.JSX.Element {
       <>
         <h1>People &amp; Access</h1>
         <p className="notice">
-          Only the H&amp;S coordinator can manage people and access.
+          Only H&amp;S coordinators and management can manage people and access.
         </p>
       </>
     );
@@ -66,6 +67,7 @@ export function RosterRoute(): React.JSX.Element {
       canInviteFromRoster={canInviteFromRoster(account)}
       canImportRoster={canImportRoster(account)}
       canAddPersonToRoster={canAddPersonToRoster(account)}
+      canPromote={canPromote(account)}
     />
   );
 }
@@ -80,11 +82,13 @@ function RosterConsole({
   canInviteFromRoster: mayInvite,
   canImportRoster: mayImport,
   canAddPersonToRoster: mayAddPerson,
+  canPromote: mayPromote,
 }: {
   siteScope: readonly string[];
   canInviteFromRoster: boolean;
   canImportRoster: boolean;
   canAddPersonToRoster: boolean;
+  canPromote: boolean;
 }): React.JSX.Element {
   const importTriggerRef = useRef<HTMLButtonElement>(null);
   const addTriggerRef = useRef<HTMLButtonElement>(null);
@@ -176,6 +180,7 @@ function RosterConsole({
         ready={roster.isSuccess}
         mayInvite={mayInvite}
         mayImport={mayImport}
+        mayPromote={mayPromote}
         importTriggerRef={importTriggerRef}
         onImport={() => setImporting(true)}
         onAct={setDialog}

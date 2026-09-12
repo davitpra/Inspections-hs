@@ -3,7 +3,13 @@ import { passwordSchema } from '@hs/contracts';
 import { useState } from 'react';
 
 import { sessionClient } from '../../api/client';
-import { CheckIcon, CrossIcon, LockIcon } from '../../components/icons';
+import {
+  CheckIcon,
+  CrossIcon,
+  EyeIcon,
+  EyeOffIcon,
+  LockIcon,
+} from '../../components/icons';
 import { messageFor } from './presentation';
 
 /**
@@ -30,6 +36,17 @@ export function AcceptInvitationRoute(): React.JSX.Element {
   const [invalidPassword, setInvalidPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
+
+  /**
+   * Lo mismo que en el inicio de sesión, y acá pesa más: esta contraseña se elige una
+   * sola vez y sin poder presentar la anterior, así que un dedazo a ciegas deja la cuenta
+   * afuera y obliga al coordinador a revocar y emitir otra invitación.
+   *
+   * Un solo estado para los dos campos, no uno por campo: la repetición existe para
+   * atrapar el dedazo que no se ve, y revelar uno mientras el otro sigue en puntos
+   * compara contra nada. O se ven las dos o no se ve ninguna.
+   */
+  const [revealed, setRevealed] = useState(false);
 
   const submit = async (event: React.FormEvent): Promise<void> => {
     event.preventDefault();
@@ -133,28 +150,53 @@ export function AcceptInvitationRoute(): React.JSX.Element {
               <form className="auth__form" onSubmit={(event) => void submit(event)}>
                 <div className="auth__field">
                   <label htmlFor="password">New password</label>
-                  <input
-                    id="password"
-                    type="password"
-                    autoComplete="new-password"
-                    required
-                    aria-invalid={invalidPassword}
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                  />
+                  <div className="auth__reveal">
+                    <input
+                      id="password"
+                      type={revealed ? 'text' : 'password'}
+                      autoComplete="new-password"
+                      required
+                      aria-invalid={invalidPassword}
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                    />
+                    {/* `type="button"`: dentro del `form`, un botón sin tipo envía. */}
+                    <button
+                      className="auth__reveal-toggle"
+                      type="button"
+                      aria-controls="password confirmation"
+                      aria-pressed={revealed}
+                      aria-label={revealed ? 'Hide password' : 'Show password'}
+                      onClick={() => setRevealed((shown) => !shown)}
+                    >
+                      {revealed ? <EyeOffIcon size={20} /> : <EyeIcon size={20} />}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="auth__field">
                   <label htmlFor="confirmation">Repeat the password</label>
-                  <input
-                    id="confirmation"
-                    type="password"
-                    autoComplete="new-password"
-                    required
-                    aria-invalid={invalidPassword}
-                    value={confirmation}
-                    onChange={(event) => setConfirmation(event.target.value)}
-                  />
+                  <div className="auth__reveal">
+                    <input
+                      id="confirmation"
+                      type={revealed ? 'text' : 'password'}
+                      autoComplete="new-password"
+                      required
+                      aria-invalid={invalidPassword}
+                      value={confirmation}
+                      onChange={(event) => setConfirmation(event.target.value)}
+                    />
+                    <button
+                      className="auth__reveal-toggle"
+                      type="button"
+                      aria-controls="password confirmation"
+                      aria-pressed={revealed}
+                      aria-label={revealed ? 'Hide password' : 'Show password'}
+                      onClick={() => setRevealed((shown) => !shown)}
+                    >
+                      {revealed ? <EyeOffIcon size={20} /> : <EyeIcon size={20} />}
+                    </button>
+                  </div>
                 </div>
 
                 {error ? (

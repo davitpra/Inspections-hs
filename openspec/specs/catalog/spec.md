@@ -83,7 +83,8 @@ the role that owns the table.
 
 ### Requirement: The HS coordinator can register a new site from the console
 
-The system SHALL allow only an HS coordinator to register a new `site` from a `code` and a `name`.
+The system SHALL allow only an administrative account — `hs_coordinator` or `management` — to
+register a new `site` from a `code` and a `name`.
 The registered row SHALL carry the submitted `code`, the submitted `name`, a `created_at` timestamp
 and a null `deactivated_at`. `code` SHALL satisfy the catalogue code pattern and SHALL be unique
 across every site, active or not.
@@ -107,9 +108,9 @@ deactivation and reactivation SHALL be offered only by the separate site-managem
 - **AND** the refusal names the code that is already in use
 - **AND** no new `site` row is stored
 
-#### Scenario: A supervisor cannot register a site
+#### Scenario: A JHSC member cannot register a site
 
-- **WHEN** a `supervisor` submits a site registration
+- **WHEN** a `jhsc_member` submits a site registration
 - **THEN** the request is refused with HTTP 403
 - **AND** no `site` row is stored
 
@@ -140,8 +141,8 @@ deactivation and reactivation SHALL be offered only by the separate site-managem
 
 ### Requirement: The HS coordinator can manage a site from the Locations console
 
-The system SHALL allow only an HS coordinator to update a scoped site's human-readable `name`, to
-deactivate that site, or to reactivate a site it previously deactivated, through the Locations
+The system SHALL allow only an administrative account — `hs_coordinator` or `management` — to update
+a scoped site's human-readable `name`, to deactivate that site, or to reactivate a site it previously deactivated, through the Locations
 console. The operation SHALL never change `code`, `created_at` or any historical record. A
 deactivated site SHALL remain readable with its non-null `deactivated_at`, but SHALL not appear as
 an active site column in the Locations console.
@@ -158,9 +159,9 @@ scope, and it SHALL NOT grant scope over any site.
 - **THEN** the request succeeds with the site's `id`, unchanged `code`, new `name` and current
   `deactivated_at`
 
-#### Scenario: A supervisor cannot manage a site
+#### Scenario: A JHSC member cannot manage a site
 
-- **WHEN** a `supervisor` submits a site rename or deactivation
+- **WHEN** a `jhsc_member` submits a site rename or deactivation
 - **THEN** the request is refused with HTTP 403
 - **AND** the site row is unchanged
 
@@ -335,7 +336,7 @@ SHALL NOT belong to two sites, and SHALL NOT exist without one.
 
 ### Requirement: The HS coordinator adds catalogue entries from the console
 
-The system SHALL let the HS coordinator create both kinds of catalogue entry without a
+The system SHALL let an administrative account — `hs_coordinator` or `management` — create both kinds of catalogue entry without a
 deployment: an `organization_location`, which carries no site, and a `location`, which
 belongs to one. Seeding SHALL remain a valid and sufficient way to load the catalogue, and
 neither path SHALL produce an entry the other could not have produced.
@@ -350,7 +351,7 @@ A new `location` SHALL be created unmapped. Recording that a plant has a place a
 declaring which shared location it represents are two acts, and a creation that did both
 would force the coordinator to decide the second before knowing the first.
 
-Every creation SHALL be restricted to the HS coordinator, and a collision SHALL name the
+Every creation SHALL be restricted to an administrative account, and a collision SHALL name the
 field to change: a repeated code and a repeated active name are two different constraints
 and two different corrections.
 
@@ -387,9 +388,9 @@ and two different corrections.
   site
 - **THEN** the refusal names the name
 
-#### Scenario: Only the HS coordinator can add
+#### Scenario: Only an administrative account can add
 
-- **WHEN** an account whose role is `supervisor` creates either kind of entry
+- **WHEN** an account whose role is `jhsc_member` creates either kind of entry
 - **THEN** the request is refused
 
 ### Requirement: Location codes and active names are unique within their site
@@ -597,7 +598,7 @@ seeds, fixtures and tests can reference a site without querying for it first.
 
 ### Requirement: The HS coordinator can retire a shared organization location
 
-The system SHALL allow only an HS coordinator to retire an active
+The system SHALL allow only an administrative account — `hs_coordinator` or `management` — to retire an active
 `organization_location` by setting its `deactivated_at` timestamp. The operation SHALL accept
 only the deactivation command and SHALL never delete the row or provide reactivation through the
 console operation.
@@ -609,9 +610,9 @@ console operation.
 - **THEN** the system sets that row's `deactivated_at` to a non-null timestamp
 - **AND** the `organization_location` row remains stored
 
-#### Scenario: A supervisor cannot retire a shared location
+#### Scenario: A JHSC member cannot retire a shared location
 
-- **WHEN** a `supervisor` submits the deactivation command for an active `organization_location`
+- **WHEN** a `jhsc_member` submits the deactivation command for an active `organization_location`
 - **THEN** the request is refused with HTTP 403
 - **AND** the `organization_location.deactivated_at` value is unchanged
 

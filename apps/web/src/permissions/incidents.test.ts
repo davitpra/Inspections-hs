@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Incident, Session } from '@hs/contracts';
 
-import { availableTransitions } from './incidents';
+import { availableTransitions, canReportIncident } from './incidents';
 
 const PERSON = '11111111-1111-4111-8111-111111111111';
 const USER = '22222222-2222-4222-8222-222222222222';
@@ -12,8 +12,6 @@ function session(role: Session['role']): Session {
     personId: PERSON,
     role,
     siteScope: ['33333333-3333-4333-8333-333333333333'],
-    recordsFrom: null,
-    recordsTo: null,
   };
 }
 
@@ -57,16 +55,20 @@ function incident(overrides: Partial<Incident> = {}): Incident {
 }
 
 describe('qué botones ofrece la pantalla', () => {
-  it('el supervisor que reportó no puede investigar ni cerrar', () => {
-    expect(availableTransitions(incident(), session('supervisor'))).toEqual([]);
+  it.each(['hs_coordinator', 'management'] as const)('%s puede reportar', (role) => {
+    expect(canReportIncident(session(role))).toBe(true);
   });
 
-  it('gerencia tampoco: §4 dice que investigar y cerrar son del coordinador', () => {
-    expect(availableTransitions(incident(), session('management'))).toEqual([]);
+  it('un miembro del JHSC no puede reportar', () => {
+    expect(canReportIncident(session('jhsc_member'))).toBe(false);
   });
 
-  it('el coordinador puede investigar y cerrar un primeros auxilios', () => {
-    const available = availableTransitions(incident(), session('hs_coordinator'));
+  it('un miembro del JHSC no puede investigar ni cerrar', () => {
+    expect(availableTransitions(incident(), session('jhsc_member'))).toEqual([]);
+  });
+
+  it.each(['hs_coordinator', 'management'] as const)('%s puede investigar y cerrar', (role) => {
+    const available = availableTransitions(incident(), session(role));
 
     expect(available.map((transition) => transition.to).sort()).toEqual([
       'closed',
@@ -98,6 +100,6 @@ describe('qué botones ofrece la pantalla', () => {
     expect(
       availableTransitions(closed, session('hs_coordinator')).map((transition) => transition.to),
     ).toEqual(['under_investigation']);
-    expect(availableTransitions(closed, session('supervisor'))).toEqual([]);
+    expect(availableTransitions(closed, session('jhsc_member'))).toEqual([]);
   });
 });

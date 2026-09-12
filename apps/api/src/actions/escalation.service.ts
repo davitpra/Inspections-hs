@@ -12,8 +12,8 @@ import { JobsService } from '../jobs/jobs.service';
 import { ESCALATE_OVERDUE_CRON, ESCALATE_OVERDUE_JOB, SITE_TIME_ZONE } from '../jobs/job-registry';
 
 /**
- * ADR-005 y §3 R3 — El escalamiento de las acciones vencidas: +3 días al supervisor,
- * +7 a gerencia.
+ * ADR-005, ADR-022 y §3 R3 — El escalamiento de las acciones vencidas: +3 días al
+ * coordinador, +7 a gerencia.
  *
  * DOS PROPIEDADES QUE NO ESTÁN EN ESTE ARCHIVO, y es donde tienen que no estar:
  *
@@ -184,14 +184,14 @@ async function overdueWithoutEscalation(
 }
 
 /**
- * El aviso a quien corresponde: supervisores a los +3, gerencia a los +7 (§4, tabla de
+ * El aviso a quien corresponde: coordinadores a los +3, gerencia a los +7 (§4, tabla de
  * roles: "Gerencia recibe escalamientos").
  *
  * Los destinatarios salen de una subconsulta y no de un `SELECT` seguido de un bucle de
  * `INSERT`, igual que en la apertura de período: es una sola sentencia, así que un
- * supervisor dado de alta a mitad del trabajo no queda a medias.
+ * coordinador dado de alta a mitad del trabajo no queda a medias.
  *
- * `dedupe_key` lleva el nivel: el mismo supervisor puede recibir el aviso de los +3 y
+ * `dedupe_key` lleva el nivel: una cuenta puede recibir avisos de niveles distintos y
  * el de los +7 de la misma acción, y son dos hechos distintos.
  */
 async function notifyRecipients(
@@ -232,10 +232,10 @@ async function notifyRecipients(
 
 /**
  * Dos `kind` y no uno con un campo `level`: quién recibe qué es la decisión de R3, y un
- * solo tipo haría que la bandeja del supervisor y la de gerencia se distingan por el
+ * solo tipo haría que la bandeja del coordinador y la de gerencia se distingan por el
  * contenido en vez de por el destinatario.
  */
 export const NOTIFICATION_KIND: Readonly<Record<EscalationLevel, string>> = {
-  supervisor: 'corrective_action_overdue_supervisor',
+  hs_coordinator: 'corrective_action_overdue_coordinator',
   management: 'corrective_action_overdue_management',
 };

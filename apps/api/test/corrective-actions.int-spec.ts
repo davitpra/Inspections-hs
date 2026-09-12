@@ -48,11 +48,10 @@ let locationA: string;
 let locationB: string;
 
 let inspector: { accountId: string };
-let coordinator: { accountId: string };
+let coordinator: { accountId: string; personId: string };
 let supervisor: { accountId: string; personId: string };
 let otherSupervisor: { accountId: string; personId: string };
 let manager: { accountId: string; personId: string };
-let auditor: { accountId: string };
 let jhsc: { accountId: string };
 let inspectorB: { accountId: string };
 
@@ -91,8 +90,8 @@ const sessionFor = (accountId: string, role: string, siteIds: string[]) => ({
 });
 
 const asCoordinator = () => sessionFor(coordinator.accountId, 'hs_coordinator', [SITE_A, SITE_B]);
-const asSupervisor = () => sessionFor(supervisor.accountId, 'supervisor', [SITE_A]);
-const asOtherSupervisor = () => sessionFor(otherSupervisor.accountId, 'supervisor', [SITE_A]);
+const asSupervisor = () => sessionFor(supervisor.accountId, 'management', [SITE_A]);
+const asOtherSupervisor = () => sessionFor(otherSupervisor.accountId, 'management', [SITE_A]);
 const asManager = () => sessionFor(manager.accountId, 'management', [SITE_A]);
 
 let periodCursor = 0;
@@ -337,17 +336,10 @@ beforeAll(async () => {
     firstName: 'Casey',
     lastName: 'Coordinator',
   });
-  supervisor = await createAccount(db.app, { siteIds: [SITE_A], role: 'supervisor' });
-  otherSupervisor = await createAccount(db.app, { siteIds: [SITE_A], role: 'supervisor' });
+  supervisor = await createAccount(db.app, { siteIds: [SITE_A], role: 'management' });
+  otherSupervisor = await createAccount(db.app, { siteIds: [SITE_A], role: 'management' });
   manager = await createAccount(db.app, { siteIds: [SITE_A], role: 'management' });
   jhsc = await createAccount(db.app, { siteIds: [SITE_A], role: 'jhsc_member' });
-  auditor = await createAccount(db.app, {
-    siteIds: [SITE_A],
-    role: 'external_auditor',
-    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-    recordsFrom: '2026-01-01',
-    recordsTo: '2026-12-31',
-  });
 
   rosterPerson = await createPerson(db.app, SITE_A);
   rosterPersonB = await createPerson(db.app, SITE_B);
@@ -1404,17 +1396,15 @@ describe('los permisos', () => {
     expect(action.events[2]?.actor_user_id).toBe(coordinator.accountId);
   });
 
-  it('un miembro del JHSC y un auditor externo no escriben nada', async () => {
+  it('un miembro del JHSC no escribe nada', async () => {
     const actionId = await openAction();
 
-    for (const session of [
-      sessionFor(jhsc.accountId, 'jhsc_member', [SITE_A]),
-      sessionFor(auditor.accountId, 'external_auditor', [SITE_A]),
-    ]) {
-      await expect(
-        actions.transition(session, actionId, { to: 'in_progress', evidence: [] }),
-      ).rejects.toMatchObject({ response: { code: 'forbidden' } });
-    }
+    await expect(
+      actions.transition(sessionFor(jhsc.accountId, 'jhsc_member', [SITE_A]), actionId, {
+        to: 'in_progress',
+        evidence: [],
+      }),
+    ).rejects.toMatchObject({ response: { code: 'forbidden' } });
   });
 });
 
@@ -1467,8 +1457,8 @@ describe('el escalamiento', () => {
   /**
    * Cuántas notificaciones de este tipo tiene CADA destinatario.
    *
-   * Por destinatario y no en total: SITE_A tiene dos supervisores, así que un
-   * escalamiento correcto produce dos filas — una por persona— y contar el total
+   * Por destinatario y no en total: un sitio puede tener más de un coordinador, así que un
+   * escalamiento correcto produce una fila por persona y contar el total
    * confundiría "escaló dos veces" con "avisó a dos personas", que es justo lo que este
    * test tiene que distinguir.
    */
@@ -1497,14 +1487,14 @@ describe('el escalamiento', () => {
     return Number(one(rows).count);
   }
 
-  it('a los cuatro días escala al supervisor y a nadie más', async () => {
+  it('a los cuatro días escala al coordinador y a nadie más', async () => {
     const actionId = await openAction();
     const action = await actions.get(asCoordinator(), actionId);
 
     await escalation.run(daysAfter(action.due_at, 4));
 
-    expect((await escalationsOf(actionId)).map((row) => row.level)).toEqual(['supervisor']);
-    expect(await notificationsFor(actionId, 'corrective_action_overdue_supervisor')).toBeGreaterThan(
+    expect((await escalationsOf(actionId)).map((row) => row.level)).toEqual(['hs_coordinator']);
+    expect(await notificationsFor(actionId, 'corrective_action_overdue_coordinator')).toBeGreaterThan(
       0,
     );
     expect(await notificationsFor(actionId, 'corrective_action_overdue_management')).toBe(0);
@@ -1517,8 +1507,8 @@ describe('el escalamiento', () => {
     await escalation.run(daysAfter(action.due_at, 8));
 
     expect((await escalationsOf(actionId)).map((row) => row.level)).toEqual([
+      'hs_coordinator',
       'management',
-      'supervisor',
     ]);
     expect(await notificationsFor(actionId, 'corrective_action_overdue_management')).toBeGreaterThan(
       0,
@@ -1539,19 +1529,18 @@ describe('el escalamiento', () => {
 
     expect(await escalationsOf(actionId)).toHaveLength(2);
 
-    // Cada destinatario, exactamente una por nivel. La planta tiene dos supervisores, así
-    // que el total es dos y la propiedad que importa es que ninguno la reciba dos veces.
-    const toSupervisors = await notificationsPerRecipient(
+    // Cada destinatario, exactamente una por nivel.
+    const toCoordinators = await notificationsPerRecipient(
       actionId,
-      'corrective_action_overdue_supervisor',
+      'corrective_action_overdue_coordinator',
     );
     const toManagement = await notificationsPerRecipient(
       actionId,
       'corrective_action_overdue_management',
     );
 
-    expect(toSupervisors.length).toBeGreaterThan(0);
-    expect(toSupervisors.every((count) => count === 1)).toBe(true);
+    expect(toCoordinators.length).toBeGreaterThan(0);
+    expect(toCoordinators.every((count) => count === 1)).toBe(true);
     expect(toManagement.length).toBeGreaterThan(0);
     expect(toManagement.every((count) => count === 1)).toBe(true);
   });
@@ -1629,7 +1618,7 @@ describe('la notificación de asignación', () => {
   /**
    * Persona ≠ Usuario: una persona del roster sin cuenta no tiene bandeja, y la acción
    * se crea igual. La red que cubre ese silencio es el escalamiento a los +3 días, que
-   * le llega al supervisor.
+   * le llega al coordinador.
    */
   it('un responsable sin cuenta no genera notificación, y la acción se crea igual', async () => {
     const actionId = await openAction({ assignee: rosterPerson });
@@ -1646,20 +1635,20 @@ describe('la notificación de asignación', () => {
     expect(await stateOf(actionId)).toBe('open');
   });
 
-  it('la bandeja devuelve juntos los tipos distintos', async () => {
-    const actionId = await openAction();
+  it('el coordinador responsable recibe asignación y primer escalamiento', async () => {
+    const actionId = await openAction({ assignee: coordinator.personId });
     const action = await actions.get(asCoordinator(), actionId);
 
     await escalation.run(daysAfter(action.due_at, 4));
 
-    const inbox = await stack.notifications.inbox(asSupervisor());
+    const inbox = await stack.notifications.inbox(asCoordinator());
     const kinds = new Set(inbox.map((item) => item.kind));
 
     // El parseo contra la unión discriminada corre acá: si un `kind` de la base no
     // estuviera en el contrato, esta lectura fallaría en vez de devolver una tarjeta que
     // nadie sabe mostrar (design D11).
     expect(kinds.has('corrective_action_assigned')).toBe(true);
-    expect(kinds.has('corrective_action_overdue_supervisor')).toBe(true);
+    expect(kinds.has('corrective_action_overdue_coordinator')).toBe(true);
   });
 });
 
@@ -2376,7 +2365,10 @@ describe('la cadena de auditoría', () => {
 
     expect(escalated).toHaveLength(2);
     expect(escalated.every((row) => row.actor_user_id === null)).toBe(true);
-    expect(escalated.map((row) => row.payload.level).sort()).toEqual(['management', 'supervisor']);
+    expect(escalated.map((row) => row.payload.level).sort()).toEqual([
+      'hs_coordinator',
+      'management',
+    ]);
     expect(await chainIsIntact(SITE_A)).toBe(true);
   });
 

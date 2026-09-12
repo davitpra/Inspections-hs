@@ -3,7 +3,7 @@
 Turns a finding, or the investigation of an incident, into an obligation with a named owner and a
 deadline declared by the HS coordinator, records every step of that obligation as an immutable event
 rather than a status column, records optional evidence, requires a second person's verification to
-close it, and escalates it to the supervisor and then to management when it runs past its deadline
+close it, and escalates it to the coordinator and then to management when it runs past its deadline
 unclosed.
 
 ## Requirements
@@ -390,16 +390,28 @@ photograph.
 The system SHALL refuse the transition `awaiting_verification` → `closed`, and the refusal
 `awaiting_verification` → `in_progress`, when the acting account is the `actor_user_id` of the
 event that moved the action to `awaiting_verification` **and** that account's role is
-`supervisor` or `management`. An `hs_coordinator` account SHALL be accepted for both
+`management` or `jhsc_member`. An `hs_coordinator` account SHALL be accepted for both
 transitions even when it is the `actor_user_id` of that event. The rule SHALL be enforced by
 the database and not only by the endpoint, and the database SHALL decide the exception from the
 acting account's own role, not from a value supplied with the event. When the verification is
 refused, the event SHALL carry a `reason`; when it closes the action, a `reason` SHALL NOT be
 required.
 
-#### Scenario: A supervisor cannot verify their own work
+The exception SHALL belong to `hs_coordinator` alone and SHALL NOT extend to `management`, even
+though the two roles hold the same administrative permissions otherwise: the exception exists
+because a site can hold a single coordinator whose work would otherwise stall unverifiable, and a
+management account is by construction a second account that can verify it.
 
-- **GIVEN** an action moved to `awaiting_verification` by the supervisor who executed it
+#### Scenario: A manager cannot verify their own work
+
+- **GIVEN** an action moved to `awaiting_verification` by a `management` account
+- **WHEN** that same account attempts to close it
+- **THEN** the request is rejected with the code `verifier_is_executor`
+- **AND** the action's state is still `awaiting_verification`
+
+#### Scenario: A JHSC member cannot verify their own work
+
+- **GIVEN** an action moved to `awaiting_verification` by the `jhsc_member` assignee who executed it
 - **WHEN** that same account attempts to close it
 - **THEN** the request is rejected with the code `verifier_is_executor`
 - **AND** the action's state is still `awaiting_verification`
@@ -412,7 +424,7 @@ required.
 
 #### Scenario: The rule holds for a direct insert too
 
-- **WHEN** a closing event whose `actor_user_id` equals the `supervisor` actor of the completion
+- **WHEN** a closing event whose `actor_user_id` equals the `management` actor of the completion
   event is inserted directly, bypassing the endpoint
 - **THEN** the insert fails on the verifier guard
 
@@ -464,10 +476,9 @@ the creation of an action for an investigation only from an `hs_coordinator` acc
 system SHALL accept the transitions `open` → `in_progress` and `in_progress` →
 `awaiting_verification` only from the account of the assigned person or from an
 `hs_coordinator` account acting on their behalf. The system SHALL accept the verification
-transitions from an `hs_coordinator`, `supervisor` or `management` account of the action's
-site, subject to the verifier rule. An `external_auditor` SHALL be refused every write and a
-`jhsc_member` who neither raised the finding nor is the assigned person SHALL be refused
-every write, both with `forbidden`. The acting account SHALL be taken from the session and
+transitions from an `hs_coordinator` or `management` account of the action's site, subject to the
+verifier rule. A `jhsc_member` who neither raised the finding nor is the assigned person SHALL be
+refused every write with `forbidden`. The acting account SHALL be taken from the session and
 never from the payload. A finding outside the session's scope SHALL be refused with
 `action_not_found`, the same code as a finding that does not exist, evaluated before the
 permission itself so that the response never discloses which is the case.
@@ -480,9 +491,9 @@ permission itself so that the response never discloses which is the case.
 - **THEN** a `corrective_action` row is created referencing that finding
 - **AND** its `created_by` is that account
 
-#### Scenario: A supervisor who did not raise the finding cannot create an action
+#### Scenario: A manager who did not raise the finding cannot create an action
 
-- **WHEN** a supervisor who is not the finding's `reported_by` and not an `hs_coordinator`
+- **WHEN** a `management` account that is not the finding's `reported_by`
   creates an action for that finding
 - **THEN** the request is rejected with the code `forbidden`
 - **AND** no `corrective_action` row is created
@@ -495,8 +506,8 @@ permission itself so that the response never discloses which is the case.
 
 #### Scenario: Raising the finding does not extend to an investigation
 
-- **GIVEN** an incident's investigation reported by a supervisor
-- **WHEN** that supervisor, who is not an `hs_coordinator`, creates an action for that
+- **GIVEN** an incident's investigation reported by a `management` account
+- **WHEN** that same account, which is not an `hs_coordinator`, creates an action for that
   investigation
 - **THEN** the request is rejected with the code `forbidden`
 
@@ -508,7 +519,8 @@ permission itself so that the response never discloses which is the case.
 #### Scenario: Someone else's action cannot be advanced
 
 - **GIVEN** an action assigned to a person whose account is not the caller's
-- **WHEN** a supervisor who is neither the assignee nor the coordinator moves it to `in_progress`
+- **WHEN** a `management` account that is neither the assignee nor the coordinator moves it to
+  `in_progress`
 - **THEN** the request is rejected with the code `forbidden`
 
 #### Scenario: The coordinator records progress on behalf of the assignee
@@ -517,32 +529,36 @@ permission itself so that the response never discloses which is the case.
 - **WHEN** the HS coordinator moves it to `in_progress`
 - **THEN** the event is appended with the coordinator's account as `actor_user_id`
 
-#### Scenario: An external auditor writes nothing
-
-- **WHEN** an external auditor requests any transition
-- **THEN** the request is rejected with the code `forbidden`
-
 #### Scenario: The actor is taken from the session
 
 - **WHEN** a transition is posted with an `actor_user_id` in the payload naming another account
 - **THEN** the stored `actor_user_id` is the account of the authenticated session
 
-### Requirement: An overdue action escalates to the supervisor at three days and to management at seven
+### Requirement: An overdue action escalates to the coordinator at three days and to management at seven
 
 The system SHALL use the current `corrective_action.due_at` to find every non-closed action more than
-3 or 7 days overdue and SHALL retain the existing supervisor and management escalation behavior.
-Each level SHALL still be emitted at most once. Replacing `due_at` SHALL affect future decisions but
-SHALL NOT delete, withdraw or repeat an escalation already emitted. An action whose work is declared
-done SHALL keep escalating against the frozen `due_at`, which SHALL be movable only after a refused
-verification returns it to `in_progress`.
+3 or 7 days overdue and SHALL escalate it to the two administrative roles in turn: `hs_coordinator`
+at three days and `management` at seven. Each level SHALL be emitted at most once. Replacing `due_at`
+SHALL affect future decisions but SHALL NOT delete, withdraw or repeat an escalation already emitted.
+An action whose work is declared done SHALL keep escalating against the frozen `due_at`, which SHALL
+be movable only after a refused verification returns it to `in_progress`.
 
-#### Scenario: Three days past the deadline reaches the supervisor
+The two levels SHALL be distinguished by their recipient and not by their content: each SHALL carry
+its own notification kind — `corrective_action_overdue_coordinator` and
+`corrective_action_overdue_management` — so that a recipient's inbox is decided by who they are
+rather than by reading the notification.
+
+The first level SHALL reach every active `hs_coordinator` account of the action's site even when
+that coordinator is the account that created the action or the person assigned to it: an escalation
+reports the deadline, not fault.
+
+#### Scenario: Three days past the deadline reaches the coordinator
 
 - **GIVEN** an action whose current state is `in_progress` and whose `due_at` was 4 days ago
 - **WHEN** the escalation job runs
-- **THEN** a `corrective_action_escalation` row with `level` `supervisor` exists for it
-- **AND** every active `supervisor` account of its site has a notification of kind
-  `corrective_action_overdue_supervisor` naming the action
+- **THEN** a `corrective_action_escalation` row with `level` `hs_coordinator` exists for it
+- **AND** every active `hs_coordinator` account of its site has a notification of kind
+  `corrective_action_overdue_coordinator` naming the action
 
 #### Scenario: A replacement deadline governs future escalation
 
@@ -554,7 +570,7 @@ verification returns it to `in_progress`.
 
 - **GIVEN** an action is `awaiting_verification` and its `due_at` was 4 days ago
 - **WHEN** the escalation job runs
-- **THEN** a `corrective_action_escalation` row with `level` `supervisor` exists for it
+- **THEN** a `corrective_action_escalation` row with `level` `hs_coordinator` exists for it
 - **AND** its `due_at` cannot be replaced while it stays in that state
 
 #### Scenario: A past escalation survives a replacement
@@ -565,17 +581,23 @@ verification returns it to `in_progress`.
 
 #### Scenario: Seven days past the deadline reaches management
 
-- **GIVEN** an action already escalated to the supervisor and whose `due_at` was 8 days ago
+- **GIVEN** an action already escalated to the coordinator and whose `due_at` was 8 days ago
 - **WHEN** the escalation job runs
 - **THEN** a second row with `level` `management` exists for it
 - **AND** every active `management` account of its site has a notification of kind
   `corrective_action_overdue_management`
 
+#### Scenario: The coordinator who owns the action is still notified
+
+- **GIVEN** an action created by the only `hs_coordinator` of its site, 4 days overdue
+- **WHEN** the escalation job runs
+- **THEN** that coordinator has a notification of kind `corrective_action_overdue_coordinator`
+
 #### Scenario: Thirty daily runs escalate once
 
 - **GIVEN** an action that has been overdue for 30 days
 - **WHEN** the escalation job runs on each of those days
-- **THEN** exactly one `supervisor` row and one `management` row exist for it
+- **THEN** exactly one `hs_coordinator` row and one `management` row exist for it
 - **AND** each recipient has exactly one notification per level
 
 #### Scenario: A closed action does not escalate
@@ -648,15 +670,15 @@ listing SHALL omit event and evidence history; an individual action read SHALL r
 history. A request for an action outside the session's scope SHALL be answered exactly as one for
 an action that does not exist.
 
-#### Scenario: A supervisor of one site does not see the other's actions
+#### Scenario: A JHSC member of one site does not see the other's actions
 
 - **GIVEN** actions in St. Thomas and in Glencoe
-- **WHEN** a supervisor scoped to St. Thomas lists actions
+- **WHEN** a `jhsc_member` scoped to St. Thomas lists actions
 - **THEN** only the St. Thomas actions are returned
 
 #### Scenario: An action of the other site is indistinguishable from a missing one
 
-- **WHEN** a supervisor scoped to St. Thomas requests a Glencoe action by id
+- **WHEN** a `jhsc_member` scoped to St. Thomas requests a Glencoe action by id
 - **THEN** the response is `action_not_found`
 - **AND** the body reveals nothing about its site, assignee or description
 

@@ -21,6 +21,7 @@ const getAccount = vi.hoisted(() => vi.fn());
 const reissueInvitation = vi.hoisted(() => vi.fn());
 const removeJhscAccess = vi.hoisted(() => vi.fn());
 const setJhscSeat = vi.hoisted(() => vi.fn());
+const promoteToCoordinator = vi.hoisted(() => vi.fn());
 const importRoster = vi.hoisted(() => vi.fn());
 const createPerson = vi.hoisted(() => vi.fn());
 const deactivatePerson = vi.hoisted(() => vi.fn());
@@ -34,6 +35,7 @@ vi.mock('../../api/roster', () => ({
   reissueInvitation,
   removeJhscAccess,
   setJhscSeat,
+  promoteToCoordinator,
   importRoster,
   createPerson,
   deactivatePerson,
@@ -47,8 +49,6 @@ function session(role: Session['role'], siteScope: string[] = [SITE]): { account
       personId: PERSON,
       role,
       siteScope,
-      recordsFrom: null,
-      recordsTo: null,
     },
   };
 }
@@ -119,6 +119,7 @@ beforeEach(() => {
   reissueInvitation.mockReset();
   removeJhscAccess.mockReset();
   setJhscSeat.mockReset();
+  promoteToCoordinator.mockReset();
   importRoster.mockReset();
   createPerson.mockReset();
   deactivatePerson.mockReset();
@@ -192,12 +193,12 @@ afterEach(() => {
 });
 
 describe('quién puede entrar', () => {
-  it('a cualquiera que no sea el coordinador le avisa y NO pide nada al servidor', async () => {
-    useAppSession.mockReturnValue(session('supervisor'));
+  it('al miembro del JHSC le avisa y NO pide nada al servidor', async () => {
+    useAppSession.mockReturnValue(session('jhsc_member'));
 
     renderRoute();
 
-    expect(await screen.findByText(/Only the H&S coordinator/i)).toBeTruthy();
+    expect(await screen.findByText(/Only H&S coordinators and management/i)).toBeTruthy();
 
     // Lo que importa no es el aviso, es que no se dispare una consulta que el servidor
     // va a negar igual.
@@ -211,6 +212,12 @@ describe('quién puede entrar', () => {
 
     expect(await screen.findByRole('rowheader', { name: 'Reid, Ada' })).toBeTruthy();
     expect(screen.getByText('10472')).toBeTruthy();
+  });
+
+  it('management ve el roster de su planta', async () => {
+    useAppSession.mockReturnValue(session('management'));
+    renderRoute();
+    expect(await screen.findByRole('rowheader', { name: 'Reid, Ada' })).toBeTruthy();
   });
 });
 
@@ -427,12 +434,12 @@ describe('agregar una persona (add-person-to-roster-by-hand)', () => {
     expect(screen.getByRole('dialog')).toBeTruthy();
   });
 
-  it('un rol que no es coordinador no ve el botón', async () => {
-    useAppSession.mockReturnValue(session('supervisor'));
+  it('un miembro del JHSC no ve el botón', async () => {
+    useAppSession.mockReturnValue(session('jhsc_member'));
 
     renderRoute();
 
-    expect(await screen.findByText(/Only the H&S coordinator/i)).toBeTruthy();
+    expect(await screen.findByText(/Only H&S coordinators and management/i)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Add person' })).toBeNull();
   });
 });
@@ -958,16 +965,16 @@ describe('quitar el acceso (remove-jhsc-access-from-roster)', () => {
     expect(within(adaMenu).queryByRole('menuitem', { name: 'Remove' })).toBeNull();
   });
 
-  // El roster administra el acceso que el roster otorga. Un supervisor no se toca de acá.
+  // El roster no quita desde esta acción el acceso de una cuenta administrativa.
   it('no ofrece quitar el acceso de una cuenta que no es jhsc_member', async () => {
     listPeople.mockResolvedValue([
-      person({ id: ADA, account: { ...member, role: 'supervisor' } }),
+      person({ id: ADA, account: { ...member, role: 'hs_coordinator' } }),
     ]);
 
     renderRoute();
     await screen.findByRole('rowheader', { name: 'Reid, Ada' });
 
-    expect(screen.queryByRole('button', { name: 'More actions for Reid, Ada' })).toBeNull();
+    expect(within(openRowMenu('Reid, Ada')).queryByRole('menuitem', { name: 'Remove' })).toBeNull();
   });
 
   it('confirma antes de quitar, y solo llama al servidor al confirmar', async () => {
@@ -1066,11 +1073,11 @@ describe('quitar el acceso (remove-jhsc-access-from-roster)', () => {
     expect(screen.queryByRole('button', { name: 'More actions for Reid, Ada' })).toBeNull();
   });
 
-  // La cuenta inactiva de supervisor no se revive, pero la fila sigue siendo un Worker que
+  // Una cuenta administrativa inactiva no se revive, pero la fila sigue siendo un Worker que
   // el coordinador puede quitar del roster.
   it('solo ofrece quitar al Worker cuando la cuenta inactiva no era de jhsc_member', async () => {
     listPeople.mockResolvedValue([
-      person({ id: ADA, account: { ...removed, role: 'supervisor' } }),
+      person({ id: ADA, account: { ...removed, role: 'management' } }),
     ]);
 
     renderRoute();
@@ -1079,6 +1086,39 @@ describe('quitar el acceso (remove-jhsc-access-from-roster)', () => {
     const menu = openRowMenu('Reid, Ada');
     expect(within(menu).queryByRole('menuitem', { name: 'Invite to JHSC' })).toBeNull();
     expect(within(menu).getByRole('menuitem', { name: 'Remove worker' })).toBeTruthy();
+  });
+});
+
+describe('promover a coordinador', () => {
+  it('management confirma, promueve y refresca el rol sin tocar el asiento', async () => {
+    useAppSession.mockReturnValue(session('management'));
+    listPeople.mockResolvedValue([person({ account: account({ jhsc_seat: false }) })]);
+    promoteToCoordinator.mockResolvedValue({
+      account: account({ role: 'hs_coordinator', jhsc_seat: false }),
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+    renderRoute(client);
+    await screen.findByRole('rowheader', { name: 'Reid, Ada' });
+
+    clickRowAction('Reid, Ada', 'Promote');
+    expect(screen.getByText(/This does not grant a JHSC seat/i)).toBeTruthy();
+    expect(promoteToCoordinator).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Promote to coordinator' }));
+
+    await waitFor(() => expect(promoteToCoordinator).toHaveBeenCalledWith({ userId: ACCOUNT }));
+    expect(setJhscSeat).not.toHaveBeenCalled();
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['roster', SITE] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['account', ACCOUNT] });
+  });
+
+  it('el coordinador no recibe la acción de promoción', async () => {
+    listPeople.mockResolvedValue([person({ account: account() })]);
+    renderRoute();
+    await screen.findByRole('rowheader', { name: 'Reid, Ada' });
+
+    expect(within(openRowMenu('Reid, Ada')).queryByRole('menuitem', { name: 'Promote' })).toBeNull();
   });
 });
 
@@ -1102,6 +1142,16 @@ describe('el asiento en el JHSC (coordinator-jhsc-seat)', () => {
 
     expect(within(openRowMenu('Reid, Ada')).getByRole('menuitem', { name: 'Join JHSC' })).toBeTruthy();
     expect(within(openRowMenu('Alvarez, Bruno')).queryByRole('menuitem', { name: 'Join JHSC' })).toBeNull();
+  });
+
+  it('management también puede ocupar un asiento', async () => {
+    useAppSession.mockReturnValue(session('management'));
+    listPeople.mockResolvedValue([
+      person({ account: account({ role: 'management', jhsc_seat: false }) }),
+    ]);
+    renderRoute();
+    await screen.findByRole('rowheader', { name: 'Reid, Ada' });
+    expect(within(openRowMenu('Reid, Ada')).getByRole('menuitem', { name: 'Join JHSC' })).toBeTruthy();
   });
 
   it('la celda Role dice el asiento de quien lo tiene', async () => {

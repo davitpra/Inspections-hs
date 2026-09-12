@@ -39,14 +39,14 @@ las clasificaciones de incidente (riesgo F).
 > mensuales ni de los accidentes en dos instalaciones, porque la herramienta actual pierde
 > el trabajo cuando falla la conexión y obliga a dar acceso completo al sistema a cualquiera
 > que necesite cargar algo.
-> Resuelto se ve así: una inspección se completa entera aunque no haya señal, un supervisor
+> Resuelto se ve así: una inspección se completa entera aunque no haya señal, una cuenta administrativa
 > reporta un accidente sin poder ver información de nadie más, y cada hallazgo tiene un
 > responsable con fecha hasta que alguien distinto verifica que se cerró.
 
 ### Quién lo tiene
 
-El coordinador de Salud y Seguridad, los 7 miembros del JHSC (4 en St. Thomas, 3 en Glencoe),
-y los supervisores y gerentes de operaciones de ambos sitios.
+El coordinador de Salud y Seguridad, los 7 miembros del JHSC (4 en St. Thomas, 3 en Glencoe)
+y los gerentes de operaciones de ambos sitios.
 
 ### Qué hacen hoy
 
@@ -59,7 +59,7 @@ Usan **Atlas Citation Canada**. Dos fallas que la v1 resuelve:
    acceso al sistema. No existe el permiso acotado.
 
 Una tercera falla **queda sin resolver por decisión de alcance**: Atlas no soporta español, y
-la v1 tampoco lo hará — la plataforma es solo en inglés. Los supervisores hispanohablantes
+la v1 tampoco lo hará — la plataforma es solo en inglés. Los usuarios hispanohablantes
 sí reportan, en inglés, con la ayuda que sea necesaria. Ver riesgo G.
 
 Consecuencia acumulada: **el roster en Atlas está desactualizado**, porque agregar personas
@@ -94,7 +94,7 @@ objetivo en la revisión de los 12 meses.
 
 Lo siguiente estaba en el borrador inicial y **sale**:
 
-- **Reporte de incidentes en primera persona.** Los incidentes los carga el supervisor o
+- **Reporte de incidentes en primera persona.** Los incidentes los carga una cuenta administrativa o
   gerente. El lesionado no reporta lo suyo.
 - **Formulario sin cuenta / kiosco / link público.** Todo reporte viene de un usuario
   autenticado.
@@ -179,12 +179,12 @@ la exige para pasar a _esperando verificación_ (ADR-016). **Una persona distint
 la verifica y la cierra, salvo el coordinador de H&S, que es el único rol exento porque es la
 única cuenta que declara trabajo hecho por una persona del roster sin usuario (ADR-019). Si
 vence sin
-cerrarse: +3 días escala al supervisor, +7 días a gerencia. Cada transición es un evento
+cerrarse: +3 días escala al coordinador, +7 días a gerencia. Cada transición es un evento
 append-only, no un campo que se sobrescribe.
 
 ### R4 — Reporte de incidente en tercera persona
 
-Ocurrió un accidente (choque de montacargas, corte, caída). Un supervisor o gerente entra a
+Ocurrió un accidente (choque de montacargas, corte, caída). Un coordinador o gerente entra a
 la plataforma **en inglés**, **selecciona a la persona afectada de una lista sin poder ver su
 perfil**, clasifica el evento, y describe qué pasó. Registra la categoría de la lesión,
 **no el diagnóstico** — eso no entra al sistema.
@@ -203,7 +203,7 @@ Es la decisión de modelo más importante del sistema y la que resuelve el terce
   de un incidente o responsable de una acción. **La mayoría nunca inicia sesión.**
 - **Usuario** — quien tiene credenciales. Subconjunto pequeño. Referencia a una Persona.
 
-Un supervisor selecciona una **Persona** como sujeto del incidente sin que eso implique darle
+Una cuenta administrativa selecciona una **Persona** como sujeto del incidente sin que eso implique darle
 acceso al sistema a esa persona, y sin poder ver su perfil.
 
 ### Entidades
@@ -328,13 +328,14 @@ como superado. No es edición: es entrada adicional.
 
 ### Roles y permisos
 
-| Rol                                     | Alcance                                                                                    |
-| --------------------------------------- | ------------------------------------------------------------------------------------------ |
-| **Miembro JHSC**                        | Ejecuta inspecciones de su sitio. Ve hallazgos e incidentes.                               |
-| **Supervisor / Gerente de operaciones** | Crea incidentes en tercera persona. Ejecuta acciones asignadas. No ve incidentes de otros. |
-| **Coordinador de HS**                   | Todo. Administra plantillas y roster.                                                      |
-| **Gerencia**                            | Lectura completa + dashboards. Recibe escalamientos.                                       |
-| **Auditor externo**                     | Solo lectura, alcance acotado por fecha.                                                   |
+| Rol                   | Alcance                                                                                                                                                |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Miembro JHSC**      | Ejecuta inspecciones de su sitio y las acciones que tiene asignadas. No administra la plataforma ni reporta incidentes en tercera persona.             |
+| **Coordinador de HS** | Administra roster, cuentas, plantillas, catálogo y programación. Reporta incidentes y hallazgos manuales. Recibe el primer escalamiento de una acción. |
+| **Gerencia**          | Tiene la misma autoridad administrativa que el coordinador, lectura completa y dashboards. Ejecuta las acciones que tiene asignadas, puede promover un miembro JHSC a coordinador y recibe el escalamiento final. |
+
+La promoción de `jhsc_member` a `hs_coordinator` es el único cambio de rol expuesto y
+pertenece exclusivamente a `management`. No concede un asiento en el JHSC como efecto lateral.
 
 **No existe un permiso de "no editar".** Nadie edita nada: la inmutabilidad es una propiedad
 global del sistema, no un atributo de rol. Eliminar esa frase del vocabulario del proyecto.
@@ -462,7 +463,7 @@ casi-accidentes" se ven idénticos en un dashboard.
 **Decisión: "casi-accidente" sale de las clasificaciones de incidente, y el indicador de
 volumen sale de la analítica.** Este módulo mide cumplimiento, no prevención.
 
-**Pero el evento sigue teniendo dónde vivir.** Un supervisor que presencia un casi-accidente
+**Pero el evento sigue teniendo dónde vivir.** Un gerente que presencia un casi-accidente
 lo carga como **hallazgo de entrada manual**, que ya existe en §4: descripción, foto,
 ubicación, y de ahí sale una acción correctiva con responsable y
 fecha. Es el camino correcto — la prevención vive en el módulo de hallazgos, que es donde
@@ -473,18 +474,18 @@ cualquier agrupación por concepto (§4). Los casi-accidentes heredan ese punto 
 en v2 si el volumen lo justifica.
 
 **G. Fidelidad del relato con la plataforma solo en inglés.**
-Un supervisor hispanohablante presencia el accidente y tiene que describirlo en inglés, en un
+Un usuario hispanohablante presencia el accidente y tiene que describirlo en inglés, en un
 registro inmutable que puede terminar en un Form 7 del WSIB o en un expediente del MLITSD.
 El riesgo no es de código: es que la narrativa quede pobre, ambigua o incompleta justo en el
 documento donde la precisión importa más. Mitigaciones posibles sin construir i18n:
 
 - Los campos narrativos aceptan texto en cualquier idioma y registran cuál se usó. Si el
-  supervisor escribe en español, el registro conserva sus palabras exactas.
+  usuario escribe en español, el registro conserva sus palabras exactas.
 - Campos guiados y estructurados (qué, dónde, cuándo, quién, qué tarea se hacía) en lugar de
   un solo cuadro de texto libre grande. Reducen la carga de redacción.
 - **No usar traducción automática** dentro de un registro inmutable.
 
-_Nota:_ si en producción se observa que los supervisores hispanohablantes dejan de reportar o
+_Nota:_ si en producción se observa que los usuarios hispanohablantes dejan de reportar o
 reportan de segunda mano, esta decisión de alcance hay que revisarla.
 
 **G-bis. La confidencialidad médica no desaparece con la tabla.**
@@ -519,19 +520,11 @@ Tres razones:
 
 Se revisa en v2 si el coordinador reporta que la transcripción es un dolor real.
 
-**I. Ciclo de vida del auditor externo — cerrado en v1.2.**
+**I. Ciclo de vida del auditor externo — retirado por ADR-022.**
 
-| Aspecto       | Decisión                                                                        |
-| ------------- | ------------------------------------------------------------------------------- |
-| Quién lo crea | Solo el coordinador de HS                                                       |
-| Vencimiento   | `expires_at` obligatorio. Default 30 días, máximo 90. Sin renovación automática |
-| Alcance       | Solo lectura, uno o ambos sitios, acotado por rango de fechas de los registros  |
-| Revocación    | Inmediata por el coordinador, en cualquier momento                              |
-| Fin de vida   | La cuenta se desactiva, nunca se borra — igual que Persona e ítem               |
-
-**Las lecturas del auditor se registran en el log de auditoría.** Es la única excepción a no
-loguear lecturas: para el resto de los roles sería caro y sin valor, pero saber qué miró un
-auditor externo y cuándo es exactamente el tipo de cosa que después hace falta.
+El rol `external_auditor`, su vencimiento, su ventana de registros y la excepción que
+registraba sus lecturas se retiraron antes de producción. Una auditoría externa se atiende
+con una cuenta administrativa dentro de su alcance de sitio, sin un ciclo de vida especial.
 
 _(La pregunta sobre el detalle médico ya no aplica: no hay detalle médico en el sistema.)_
 
@@ -576,8 +569,9 @@ _(La pregunta sobre el detalle médico ya no aplica: no hay detalle médico en e
    Cada lugar de trabajo tiene su JHSC y su obligación propia.
    **→ No. Solo coordinador y gerencia ven ambos sitios.**
 
-6. **¿Un supervisor ve los incidentes que él mismo cargó, o ninguno después de enviarlo?**
-   **→ Ve los suyos, no los de otros.**
+6. **¿Un miembro del JHSC ve incidentes de otras personas?**
+   **→ No. RLS solo admitiría aquellos cuyo `reported_by` lo nombre; como no puede reportar en
+   tercera persona, en el flujo ordinario no ve ninguno.**
 
 ### Cerradas en v1.1 (fuera del alcance original de esta sección)
 
@@ -668,9 +662,8 @@ de cada una vive en el riesgo correspondiente; acá queda la decisión.
 14. **¿"Precarga el Form 7" es mostrar campos o generar el PDF del WSIB?**
     **→ Mostrar campos, con copiar-al-portapapeles. Sin PDF oficial.** Ver riesgo H.
 
-15. **¿Cuál es el ciclo de vida del auditor externo?**
-    **→ Creado por el coordinador, `expires_at` obligatorio, revocable, lecturas logueadas.**
-    Ver riesgo I.
+15. ~~**¿Cuál es el ciclo de vida del auditor externo?**~~
+    **→ Pregunta retirada por ADR-022 junto con el rol `external_auditor`.** Ver riesgo I.
 
 16. **¿Cuáles son los números de "cómo sabremos que funcionó"?**
     **→ Cinco métricas con objetivo y una sexta sin línea base.** Ver §1.

@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  AUDITOR_DEFAULT_DAYS,
-  AUDITOR_MAX_DAYS,
+  ROLES,
   accountDetailSchema,
   accountSchema,
   createAccountRequestSchema,
   createAccountResponseSchema,
   createAccountSchema,
   createPersonRequestSchema,
+  isAdministrator,
   personAccountSchema,
   personOptionSchema,
   personSchema,
@@ -41,22 +41,21 @@ function validAccountInput() {
   return {
     person_id: PERSON_ID,
     email: 'ada.reid@example.com',
-    role: 'supervisor' as const,
+    role: 'jhsc_member' as const,
     site_ids: [SITE_ID],
   };
 }
 
 describe('roleSchema', () => {
-  it('acepta los cinco roles de §4', () => {
-    for (const role of [
-      'hs_coordinator',
-      'jhsc_member',
-      'supervisor',
-      'management',
-      'external_auditor',
-    ]) {
+  it('acepta los tres roles vigentes', () => {
+    for (const role of ['hs_coordinator', 'jhsc_member', 'management']) {
       expect(roleSchema.safeParse(role).success).toBe(true);
     }
+  });
+
+  it('rechaza los roles retirados', () => {
+    expect(roleSchema.safeParse('supervisor').success).toBe(false);
+    expect(roleSchema.safeParse('external_auditor').success).toBe(false);
   });
 
   it('rechaza "inspector" — no es un rol, es un campo de la inspección', () => {
@@ -186,15 +185,12 @@ describe('personOptionSchema', () => {
 });
 
 describe('accountSchema', () => {
-  it('acepta una cuenta interna sin vencimiento', () => {
+  it('acepta una cuenta vigente', () => {
     const result = accountSchema.safeParse({
       id: ACCOUNT_ID,
       person_id: PERSON_ID,
       email: 'ada.reid@example.com',
-      role: 'supervisor',
-      expires_at: null,
-      records_from: null,
-      records_to: null,
+      role: 'management',
       deactivated_at: null,
       active: true,
       jhsc_seat: false,
@@ -209,12 +205,10 @@ describe('accountSchema', () => {
       id: ACCOUNT_ID,
       person_id: PERSON_ID,
       email: 'ada.reid@example.com',
-      role: 'supervisor',
-      expires_at: null,
-      records_from: null,
-      records_to: null,
+      role: 'management',
       deactivated_at: null,
       active: true,
+      jhsc_seat: false,
       scope: [],
       password_hash: 'no',
     });
@@ -223,53 +217,19 @@ describe('accountSchema', () => {
   });
 });
 
-describe('createAccountSchema — ciclo de vida del auditor externo (§5 riesgo I)', () => {
-  it('pone 30 días por default', () => {
+describe('createAccountSchema', () => {
+  it('acepta el alta de un rol vigente', () => {
     const result = createAccountSchema.safeParse(validAccountInput());
 
     expect(result.success).toBe(true);
-    expect(result.success && result.data.expires_in_days).toBe(AUDITOR_DEFAULT_DAYS);
   });
 
-  it('acepta 90 días', () => {
+  it('rechaza el ciclo de vida retirado del auditor', () => {
     const result = createAccountSchema.safeParse({
       ...validAccountInput(),
-      role: 'external_auditor',
-      expires_in_days: AUDITOR_MAX_DAYS,
-      records_from: '2026-01-01',
-      records_to: '2026-08-07',
-    });
-
-    expect(result.success).toBe(true);
-  });
-
-  it('rechaza 91 días', () => {
-    const result = createAccountSchema.safeParse({
-      ...validAccountInput(),
-      role: 'external_auditor',
-      expires_in_days: AUDITOR_MAX_DAYS + 1,
-      records_from: '2026-01-01',
-      records_to: '2026-08-07',
-    });
-
-    expect(result.success).toBe(false);
-  });
-
-  it('rechaza un auditor sin ventana de fechas', () => {
-    const result = createAccountSchema.safeParse({
-      ...validAccountInput(),
-      role: 'external_auditor',
-    });
-
-    expect(result.success).toBe(false);
-  });
-
-  it('rechaza una ventana invertida', () => {
-    const result = createAccountSchema.safeParse({
-      ...validAccountInput(),
-      role: 'external_auditor',
+      expires_in_days: 30,
       records_from: '2026-08-07',
-      records_to: '2026-01-01',
+      records_to: '2026-09-07',
     });
 
     expect(result.success).toBe(false);
@@ -346,7 +306,7 @@ describe('createAccountRequestSchema — el alta desde el roster (design D4)', (
     expect(result.success).toBe(true);
   });
 
-  it('rechaza un external_auditor sin su ventana de fechas, igual que el comando', () => {
+  it('rechaza un rol retirado', () => {
     const result = createAccountRequestSchema.safeParse({
       ...validAccountInput(),
       role: 'external_auditor',
@@ -515,10 +475,30 @@ describe('updateAccountRequestSchema — el pedido de PATCH /accounts/:id (desig
     expect(result.success).toBe(true);
   });
 
-  it('no expone role — por acá se administra el acceso, no se cambia de rol', () => {
-    const result = updateAccountRequestSchema.safeParse({ role: 'supervisor' });
+  it('no expone un role libre', () => {
+    const result = updateAccountRequestSchema.safeParse({ role: 'management' });
 
     expect(result.success).toBe(false);
+  });
+
+  it('acepta únicamente la promoción literal a coordinador', () => {
+    expect(
+      updateAccountRequestSchema.safeParse({ promote_to: 'hs_coordinator' }).success,
+    ).toBe(true);
+    expect(updateAccountRequestSchema.safeParse({ promote_to: 'management' }).success).toBe(false);
+  });
+
+  it('rechaza combinar la promoción con otro acto', () => {
+    for (const other of [
+      { deactivated: true as const },
+      { email: 'ada.reid@example.com' },
+      { invite: true },
+      { jhsc_seat: true },
+    ]) {
+      expect(
+        updateAccountRequestSchema.safeParse({ promote_to: 'hs_coordinator', ...other }).success,
+      ).toBe(false);
+    }
   });
 
   it('acepta dar de baja el acceso, solo', () => {
@@ -578,5 +558,12 @@ describe('updateAccountRequestSchema — el pedido de PATCH /accounts/:id (desig
 
       expect(result.success).toBe(false);
     }
+  });
+});
+
+describe('isAdministrator', () => {
+  it('admite coordinador y gerencia, no al miembro JHSC', () => {
+    expect(ROLES.filter(isAdministrator)).toEqual(['hs_coordinator', 'management']);
+    expect(isAdministrator('jhsc_member')).toBe(false);
   });
 });

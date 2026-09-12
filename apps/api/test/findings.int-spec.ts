@@ -234,15 +234,8 @@ beforeAll(async () => {
     siteIds: [SITE_A, SITE_B],
     role: 'hs_coordinator',
   });
-  supervisor = await createAccount(db.app, { siteIds: [SITE_A], role: 'supervisor' });
-  // El auditor externo lleva vencimiento y ventana de fechas obligatorios (§5 riesgo I).
-  auditor = await createAccount(db.app, {
-    siteIds: [SITE_A],
-    role: 'external_auditor',
-    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-    recordsFrom: '2026-01-01',
-    recordsTo: '2026-12-31',
-  });
+  supervisor = await createAccount(db.app, { siteIds: [SITE_A], role: 'management' });
+  auditor = await createAccount(db.app, { siteIds: [SITE_A], role: 'jhsc_member' });
 }, 120_000);
 
 afterAll(async () => {
@@ -520,7 +513,7 @@ describe('la entrada manual', () => {
 
   it('un supervisor reporta un peligro, sin clasificación y sin item_key', async () => {
     const created = await findings.report(
-      sessionFor(supervisor.accountId, [SITE_A], 'supervisor'),
+      sessionFor(supervisor.accountId, [SITE_A], 'management'),
       manual(),
     );
 
@@ -540,7 +533,7 @@ describe('la entrada manual', () => {
       submissionFor(scheduled, SITE_A, versionV2, locationA),
     );
 
-    await findings.report(sessionFor(supervisor.accountId, [SITE_A], 'supervisor'), manual());
+    await findings.report(sessionFor(supervisor.accountId, [SITE_A], 'management'), manual());
 
     const groups = await inScope<{ item_key: string; count: string }>(
       db.app,
@@ -562,7 +555,7 @@ describe('la entrada manual', () => {
 
     await expect(
       findings.report(
-        sessionFor(supervisor.accountId, [SITE_A], 'supervisor'),
+        sessionFor(supervisor.accountId, [SITE_A], 'management'),
         manual({
           details: {
             description: 'Forklift near miss at the loading dock',
@@ -577,7 +570,7 @@ describe('la entrada manual', () => {
   it('rechaza una foto que no es de este borrador', async () => {
     await expect(
       findings.report(
-        sessionFor(supervisor.accountId, [SITE_A], 'supervisor'),
+        sessionFor(supervisor.accountId, [SITE_A], 'management'),
         manual({
           details: {
             description: 'Forklift near miss at the loading dock',
@@ -591,7 +584,7 @@ describe('la entrada manual', () => {
 
   it('un auditor externo no reporta nada', async () => {
     await expect(
-      findings.report(sessionFor(auditor.accountId, [SITE_A], 'external_auditor'), manual()),
+      findings.report(sessionFor(auditor.accountId, [SITE_A], 'jhsc_member'), manual()),
     ).rejects.toMatchObject({ response: { code: 'forbidden' } });
   });
 
@@ -782,7 +775,7 @@ describe('el roster del hallazgo (ADR-017)', () => {
 
   it('trae solo cuatro columnas, y ninguna es el perfil', async () => {
     const finding = await findings.report(
-      sessionFor(supervisor.accountId, [SITE_A], 'supervisor'),
+      sessionFor(supervisor.accountId, [SITE_A], 'management'),
       manualAt(SITE_A, locationA),
     );
 
@@ -799,7 +792,7 @@ describe('el roster del hallazgo (ADR-017)', () => {
 
   it('no ofrece a una persona desactivada', async () => {
     const finding = await findings.report(
-      sessionFor(supervisor.accountId, [SITE_A], 'supervisor'),
+      sessionFor(supervisor.accountId, [SITE_A], 'management'),
       manualAt(SITE_A, locationA),
     );
     const departed = await createPerson(db.app, SITE_A, { firstName: 'Gone', lastName: 'Zulu' });
@@ -823,7 +816,7 @@ describe('el roster del hallazgo (ADR-017)', () => {
 
   it('solo trae personas del sitio del hallazgo, no de la otra planta', async () => {
     const finding = await findings.report(
-      sessionFor(supervisor.accountId, [SITE_A], 'supervisor'),
+      sessionFor(supervisor.accountId, [SITE_A], 'management'),
       manualAt(SITE_A, locationA),
     );
     await createPerson(db.app, SITE_B, { firstName: 'Other', lastName: 'Site' });
@@ -954,7 +947,7 @@ describe('la cadena de auditoría', () => {
     const draftId = randomUUID();
 
     await findings.report(
-      sessionFor(supervisor.accountId, [SITE_A], 'supervisor'),
+      sessionFor(supervisor.accountId, [SITE_A], 'management'),
       {
         site_id: SITE_A,
         draft_finding_id: draftId,

@@ -1,4 +1,5 @@
 import type { PoolClient } from 'pg';
+import type { Role } from '@hs/contracts';
 
 /**
  * El orden de INSERT del alta de una cuenta, y NADA MÁS: sin chequeo de rol, sin
@@ -19,20 +20,17 @@ import type { PoolClient } from 'pg';
 export interface AccountInsert {
   personId: string;
   email: string;
-  role: string;
-  expiresAt: Date | null;
-  recordsFrom: string | null;
-  recordsTo: string | null;
+  role: Role;
   siteIds: readonly string[];
 }
 
 /** El alta: `app_user` y, por cada sitio del alcance pedido, su `user_site_scope`. */
 export async function insertAccount(client: PoolClient, input: AccountInsert): Promise<string> {
   const { rows } = await client.query<{ id: string }>(
-    `INSERT INTO app_user (person_id, email, role, expires_at, records_from, records_to)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO app_user (person_id, email, role)
+     VALUES ($1, $2, $3)
      RETURNING id`,
-    [input.personId, input.email, input.role, input.expiresAt, input.recordsFrom, input.recordsTo],
+    [input.personId, input.email, input.role],
   );
 
   const accountId = rows[0]!.id;
@@ -49,7 +47,7 @@ export async function insertAccount(client: PoolClient, input: AccountInsert): P
 
 export interface AccountDetailRow {
   id: string;
-  role: string;
+  role: Role;
   active: boolean;
   can_sign_in: boolean;
   email: string;

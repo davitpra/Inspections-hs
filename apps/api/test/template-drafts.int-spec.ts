@@ -95,11 +95,11 @@ beforeAll(async () => {
   const coordinator = await createAccount(db.app, { siteIds: [SITE], role: 'hs_coordinator' });
   coordinatorId = coordinator.accountId;
 
-  const supervisor = await createAccount(db.app, { siteIds: [SITE], role: 'supervisor' });
+  const supervisor = await createAccount(db.app, { siteIds: [SITE], role: 'jhsc_member' });
   supervisorId = supervisor.accountId;
   const otherSupervisor = await createAccount(db.app, {
     siteIds: [OTHER_SITE],
-    role: 'supervisor',
+    role: 'jhsc_member',
   });
   otherSupervisorId = otherSupervisor.accountId;
 }, 120_000);
@@ -220,7 +220,7 @@ describe('lo que el motor permite y lo que no', () => {
 
 describe('quién puede escribir plantillas', () => {
   it('lo niega a todo rol que no sea el coordinador, también en la lectura', async () => {
-    for (const role of ['supervisor', 'jhsc_member', 'management', 'external_auditor']) {
+    for (const role of ['jhsc_member']) {
       const other = { userId: supervisorId, role, siteIds: [SITE] };
       const rejected = { response: { code: 'template_draft_forbidden' } };
 
@@ -721,11 +721,11 @@ describe('publicar un borrador', () => {
       published.template_version_id,
     );
     const supervisorRead = await templates.getPublishedVersion(
-      { userId: supervisorId, role: 'supervisor', siteIds: [SITE] },
+      { userId: supervisorId, role: 'jhsc_member', siteIds: [SITE] },
       published.template_version_id,
     );
     const otherPlantRead = await templates.getPublishedVersion(
-      { userId: otherSupervisorId, role: 'supervisor', siteIds: [OTHER_SITE] },
+      { userId: otherSupervisorId, role: 'jhsc_member', siteIds: [OTHER_SITE] },
       published.template_version_id,
     );
 
@@ -835,7 +835,7 @@ describe('publicar un borrador', () => {
     const draft = await newDraft('Forbidden publication');
 
     await expect(
-      templates.publishDraft({ userId: supervisorId, role: 'supervisor', siteIds: [SITE] }, draft.id),
+      templates.publishDraft({ userId: supervisorId, role: 'jhsc_member', siteIds: [SITE] }, draft.id),
     ).rejects.toMatchObject({ response: { code: 'template_draft_forbidden' } });
   });
 

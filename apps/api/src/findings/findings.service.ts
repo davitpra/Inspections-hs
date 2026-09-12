@@ -4,6 +4,7 @@ import type {
   ManualFindingRequest,
   PersonOption,
 } from '@hs/contracts';
+import { isAdministrator } from '@hs/contracts';
 import type { PoolClient } from 'pg';
 
 import { DbService } from '../db/db.service';
@@ -41,7 +42,7 @@ export class FindingsService {
    * coordinador o por quien reportó este hallazgo (ADR-017).
    */
   async report(session: SessionScope, payload: ManualFindingRequest): Promise<Finding> {
-    if (!CAN_REPORT.has(session.role)) {
+    if (!isAdministrator(session.role)) {
       throw findingForbidden('Your role cannot report a finding');
     }
 
@@ -209,9 +210,6 @@ export class FindingsService {
     return toFinding(row);
   }
 }
-
-/** Quién puede cargar un hallazgo a mano (§4, tabla de roles). */
-const CAN_REPORT = new Set(['supervisor', 'management', 'hs_coordinator']);
 
 /** Las fotos se agregan en la consulta para que la lectura del hallazgo sea completa. */
 const FINDING_SELECT = `

@@ -151,6 +151,39 @@ describe('AcceptInvitationRoute', () => {
     expect(screen.getByRole('button', { name: 'Set password' })).toBeTruthy();
   });
 
+  /**
+   * Un solo interruptor para los dos campos: la repetición está para atrapar el dedazo
+   * que no se ve, y revelar uno mientras el otro sigue en puntos no compara nada.
+   */
+  it('revela y vuelve a ocultar las dos contraseñas a la vez', () => {
+    render(<AcceptInvitationRoute />);
+
+    const fields = (): HTMLInputElement[] => [
+      screen.getByLabelText('New password') as HTMLInputElement,
+      screen.getByLabelText('Repeat the password') as HTMLInputElement,
+    ];
+
+    expect(fields().map((field) => field.type)).toEqual(['password', 'password']);
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Show password' })[0]!);
+
+    expect(fields().map((field) => field.type)).toEqual(['text', 'text']);
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Hide password' })[1]!);
+
+    expect(fields().map((field) => field.type)).toEqual(['password', 'password']);
+  });
+
+  /** `type="button"`: dentro del `form`, un botón sin tipo envía. */
+  it('revelar la contraseña no envía el formulario', () => {
+    render(<AcceptInvitationRoute />);
+
+    fillPasswords(GOOD_PASSWORD);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Show password' })[0]!);
+
+    expect(acceptInvitation).not.toHaveBeenCalled();
+  });
+
   it('reemplaza el formulario por el aviso de éxito y manda a iniciar sesión', async () => {
     render(<AcceptInvitationRoute />);
 

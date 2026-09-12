@@ -143,9 +143,21 @@ export async function removeJhscAccess(input: { userId: string }): Promise<Creat
   );
 }
 
+/** Promueve un miembro del JHSC a coordinador; no modifica su asiento ni su acceso. */
+export async function promoteToCoordinator(input: {
+  userId: string;
+}): Promise<CreateAccountResponse> {
+  return send(
+    'PATCH',
+    `/accounts/${input.userId}`,
+    { promote_to: 'hs_coordinator' },
+    (value) => createAccountResponseSchema.parse(value),
+  );
+}
+
 
 /**
- * Sienta a una cuenta de coordinador en el JHSC, o la levanta (`coordinator-jhsc-seat`).
+ * Sienta a una cuenta administrativa en el JHSC, o la levanta (`coordinator-jhsc-seat`).
  *
  * **UNA función con un booleano, y no dos como invitar/quitar el acceso.** Aquellas son
  * dos rutas porque del lado del servidor son dos escrituras distintas —un alta que revive

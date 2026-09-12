@@ -12,7 +12,6 @@ interface AccountRow {
   role: Role;
   email: string;
   deactivated_at: Date | null;
-  expires_at: Date | null;
 }
 
 /**
@@ -46,14 +45,9 @@ export class AuthService {
 
     const credential = await this.credentials.find(account.id);
 
-    // Cuenta desactivada, auditor vencido, o cuenta sin credencial: los tres se
-    // responden igual que una contraseña incorrecta. El spec lo exige.
-    if (
-      !credential ||
-      !credential.password ||
-      account.deactivated_at ||
-      (account.expires_at && account.expires_at.getTime() <= Date.now())
-    ) {
+    // Cuenta desactivada o sin credencial: las dos se responden igual que una
+    // contraseña incorrecta. El spec lo exige.
+    if (!credential || !credential.password || account.deactivated_at) {
       throw invalidCredentials();
     }
 
@@ -101,7 +95,7 @@ export class AuthService {
 
   private async findAccount(email: string): Promise<AccountRow | null> {
     const { rows } = await this.db.unscopedPool.query<AccountRow>(
-      `SELECT id, role, email, deactivated_at, expires_at
+      `SELECT id, role, email, deactivated_at
          FROM app_user WHERE email = lower($1)`,
       [email],
     );

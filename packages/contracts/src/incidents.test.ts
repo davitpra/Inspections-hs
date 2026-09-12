@@ -81,11 +81,10 @@ describe('la máquina de estados del incidente', () => {
     }
   });
 
-  it('el reporte lo hacen supervisor, gerencia y coordinador, nunca el auditor ni el JHSC', () => {
+  it('el reporte lo hacen gerencia y coordinador, nunca el JHSC', () => {
     const report = incidentTransitionFor(null, 'reported');
 
-    expect(report?.roles).toEqual(['supervisor', 'management', 'hs_coordinator']);
-    expect(report?.roles).not.toContain('external_auditor');
+    expect(report?.roles).toEqual(['management', 'hs_coordinator']);
     expect(report?.roles).not.toContain('jhsc_member');
   });
 

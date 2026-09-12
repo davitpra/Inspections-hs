@@ -254,18 +254,18 @@ describe('los permisos de la programación', () => {
     expect(one(after).inspector_id).toBe(target.inspector_id);
   });
 
-  it('un supervisor no puede crear una regla', async () => {
-    const supervisor = await createAccount(db.app, { siteIds: [SITE_A], role: 'supervisor' });
+  it('un miembro no puede crear una regla', async () => {
+    const member = await createAccount(db.app, { siteIds: [SITE_A], role: 'jhsc_member' });
 
     await expect(
-      stack.inspections.createSchedule(session(supervisor.accountId, 'supervisor'), {
+      stack.inspections.createSchedule(session(member.accountId, 'jhsc_member'), {
         site_id: SITE_A,
         template_id: templateId,
       }),
     ).rejects.toMatchObject({ status: 403 });
   });
 
-  it('rechaza como inspector a una cuenta que no es del JHSC, y nombra el rol', async () => {
+  it('rechaza como inspector a una cuenta administrativa sin asiento', async () => {
     const manager = await createAccount(db.app, { siteIds: [SITE_A], role: 'management' });
 
     await expect(
@@ -274,7 +274,7 @@ describe('los permisos de la programación', () => {
         template_id: templateId,
         default_inspector_id: manager.accountId,
       }),
-    ).rejects.toThrow(/management/);
+    ).rejects.toThrow(/seat on the JHSC/);
   });
 
   it('rechaza como inspector a quien no tiene alcance en la planta, y nombra el sitio', async () => {

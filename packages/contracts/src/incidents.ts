@@ -6,7 +6,7 @@ import type { Role } from './identity.js';
 /**
  * Requisitos §7 etapa 6 — El incidente en tercera persona y su ciclo de vida.
  *
- * Un supervisor carga el accidente sobre una **Persona** del roster que casi
+ * Un administrador carga el accidente sobre una **Persona** del roster que casi
  * seguro no tiene cuenta, sin poder ver su perfil (§3 R4). El sistema clasifica,
  * muestra los relojes regulatorios que aplican y notifica al coordinador. **No
  * envía nada al MLITSD ni al WSIB**: la responsabilidad legal es de una persona.
@@ -151,7 +151,7 @@ export const INCIDENT_TRANSITIONS: readonly IncidentTransition[] = [
   {
     from: null,
     to: 'reported',
-    roles: ['supervisor', 'management', 'hs_coordinator'],
+    roles: ['management', 'hs_coordinator'],
     requires: [],
   },
   {
@@ -282,7 +282,7 @@ export type OnSiteTreatment = z.infer<typeof onSiteTreatmentSchema>;
  * El idioma en que se escribió la narrativa (riesgo G).
  *
  * La plataforma es **solo inglés** y esto no la localiza: es un dato sobre el
- * texto, no una preferencia de interfaz. Si un supervisor hispanohablante escribe
+ * texto, no una preferencia de interfaz. Si un administrador hispanohablante escribe
  * en español, el registro conserva sus palabras exactas y anota cuál era el
  * idioma. **No hay traducción automática dentro de un registro inmutable**, y esa
  * prohibición es del riesgo G, no una limitación técnica.
@@ -324,7 +324,7 @@ export type IncidentFieldName = (typeof INCIDENT_FIELDS)[number];
  * **Existe para que "vacío porque no aplicaba" y "vacío porque no existía" no se
  * vuelvan indistinguibles**, que en un registro inmutable es algo que no se
  * corrige después. Sin este registro, un incidente de 2026 leído por el código de
- * 2028 mostraría el campo nuevo en blanco y nadie podría decir si el supervisor lo
+ * 2028 mostraría el campo nuevo en blanco y nadie podría decir si quien reportó lo
  * dejó vacío o si todavía no existía.
  *
  * **Agregar un campo es una entrada nueva acá más una migración, nunca una edición
@@ -468,7 +468,7 @@ export type RecordCauseRequest = z.infer<typeof recordCauseRequestSchema>;
  * Un testigo: una referencia a Persona, **sin perfil** (§4).
  *
  * Es exactamente un `PersonOption` —los mismos cuatro campos del selector de sujeto— y
- * no una forma paralela: §4 dice que el supervisor elige a la persona sin poder ver su
+ * no una forma paralela: §4 dice que el administrador elige a la persona sin poder ver su
  * perfil, y devolver en la lectura un campo más que en el selector sería abrir por la
  * puerta de atrás lo que el selector cierra.
  */

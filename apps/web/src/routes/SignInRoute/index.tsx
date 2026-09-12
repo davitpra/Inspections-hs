@@ -1,7 +1,7 @@
 import { useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 
-import { CrossIcon, LockIcon } from '../../components/icons';
+import { CrossIcon, EyeIcon, EyeOffIcon, LockIcon } from '../../components/icons';
 import { sessionClient } from '../../api/client';
 import { messageFor } from './presentation';
 import { useAppSession } from '../../app/session-context';
@@ -33,6 +33,14 @@ export function SignInRoute(): React.JSX.Element {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  /**
+   * Se escribe con guantes y a veces bajo el sol: una contraseña larga tecleada a ciegas
+   * se equivoca, y el error que devuelve el servidor no distingue "me equivoqué de tecla"
+   * de "no es mi cuenta". El estado arranca oculto y no se recuerda entre montajes — que
+   * quede revelada es una decisión de este intento, no una preferencia del dispositivo.
+   */
+  const [revealed, setRevealed] = useState(false);
 
   const submit = async (event: React.FormEvent): Promise<void> => {
     event.preventDefault();
@@ -87,14 +95,27 @@ export function SignInRoute(): React.JSX.Element {
 
             <div className="auth__field">
               <label htmlFor="password">Password</label>
-              <input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
+              <div className="auth__reveal">
+                <input
+                  id="password"
+                  type={revealed ? 'text' : 'password'}
+                  autoComplete="current-password"
+                  required
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                />
+                {/* `type="button"`: dentro del `form`, un botón sin tipo envía. */}
+                <button
+                  className="auth__reveal-toggle"
+                  type="button"
+                  aria-controls="password"
+                  aria-pressed={revealed}
+                  aria-label={revealed ? 'Hide password' : 'Show password'}
+                  onClick={() => setRevealed((shown) => !shown)}
+                >
+                  {revealed ? <EyeOffIcon size={20} /> : <EyeIcon size={20} />}
+                </button>
+              </div>
             </div>
 
             {error ? (

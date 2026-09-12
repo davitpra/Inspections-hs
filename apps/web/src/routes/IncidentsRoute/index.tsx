@@ -3,13 +3,15 @@ import { Link } from '@tanstack/react-router';
 
 import { listIncidents } from '../../api/incidents';
 import { queryKeys } from '../../api/query-keys';
+import { useAppSession } from '../../app/session-context';
+import { canReportIncident } from '../../permissions/incidents';
 import { formatDay } from '../../presentation/dates';
 import { CLASSIFICATION_LABELS, INCIDENT_STATE_LABELS } from '../../presentation/incidents';
 
 /**
  * Los incidentes que esta cuenta puede ver.
  *
- * **La lista no filtra nada, y esa ausencia es el invariante.** Un supervisor ve los que
+ * **La lista no filtra nada, y esa ausencia es el invariante.** La cuenta ve solamente lo que
  * cargó él porque la política RLS de 0012 no le devuelve los demás, no porque este
  * componente los descarte. El coordinador y gerencia ven todos los de su alcance por la
  * misma razón.
@@ -17,6 +19,7 @@ import { CLASSIFICATION_LABELS, INCIDENT_STATE_LABELS } from '../../presentation
  * No hay contador de "los que no ves": decir cuántos hay ya sería decir que hay.
  */
 export function IncidentsRoute(): React.JSX.Element {
+  const { account } = useAppSession();
   const incidents = useQuery({
     queryKey: queryKeys.incidents(),
     queryFn: listIncidents,
@@ -30,9 +33,11 @@ export function IncidentsRoute(): React.JSX.Element {
     <>
       <h1>Incidents</h1>
 
-      <p>
-        <Link to="/incidents/report">Report an incident</Link>
-      </p>
+      {canReportIncident(account) ? (
+        <p>
+          <Link to="/incidents/report">Report an incident</Link>
+        </p>
+      ) : null}
 
       {incidents.data.length === 0 ? (
         <p>No incidents to show.</p>

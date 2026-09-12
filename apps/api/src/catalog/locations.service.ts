@@ -1,9 +1,10 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import type {
-  CreateLocation,
-  CreateOrganizationLocation,
-  Location,
-  OrganizationLocation,
+import {
+  isAdministrator,
+  type CreateLocation,
+  type CreateOrganizationLocation,
+  type Location,
+  type OrganizationLocation,
 } from '@hs/contracts';
 
 import { DbService } from '../db/db.service';
@@ -252,7 +253,7 @@ export class LocationsService {
   }
 
   private requireCoordinator(session: SessionScope): void {
-    if (session.role !== 'hs_coordinator') {
+    if (!isAdministrator(session.role)) {
       throw new ForbiddenException('Only the H&S coordinator can administer locations');
     }
   }

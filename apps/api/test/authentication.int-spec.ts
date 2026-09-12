@@ -82,9 +82,6 @@ async function account(spec: {
   email?: string;
   firstName?: string;
   lastName?: string;
-  expiresAt?: Date | null;
-  recordsFrom?: string | null;
-  recordsTo?: string | null;
   withCredential?: boolean;
 }) {
   const created = await createAccount(db.app, {
@@ -93,9 +90,6 @@ async function account(spec: {
     email: spec.email,
     firstName: spec.firstName,
     lastName: spec.lastName,
-    expiresAt: spec.expiresAt ?? null,
-    recordsFrom: spec.recordsFrom ?? null,
-    recordsTo: spec.recordsTo ?? null,
   });
 
   if (spec.withCredential !== false) {
@@ -261,35 +255,6 @@ describe('el login', () => {
         `UPDATE app_user SET deactivated_at = now() WHERE id = '${created.accountId}'` as never,
       );
     });
-
-    expect(await codeOf(() => stack.auth.signIn({ email: created.email, password: PASSWORD }))).toBe(
-      'invalid_credentials',
-    );
-  });
-
-  it('un auditor externo vencido no entra', async () => {
-    const created = await createAccount(db.app, {
-      role: 'external_auditor',
-      siteIds: [SITE_A],
-      email: 'expired-auditor@auth.test',
-      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      recordsFrom: '2026-01-01',
-      recordsTo: '2026-06-30',
-    });
-
-    await grantCredential(stack, coordinator, created.accountId, PASSWORD);
-
-    // Se vence a mano: el CHECK impide crear una cuenta ya vencida, que es correcto.
-    // Bajo alcance, porque cambiar `expires_at` dispara `user.expiry_changed`, que
-    // hace fan-out a las plantas de la cuenta.
-    await inScope(
-      db.migrator,
-      [SITE_A],
-      // Un microsegundo después del alta: el CHECK exige `expires_at > created_at`, y
-      // un segundo caería en el futuro porque la cuenta se creó recién.
-      `UPDATE app_user SET expires_at = created_at + interval '1 microsecond' WHERE id = $1`,
-      [created.accountId],
-    );
 
     expect(await codeOf(() => stack.auth.signIn({ email: created.email, password: PASSWORD }))).toBe(
       'invalid_credentials',
@@ -616,83 +581,6 @@ describe('la revocación', () => {
 
 });
 
-describe('el auditor externo', () => {
-  it('la ventana de fechas acota su lectura por los dos lados', async () => {
-    const auditor = await createAccount(db.app, {
-      role: 'external_auditor',
-      siteIds: [SITE_A],
-      email: 'auditor@auth.test',
-      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      recordsFrom: '2020-01-01',
-      recordsTo: '2020-12-31',
-    });
-
-    await grantCredential(stack, coordinator, auditor.accountId, PASSWORD);
-
-    const { tokens } = await stack.auth.signIn({ email: auditor.email, password: PASSWORD });
-    const session = await stack.sessions.resolve(tokens.accessToken);
-
-    expect(session.recordsFrom).toBe('2020-01-01');
-    expect(session.recordsTo).toBe('2020-12-31');
-
-    // Todo lo que existe hoy en el log ocurrió ahora, así que nada cae en 2020.
-    const result = await stack.db.withSession(
-      session,
-      async (dbx) => dbx.execute(`SELECT id FROM audit_log` as never),
-      { resource: 'audit_log' },
-    );
-
-    expect((result as unknown as { rows: unknown[] }).rows).toHaveLength(0);
-  });
-
-  it('su lectura queda registrada en la cadena, y la de otro rol no', async () => {
-    const auditor = await createAccount(db.app, {
-      role: 'external_auditor',
-      siteIds: [SITE_A],
-      email: 'auditor-logged@auth.test',
-      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      recordsFrom: '2026-01-01',
-      recordsTo: '2030-12-31',
-    });
-
-    await grantCredential(stack, coordinator, auditor.accountId, PASSWORD);
-
-    const { tokens } = await stack.auth.signIn({ email: auditor.email, password: PASSWORD });
-    const session = await stack.sessions.resolve(tokens.accessToken);
-
-    const before = await auditEntries(db.app, SITE_A, 'auditor.read');
-
-    await stack.db.withSession(
-      session,
-      async (dbx) => dbx.execute(`SELECT id FROM person` as never),
-      { resource: 'person' },
-    );
-
-    const after = await auditEntries(db.app, SITE_A, 'auditor.read');
-
-    expect(after.length).toBe(before.length + 1);
-    expect(after.at(-1)?.payload).toMatchObject({ resource: 'person' });
-    expect(after.at(-1)?.actor_user_id).toBe(auditor.accountId);
-
-    // La misma lectura hecha por el coordinador no escribe nada. Es la regla que la
-    // excepción del auditor confirma: este sistema no loguea lecturas.
-    const coordinatorSession = {
-      userId: coordinator.userId,
-      siteIds: [SITE_A],
-      role: 'hs_coordinator',
-    };
-
-    await stack.db.withSession(
-      coordinatorSession,
-      async (dbx) => dbx.execute(`SELECT id FROM person` as never),
-      { resource: 'person' },
-    );
-
-    const afterCoordinator = await auditEntries(db.app, SITE_A, 'auditor.read');
-    expect(afterCoordinator.length).toBe(after.length);
-  });
-});
-
 describe('ninguna ruta acepta un sitio, un alcance ni un actor', () => {
   /**
    * Tarea 6.8 del change. Lo que se prueba acá NO es que hoy no haya rutas de
@@ -731,18 +619,14 @@ describe('ninguna ruta acepta un sitio, un alcance ni un actor', () => {
     expect(parsed).not.toHaveProperty('role');
   });
 
-  it('un external_auditor no puede administrar ninguna cuenta', async () => {
-    const auditor = await createAccount(db.app, {
-      role: 'external_auditor',
+  it('un miembro del JHSC no puede administrar ninguna cuenta', async () => {
+    const member = await createAccount(db.app, {
+      role: 'jhsc_member',
       siteIds: [SITE_A],
-      email: 'auditor-write@auth.test',
-      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      recordsFrom: '2026-01-01',
-      recordsTo: '2026-06-30',
+      email: 'member-write@auth.test',
     });
-
     const victim = await account({ withCredential: false, email: 'auditor-victim@auth.test' });
-    const actor = { userId: auditor.accountId, role: 'external_auditor' as const };
+    const actor = { userId: member.accountId, role: 'jhsc_member' as const };
 
     // Los dos verbos administrativos que quedan con chequeo de rol EN EL SERVICIO. El
     // tercero era `twoFactor.reset`, y se fue con el segundo factor; los demás

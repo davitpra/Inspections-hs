@@ -76,8 +76,6 @@ function session(role: Session['role']): { account: Session } {
       personId: PERSON,
       role,
       siteScope: [SITE],
-      recordsFrom: null,
-      recordsTo: null,
     },
   };
 }
@@ -167,7 +165,8 @@ afterEach(() => {
 });
 
 describe('quién puede escribir plantillas', () => {
-  it('se la ofrece al coordinador', async () => {
+  it.each(['hs_coordinator', 'management'] as const)('se la ofrece a %s', async (role) => {
+    useAppSession.mockReturnValue(session(role));
     renderRoute();
 
     expect(await screen.findByText('Monthly electrical inspection')).toBeTruthy();
@@ -177,14 +176,14 @@ describe('quién puede escribir plantillas', () => {
    * Y sin disparar la consulta: pedir algo que el servidor va a negar con 403 solo sirve
    * para llenar el log. Es lo mismo que hace `RosterRoute`.
    */
-  it.each(['jhsc_member', 'supervisor', 'management', 'external_auditor'] as const)(
+  it.each(['jhsc_member'] as const)(
     'se la niega a %s, y sin llamar a la API',
     (role) => {
       useAppSession.mockReturnValue(session(role));
 
       renderRoute();
 
-      expect(screen.getByText(/Only the H&S coordinator can write templates/)).toBeTruthy();
+      expect(screen.getByText(/Only H&S coordinators and management can write templates/)).toBeTruthy();
       expect(listTemplateDrafts).not.toHaveBeenCalled();
     },
   );

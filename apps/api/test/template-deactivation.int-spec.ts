@@ -40,7 +40,7 @@ let coordinatorId: string;
 let supervisorId: string;
 
 const asCoordinator = () => ({ userId: coordinatorId, role: 'hs_coordinator', siteIds: [SITE] });
-const asSupervisor = () => ({ userId: supervisorId, role: 'supervisor', siteIds: [SITE] });
+const asSupervisor = () => ({ userId: supervisorId, role: 'jhsc_member', siteIds: [SITE] });
 
 /** Una sección con un ítem: el borrador publicable más chico que existe. */
 function usableDocument(itemKey: string): TemplateDraftDocument {
@@ -98,7 +98,7 @@ beforeAll(async () => {
 
   coordinatorId = (await createAccount(db.app, { siteIds: [SITE], role: 'hs_coordinator' }))
     .accountId;
-  supervisorId = (await createAccount(db.app, { siteIds: [SITE], role: 'supervisor' })).accountId;
+  supervisorId = (await createAccount(db.app, { siteIds: [SITE], role: 'jhsc_member' })).accountId;
 }, 120_000);
 
 afterAll(async () => {

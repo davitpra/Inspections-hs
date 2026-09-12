@@ -82,18 +82,17 @@ vez.
 
 ### Dar de alta a alguien
 
-**Un miembro del JHSC, por la pantalla.** `/roster` —solo coordinador— muestra, junto a
+**Un miembro del JHSC, por la pantalla.** `/roster` —coordinador o management— muestra, junto a
 cada persona sin cuenta, un botón "Invite as JHSC member". Pide el email, y con eso crea
 la cuenta y emite la invitación en un solo `POST /accounts` (design D4 del change que lo
 agregó): el sitio es el que la pantalla está mirando, no una elección aparte. El link de
 un solo uso se muestra ahí mismo para copiar —`https://<host>/accept-invitation?token=…`—
 y no se vuelve a mostrar. Con cuenta, la fila muestra el rol en vez del botón.
 
-**Los otros cuatro roles, y el arranque sin coordinador, siguen siendo el comando.** Un
-supervisor, un management o un auditor externo se dan de alta una vez cada varios meses y
-traen decisiones que no caben en un botón de una fila —alcance multi-planta, ventana de
-fechas—, y la primera cuenta del sistema no tiene, todavía, un coordinador con sesión que
-apriete ningún botón. Tres pasos, y los tres son actos distintos a propósito (ADR-011):
+**Management y el arranque sin una cuenta administrativa siguen siendo el comando.** Una
+cuenta de management se da de alta rara vez y puede llevar alcance multi-planta; la primera
+cuenta del sistema tampoco tiene todavía una sesión administrativa que apriete un botón.
+Tres pasos, y los tres son actos distintos a propósito (ADR-011):
 
 1. **Crear la cuenta.** La persona ya está en el roster; falta el `app_user` con su
    alcance:
@@ -109,15 +108,14 @@ apriete ningún botón. Tres pasos, y los tres son actos distintos a propósito 
    idempotente y no crea personas: si no está en el roster, entra por `roster:import`.
 
    Es el **único `auth:*` que corre en producción**, y la razón es que no siembra ni
-   reemplaza ninguna credencial. Para `external_auditor` no sirve: ese rol necesita
-   `expires_at`, `records_from` y `records_to`, y va por SQL.
+   reemplaza ninguna credencial. Solo acepta `hs_coordinator`, `jhsc_member` y `management`.
 
    Reusa el mismo `INSERT` que `POST /accounts` —`account.repository.ts`— compilado desde
    `dist/`, así que necesita `pnpm --filter api build` corrido antes; si falta, el comando
    lo dice.
 
 2. **Emitir la invitación.** `pnpm auth:bootstrap <userId>`, o `POST /auth/invitations`
-   con sesión de coordinador. Devuelve el token **una sola vez**: del otro lado queda su
+   con sesión administrativa. Devuelve el token **una sola vez**: del otro lado queda su
    hash y no hay ruta que lo vuelva a mostrar. Si se pierde, se revoca y se emite otro.
 3. **Pasarle el link.** `https://<host>/accept-invitation?token=<token>`. Ahí elige su
    contraseña (mínimo 12) y de ahí va a iniciar sesión. Vence a las 72 horas y se usa una
@@ -130,7 +128,7 @@ misma pantalla.
 
 ### Historial: que todas las pantallas tengan algo que mostrar
 
-`demo:data` deja el entorno *usable* y ahí se detiene. Con eso `/` tiene una fila y el
+`demo:data` deja el entorno _usable_ y ahí se detiene. Con eso `/` tiene una fila y el
 resto de la aplicación está en blanco: hallazgos, acciones correctivas e incidentes son
 consecuencias de meses de trabajo que un entorno recién levantado no tuvo.
 
@@ -167,10 +165,10 @@ DEMO_COORDINATOR_PASSWORD='la que tenga' pnpm demo:content
 Corridos los dos comandos, en http://localhost:5173 entran estas dos cuentas y ninguna
 más:
 
-| Email | Contraseña | Rol | Alcance | Persona |
-|---|---|---|---|---|
-| `coordinator@example.com` | `DEMO_COORDINATOR_PASSWORD` | `hs_coordinator` | St. Thomas + Glencoe | Health and Safety Coordinator (`BOOTSTRAP-0001`) |
-| `demo.inspector@example.com` | `DEMO_PASSWORD` | `jhsc_member` | St. Thomas | Dana Inspector (`DEMO-0001`) |
+| Email                        | Contraseña                  | Rol              | Alcance              | Persona                                          |
+| ---------------------------- | --------------------------- | ---------------- | -------------------- | ------------------------------------------------ |
+| `coordinator@example.com`    | `DEMO_COORDINATOR_PASSWORD` | `hs_coordinator` | St. Thomas + Glencoe | Health and Safety Coordinator (`BOOTSTRAP-0001`) |
+| `demo.inspector@example.com` | `demo-inspector-2026`       | `jhsc_member`    | St. Thomas           | Dana Inspector (`DEMO-0001`)                     |
 
 Sin esas variables en el entorno la contraseña de las dos es `demo-inspector-2026`, el
 `DEFAULT_PASSWORD` de `scripts/demo-data.mjs`. **Es una contraseña de desarrollo y nada
@@ -186,13 +184,13 @@ necesita ese paso: `demo:data` crea la cuenta y acepta su propia invitación.
 El resto del roster que siembra `demo:data` son **cinco personas sin cuenta**, que es el
 caso normal (§4) y lo que hace que `/roster` tenga algo que mostrar y a quién invitar:
 
-| Persona | Legajo | Sitio |
-|---|---|---|
-| Alex Boivin | `DEMO-1001` | St. Thomas |
-| Priya Raman | `DEMO-1002` | St. Thomas |
-| Sam Okafor | `DEMO-1003` | St. Thomas |
-| Marie Tremblay | `DEMO-1004` | Glencoe |
-| Chen Wu | `DEMO-1005` | Glencoe |
+| Persona        | Legajo      | Sitio      |
+| -------------- | ----------- | ---------- |
+| Alex Boivin    | `DEMO-1001` | St. Thomas |
+| Priya Raman    | `DEMO-1002` | St. Thomas |
+| Sam Okafor     | `DEMO-1003` | St. Thomas |
+| Marie Tremblay | `DEMO-1004` | Glencoe    |
+| Chen Wu        | `DEMO-1005` | Glencoe    |
 
 ### Cuando te quedás afuera
 
@@ -203,7 +201,7 @@ pnpm auth:reset-password <userId> --password <pw>           # una que elijas vos
 ```
 
 Dos situaciones distintas y conviene no confundirlas. **Cuenta trabada**: cinco intentos
-fallidos bloquean quince minutos (D8), y el servidor responde `account_locked` *antes* de
+fallidos bloquean quince minutos (D8), y el servidor responde `account_locked` _antes_ de
 verificar la contraseña — así que desde afuera se ve igual que una contraseña mal puesta,
 a propósito: si respondiera distinto, el bloqueo sería un oráculo. `--unlock` limpia el
 contador sin tocar la credencial. **Contraseña perdida**: no se recupera, solo se
@@ -226,38 +224,38 @@ el filtro está en el componente.
 miembros del JHSC son los únicos que ejecutan inspecciones, y `requireInspector()` lo
 comprueba.
 
-| Ruta | Qué es |
-| --- | --- |
-| `/` | Lo que esta cuenta debe y cuándo. No lista borradores ni cerrados: cada borrador vive en la página de su asignación y lo cerrado está en `/historical`. |
-| `/inspections/$id` | La asignación, y el borrador de ESTE dispositivo si lo hay: donde se retoma y donde se descarta. |
-| `/inspections/$id/capture` | La captura. |
-| `/inspections/$id/review` | Revisar y firmar — el momento en que un borrador deja de serlo. Valida con `validateAnswers` de `@hs/forms`, la misma función que corre el servidor. |
-| `/inspections/$id/report` | Una inspección enviada, leída de vuelta: el documento **congelado** con el que se contestó, no la versión publicada hoy. |
-| `/historical` | Todo lo que esta cuenta cerró, separado por la identidad estable de cada plantilla. |
-| `/outbox` | Lo que no salió de este dispositivo, con el motivo del servidor si fue rechazado. |
+| Ruta                       | Qué es                                                                                                                                                  |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/`                        | Lo que esta cuenta debe y cuándo. No lista borradores ni cerrados: cada borrador vive en la página de su asignación y lo cerrado está en `/historical`. |
+| `/inspections/$id`         | La asignación, y el borrador de ESTE dispositivo si lo hay: donde se retoma y donde se descarta.                                                        |
+| `/inspections/$id/capture` | La captura.                                                                                                                                             |
+| `/inspections/$id/review`  | Revisar y firmar — el momento en que un borrador deja de serlo. Valida con `validateAnswers` de `@hs/forms`, la misma función que corre el servidor.    |
+| `/inspections/$id/report`  | Una inspección enviada, leída de vuelta: el documento **congelado** con el que se contestó, no la versión publicada hoy.                                |
+| `/historical`              | Todo lo que esta cuenta cerró, separado por la identidad estable de cada plantilla.                                                                     |
+| `/outbox`                  | Lo que no salió de este dispositivo, con el motivo del servidor si fue rechazado.                                                                       |
 
 **Lo que sale del recorrido.**
 
-| Ruta | Qué es |
-| --- | --- |
-| `/findings` | Los recorridos en los que esta cuenta encontró algo que arreglar, separados por tipo. |
-| `/findings/$id` | El hilo de un hallazgo: su ciclo y la corrección leídos como una sola cosa, no como dos listas al lado. |
-| `/incidents` | Los que esta cuenta puede ver. **La lista no filtra nada**: un supervisor ve los suyos porque la política RLS de la migración `0012` no le devuelve los demás. |
-| `/incidents/report` | Reportar uno. |
-| `/incidents/$id` | El incidente, sus relojes regulatorios y su investigación. |
-| `/incidents/$id/form7` | Los valores mapeados a los campos del Form 7 del WSIB. Solo lectura y con copiar al portapapeles: **sin PDF, a propósito** (riesgo H, cerrado en v1.2). |
+| Ruta                   | Qué es                                                                                                                                                         |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/findings`            | Los recorridos en los que esta cuenta encontró algo que arreglar, separados por tipo.                                                                          |
+| `/findings/$id`        | El hilo de un hallazgo: su ciclo y la corrección leídos como una sola cosa, no como dos listas al lado.                                                        |
+| `/incidents`           | Los que esta cuenta puede ver. **La lista no filtra nada**: RLS entrega todos los del alcance a coordinador y management, y a un miembro solo los que hubiera reportado. |
+| `/incidents/report`    | Reportar uno.                                                                                                                                                  |
+| `/incidents/$id`       | El incidente, sus relojes regulatorios y su investigación.                                                                                                     |
+| `/incidents/$id/form7` | Los valores mapeados a los campos del Form 7 del WSIB. Solo lectura y con copiar al portapapeles: **sin PDF, a propósito** (riesgo H, cerrado en v1.2).        |
 
 **Administración.**
 
-| Ruta | Qué es |
-| --- | --- |
-| `/scheduling` | El año por planta: qué requisitos hay y qué períodos abrieron. |
-| `/scheduling/$scheduleId` | Un requisito año por año — abrir un período, asignarle inspector, adelantarle la visibilidad. |
-| `/roster` | Quién está en cada planta, con filtro de estado y búsqueda. Ver "Dar de alta a alguien" y "Corregir el roster". |
-| `/templates` | Las plantillas publicadas como referencia y las que se están escribiendo. |
-| `/templates/drafts/$id` | El editor del borrador. |
-| `/templates/versions/$versionId` | Una versión publicada, de solo lectura. |
-| `/catalog/locations` | Una fila por ubicación compartida y una columna por planta: la pregunta es «¿cada lugar que mis plantillas nombran existe en cada planta?». |
+| Ruta                             | Qué es                                                                                                                                      |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/scheduling`                    | El año por planta: qué requisitos hay y qué períodos abrieron.                                                                              |
+| `/scheduling/$scheduleId`        | Un requisito año por año — abrir un período, asignarle inspector, adelantarle la visibilidad.                                               |
+| `/roster`                        | Quién está en cada planta, con filtro de estado y búsqueda. Ver "Dar de alta a alguien" y "Corregir el roster".                             |
+| `/templates`                     | Las plantillas publicadas como referencia y las que se están escribiendo.                                                                   |
+| `/templates/drafts/$id`          | El editor del borrador.                                                                                                                     |
+| `/templates/versions/$versionId` | Una versión publicada, de solo lectura.                                                                                                     |
+| `/catalog/locations`             | Una fila por ubicación compartida y una columna por planta: la pregunta es «¿cada lugar que mis plantillas nombran existe en cada planta?». |
 
 **Sin sesión:** `/accept-invitation`, donde el titular de una invitación elige su contraseña.
 
@@ -268,11 +266,11 @@ Ninguno es una columna: los tres se calculan de eventos inmutables y reglas pura
 la misma tabla está escrita como guarda en la migración — hay un test de integración que
 evalúa los pares por los dos caminos y los compara.
 
-| | Estados | Dónde está la máquina |
-| --- | --- | --- |
-| Hallazgo | `raised` → `assigned` → `in_progress` → `verification` → `closed` | `packages/contracts/src/findings.ts` |
-| Acción correctiva | `open` → `in_progress` → `awaiting_verification` → `closed` | `packages/contracts/src/actions.ts` |
-| Incidente | `reported` → `under_investigation` → `closed` | `packages/contracts/src/incidents.ts` |
+|                   | Estados                                                           | Dónde está la máquina                 |
+| ----------------- | ----------------------------------------------------------------- | ------------------------------------- |
+| Hallazgo          | `raised` → `assigned` → `in_progress` → `verification` → `closed` | `packages/contracts/src/findings.ts`  |
+| Acción correctiva | `open` → `in_progress` → `awaiting_verification` → `closed`       | `packages/contracts/src/actions.ts`   |
+| Incidente         | `reported` → `under_investigation` → `closed`                     | `packages/contracts/src/incidents.ts` |
 
 Dos reglas del ciclo de la acción que explican la mitad de las pantallas: `closed` no
 aparece nunca como origen —que el trabajo cerrado se haya deshecho es un hallazgo nuevo,
@@ -281,33 +279,34 @@ quien declara hecho el trabajo no puede ser quien lo verifica.
 
 ## Comandos
 
-| Comando | Qué hace |
-| --- | --- |
-| `pnpm dev` | Compila `contracts` y `forms`, y levanta API (:3000) y PWA (:5173) en paralelo. |
-| `pnpm setup` | Los cuatro pasos de base: `db:up`, `db:migrate`, `db:jobs:install`, `db:seed`. |
-| `pnpm db:up` / `db:down` / `db:reset` | El compose: Postgres y MinIO. `reset` borra los volúmenes. |
-| `pnpm db:migrate` | Migraciones (`hs_migrator`). |
-| `pnpm db:jobs:install` | Instala/actualiza el esquema `pgboss`. Paso de despliegue, no de arranque. |
-| `pnpm db:seed` | Datos de referencia idempotentes. Sin credenciales. |
-| `pnpm demo:data` | Entorno de demo local usable. Solo a mano. |
-| `pnpm demo:content` | Historial de demo: hallazgos, acciones e incidentes. |
-| `pnpm auth:create-account` | Crea la cuenta de una persona del roster. El único `auth:*` que corre en producción. |
-| `pnpm auth:bootstrap [userId]` | Emite la invitación de una cuenta sin credencial. |
-| `pnpm auth:reset-password <userId\|email>` | Contraseña nueva, o `--unlock` para destrabar. Solo fuera de producción. |
-| `pnpm roster:import <csv>` | Importa el roster de ADP. El mismo CSV entra por el botón de `/roster`. |
-| `pnpm test` | Unitarios. |
-| `pnpm --filter api test:int` | Integración, contra Postgres real (testcontainers). |
-| `pnpm typecheck` / `pnpm lint` | Lo de siempre. |
+| Comando                                    | Qué hace                                                                             |
+| ------------------------------------------ | ------------------------------------------------------------------------------------ |
+| `pnpm dev`                                 | Compila `contracts` y `forms`, y levanta API (:3000) y PWA (:5173) en paralelo.      |
+| `pnpm setup`                               | Los cuatro pasos de base: `db:up`, `db:migrate`, `db:jobs:install`, `db:seed`.       |
+| `pnpm db:up` / `db:down` / `db:reset`      | El compose: Postgres y MinIO. `reset` borra los volúmenes.                           |
+| `pnpm db:migrate`                          | Migraciones (`hs_migrator`).                                                         |
+| `pnpm db:jobs:install`                     | Instala/actualiza el esquema `pgboss`. Paso de despliegue, no de arranque.           |
+| `pnpm db:seed`                             | Datos de referencia idempotentes. Sin credenciales.                                  |
+| `pnpm demo:data`                           | Entorno de demo local usable. Solo a mano.                                           |
+| `pnpm demo:content`                        | Historial de demo: hallazgos, acciones e incidentes.                                 |
+| `pnpm auth:create-account`                 | Crea la cuenta de una persona del roster. El único `auth:*` que corre en producción. |
+| `pnpm auth:bootstrap [userId]`             | Emite la invitación de una cuenta sin credencial.                                    |
+| `pnpm auth:reset-password <userId\|email>` | Contraseña nueva, o `--unlock` para destrabar. Solo fuera de producción.             |
+| `pnpm roster:import <csv>`                 | Importa el roster de ADP. El mismo CSV entra por el botón de `/roster`.              |
+| `pnpm test`                                | Unitarios.                                                                           |
+| `pnpm --filter api test:int`               | Integración, contra Postgres real (testcontainers).                                  |
+| `pnpm typecheck` / `pnpm lint`             | Lo de siempre.                                                                       |
 
 ## Lo que todavía no tiene UI
 
-**Emitir la invitación de un rol que no sea `jhsc_member`.** `POST /auth/invitations`
-existe y solo lo puede llamar el coordinador, pero fuera del botón de `/roster` —que
-crea la cuenta e invita en un solo acto, y solo para `jhsc_member`— no hay pantalla para
-los otros cuatro roles: se emite con `pnpm auth:bootstrap` o con curl.
+**Crear e invitar una cuenta de management.** `POST /auth/invitations` existe y lo puede
+llamar una cuenta administrativa, pero fuera del botón de `/roster` —que crea la cuenta e
+invita en un solo acto, y solo para `jhsc_member`— no hay pantalla para management: se crea
+con `pnpm auth:create-account` y se invita con `pnpm auth:bootstrap` o con curl. La promoción
+de un miembro activo a coordinador sí está en `/roster` y solo la ofrece a management.
 
 Crear una cuenta de `jhsc_member` y aceptar la invitación, en cambio, ya no están acá: son
-el botón de `/roster` (o `pnpm auth:create-account` para los otros roles) y
+el botón de `/roster` (o `pnpm auth:create-account` para management) y
 `/accept-invitation` — ver "Dar de alta a alguien".
 
 **Elegir a una persona en el reporte de incidente.** El `PersonPicker` de

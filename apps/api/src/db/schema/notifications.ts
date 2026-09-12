@@ -7,7 +7,7 @@ import { appUser } from './identity';
 /**
  * ADR-004 — La fuente de verdad de esta tabla es
  * `apps/api/drizzle/0008_inspection_scheduling.sql`, no este archivo, y la lista de
- * `kind` la amplía `0011_corrective_actions.sql`. Ver la cabecera de `inspections.ts`:
+ * `kind` la amplían `0011`, `0012` y `0046`. Ver la cabecera de `inspections.ts`:
  * el SQL lleva el trigger de guarda, los de prohibición de DELETE/TRUNCATE, la política
  * de aislamiento y los GRANT por columna.
  */
@@ -20,8 +20,9 @@ import { appUser } from './identity';
 export const NOTIFICATION_KINDS = [
   'inspection_period_opened',
   'corrective_action_assigned',
-  'corrective_action_overdue_supervisor',
+  'corrective_action_overdue_coordinator',
   'corrective_action_overdue_management',
+  'incident_reported',
 ] as const;
 
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
@@ -68,8 +69,9 @@ export const notification = pgTable(
     check(
       'notification_kind_check',
       sql`${table.kind} IN ('inspection_period_opened', 'corrective_action_assigned',
-                            'corrective_action_overdue_supervisor',
-                            'corrective_action_overdue_management')`,
+                             'corrective_action_overdue_coordinator',
+                            'corrective_action_overdue_management',
+                            'incident_reported')`,
     ),
     unique('notification_dedupe_uq').on(table.userId, table.kind, table.dedupeKey),
     index('notification_inbox_idx').on(table.userId, table.readAt, table.createdAt),

@@ -58,8 +58,6 @@ function session(role: Session['role']): { account: Session } {
       personId: PERSON,
       role,
       siteScope: currentSiteScope,
-      recordsFrom: null,
-      recordsTo: null,
     },
   };
 }
@@ -163,19 +161,25 @@ afterEach(() => {
 });
 
 describe('quién puede administrar el catálogo', () => {
-  it.each(['jhsc_member', 'supervisor', 'management', 'external_auditor'] as const)(
+  it.each(['jhsc_member'] as const)(
     'se lo niega a %s, y sin llamar a la API',
     (role) => {
       useAppSession.mockReturnValue(session(role));
 
       renderRoute();
 
-      expect(screen.getByText(/Only the H&S coordinator can administer locations/)).toBeTruthy();
+      expect(screen.getByText(/Only H&S coordinators and management can administer locations/)).toBeTruthy();
       expect(screen.queryByRole('button', { name: 'Add site' })).toBeNull();
       expect(screen.queryByRole('button', { name: 'Manage sites' })).toBeNull();
       expect(listCatalogLocations).not.toHaveBeenCalled();
     },
   );
+
+  it('management puede abrir el catálogo', async () => {
+    useAppSession.mockReturnValue(session('management'));
+    renderRoute();
+    expect(await screen.findByRole('button', { name: 'Add location' })).toBeTruthy();
+  });
 });
 
 describe('la tabla cruza las plantas', () => {

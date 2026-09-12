@@ -8,7 +8,7 @@
  * devuelve las seis columnas de `person` y solo lo puede llamar el coordinador,
  * justamente porque §4 dice que quien reporta elige a una persona **sin poder ver su
  * perfil**. Colgar este selector de ahí pondría esa superficie detrás de la pantalla de
- * un supervisor y rompería lo único que mantiene separadas a las dos.
+ * una cuenta administrativa y rompería lo único que mantiene separadas a las dos.
  *
  * Lo que hace falta es una ruta con forma de `personOptionSchema` —cuatro columnas, solo
  * activas— como la que ya sirve el paquete de campo. **Lo que no cambia cuando exista es

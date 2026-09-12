@@ -16,7 +16,7 @@ import { incidentClassificationSchema } from './incidents.js';
 export const NOTIFICATION_KINDS = [
   'inspection_period_opened',
   'corrective_action_assigned',
-  'corrective_action_overdue_supervisor',
+  'corrective_action_overdue_coordinator',
   'corrective_action_overdue_management',
   'incident_reported',
 ] as const;
@@ -82,7 +82,7 @@ export type CorrectiveActionAssignedPayload = z.infer<
  * Los dos niveles comparten forma —cambia quién lo recibe, no qué dice— pero son
  * dos `kind` distintos y no uno con un campo `level`: quién recibe qué es la
  * decisión de R3, y un solo `kind` haría que la bandeja de gerencia y la del
- * supervisor se distingan por el contenido en vez de por el destinatario.
+ * coordinador se distingan por el contenido en vez de por el destinatario.
  */
 export const correctiveActionOverduePayloadSchema = z.strictObject({
   action_id: z.uuid(),
@@ -151,7 +151,7 @@ export const notificationSchema = z.discriminatedUnion('kind', [
   }),
   z.strictObject({
     ...notificationBase,
-    kind: z.literal('corrective_action_overdue_supervisor'),
+    kind: z.literal('corrective_action_overdue_coordinator'),
     payload: correctiveActionOverduePayloadSchema,
   }),
   z.strictObject({

@@ -30,8 +30,16 @@ let accounts: AccountService;
 let coordinatorId: string;
 let narrowId: string;
 
-const asCoordinator = () => ({ userId: coordinatorId, role: 'hs_coordinator' as const });
-const asNarrowCoordinator = () => ({ userId: narrowId, role: 'hs_coordinator' as const });
+const asCoordinator = () => ({
+  userId: coordinatorId,
+  role: 'hs_coordinator' as const,
+  siteIds: [SITE_A, SITE_B],
+});
+const asNarrowCoordinator = () => ({
+  userId: narrowId,
+  role: 'hs_coordinator' as const,
+  siteIds: [SITE_A],
+});
 
 beforeAll(async () => {
   db = await startTestDatabase();
@@ -113,8 +121,8 @@ describe('el alta escribe app_user, user_site_scope y su auditoría', () => {
 });
 
 describe('el permiso no se escribe dos veces (design D3)', () => {
-  it('ningún otro rol puede crear una cuenta, y no crea nada', async () => {
-    for (const role of ['jhsc_member', 'supervisor', 'management', 'external_auditor']) {
+  it('un miembro del JHSC no puede crear una cuenta, y no crea nada', async () => {
+    for (const role of ['jhsc_member']) {
       const person = await createPerson(db.app, SITE_A, { lastName: `Rechazado-${role}` });
 
       const code = await codeOf(() =>
@@ -170,7 +178,7 @@ describe('los otros dos rechazos del alta', () => {
   });
 
   it('un email que ya es de otra cuenta se rechaza', async () => {
-    const existing = await createAccount(db.app, { role: 'supervisor', siteIds: [SITE_A] });
+    const existing = await createAccount(db.app, { role: 'management', siteIds: [SITE_A] });
     const person = await createPerson(db.app, SITE_A, { lastName: 'EmailTomado' });
 
     const code = await codeOf(() =>

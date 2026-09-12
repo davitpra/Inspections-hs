@@ -38,8 +38,6 @@ export interface SessionContext extends SessionScope {
   sessionId: string;
   personId: string;
   role: Role;
-  recordsFrom: string | null;
-  recordsTo: string | null;
   /**
    * El email de la cuenta. Sale de `app_user`, que no lleva RLS, así que viaja en la
    * resolución misma. El nombre de la persona NO está acá — ver `toContractSession`.
@@ -55,9 +53,6 @@ interface ResolvedRow {
   person_id: string;
   role: Role;
   deactivated_at: Date | null;
-  expires_at: Date | null;
-  records_from: string | null;
-  records_to: string | null;
   email: string;
   site_ids: string[];
 }
@@ -89,7 +84,7 @@ export class SessionService {
 
   /**
    * Design D4 — La resolución completa en UNA consulta: sesión viva y no vencida →
-   * cuenta activa y no vencida → persona → rol → sitios del alcance vigente.
+   * cuenta activa → persona → rol → sitios del alcance vigente.
    *
    * El alcance sale de `user_site_scope` acá y no del token, y esa es la propiedad
    * que hace ciertos los escenarios de "un sitio revocado sale del alcance en el
@@ -121,9 +116,6 @@ export class SessionService {
               u.person_id     AS person_id,
               u.role          AS role,
               u.deactivated_at,
-              u.expires_at,
-              u.records_from::text AS records_from,
-              u.records_to::text   AS records_to,
               u.email         AS email,
               coalesce(
                 (SELECT array_agg(sc.site_id ORDER BY sc.site_id)
@@ -143,14 +135,11 @@ export class SessionService {
     if (!row) throw sessionEnded('The session does not exist');
     if (row.session_revoked_at) throw sessionEnded('The session was revoked');
 
-    // El orden importa. Primero las condiciones FINALES —cuenta desactivada o
-    // vencida—, después el vencimiento del access token, que es la única renovable.
+    // El orden importa. Primero la condición FINAL —cuenta desactivada—, después el
+    // vencimiento del access token, que es renovable.
     // Al revés, una cuenta desactivada con token vencido recibiría `token_expired` y
     // el cliente entraría en un ciclo de refrescos que nunca van a servir.
     if (row.deactivated_at) throw sessionEnded('The account is deactivated');
-    if (row.expires_at && row.expires_at.getTime() <= Date.now()) {
-      throw sessionEnded('The account has expired');
-    }
 
     if (row.session_expires_at.getTime() <= Date.now()) throw tokenExpired();
 
@@ -160,8 +149,6 @@ export class SessionService {
       personId: row.person_id,
       role: row.role,
       siteIds: row.site_ids,
-      recordsFrom: row.records_from,
-      recordsTo: row.records_to,
       email: row.email,
     };
   }
@@ -239,11 +226,10 @@ export class SessionService {
         session_revoked_at: Date | null;
         session_revoked_reason: string | null;
         deactivated_at: Date | null;
-        account_expires_at: Date | null;
       }>(
         `SELECT r.id, r.session_id, r.expires_at, r.spent_at, r.replaced_by_id, r.revoked_at,
                 s.user_id, s.revoked_at AS session_revoked_at, s.revoked_reason AS session_revoked_reason,
-                u.deactivated_at, u.expires_at AS account_expires_at
+                u.deactivated_at
            FROM app_refresh_token r
            JOIN app_session s ON s.id = r.session_id
            JOIN app_user u ON u.id = s.user_id
@@ -273,9 +259,6 @@ export class SessionService {
         throw sessionEnded('The session has ended');
       }
       if (row.deactivated_at) throw sessionEnded('The account is deactivated');
-      if (row.account_expires_at && row.account_expires_at.getTime() <= Date.now()) {
-        throw sessionEnded('The account has expired');
-      }
       if (row.expires_at.getTime() <= Date.now()) {
         throw sessionEnded('The refresh token has expired');
       }
@@ -391,9 +374,6 @@ export class SessionService {
    * `GET /auth/session`—, y para entonces el alcance ya existe: se lee bajo
    * `withSessionClient`, por la misma puerta que cualquier otra lectura del sistema.
    *
-   * Sin `ReadDescriptor` a propósito: el registro de lecturas del auditor externo
-   * (design D10) es sobre los REGISTROS que mira, y el nombre propio no es uno.
-   *
    * Si el nombre no aparece —la persona vive en una planta fuera del alcance de su
    * cuenta— la sesión sale sin él y el cliente cae al email. Se degrada en vez de
    * fallar: no poder escribir un nombre en una barra no puede impedir iniciar sesión.
@@ -413,8 +393,6 @@ export class SessionService {
       personId: context.personId,
       role: context.role,
       siteScope: [...context.siteIds],
-      recordsFrom: context.recordsFrom,
-      recordsTo: context.recordsTo,
       email: context.email,
       firstName: person?.first_name,
       lastName: person?.last_name,

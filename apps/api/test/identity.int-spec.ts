@@ -296,7 +296,7 @@ describe('una cuenta siempre pertenece a una persona', () => {
         db.migrator,
         [],
         `INSERT INTO app_user (person_id, email, role)
-         VALUES ('88888888-0000-4000-8000-0000000000ff', 'ghost@example.com', 'supervisor')`,
+         VALUES ('88888888-0000-4000-8000-0000000000ff', 'ghost@example.com', 'management')`,
       ),
     ).rejects.toMatchObject({ code: FOREIGN_KEY_VIOLATION });
   });
@@ -308,7 +308,7 @@ describe('una cuenta siempre pertenece a una persona', () => {
       inScope(
         db.migrator,
         [SITE_A],
-        `INSERT INTO app_user (person_id, email, role) VALUES ($1, 'second@example.com', 'supervisor')`,
+        `INSERT INTO app_user (person_id, email, role) VALUES ($1, 'second@example.com', 'management')`,
         [seeded.personId],
       ),
     ).rejects.toMatchObject({ code: UNIQUE_VIOLATION });
@@ -398,121 +398,17 @@ describe('el rol es uno, de un conjunto cerrado', () => {
     ).rejects.toMatchObject({ code: NOT_NULL_VIOLATION });
   });
 
-  it('los cinco roles de §4 se aceptan', async () => {
-    for (const role of ['hs_coordinator', 'jhsc_member', 'supervisor', 'management']) {
+  it('los tres roles de ADR-022 se aceptan y los retirados se rechazan', async () => {
+    for (const role of ['hs_coordinator', 'jhsc_member', 'management']) {
       const seeded = await createAccount(db.migrator, { siteIds: [SITE_A], role });
       expect(seeded.accountId).toBeTruthy();
     }
 
-    const auditor = await createAccount(db.migrator, {
-      siteIds: [SITE_A],
-      role: 'external_auditor',
-      expiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000),
-      recordsFrom: '2026-01-01',
-      recordsTo: '2026-08-07',
-    });
-
-    expect(auditor.accountId).toBeTruthy();
-  });
-});
-
-// ---------------------------------------------------------------------------
-describe('el ciclo de vida del auditor externo (§5 riesgo I)', () => {
-  const inDays = (days: number) => new Date(Date.now() + days * 24 * 3600 * 1000);
-
-  const auditor = (overrides: Record<string, unknown> = {}) => ({
-    siteIds: [SITE_A],
-    role: 'external_auditor',
-    expiresAt: inDays(30),
-    recordsFrom: '2026-01-01',
-    recordsTo: '2026-08-07',
-    ...overrides,
-  });
-
-  it('sin vencimiento se rechaza', async () => {
-    await expect(
-      createAccount(db.migrator, auditor({ expiresAt: null }) as never),
-    ).rejects.toMatchObject({ code: CHECK_VIOLATION });
-  });
-
-  it('a 91 días se rechaza', async () => {
-    await expect(
-      createAccount(db.migrator, auditor({ expiresAt: inDays(91) }) as never),
-    ).rejects.toMatchObject({ code: CHECK_VIOLATION });
-  });
-
-  it('a 30 días se acepta', async () => {
-    await expect(createAccount(db.migrator, auditor() as never)).resolves.toBeTruthy();
-  });
-
-  it('un vencimiento en un rol que no es auditor se rechaza', async () => {
-    await expect(
-      createAccount(db.migrator, {
-        siteIds: [SITE_A],
-        role: 'supervisor',
-        expiresAt: inDays(30),
-      }),
-    ).rejects.toMatchObject({ code: CHECK_VIOLATION });
-  });
-
-  it('sin ventana de fechas se rechaza', async () => {
-    await expect(
-      createAccount(db.migrator, auditor({ recordsFrom: null }) as never),
-    ).rejects.toMatchObject({ code: CHECK_VIOLATION });
-  });
-
-  it('con la ventana invertida se rechaza', async () => {
-    await expect(
-      createAccount(db.migrator, auditor({ recordsFrom: '2026-08-07', recordsTo: '2026-01-01' }) as never),
-    ).rejects.toMatchObject({ code: CHECK_VIOLATION });
-  });
-
-  it('una cuenta vencida se reporta inactiva y su fila sigue entera', async () => {
-    const personId = await createPerson(db.migrator, SITE_A);
-
-    const rows = await inScope<{ id: string }>(
-      db.migrator,
-      [SITE_A],
-      `INSERT INTO app_user (person_id, email, role, created_at, expires_at, records_from, records_to)
-       VALUES ($1, 'expired@example.com', 'external_auditor',
-               now() - interval '60 days', now() - interval '30 days', '2026-01-01', '2026-03-01')
-       RETURNING id`,
-      [personId],
-    );
-
-    const accountId = one(rows).id;
-
-    await inScope(db.migrator, [SITE_A], 'INSERT INTO user_site_scope (user_id, site_id) VALUES ($1, $2)', [
-      accountId,
-      SITE_A,
-    ]);
-
-    const state = await inScope<{ active: boolean }>(
-      db.migrator,
-      [],
-      'SELECT hs_account_is_active(u.*) AS active FROM app_user u WHERE u.id = $1',
-      [accountId],
-    );
-
-    expect(one(state).active).toBe(false);
-    expect(await effectiveScope(db.migrator, accountId)).toEqual([SITE_A]);
-  });
-
-  it('revocarla antes del vencimiento también la deja inactiva', async () => {
-    const seeded = await createAccount(db.migrator, auditor() as never);
-
-    await inScope(db.migrator, [SITE_A], 'UPDATE app_user SET deactivated_at = now() WHERE id = $1', [
-      seeded.accountId,
-    ]);
-
-    const state = await inScope<{ active: boolean }>(
-      db.migrator,
-      [],
-      'SELECT hs_account_is_active(u.*) AS active FROM app_user u WHERE u.id = $1',
-      [seeded.accountId],
-    );
-
-    expect(one(state).active).toBe(false);
+    for (const role of ['supervisor', 'external_auditor']) {
+      await expect(
+        createAccount(db.migrator, { siteIds: [SITE_A], role }),
+      ).rejects.toMatchObject({ code: CHECK_VIOLATION });
+    }
   });
 });
 
@@ -552,12 +448,14 @@ describe('el asiento en el JHSC (coordinator-jhsc-seat)', () => {
    * guarda del servicio da el mensaje legible; esta es la que no se saltea con un UPDATE a
    * mano.
    */
-  it('ningún rol que no sea hs_coordinator puede llevarlo', async () => {
-    for (const role of ['jhsc_member', 'supervisor', 'management'] as const) {
-      await expect(
-        createAccount(db.migrator, { siteIds: [SITE_A], role, jhscSeat: true }),
-      ).rejects.toMatchObject({ code: CHECK_VIOLATION });
-    }
+  it('un miembro no puede llevarlo y management sí', async () => {
+    await expect(
+      createAccount(db.migrator, { siteIds: [SITE_A], role: 'jhsc_member', jhscSeat: true }),
+    ).rejects.toMatchObject({ code: CHECK_VIOLATION });
+
+    await expect(
+      createAccount(db.migrator, { siteIds: [SITE_A], role: 'management', jhscSeat: true }),
+    ).resolves.toBeTruthy();
   });
 
   it('cambiarle el rol a una cuenta sentada se rechaza, en vez de dejarla sentada', async () => {
@@ -569,7 +467,7 @@ describe('el asiento en el JHSC (coordinator-jhsc-seat)', () => {
 
     await expect(
       inScope(db.migrator, [SITE_A], 'UPDATE app_user SET role = $1 WHERE id = $2', [
-        'supervisor',
+        'jhsc_member',
         seated.accountId,
       ]),
     ).rejects.toMatchObject({ code: CHECK_VIOLATION });
@@ -907,7 +805,7 @@ describe('la auditoría de la cuenta se abre por planta del alcance', () => {
       db.migrator,
       [SITE_A],
       `INSERT INTO app_user (person_id, email, role)
-       VALUES ($1, 'noscope@example.com', 'supervisor') RETURNING id`,
+       VALUES ($1, 'noscope@example.com', 'management') RETURNING id`,
       [personId],
     );
 
@@ -920,7 +818,7 @@ describe('la auditoría de la cuenta se abre por planta del alcance', () => {
   it('cambiar el rol escribe una entrada por planta, con el rol anterior y el nuevo', async () => {
     const seeded = await createAccount(db.migrator, {
       siteIds: [SITE_A, SITE_B],
-      role: 'supervisor',
+      role: 'jhsc_member',
     });
 
     await inScope(db.migrator, [SITE_A, SITE_B], 'UPDATE app_user SET role = $1 WHERE id = $2', [
@@ -933,7 +831,7 @@ describe('la auditoría de la cuenta se abre por planta del alcance', () => {
         (entry) => entry.event_type === 'user.role_changed',
       );
 
-      expect(changed!.payload.previous_role).toBe('supervisor');
+      expect(changed!.payload.previous_role).toBe('jhsc_member');
       expect(changed!.payload.role).toBe('hs_coordinator');
     }
   });

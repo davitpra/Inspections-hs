@@ -10,7 +10,8 @@
  * miembros, no una regla: la coordinadora también se sienta en el comité, y como
  * `app_user.person_id` es UNIQUE no existe una segunda cuenta que dárselo. Por eso la
  * pregunta que se hace acá pasó de ser sobre el ROL a ser sobre el ASIENTO, con sus dos
- * casos — y el `CHECK` de 0035 garantiza que el segundo solo alcanza a `hs_coordinator`.
+ * casos — y el `CHECK` del motor garantiza que el segundo solo alcanza a un rol
+ * administrativo.
  *
  * POR QUÉ ESTO ES UN MÓDULO Y NO DOS CONSULTAS PARECIDAS. Desde que existe una pantalla
  * de asignación hay dos lugares que preguntan lo mismo: el listado, que ofrece
@@ -34,8 +35,8 @@ export const ACCOUNT_IS_ACTIVE = 'u.deactivated_at IS NULL';
 export const ACCOUNT_IS_JHSC_MEMBER = `u.role = 'jhsc_member'`;
 
 /**
- * El asiento otorgado a una cuenta de coordinador (0035). No hace falta comprobar el rol
- * acá: el `CHECK` del motor no deja que esta columna sea no-nula para ningún otro.
+ * El asiento otorgado a una cuenta administrativa. No hace falta comprobar el rol acá:
+ * el `CHECK` del motor no deja que esta columna sea no-nula para ningún otro.
  */
 export const ACCOUNT_HOLDS_JHSC_SEAT = 'u.jhsc_seat_granted_at IS NOT NULL';
 

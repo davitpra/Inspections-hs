@@ -788,13 +788,14 @@ concept is not asked again.
 
 ### Requirement: Publishing a template is the HS coordinator's
 
-The system SHALL restrict publishing a template draft to the HS coordinator, and SHALL refuse
-every other role as `template_draft_forbidden`, the same code the other acts on a draft use: for
-every role but one, a draft is a document that does not exist.
+The system SHALL restrict publishing a template draft to an administrative account —
+`hs_coordinator` or `management` — and SHALL refuse `jhsc_member` as `template_draft_forbidden`,
+the same code the other acts on a draft use: for the role that inspects, a draft is a document that
+does not exist.
 
-#### Scenario: A non-coordinator cannot publish
+#### Scenario: A JHSC member cannot publish
 
-- **WHEN** an account whose role is `supervisor` publishes a draft
+- **WHEN** an account whose role is `jhsc_member` publishes a draft
 - **THEN** the request is refused as `template_draft_forbidden`
 - **AND** no `template` or `template_version` row is written
 
@@ -843,7 +844,7 @@ carrying the concept forward is the whole point of revising rather than starting
 
 The request SHALL be refused as `template_not_found` when the template does not exist or has been
 deactivated, and as `template_version_not_found` when it has no published version. It SHALL be
-restricted to the HS coordinator and refused to every other role as `template_draft_forbidden`.
+restricted to an administrative account and refused to `jhsc_member` as `template_draft_forbidden`.
 
 #### Scenario: The seeded draft repeats the published document
 
@@ -865,9 +866,9 @@ restricted to the HS coordinator and refused to every other role as `template_dr
 - **THEN** the number of `template`, `template_item`, `template_version` and
   `template_version_item` rows is unchanged
 
-#### Scenario: A non-coordinator cannot revise
+#### Scenario: A JHSC member cannot revise
 
-- **WHEN** an account whose role is `supervisor` revises a published template
+- **WHEN** an account whose role is `jhsc_member` revises a published template
 - **THEN** the request is refused as `template_draft_forbidden`
 - **AND** no `template_draft` row is written
 
@@ -1206,31 +1207,36 @@ configuration field belonging to a response type it no longer has.
 ### Requirement: Authoring a template is the HS coordinator's
 
 The system SHALL restrict reading, creating, saving, discarding and publishing a template draft
-to the HS
-coordinator, and SHALL refuse every other role with a code the interface can act on rather than a
-message it must parse.
+to an administrative account — `hs_coordinator` or `management` — and SHALL refuse `jhsc_member`
+with a code the interface can act on rather than a message it must parse.
 
 The restriction SHALL be by role and not by site scope, because a template carries no `site_id` by
 design and a draft's `site_ids` describes where it is intended to be used rather than whose data
 it is. A draft remains organisation reference content, and restricting visibility by plant would
 reintroduce the per-plant duplication the model exists to avoid.
 
-#### Scenario: A non-coordinator cannot read drafts
+#### Scenario: A JHSC member cannot read drafts
 
 - **WHEN** an account whose role is `jhsc_member` lists the template drafts
 - **THEN** the request is refused as `template_draft_forbidden`
 
-#### Scenario: A non-coordinator cannot save a draft
+#### Scenario: A JHSC member cannot save a draft
 
-- **WHEN** an account whose role is `supervisor` saves an existing draft
+- **WHEN** an account whose role is `jhsc_member` saves an existing draft
 - **THEN** the request is refused as `template_draft_forbidden`
 - **AND** the stored draft is unchanged
 
-#### Scenario: A non-coordinator cannot publish a draft
+#### Scenario: A JHSC member cannot publish a draft
 
 - **WHEN** an account whose role is `jhsc_member` publishes a draft
 - **THEN** the request is refused as `template_draft_forbidden`
 - **AND** no `template_version` row is written
+
+#### Scenario: A management account authors like the coordinator
+
+- **WHEN** an account whose role is `management` lists, creates, saves, discards or publishes a
+  template draft
+- **THEN** each request is accepted on the same terms as for an `hs_coordinator`
 
 #### Scenario: Drafts do not depend on the requester's site scope
 
@@ -1861,7 +1867,7 @@ authors templates.
 #### Scenario: A role that cannot author templates can still read one
 
 - **GIVEN** a published template version
-- **WHEN** an account whose role is `supervisor` reads it
+- **WHEN** an account whose role is `jhsc_member` reads it
 - **THEN** the response is the same document the coordinator reads
 
 #### Scenario: The account's plants do not change the answer

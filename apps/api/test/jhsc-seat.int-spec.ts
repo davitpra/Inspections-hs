@@ -34,7 +34,11 @@ let accounts: AccountService;
 
 let coordinatorId: string;
 
-const asCoordinator = () => ({ userId: coordinatorId, role: 'hs_coordinator' as const });
+const asCoordinator = () => ({
+  userId: coordinatorId,
+  role: 'hs_coordinator' as const,
+  siteIds: [SITE_A, SITE_B],
+});
 
 beforeAll(async () => {
   db = await startTestDatabase();
@@ -85,12 +89,14 @@ async function seatOf(accountId: string): Promise<Date | null> {
 }
 
 describe('el motor decide quién puede ocupar un asiento', () => {
-  it('rechaza el asiento sobre cualquier rol que no sea hs_coordinator', async () => {
-    for (const role of ['jhsc_member', 'supervisor', 'management'] as const) {
-      await expect(
-        createAccount(db.app, { role, siteIds: [SITE_A], jhscSeat: true }),
-      ).rejects.toThrow(/app_user_jhsc_seat_check/);
-    }
+  it('rechaza el asiento sobre un miembro y lo acepta sobre management', async () => {
+    await expect(
+      createAccount(db.app, { role: 'jhsc_member', siteIds: [SITE_A], jhscSeat: true }),
+    ).rejects.toThrow(/app_user_jhsc_seat_check/);
+
+    await expect(
+      createAccount(db.app, { role: 'management', siteIds: [SITE_A], jhscSeat: true }),
+    ).resolves.toBeTruthy();
   });
 
   it('acepta el asiento sobre una cuenta de coordinador', async () => {
@@ -150,7 +156,7 @@ describe('sentarse y levantarse dejan rastro donde el registro lo necesita', () 
    */
   it('la coordinadora puede sentarse a sí misma', async () => {
     const own = await createAccount(db.app, { role: 'hs_coordinator', siteIds: [SITE_A] });
-    const herself = { userId: own.accountId, role: 'hs_coordinator' as const };
+    const herself = { userId: own.accountId, role: 'hs_coordinator' as const, siteIds: [SITE_A] };
 
     const result = await accounts.update(herself, own.accountId, request({ jhsc_seat: true }));
 
@@ -240,13 +246,13 @@ describe('lo que el servicio rechaza antes de llegar al motor', () => {
     expect(code).toBe('account_already_inactive');
   });
 
-  it('solo el coordinador administra el asiento', async () => {
+  it('solo una cuenta administrativa administra el asiento', async () => {
     const target = await createAccount(db.app, { role: 'hs_coordinator', siteIds: [SITE_A] });
     const member = await createAccount(db.app, { role: 'jhsc_member', siteIds: [SITE_A] });
 
     const code = await codeOf(() =>
       accounts.update(
-        { userId: member.accountId, role: 'jhsc_member' },
+        { userId: member.accountId, role: 'jhsc_member', siteIds: [SITE_A] },
         target.accountId,
         request({ jhsc_seat: true }),
       ),

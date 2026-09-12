@@ -1,20 +1,21 @@
 import { Injectable } from '@nestjs/common';
-import type {
-  AnswerValue,
-  CreateInspectionSchedule,
-  CreateScheduledInspection,
-  InspectionSchedule,
-  InspectorOption,
-  LocationPackage,
-  PendingInspection,
-  PeriodMonths,
-  PeriodStatus,
-  Role,
-  RosterPackage,
-  ScheduledInspection,
-  SubmittedInspection,
-  TemplateVersionPackage,
-  UpdateInspectionSchedule,
+import {
+  isAdministrator,
+  type AnswerValue,
+  type CreateInspectionSchedule,
+  type CreateScheduledInspection,
+  type InspectionSchedule,
+  type InspectorOption,
+  type LocationPackage,
+  type PendingInspection,
+  type PeriodMonths,
+  type PeriodStatus,
+  type Role,
+  type RosterPackage,
+  type ScheduledInspection,
+  type SubmittedInspection,
+  type TemplateVersionPackage,
+  type UpdateInspectionSchedule,
 } from '@hs/contracts';
 import type { TemplateDocument } from '@hs/forms';
 import type { DatabaseError, PoolClient } from 'pg';
@@ -496,7 +497,7 @@ export class InspectionsService {
     return this.db.withSessionClient(session, async (client) => {
       const scheduled = await this.scheduledForAdvance(client, id);
 
-      if (scheduled.inspector_id !== session.userId && session.role !== 'hs_coordinator') {
+      if (scheduled.inspector_id !== session.userId && !isAdministrator(session.role)) {
         throw forbidden('Only the assigned inspector or an HS coordinator can advance the template version');
       }
 
@@ -737,8 +738,8 @@ export class InspectionsService {
 
   // -------------------------------------------------------------------------
 
-  private requireCoordinator(session: { role: string }): void {
-    if (session.role !== 'hs_coordinator') {
+  private requireCoordinator(session: SessionScope): void {
+    if (!isAdministrator(session.role)) {
       throw forbidden('Only the HS coordinator can administer inspection scheduling');
     }
   }
@@ -765,7 +766,7 @@ export class InspectionsService {
 
   /**
    * Un inspector válido se sienta en el JHSC —rol `jhsc_member`, o asiento otorgado a una
-   * cuenta de coordinador (0035)— y tiene alcance VIGENTE en esa planta.
+   * cuenta administrativa— y tiene alcance VIGENTE en esa planta.
    *
    * Las condiciones salen de `inspector-eligibility.ts`, compartidas con el listado de
    * candidatos, para que no pueda ofrecerse una cuenta que después se rechace acá.
@@ -804,7 +805,7 @@ export class InspectionsService {
 
     if (row.role !== 'jhsc_member' && !row.holds_seat) {
       throw inspectorInvalid(
-        row.role === 'hs_coordinator'
+        isAdministrator(row.role)
           ? 'The account holds no seat on the JHSC'
           : `Role ${row.role} cannot be assigned an inspection`,
       );

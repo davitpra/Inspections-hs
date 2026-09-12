@@ -90,13 +90,10 @@ beforeAll(async () => {
   });
   coordinatorId = coordinator.accountId;
 
-  for (const role of ['supervisor', 'jhsc_member', 'management', 'external_auditor']) {
+  for (const role of ['jhsc_member']) {
     const account = await createAccount(db.app, {
       siteIds: [SITE_A],
       role,
-      expiresAt: role === 'external_auditor' ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) : null,
-      recordsFrom: role === 'external_auditor' ? '2020-01-01' : null,
-      recordsTo: role === 'external_auditor' ? '2030-01-01' : null,
     });
     tokens.set(role, account.accountId);
   }
@@ -179,7 +176,7 @@ describe('POST /people/import', () => {
     expect((await person('HTTP-REPEAT'))?.deactivated_at).not.toBeNull();
   });
 
-  it('niega todos los demás roles sin escribir personas, lotes ni auditoría', async () => {
+  it('niega al miembro del JHSC sin escribir personas, lotes ni auditoría', async () => {
     const beforeImports = await importCount();
     const beforeAudit = await inScope<{ count: string }>(
       db.migrator,
@@ -187,7 +184,7 @@ describe('POST /people/import', () => {
       'SELECT count(*)::text AS count FROM audit_log',
     );
 
-    for (const role of ['supervisor', 'jhsc_member', 'management', 'external_auditor']) {
+    for (const role of ['jhsc_member']) {
       const response = await post(
         tokens.get(role)!,
         upload(csv(`ROLE-${role},No,Crear,http-a,active`, 'HTTP-1,No,Cambiar,http-a,active')),

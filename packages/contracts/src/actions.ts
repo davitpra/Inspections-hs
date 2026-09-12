@@ -39,7 +39,7 @@ const objectKeySchema = z.string().min(1).max(512);
  * **`overdue` no está y esa ausencia es deliberada**: que una acción esté vencida
  * es una comparación entre `due_at` y el reloj, no un estado por el que la acción
  * pasa. Si lo fuera, una acción vencida perdería la información de si estaba en
- * progreso o esperando verificación, que es justo lo que el supervisor que recibe
+ * progreso o esperando verificación, que es justo lo que el coordinador que recibe
  * el escalamiento necesita saber.
  *
  * **La misma lista está escrita como `CHECK` en la migración 0011** y un test de
@@ -77,7 +77,7 @@ export type TransitionActor = Role | typeof ASSIGNEE;
  *   exento** (ADR-019): es la única cuenta que declara trabajo hecho por una
  *   persona del roster sin usuario, y aplicarle la regla dejaba trabajo
  *   terminado retenido en `awaiting_verification`. Sigue entera para
- *   `supervisor` y `management`.
+ *   `management`.
  * - `reason`: hay que decir por qué. Solo al rechazar una verificación.
  *
  * QUIÉN SUFRE `not_executor` NO SE LEE DE ACÁ, igual que `ASSIGNEE` no dice
@@ -129,13 +129,13 @@ export const TRANSITIONS: readonly ActionTransition[] = [
   {
     from: 'awaiting_verification',
     to: 'closed',
-    roles: ['hs_coordinator', 'supervisor', 'management'],
+    roles: ['hs_coordinator', 'management'],
     requires: ['not_executor'],
   },
   {
     from: 'awaiting_verification',
     to: 'in_progress',
-    roles: ['hs_coordinator', 'supervisor', 'management'],
+    roles: ['hs_coordinator', 'management'],
     requires: ['not_executor', 'reason'],
   },
 ] as const;
@@ -168,21 +168,21 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
  *
  * El orden es significativo: el cron los recorre de menor a mayor.
  */
-export const ESCALATION_LEVELS = ['supervisor', 'management'] as const;
+export const ESCALATION_LEVELS = ['hs_coordinator', 'management'] as const;
 
 export const escalationLevelSchema = z.enum(ESCALATION_LEVELS);
 
 export type EscalationLevel = z.infer<typeof escalationLevelSchema>;
 
-/** +3 días al supervisor, +7 días a gerencia. ADR-005 lo nombra con estos números. */
+/** +3 días al coordinador, +7 días a gerencia. ADR-022 conserva estos números. */
 export const ESCALATION_DAYS: Readonly<Record<EscalationLevel, number>> = {
-  supervisor: 3,
+  hs_coordinator: 3,
   management: 7,
 };
 
 /** Qué rol recibe cada escalón (§4, tabla de roles: "Gerencia recibe escalamientos"). */
 export const ESCALATION_RECIPIENT_ROLE: Readonly<Record<EscalationLevel, Role>> = {
-  supervisor: 'supervisor',
+  hs_coordinator: 'hs_coordinator',
   management: 'management',
 };
 

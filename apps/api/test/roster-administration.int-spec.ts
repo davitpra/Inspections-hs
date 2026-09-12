@@ -72,7 +72,7 @@ beforeAll(async () => {
   const narrow = await createAccount(db.app, { siteIds: [SITE_A], role: 'hs_coordinator' });
   narrowId = narrow.accountId;
 
-  const supervisor = await createAccount(db.app, { siteIds: [SITE_A], role: 'supervisor' });
+  const supervisor = await createAccount(db.app, { siteIds: [SITE_A], role: 'jhsc_member' });
   supervisorId = supervisor.accountId;
 
   // Apellidos elegidos para que el orden sea comprobable y no coincida con el de alta.
@@ -142,7 +142,7 @@ describe('leer el roster de una planta', () => {
   });
 
   it('lo niega a cualquier rol que no sea el coordinador, también en la lectura', async () => {
-    for (const role of ['supervisor', 'jhsc_member', 'management', 'external_auditor']) {
+    for (const role of ['jhsc_member']) {
       await expect(
         roster.list(
           { userId: supervisorId, role, siteIds: [SITE_A] },
@@ -296,7 +296,7 @@ describe('dar de baja un worker desde su fila', () => {
   it('lo niega a cualquier rol que no sea el coordinador', async () => {
     const id = await createPerson(db.app, SITE_A, { lastName: 'Protegida' });
 
-    for (const role of ['supervisor', 'jhsc_member', 'management', 'external_auditor']) {
+    for (const role of ['jhsc_member']) {
       await expect(
         roster.deactivate({ userId: supervisorId, role, siteIds: [SITE_A] }, id),
       ).rejects.toMatchObject({ response: { code: 'roster_forbidden' } });
@@ -329,7 +329,7 @@ describe('la cuenta que viaja junto a cada persona (design D1/D2)', () => {
   });
 
   it('cada cuenta trae su email, y ninguna trae alcance ni token', async () => {
-    await createAccount(db.app, { role: 'supervisor', siteIds: [SITE_A], lastName: 'Privado' });
+    await createAccount(db.app, { role: 'management', siteIds: [SITE_A], lastName: 'Privado' });
 
     const rows = await roster.list(asCoordinator(), { site_id: SITE_A, status: 'active' });
     const withAccounts = rows.filter((row) => row.account !== null);

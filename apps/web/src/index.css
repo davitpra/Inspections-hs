@@ -7665,6 +7665,45 @@ button.schedule-cell:focus-visible {
   font-size: var(--text-sm);
 }
 
+/*
+ * Ver lo que se está escribiendo. El botón va DENTRO del campo y no en la fila de la
+ * etiqueta: cualquier `button` mide 48px de piso (ADR-010) y en la fila de la etiqueta
+ * eso la empujaría al alto de un control, cuando es texto. Encima del input el alto ya
+ * está —el input también mide 48px—, así que el objetivo de toque sale gratis.
+ *
+ * El relleno derecho del input es lo que impide que la contraseña pase por debajo del
+ * botón; sin él, el final de lo revelado queda tapado justo cuando se lo quiere leer.
+ */
+/* `flex` y no un bloque suelto: el input es `inline-block` y deja debajo el hueco de la
+   línea base, que serían dos o tres píxeles de alto que el botón heredaría de más. */
+.auth__reveal {
+  position: relative;
+  display: flex;
+}
+
+.auth__reveal input {
+  padding-right: var(--space-12);
+}
+
+.auth__reveal-toggle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-12);
+  height: 100%;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+
+.auth__reveal-toggle[aria-pressed='true'] {
+  color: var(--brand);
+}
+
 .auth__note {
   display: flex;
   align-items: flex-start;

@@ -131,8 +131,6 @@ function session(role: Session['role']): Session {
     personId: PERSON,
     role,
     siteScope: [SITE],
-    recordsFrom: null,
-    recordsTo: null,
   };
 }
 
@@ -508,7 +506,7 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
       report({ findings: [finding({ state: 'assigned' })] }),
     );
     listActions.mockResolvedValue([action()]);
-    useAppSession.mockReturnValue({ account: session('external_auditor') });
+    useAppSession.mockReturnValue({ account: session('jhsc_member') });
 
     renderRoute();
 
@@ -516,12 +514,12 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
     expect(within(next).getByRole('button', { name: 'Start work' })).toBeTruthy();
   });
 
-  it('ofrece la verificación al supervisor', async () => {
+  it('ofrece la verificación a management', async () => {
     getSubmittedInspection.mockResolvedValue(
       report({ findings: [finding({ state: 'verification' })] }),
     );
     listActions.mockResolvedValue([action({ state: 'awaiting_verification' })]);
-    useAppSession.mockReturnValue({ account: session('supervisor') });
+    useAppSession.mockReturnValue({ account: session('management') });
 
     renderRoute();
 
@@ -867,7 +865,7 @@ describe('InspectionFindingsRoute — avance de la acción', () => {
       report({ findings: [finding({ state: 'verification' })] }),
     );
     listActions.mockResolvedValue([action({ state: 'awaiting_verification' })]);
-    useAppSession.mockReturnValue({ account: session('supervisor') });
+    useAppSession.mockReturnValue({ account: session('management') });
 
     renderRoute();
 
@@ -889,7 +887,7 @@ describe('InspectionFindingsRoute — avance de la acción', () => {
       reads += 1;
       return Promise.resolve([action(reads === 1 ? {} : { state: 'in_progress' })]);
     });
-    useAppSession.mockReturnValue({ account: session('external_auditor') });
+    useAppSession.mockReturnValue({ account: session('jhsc_member') });
 
     renderRoute();
     await submitStep('Start work');
@@ -1092,7 +1090,7 @@ describe('InspectionFindingsRoute — Edit assignment (ADR-021)', () => {
   });
 
   it('no ofrece Edit assignment a quien no reportó el hallazgo ni es coordinador', async () => {
-    useAppSession.mockReturnValue({ account: session('supervisor') });
+    useAppSession.mockReturnValue({ account: session('management') });
     getSubmittedInspection.mockResolvedValue(
       report({
         findings: [
@@ -1646,7 +1644,7 @@ describe('InspectionFindingsRoute — navegación entre etapas', () => {
       return Promise.resolve([action(reads === 1 ? {} : { state: 'in_progress' })]);
     });
     getAction.mockResolvedValue(actionDetail());
-    useAppSession.mockReturnValue({ account: session('external_auditor') });
+    useAppSession.mockReturnValue({ account: session('jhsc_member') });
 
     renderRoute();
 

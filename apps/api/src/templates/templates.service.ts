@@ -4,6 +4,7 @@ import {
   draftFromDocument,
   draftIssues,
   emptyDraftDocument,
+  isAdministrator,
   normalizeDraft,
   templateDocumentSchema,
   type CreateTemplateDraft,
@@ -568,7 +569,7 @@ export class TemplatesService {
 }
 
 function requireCoordinator(session: SessionScope): void {
-  if (session.role !== 'hs_coordinator') throw templateDraftForbidden();
+  if (!isAdministrator(session.role)) throw templateDraftForbidden();
 }
 
 /**

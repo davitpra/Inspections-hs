@@ -36,7 +36,7 @@ vi.mock('../../api/inspections', () => ({ listSites, listTemplates, listInspecto
 vi.mock('../../app/session-context', () => ({ useAppSession }));
 
 function session(role: Session['role'], siteScope: readonly string[] = [SITE]): { account: Session } {
-  return { account: { userId: USER, personId: PERSON, role, siteScope: [...siteScope], recordsFrom: null, recordsTo: null } };
+  return { account: { userId: USER, personId: PERSON, role, siteScope: [...siteScope] } };
 }
 
 function site(): Site {

@@ -426,7 +426,7 @@ describe('las tres rutas no escriben', () => {
    * veces y afirmar que el conteo de las tres tablas no se movió lo hace explícito: si
    * mañana alguien agrega un registro de lectura acá, este test lo dice.
    *
-   * (La excepción del sistema a no loguear lecturas es el auditor externo, y este spec
+   * (El sistema no registra lecturas, y este spec
    * no usa esa cuenta a propósito.)
    */
   it('leer el paquete no cambia el estado de la base', async () => {

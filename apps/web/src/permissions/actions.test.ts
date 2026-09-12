@@ -41,8 +41,6 @@ function session(role: Session['role'], personId = PERSON, userId = DEFAULT_ACCO
     personId,
     role,
     siteScope: ['44444444-4444-4444-8444-444444444444'],
-    recordsFrom: null,
-    recordsTo: null,
   };
 }
 
@@ -100,17 +98,17 @@ function offered(state: ActionState, actor: Session | null): string[] {
 
 describe('los botones del detalle', () => {
   it('el responsable puede empezar y declarar el trabajo hecho, y nada más', () => {
-    const assignee = session('supervisor', PERSON);
+    const assignee = session('management', PERSON);
 
     expect(offered('open', assignee)).toEqual(['in_progress']);
     expect(offered('in_progress', assignee)).toEqual(['awaiting_verification']);
   });
 
-  it('un supervisor que no es el responsable no puede declararla hecha', () => {
-    // `supervisor` no está entre los roles de `open → in_progress`: ahí solo están el
-    // responsable y el coordinador. Que la cuenta sea supervisora no la vuelve dueña de la
+  it('management que no es responsable no puede declararla hecha', () => {
+    // `management` no está entre los roles de `open → in_progress`: ahí solo están el
+    // responsable y el coordinador. Que la cuenta sea administrativa no la vuelve dueña de la
     // acción de otro.
-    expect(offered('open', session('supervisor', OTHER_PERSON))).toEqual([]);
+    expect(offered('open', session('management', OTHER_PERSON))).toEqual([]);
   });
 
   it('el coordinador puede avanzar en nombre de otro', () => {
@@ -120,13 +118,6 @@ describe('los botones del detalle', () => {
     expect(offered('in_progress', coordinator)).toEqual(['awaiting_verification']);
   });
 
-  it('un supervisor cualquiera sí puede verificar', () => {
-    expect(offered('awaiting_verification', session('supervisor', OTHER_PERSON)).sort()).toEqual([
-      'closed',
-      'in_progress',
-    ]);
-  });
-
   it('gerencia verifica y no ejecuta', () => {
     const management = session('management', OTHER_PERSON);
 
@@ -134,16 +125,14 @@ describe('los botones del detalle', () => {
     expect(offered('awaiting_verification', management).sort()).toEqual(['closed', 'in_progress']);
   });
 
-  it('un miembro del JHSC y un auditor externo no ven ningún botón', () => {
-    for (const role of ['jhsc_member', 'external_auditor'] as const) {
-      for (const state of ['open', 'in_progress', 'awaiting_verification'] as const) {
-        expect(offered(state, session(role, OTHER_PERSON))).toEqual([]);
-      }
+  it('un miembro del JHSC que no es responsable no ve ningún botón', () => {
+    for (const state of ['open', 'in_progress', 'awaiting_verification'] as const) {
+      expect(offered(state, session('jhsc_member', OTHER_PERSON))).toEqual([]);
     }
   });
 
   it('una acción cerrada no ofrece nada a nadie', () => {
-    for (const role of ['hs_coordinator', 'supervisor', 'management'] as const) {
+    for (const role of ROLES) {
       expect(offered('closed', session(role))).toEqual([]);
     }
   });
@@ -158,7 +147,7 @@ describe('los botones del detalle', () => {
    * cliente es una que puede separarse de la otra mitad sin que nada se queje.
    */
   it('la pantalla no intenta adivinar si quien mira fue el ejecutor', () => {
-    const executor = session('supervisor', PERSON);
+    const executor = session('management', PERSON);
 
     expect(offered('awaiting_verification', executor)).toContain('closed');
   });

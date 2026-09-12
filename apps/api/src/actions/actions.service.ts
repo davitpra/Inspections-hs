@@ -77,7 +77,9 @@ export class ActionsService {
    * que reportó el hallazgo —`finding.reported_by`—, que en un hallazgo derivado es quien
    * firmó el envío y en uno manual quien lo cargó. Es la misma clase de regla que
    * `requireActor` aplica sobre una transición: una RELACIÓN con este registro puntual, no
-   * un rol ancho. Un `jhsc_member` que no reportó este hallazgo sigue sin poder abrir nada.
+   * un rol ancho. Es una excepción declarada a la equivalencia administrativa: gerencia
+   * llega por esa relación, no por compartir permisos con coordinación. Un `jhsc_member`
+   * que no reportó este hallazgo sigue sin poder abrir nada.
    *
    * El hallazgo se resuelve ANTES de comprobar el permiso: uno fuera del alcance tiene que
    * responder "no existe" y no "no podés", para no convertir el endpoint en un oráculo de
@@ -228,7 +230,8 @@ export class ActionsService {
 
       // El coordinador de H&S está exento (ADR-019): es la única cuenta que declara trabajo
       // hecho por una persona del roster sin usuario, y la regla le retenía en
-      // `awaiting_verification` trabajo ya terminado. Sigue entera para el resto.
+      // `awaiting_verification` trabajo ya terminado. La excepción no se extiende a
+      // `management`: una segunda cuenta administrativa puede verificar su trabajo.
       if (transition.requires.includes('not_executor') && session.role !== 'hs_coordinator') {
         const executor = await lastExecutor(client, actionId);
 
@@ -283,9 +286,11 @@ export class ActionsService {
    * que hace que "el incidente usa el mismo motor que la acción correctiva" (§4) sea
    * cierto en el código y no solo en el documento.
    *
-   * **Esta sigue siendo solo del coordinador, y ADR-017 no la toca.** El permiso que se
+   * **Esta sigue siendo solo del coordinador: es una excepción declarada a la equivalencia
+   * administrativa, y ADR-017 no la toca.** El permiso que se
    * abrió en `create` es la relación "yo reporté este hallazgo"; una investigación no
-   * tiene ese reportante —la reporta un supervisor y la investiga el coordinador—, así
+   * tiene ese reportante —la reporta una cuenta administrativa y la investiga el
+   * coordinador—, así
    * que no hay cuenta a la que extenderle el permiso.
    */
   async createForInvestigation(
@@ -500,7 +505,7 @@ export class ActionsService {
    * Una sola sentencia con subconsulta, igual que la notificación de apertura de
    * período: sin cuenta activa no hay fila, y la acción se crea igual. Es la
    * consecuencia directa de Persona ≠ Usuario, y la red que la cubre es el escalamiento
-   * a los +3 días, que llega al supervisor.
+   * a los +3 días, que llega a coordinación.
    *
    * `dedupe_key` lo elige el llamador: el id de la acción al crearla y un id de operación
    * al corregirla. La notificación siempre lee la única asignación vigente (ADR-021).

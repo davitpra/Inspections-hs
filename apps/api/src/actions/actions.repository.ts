@@ -12,7 +12,7 @@ import type {
  * Las consultas del módulo de acciones. Requisitos §7 etapa 5.
  *
  * **Ninguna lleva `WHERE site_id`, y esa ausencia es el invariante**: el recorte por
- * planta lo hace la política RLS sobre la transacción (ADR-002). Un supervisor de St.
+ * planta lo hace la política RLS sobre la transacción (ADR-002). Una cuenta de St.
  * Thomas no ve Glencoe porque la política no se lo devuelve, no porque este archivo se
  * acuerde de filtrar.
  *

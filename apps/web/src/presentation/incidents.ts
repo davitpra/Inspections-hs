@@ -92,7 +92,7 @@ export const OBLIGATION_LABELS: Readonly<Record<ClockObligation, string>> = {
 /**
  * Cómo se lee un reloj: su plazo, o que es inmediato.
  *
- * **Un reloj vencido se muestra vencido y no se esconde.** Un supervisor que carga el
+ * **Un reloj vencido se muestra vencido y no se esconde.** Una cuenta administrativa que carga el
  * lunes un accidente del martes anterior tiene obligaciones del MLITSD ya pasadas, y
  * ocultarlas sería peor que mostrarlas: quien tiene que responder ante el organismo
  * necesita saberlo hoy, no descubrirlo en una auditoría.

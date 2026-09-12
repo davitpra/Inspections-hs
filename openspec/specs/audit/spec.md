@@ -393,6 +393,8 @@ because each workplace's record must show who its people are.
 The system SHALL record an audit entry for the creation of an account, for a change of its `role`
 or its `email`, for its deactivation and reactivation, and for every grant and revocation of a
 site scope, written by the database in the same transaction as the change.
+The promotion of a `jhsc_member` to `hs_coordinator` SHALL be recorded as the role change it is, and
+SHALL be the only role change the system produces.
 
 Because an account is not itself a site-scoped record while every audit entry belongs to exactly
 one site, an account event SHALL be written once into the chain of each site in the account's
@@ -406,9 +408,9 @@ revoked. "Who was given access to this workplace, and when" is part of that work
   `st-thomas` and one in the chain of `glencoe`
 - **AND** both payloads carry the account identifier, the `person_id` and the `role`
 
-#### Scenario: A role change is recorded with both roles
+#### Scenario: A promotion is recorded with both roles
 
-- **WHEN** an account's `role` is changed from `supervisor` to `hs_coordinator`
+- **WHEN** an account's `role` is changed from `jhsc_member` to `hs_coordinator`
 - **THEN** an entry exists in the chain of every site in the account's scope
 - **AND** its `payload` contains the previous and the new `role`
 
@@ -550,58 +552,6 @@ the lock-out threshold.
 - **WHEN** an account reaches the consecutive-failure threshold
 - **THEN** an `audit_log` entry naming the lock-out exists for every site in its scope
 
-### Requirement: The reads of an external auditor are recorded, and only those
-
-The system SHALL record an audit entry for every read performed by a session whose account `role`
-is `external_auditor`, carrying the `site_id` of the records reached, the auditor's
-`actor_user_id`, an `event_type` naming an auditor read, and a `payload` identifying what was read
-— the kind of record and the identifiers returned — together with the record window the session
-was bounded by.
-
-This SHALL be the only case in which a read produces an audit entry. No read by any other role
-SHALL produce one.
-
-#### Scenario: An auditor read is recorded
-
-- **WHEN** an `external_auditor` session reads a collection of records of `st-thomas`
-- **THEN** an `audit_log` entry exists in the chain of `st-thomas` whose `actor_user_id` is the
-  auditor's account and whose `payload` identifies the records returned
-
-#### Scenario: A read that returns nothing is still recorded
-
-- **WHEN** an `external_auditor` session performs a read that returns no record
-- **THEN** an `audit_log` entry still exists, recording that the read happened and returned
-  nothing
-
-#### Scenario: An auditor read spanning two sites is recorded in both chains
-
-- **WHEN** an `external_auditor` session whose scope is both sites performs one read that returns
-  records of both
-- **THEN** an entry exists in the chain of each site, each naming the records of that site
-
-#### Scenario: A coordinator's read is not recorded
-
-- **WHEN** an `hs_coordinator` session reads the same records
-- **THEN** no `audit_log` entry is written for that read
-
-#### Scenario: A member's read is not recorded
-
-- **WHEN** a `jhsc_member` session reads its site's records
-- **THEN** no `audit_log` entry is written for that read
-
-#### Scenario: The auditor cannot read without leaving the entry
-
-- **WHEN** an `external_auditor` session's read succeeds
-- **AND** the transaction that produced it is inspected
-- **THEN** the entry was written in the same transaction as the read, and a committed read with no
-  entry is not a reachable state
-
-#### Scenario: The recorded window matches the account
-
-- **WHEN** an auditor read entry is read back
-- **THEN** its `payload` carries the `records_from` and `records_to` of the account at the time of
-  the read
-
 ### Requirement: An accepted submission is recorded in the chain by the database
 
 The system SHALL append exactly one `audit_log` entry of type `inspection.submitted` for every
@@ -723,9 +673,9 @@ the finding has no `item_key`. Its `actor_user_id` SHALL be the account that rep
 
 #### Scenario: Reporting a hazard appends one entry
 
-- **WHEN** a supervisor reports a manual finding
+- **WHEN** a management account reports a manual finding
 - **THEN** one `audit_log` entry of type `finding.reported` exists for that site
-- **AND** its `actor_user_id` is the supervisor's account
+- **AND** its `actor_user_id` is the management account
 - **AND** its `payload` reports a null `item_key`
 
 #### Scenario: Photos of a finding add no entries of their own
@@ -851,11 +801,11 @@ number of days the action was overdue when it escalated. Its `actor_user_id` SHA
 because the escalation is the scheduler's act and not a person's, and the entry SHALL still be
 linked into the site's chain like any other.
 
-#### Scenario: Escalating to the supervisor appends one entry
+#### Scenario: Escalating to the coordinator appends one entry
 
 - **GIVEN** an action overdue by four days
 - **WHEN** the escalation job runs
-- **THEN** one `audit_log` entry of type `action.escalated` exists with `level` `supervisor`
+- **THEN** one `audit_log` entry of type `action.escalated` exists with `level` `hs_coordinator`
 - **AND** its `actor_user_id` is null
 
 #### Scenario: Repeated runs append nothing further
@@ -869,7 +819,7 @@ linked into the site's chain like any other.
 
 - **GIVEN** an action overdue by eight days that escalated to both levels
 - **WHEN** its escalation entries are read
-- **THEN** one carries `level` `supervisor` and the other `level` `management`
+- **THEN** one carries `level` `hs_coordinator` and the other `level` `management`
 - **AND** each names the `due_at` it passed and how many days late it was
 
 ### Requirement: A reported incident is recorded in the chain by the database
@@ -887,7 +837,7 @@ The acting user SHALL be taken from the scope declared by the transaction.
 
 #### Scenario: Reporting an incident writes an entry
 
-- **WHEN** a supervisor reports an incident
+- **WHEN** a management account reports an incident
 - **THEN** an `audit_log` entry exists with that incident's `site_id` and an `event_type`
   identifying a reported incident
 - **AND** its `payload` contains the incident's identifier and `classification`

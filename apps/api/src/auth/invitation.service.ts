@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { PoolClient } from 'pg';
 import {
   INVITATION_DEFAULT_HOURS,
+  isAdministrator,
   type IssueInvitationResponse,
   type Role,
 } from '@hs/contracts';
@@ -41,7 +42,7 @@ export class InvitationService {
     targetUserId: string,
     expiresInHours = INVITATION_DEFAULT_HOURS,
   ): Promise<IssueInvitationResponse> {
-    if (actor.role !== 'hs_coordinator') {
+    if (!isAdministrator(actor.role)) {
       throw forbidden('Only the HS coordinator can invite an account');
     }
 
@@ -106,7 +107,7 @@ export class InvitationService {
   }
 
   async revoke(actor: { userId: string; role: Role }, invitationId: string): Promise<void> {
-    if (actor.role !== 'hs_coordinator') {
+    if (!isAdministrator(actor.role)) {
       throw forbidden('Only the HS coordinator can revoke an invitation');
     }
 
@@ -144,10 +145,9 @@ export class InvitationService {
         accepted_at: Date | null;
         revoked_at: Date | null;
         deactivated_at: Date | null;
-        account_expires_at: Date | null;
       }>(
         `SELECT i.id, i.user_id, i.expires_at, i.accepted_at, i.revoked_at,
-                u.deactivated_at, u.expires_at AS account_expires_at
+                u.deactivated_at
            FROM user_invitation i JOIN app_user u ON u.id = i.user_id
           WHERE i.token_hash = $1
           FOR UPDATE OF i`,
@@ -164,8 +164,7 @@ export class InvitationService {
         invitation.revoked_at ||
         invitation.accepted_at ||
         invitation.expires_at.getTime() <= Date.now() ||
-        invitation.deactivated_at ||
-        (invitation.account_expires_at && invitation.account_expires_at.getTime() <= Date.now())
+        invitation.deactivated_at
       ) {
         throw invitationInvalid();
       }

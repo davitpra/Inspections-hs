@@ -3,6 +3,7 @@ import {
   CURRENT_INCIDENT_FORM_VERSION,
   form7MappingOf,
   incidentTransitionFor,
+  isAdministrator,
   requiresInvestigation,
   type Form7Mapping,
   type Incident,
@@ -50,7 +51,9 @@ import {
  * escondería que son dos fuentes distintas del mismo dato.
  */
 function hasRole(roles: readonly string[] | undefined, role: string): boolean {
-  return roles !== undefined && roles.includes(role);
+  if (roles === undefined) return false;
+
+  return roles.includes(role) || (roles.includes('hs_coordinator') && isAdministrator(role));
 }
 
 /**
@@ -66,7 +69,7 @@ function hasRole(roles: readonly string[] | undefined, role: string): boolean {
  *   - Que un incidente tenga su evento de reporte       → restricción diferida `HS012`.
  *   - Que el evento no sea posterior al reporte         → CHECK de orden.
  *   - Que una planta no vea la otra                     → política RLS.
- *   - **Que un supervisor no vea el incidente de otro** → política `RESTRICTIVE`. No hay
+ *   - **Que un miembro del JHSC no vea incidentes administrativos** → política `RESTRICTIVE`. No hay
  *     `WHERE reported_by` en ninguna consulta de este módulo, y esa ausencia es el
  *     invariante (design D2).
  *
@@ -89,8 +92,7 @@ export class IncidentsService {
    * coordinador se entere — un aviso que se escribe después podría no escribirse.
    */
   async report(session: SessionScope, payload: ReportIncidentRequest): Promise<Incident> {
-    // §4, tabla de roles: el supervisor y el gerente crean incidentes en tercera
-    // persona. El coordinador también, porque es quien tiene todo.
+    // Reportar en tercera persona es un acto de los dos roles administrativos.
     const transition = incidentTransitionFor(null, 'reported');
 
     if (!hasRole(transition?.roles, session.role)) {
@@ -183,7 +185,7 @@ export class IncidentsService {
     return this.db.withSessionClient(session, async (client) => {
       const header = await findIncidentHeader(client, incidentId);
 
-      // El de otra planta, y el de otro supervisor, no devuelven fila porque la
+      // El de otra planta, o uno no visible para un miembro del JHSC, no devuelve fila porque la
       // transacción no los ve — no porque este método los filtre. Por eso responden
       // igual que uno que no existe.
       if (!header) throw incidentNotFound();
@@ -275,7 +277,7 @@ export class IncidentsService {
     incidentId: string,
     payload: RecordCauseRequest,
   ): Promise<Incident> {
-    if (session.role !== 'hs_coordinator') {
+    if (!isAdministrator(session.role)) {
       throw incidentForbidden('Only the HS coordinator records the causes of an investigation');
     }
 

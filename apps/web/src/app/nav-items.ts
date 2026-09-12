@@ -58,8 +58,8 @@ export type NavItem = {
 };
 
 /**
- * LOS TRES DESTINOS CONDICIONADOS POR ROL. Solo el coordinador administra la programación,
- * el roster y las plantillas, así que ofrecérselas al resto sería ofrecer una pantalla sin
+ * LOS DESTINOS CONDICIONADOS POR ROL. Los dos roles administrativos gestionan la programación,
+ * el roster, las plantillas y el catálogo; ofrecérselos al miembro sería ofrecer una pantalla sin
  * controles.
  *
  * **Y no se condicionan igual por dentro**, que es lo que conviene leer acá:
@@ -69,7 +69,7 @@ export type NavItem = {
  *     programación de su planta es legítimo.
  *   - `/roster` NO. Ahí el rol se comprueba también en la lectura, en el cliente y en el
  *     servidor: §4 dice que se elige a una persona sin poder ver su perfil, y un roster de
- *     solo lectura para un supervisor sería exactamente esa ficha.
+ *     solo lectura para un miembro del JHSC sería exactamente esa ficha.
  *   - `/templates` tampoco. El servidor contesta `template_draft_forbidden` en las cinco
  *     rutas de borrador, el GET incluido: una plantilla a medio pensar son preguntas que la
  *     organización todavía no decidió hacer.

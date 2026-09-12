@@ -1,11 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import type { PoolClient } from 'pg';
-import type {
-  AccountDetail,
-  CreateAccountRequest,
-  CreateAccountResponse,
-  Role,
-  UpdateAccountRequest,
+import {
+  isAdministrator,
+  type AccountDetail,
+  type CreateAccountRequest,
+  type CreateAccountResponse,
+  type Role,
+  type UpdateAccountRequest,
 } from '@hs/contracts';
 
 import { DbService } from '../db/db.service';
@@ -19,7 +20,12 @@ import {
   accountEmailTaken,
   accountForbidden,
   accountNotFound,
+  accountOutOfScope,
   accountPersonNotFound,
+  accountPromotionForbidden,
+  accountPromotionInactive,
+  accountPromotionSelf,
+  accountRoleNotPromotable,
   accountRoleNotRemovable,
   accountRoleWithoutJhscSeat,
 } from './account.errors';
@@ -43,7 +49,7 @@ import { SessionService } from './session.service';
  * de actualizarla.
  *
  * **`create()` también REVIVE** (`remove-jhsc-access-from-roster`): si la persona tiene una
- * cuenta dada de baja, dar de alta es devolverle la que ya tenía. `app_user.person_id` es
+   * cuenta dada de baja, dar de alta es devolverle la que ya tenía. `app_user.person_id` es
  * UNIQUE, así que no existe la opción de insertar una segunda — pero eso es un hecho del
  * motor y el cliente no tiene por qué conocerlo. Hay UN solo modo de decir "dale acceso a
  * esta persona", y de qué lado del `if` cae lo decide el servidor.
@@ -60,7 +66,7 @@ export class AccountService {
     actor: { userId: string; role: Role },
     request: CreateAccountRequest,
   ): Promise<CreateAccountResponse> {
-    if (actor.role !== 'hs_coordinator') throw accountForbidden();
+    if (!isAdministrator(actor.role)) throw accountForbidden();
 
     return asAdministrator(this.db, actor.userId, async (client) => {
       // Bajo el alcance del actor: `person` lleva FORCE ROW LEVEL SECURITY, así que sin
@@ -86,12 +92,6 @@ export class AccountService {
             personId: request.person_id,
             email: request.email,
             role: request.role,
-            expiresAt:
-              request.role === 'external_auditor'
-                ? new Date(Date.now() + request.expires_in_days * 24 * 60 * 60 * 1000)
-                : null,
-            recordsFrom: request.records_from ?? null,
-            recordsTo: request.records_to ?? null,
             siteIds: request.site_ids,
           });
 
@@ -133,7 +133,7 @@ export class AccountService {
    * sola— no el que `asAdministrator` reconstruye para una escritura.
    */
   async find(session: SessionScope, accountId: string): Promise<AccountDetail> {
-    if (session.role !== 'hs_coordinator') throw accountForbidden();
+    if (!isAdministrator(session.role)) throw accountForbidden();
 
     const row = await this.db.withSessionClient(session, (client) =>
       findAccountDetail(client, accountId),
@@ -177,13 +177,20 @@ export class AccountService {
    * change archivada): ninguno de los tres actos deja un estado a medias si otro falla.
    */
   async update(
-    actor: { userId: string; role: Role },
+    actor: SessionScope & { role: Role },
     accountId: string,
     request: UpdateAccountRequest,
   ): Promise<CreateAccountResponse> {
-    if (actor.role !== 'hs_coordinator') throw accountForbidden();
+    if (!isAdministrator(actor.role)) throw accountForbidden();
+    if (request.promote_to !== undefined && actor.role !== 'management') {
+      throw accountPromotionForbidden();
+    }
 
     const result = await asAdministrator(this.db, actor.userId, async (client) => {
+      if (request.promote_to !== undefined) {
+        return promote(client, actor.userId, actor.siteIds, accountId);
+      }
+
       const existing = await findAccountDetail(client, accountId);
       if (!existing) throw accountNotFound();
 
@@ -269,7 +276,7 @@ export class AccountService {
  */
 async function withdraw(
   client: PoolClient,
-  existing: { id: string; role: string; active: boolean; email: string },
+  existing: { id: string; role: Role; active: boolean; email: string },
 ): Promise<{ response: CreateAccountResponse; withdrawn: boolean }> {
   if (existing.role !== 'jhsc_member') throw accountRoleNotRemovable();
   if (!existing.active) throw accountAlreadyInactive();
@@ -297,7 +304,7 @@ async function withdraw(
 }
 
 /**
- * Sentar a una cuenta de coordinador en el JHSC, o levantarla
+ * Sentar a una cuenta administrativa en el JHSC, o levantarla
  * (`coordinator-jhsc-seat`, design D4/D5).
  *
  * **UN acto reversible sobre UNA columna, en los dos sentidos**, y por eso es una sola
@@ -321,7 +328,7 @@ async function seat(
   client: PoolClient,
   existing: {
     id: string;
-    role: string;
+    role: Role;
     active: boolean;
     can_sign_in: boolean;
     email: string;
@@ -329,7 +336,7 @@ async function seat(
   },
   granted: boolean,
 ): Promise<{ response: CreateAccountResponse; withdrawn: boolean }> {
-  if (existing.role !== 'hs_coordinator') throw accountRoleWithoutJhscSeat(existing.role);
+  if (!isAdministrator(existing.role)) throw accountRoleWithoutJhscSeat(existing.role);
   if (!existing.active) throw accountAlreadyInactive();
 
   if (existing.jhsc_seat !== granted) {
@@ -357,6 +364,68 @@ async function seat(
 }
 
 /**
+ * La única mutación de rol expuesta. Corre dentro de `asAdministrator`, por lo que el
+ * trigger existente firma el cambio y lo distribuye a cada cadena alcanzada por la
+ * cuenta objetivo; el endpoint no escribe auditoría por su cuenta.
+ */
+async function promote(
+  client: PoolClient,
+  actorUserId: string,
+  actorSiteIds: readonly string[],
+  accountId: string,
+): Promise<{ response: CreateAccountResponse; withdrawn: boolean }> {
+  const { rows } = await client.query<{
+    id: string;
+    role: Role;
+    active: boolean;
+    can_sign_in: boolean;
+    email: string;
+    jhsc_seat: boolean;
+    in_scope: boolean;
+  }>(
+    `SELECT u.id, u.role, hs_account_is_active(u) AS active, u.email,
+            EXISTS (
+              SELECT 1 FROM app_credential c WHERE c.user_id = u.id AND c.revoked_at IS NULL
+            ) AS can_sign_in,
+            u.jhsc_seat_granted_at IS NOT NULL AS jhsc_seat,
+            NOT EXISTS (
+              SELECT 1
+                FROM user_site_scope target_scope
+               WHERE target_scope.user_id = u.id
+                 AND target_scope.revoked_at IS NULL
+                  AND NOT (target_scope.site_id = ANY($2::uuid[]))
+             ) AS in_scope
+       FROM app_user u
+      WHERE u.id = $1
+      FOR UPDATE OF u`,
+    [accountId, actorSiteIds],
+  );
+
+  const existing = rows[0];
+  if (!existing) throw accountNotFound();
+  if (!existing.in_scope) throw accountOutOfScope();
+  if (existing.id === actorUserId) throw accountPromotionSelf();
+  if (existing.role !== 'jhsc_member') throw accountRoleNotPromotable(existing.role);
+  if (!existing.active) throw accountPromotionInactive();
+
+  await client.query("UPDATE app_user SET role = 'hs_coordinator' WHERE id = $1", [accountId]);
+
+  return {
+    response: {
+      account: {
+        id: existing.id,
+        role: 'hs_coordinator',
+        active: true,
+        can_sign_in: existing.can_sign_in,
+        email: existing.email,
+        jhsc_seat: existing.jhsc_seat,
+      },
+    },
+    withdrawn: false,
+  };
+}
+
+/**
  * Devolverle a una persona la cuenta que ya tenía. Es lo que hace `create()` cuando el alta
  * cae sobre alguien a quien se le quitó el acceso, y es invisible desde afuera: el llamador
  * pidió "dale acceso a esta persona" y eso es lo que pasa.
@@ -366,8 +435,8 @@ async function seat(
  * donde estaban — el motor escribe `user.reactivated` (y `user.email_changed` si el correo
  * cambió) en la cadena de cada planta que alcanza.
  *
- * **Solo revive con el MISMO rol.** Si la cuenta dada de baja era de un supervisor y el alta
- * pide `jhsc_member`, se responde el conflicto de siempre en vez de cambiarle el rol: eso es
+   * **Solo revive con el MISMO rol.** Si la cuenta dada de baja era administrativa y el alta
+   * pide `jhsc_member`, se responde el conflicto de siempre en vez de cambiarle el rol: eso es
  * una decisión con su propio evento de auditoría, y no puede salir de apretar "invitar" en
  * una lista de doscientas filas. La pantalla nunca produce ese caso —`canInvite` solo ofrece
  * el botón sobre una cuenta inactiva de `jhsc_member`—, así que la guarda protege a quien
@@ -378,7 +447,7 @@ async function seat(
  */
 async function revive(
   client: PoolClient,
-  existing: { id: string; role: string; active: boolean },
+  existing: { id: string; role: Role; active: boolean },
   request: CreateAccountRequest,
 ): Promise<string> {
   if (existing.active || existing.role !== request.role) throw accountAlreadyExists();
@@ -429,8 +498,8 @@ async function findPerson(client: PoolClient, personId: string): Promise<PersonR
 async function findAccountOfPerson(
   client: PoolClient,
   personId: string,
-): Promise<{ id: string; role: string; active: boolean } | null> {
-  const { rows } = await client.query<{ id: string; role: string; active: boolean }>(
+): Promise<{ id: string; role: Role; active: boolean } | null> {
+  const { rows } = await client.query<{ id: string; role: Role; active: boolean }>(
     `SELECT id, role, hs_account_is_active(app_user.*) AS active
        FROM app_user WHERE person_id = $1`,
     [personId],

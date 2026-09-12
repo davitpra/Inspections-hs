@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import type { CreateSite, Site, UpdateSite } from '@hs/contracts';
+import { isAdministrator, type CreateSite, type Site, type UpdateSite } from '@hs/contracts';
 
 import { DbService } from '../db/db.service';
 import type { SessionScope } from '../db/site-scope';
@@ -210,7 +210,7 @@ export class SitesService {
   }
 
   private requireCoordinator(session: SessionScope): void {
-    if (session.role !== 'hs_coordinator') {
+    if (!isAdministrator(session.role)) {
       throw new ForbiddenException('Only the H&S coordinator can administer sites');
     }
   }

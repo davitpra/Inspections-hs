@@ -8,6 +8,116 @@ endpoints agree on.
 
 ## Requirements
 
+### Requirement: Administrative authority is held by the coordinator and by management
+
+The system SHALL treat `hs_coordinator` and `management` as the two administrative roles, holding
+the same permissions as each other with exactly one asymmetry: promoting an account, which is
+management's alone.
+
+Where a requirement of this or of any other capability names `hs_coordinator` as the account
+permitted to perform an administrative act — or restricts such an act to `hs_coordinator` alone,
+whether by naming it in the requirement text or by refusing "every other role" — that permission
+SHALL be read as naming `management` equally, and the refusal SHALL be read as excluding
+`jhsc_member` only. This equivalence SHALL be stated in one place so that a later decision to
+separate the two roles changes one requirement rather than every requirement that names an
+administrative act.
+
+The equivalence SHALL NOT extend to anything derived from a relation to a particular record rather
+than from the role: being the person assigned to a corrective action, being the account that raised
+a finding, and being the inspector of an inspection SHALL continue to be resolved against the
+account and the person, not against the role.
+
+#### Scenario: A management account administers what a coordinator administers
+
+- **WHEN** an account whose `role` is `management` and whose scope contains `st-thomas` requests
+  the roster of `st-thomas`, creates a person, imports a roster file, creates an account, issues an
+  invitation, saves or publishes a template, registers or renames a site, administers a location, or
+  administers the annual plan of that site
+- **THEN** each request is accepted on the same terms as for an `hs_coordinator` of that scope
+
+#### Scenario: A JHSC member is still refused every administrative act
+
+- **WHEN** an account whose `role` is `jhsc_member` requests any of those acts
+- **THEN** the request is refused, and nothing is created, changed or disclosed
+
+#### Scenario: The site scope still bounds a management account
+
+- **WHEN** an account whose `role` is `management` and whose scope is `st-thomas` only requests the
+  roster of `glencoe`
+- **THEN** the request is refused, and the refusal does not disclose whether `glencoe` exists
+
+### Requirement: Management can promote a JHSC member to coordinator
+
+The system SHALL let an account whose `role` is `management` change the `role` of an active account
+from `jhsc_member` to `hs_coordinator`, and SHALL refuse that request to every other role, including
+`hs_coordinator`. A coordinator SHALL NOT be able to appoint another coordinator, so that the
+account that holds every administrative permission is never the account that decides who else holds
+them.
+
+The promotion SHALL be the only role change the system exposes. It SHALL be refused when the target
+account's current `role` is not `jhsc_member`, when the target account is inactive, when the target
+account is outside the requesting account's site scope, and when the requesting account is the
+target. Refusing it SHALL leave `app_user.role` unchanged.
+
+The promotion SHALL be recorded as a `user.role_changed` entry naming the previous role, the new
+role and the acting account, in the audit chain of every site in the promoted account's scope,
+written by the database rather than by the endpoint.
+
+Promoting SHALL NOT touch the account's `person_id`, `email`, site scope, credential, sessions or
+invitations: the account is the same account, carrying a different role from that moment on.
+
+A promoted account SHALL NOT carry a JHSC seat as a side effect. The seat SHALL be granted as its
+own recorded act, so that a member who inspected as `jhsc_member` and continues to inspect as
+`hs_coordinator` has a seat that was granted deliberately.
+
+#### Scenario: Management promotes a JHSC member
+
+- **WHEN** an account whose `role` is `management` and whose scope contains `st-thomas` promotes an
+  active `jhsc_member` account of `st-thomas`
+- **THEN** that account's `role` is `hs_coordinator`
+- **AND** a `user.role_changed` entry naming both roles and the acting account exists in the chain
+  of every site in the promoted account's scope
+- **AND** its `person_id`, `email` and site scope are unchanged
+
+#### Scenario: A coordinator cannot promote
+
+- **WHEN** an account whose `role` is `hs_coordinator` promotes a `jhsc_member` account
+- **THEN** the request is refused
+- **AND** the target account's `role` is unchanged
+
+#### Scenario: A JHSC member cannot promote
+
+- **WHEN** an account whose `role` is `jhsc_member` promotes another `jhsc_member` account
+- **THEN** the request is refused
+- **AND** the target account's `role` is unchanged
+
+#### Scenario: An account that is not a JHSC member cannot be promoted
+
+- **WHEN** an account whose `role` is `management` promotes an account whose `role` is already
+  `hs_coordinator`
+- **THEN** the request is refused with a reason naming the current role
+- **AND** that account's `role` is unchanged
+
+#### Scenario: An inactive account cannot be promoted
+
+- **WHEN** an account whose `role` is `management` promotes a `jhsc_member` account whose
+  `deactivated_at` is non-null
+- **THEN** the request is refused
+- **AND** the account stays inactive with its `role` unchanged
+
+#### Scenario: A promotion outside the site scope is refused
+
+- **WHEN** an account whose `role` is `management` and whose scope is `st-thomas` only promotes a
+  `jhsc_member` account scoped to `glencoe` alone
+- **THEN** the request is refused
+- **AND** that account's `role` is unchanged
+
+#### Scenario: Promotion grants no seat
+
+- **WHEN** a `jhsc_member` account is promoted to `hs_coordinator`
+- **THEN** its `jhsc_seat_granted_at` is null
+- **AND** no `user.jhsc_seat_granted` entry is written
+
 ### Requirement: A person is a roster record, not an account
 
 The system SHALL store every member of staff as a `person` row that exists independently of any
@@ -189,10 +299,9 @@ whole file at once.
 - **THEN** the result is an empty list and no error is raised
 - **AND** no `person` of `glencoe` is disclosed, not even their `employee_number`
 
-#### Scenario: Any other role is refused
+#### Scenario: A JHSC member is refused
 
-- **WHEN** an account whose `role` is `supervisor`, `jhsc_member`, `management` or
-  `external_auditor` requests the roster of a site within its own scope
+- **WHEN** an account whose `role` is `jhsc_member` requests the roster of a site within its own scope
 - **THEN** the request is refused
 - **AND** no `person` row is returned
 
@@ -299,10 +408,9 @@ mechanism that records a person created by the CSV import.
 - **THEN** the request is refused
 - **AND** no `person` row is created
 
-#### Scenario: Any other role is refused
+#### Scenario: A JHSC member is refused
 
-- **WHEN** an account whose `role` is `supervisor`, `jhsc_member`, `management` or
-  `external_auditor` creates a person on a site within its own scope
+- **WHEN** an account whose `role` is `jhsc_member` creates a person on a site within its own scope
 - **THEN** the request is refused
 - **AND** no `person` row is created
 
@@ -353,13 +461,12 @@ Safety Committee, as `jhsc_seat_granted_at`: null when the account holds no seat
 the seat was granted when it does.
 
 The seat SHALL be a position an account occupies, not a role: taking or leaving a seat SHALL NOT
-change `app_user.role`, and the closed set of five roles SHALL be unaffected.
+change `app_user.role`, and the closed set of three roles SHALL be unaffected.
 
 The database SHALL restrict a non-null `jhsc_seat_granted_at` to accounts whose `role` is
-`hs_coordinator`. A `jhsc_member` SHALL NOT carry a seat value, because that role already IS the
-seat, and no other role SHALL be able to acquire one — the seat SHALL NOT become a second way to
-grant a `supervisor`, `management` or `external_auditor` account the ability to be assigned an
-inspection.
+`hs_coordinator` or `management` — the two administrative roles, which are the accounts that may sit
+on the committee without already being it. A `jhsc_member` SHALL NOT carry a seat value, because
+that role already IS the seat, and no other role SHALL be able to acquire one.
 
 Granting and withdrawing a seat SHALL each be recorded in the audit log of every site in the
 account's scope, as `user.jhsc_seat_granted` and `user.jhsc_seat_withdrawn`, naming the acting
@@ -368,11 +475,17 @@ account.
 Holding or losing a seat SHALL NOT change what the account may sign in to: it SHALL NOT create,
 revoke or expire a credential, a session or an invitation.
 
-#### Scenario: A seat on an account that is not the coordinator's is rejected
+#### Scenario: A seat on a JHSC member's account is rejected
 
-- **WHEN** an `app_user` row whose `role` is `jhsc_member`, `supervisor`, `management` or
-  `external_auditor` is written with a non-null `jhsc_seat_granted_at`
+- **WHEN** an `app_user` row whose `role` is `jhsc_member` is written with a non-null
+  `jhsc_seat_granted_at`
 - **THEN** the write fails with a check violation
+
+#### Scenario: A seat on a management account is accepted
+
+- **WHEN** an `app_user` row whose `role` is `management` is written with a non-null
+  `jhsc_seat_granted_at`
+- **THEN** the write succeeds
 
 #### Scenario: An account without a seat carries none
 
@@ -441,8 +554,7 @@ Neither act SHALL deactivate the account, revoke its scope, or touch the referen
 
 #### Scenario: A role that cannot hold a seat is refused
 
-- **WHEN** an `hs_coordinator` grants a JHSC seat on an account whose role is `jhsc_member`,
-  `supervisor`, `management` or `external_auditor`
+- **WHEN** an `hs_coordinator` grants a JHSC seat on an account whose role is `jhsc_member`
 - **THEN** the request is refused and names the role
 - **AND** that account's `jhsc_seat_granted_at` is still null
 
@@ -460,8 +572,7 @@ Neither act SHALL deactivate the account, revoke its scope, or touch the referen
 
 #### Scenario: Someone who is not the coordinator cannot grant a seat
 
-- **WHEN** an account whose role is `jhsc_member`, `supervisor`, `management` or
-  `external_auditor` requests a JHSC seat on any account
+- **WHEN** an account whose role is `jhsc_member` or `management` requests a JHSC seat on any account
 - **THEN** the request is rejected as forbidden
 
 ### Requirement: The roster reports whether an account holds a JHSC seat
@@ -498,11 +609,12 @@ role: for a `jhsc_member` the committee membership is already its role.
 
 The system SHALL expose a request that creates an `app_user` row and its `user_site_scope`
 rows for a person who already exists on the roster, available only to a session whose `role`
-is `hs_coordinator`. It SHALL be refused for every other role, and refusing it SHALL create
-neither the account nor any scope row.
+is administrative. It SHALL be refused for `jhsc_member`, and refusing it SHALL create neither
+the account nor any scope row.
 
 The request SHALL name the person by `id`, the account's email, its role and the sites of its
-scope. The account and its scope rows SHALL be created in a single transaction under the
+scope. The role SHALL be one of the three of the closed set; the request SHALL NOT carry an expiry
+or a record date window, because no role has one. The account and its scope rows SHALL be created in a single transaction under the
 declared audit actor, so that the audit entry for the new account exists in the chain of every
 site in its scope or the account is not created at all.
 
@@ -526,20 +638,25 @@ The request SHALL be refused when the person does not exist, when the person alr
 **active** account, when their inactive account carries a role different from the requested one
 — changing the role of an account is its own recorded act and SHALL NOT be a side effect of
 creating one — when the email belongs to another account, or when a site of the requested scope
-is outside the scope of the requesting coordinator.
+is outside the scope of the requesting account.
 
-#### Scenario: The coordinator creates an account for a person on the roster
+#### Scenario: An administrative account creates an account for a person on the roster
 
-- **WHEN** an `hs_coordinator` whose scope contains `st-thomas` requests an account for a
-  person of `st-thomas` with a role and that site
+- **WHEN** an `hs_coordinator` or a `management` account whose scope contains `st-thomas` requests
+  an account for a person of `st-thomas` with a role and that site
 - **THEN** an `app_user` row and one `user_site_scope` row are created
 - **AND** an audit entry naming the new account exists in the chain of `st-thomas`
 - **AND** the account cannot sign in
 
-#### Scenario: Any other role is refused
+#### Scenario: A JHSC member is refused
 
-- **WHEN** an account whose `role` is `jhsc_member`, `supervisor`, `management` or
-  `external_auditor` requests the creation of an account
+- **WHEN** an account whose `role` is `jhsc_member` requests the creation of an account
+- **THEN** the request is refused
+- **AND** no `app_user` row is created
+
+#### Scenario: A withdrawn role is refused as the role of a new account
+
+- **WHEN** an account is requested with `role` `supervisor` or `external_auditor`
 - **THEN** the request is refused
 - **AND** no `app_user` row is created
 
@@ -575,7 +692,7 @@ is outside the scope of the requesting coordinator.
 #### Scenario: An inactive account of another role is not restored
 
 - **WHEN** a `jhsc_member` account is requested for a person whose existing inactive account
-  carries the role `supervisor`
+  carries the role `management`
 - **THEN** the request is refused
 - **AND** that account stays inactive and its role is unchanged
 
@@ -585,9 +702,9 @@ is outside the scope of the requesting coordinator.
 - **THEN** the request is refused
 - **AND** no `app_user` row is created
 
-#### Scenario: A site outside the coordinator's own scope is refused
+#### Scenario: A site outside the requesting account's own scope is refused
 
-- **WHEN** an `hs_coordinator` whose scope is `st-thomas` only requests an account scoped to
+- **WHEN** an administrative account whose scope is `st-thomas` only requests an account scoped to
   `glencoe`
 - **THEN** the request is refused
 - **AND** neither the account nor its scope row is created
@@ -600,7 +717,7 @@ is outside the scope of the requesting coordinator.
 
 ### Requirement: A person on the roster can be invited as a JHSC member in one act
 
-The system SHALL let the H&S coordinator turn a person of the roster who has no access into an
+The system SHALL let an administrative account turn a person of the roster who has no access into an
 invited `jhsc_member` in a single act: the account is created with role `jhsc_member`, scoped
 to the site whose roster is being read, and an invitation is issued for it. The one-time
 invitation token SHALL be returned to the coordinator exactly once and SHALL NOT be readable
@@ -659,7 +776,7 @@ because the scope and the validity window they need are not expressible in it.
 
 ### Requirement: A coordinator can withdraw the JHSC access they granted
 
-The system SHALL let the H&S coordinator withdraw, from the roster of the site the account is
+The system SHALL let an administrative account withdraw, from the roster of the site the account is
 scoped to, the access of an active `jhsc_member` account. Withdrawing SHALL revoke the
 account's pending invitation, revoke its credential, and set its `deactivated_at`, as one act
 that either happens whole or not at all.
@@ -672,8 +789,7 @@ makes a link stop working while removing a member ends a session that may be ope
 
 Withdrawing SHALL be confirmed before it is executed, and SHALL be refused for an account
 whose role is not `jhsc_member`: the roster administers the access the roster grants, and
-removing a supervisor or another coordinator is not a press away in a list of two hundred
-rows.
+removing another administrative account is not a press away in a list of two hundred rows.
 
 Withdrawing an account that is already inactive SHALL be refused, so that the recorded
 `deactivated_at` stays the moment the access actually ended.
@@ -700,10 +816,9 @@ roster is maintained by the CSV import.
 - **WHEN** an `hs_coordinator` withdraws the access of a `jhsc_member` account
 - **THEN** the referenced `person` row's `deactivated_at` is unchanged
 
-#### Scenario: A role the roster does not administer is refused
+#### Scenario: A JHSC member cannot withdraw access
 
-- **WHEN** an `hs_coordinator` withdraws the access of an account whose role is `supervisor`,
-  `management`, `hs_coordinator` or `external_auditor`
+- **WHEN** a `jhsc_member` withdraws the access of another account
 - **THEN** the request is refused and the account stays active
 
 #### Scenario: Withdrawing twice is refused
@@ -717,9 +832,9 @@ roster is maintained by the CSV import.
   site of their scope
 - **THEN** the request is refused and the account stays active
 
-#### Scenario: Only the coordinator can withdraw access
+#### Scenario: Only an administrative account can withdraw access
 
-- **WHEN** an account whose role is not `hs_coordinator` withdraws another account's access
+- **WHEN** an account whose role is `jhsc_member` withdraws another account's access
 - **THEN** the request is refused
 
 ### Requirement: Withdrawing access keeps the account's site scope
@@ -952,11 +1067,14 @@ identify one real person, or the immutability of the record proves nothing.
 ### Requirement: An account carries exactly one role from a closed set
 
 The system SHALL store `app_user.role` as a mandatory value restricted by the database to
-`hs_coordinator`, `jhsc_member`, `supervisor`, `management` and `external_auditor`. An account
+`hs_coordinator`, `jhsc_member` and `management`. An account
 SHALL carry exactly one role: the schema SHALL NOT allow a set, a list or a second role row.
 
 `jhsc_member` SHALL be the single term for the people who carry out inspections; `inspector` SHALL
 NOT appear as a role value.
+
+`supervisor` and `external_auditor` SHALL NOT be accepted as role values. No account SHALL be able
+to be created, restored or changed into either of them.
 
 #### Scenario: A role outside the closed set is rejected
 
@@ -968,11 +1086,16 @@ NOT appear as a role value.
 - **WHEN** an `app_user` row is inserted with a null `role`
 - **THEN** the insert fails with a not-null violation
 
-#### Scenario: Each of the five roles is accepted
+#### Scenario: Each of the three roles is accepted
 
 - **WHEN** an `app_user` row is inserted for each of `hs_coordinator`, `jhsc_member`,
-  `supervisor`, `management` and `external_auditor`
-- **THEN** all five inserts succeed
+  `management`
+- **THEN** all three inserts succeed
+
+#### Scenario: A withdrawn role is rejected
+
+- **WHEN** an `app_user` row is inserted with `role` set to `supervisor` or to `external_auditor`
+- **THEN** the insert fails with a check violation
 
 #### Scenario: A role change is recorded, not silently applied
 
@@ -1144,7 +1267,7 @@ The system SHALL derive the `app.site_ids` of a transaction from the acting acco
 scope, and SHALL rely on the row-level security policies of the site-isolated tables for the
 resulting visibility. No endpoint SHALL filter by site in its query.
 
-A `jhsc_member` or a `supervisor` SHALL normally hold one site; `hs_coordinator` and `management`
+A `jhsc_member` SHALL normally hold one site; `hs_coordinator` and `management`
 SHALL be the roles that hold both. This SHALL be a property of the scope rows granted to the
 account, not of the role value: the role does not by itself widen or narrow what is visible.
 
@@ -1163,65 +1286,6 @@ account, not of the role value: the role does not by itself widen or narrow what
 
 - **WHEN** an account with role `hs_coordinator` has no active `user_site_scope` row
 - **THEN** its effective scope is empty and reads of site-isolated tables return no rows
-
-### Requirement: An external auditor account expires, and cannot be created without an expiry
-
-The system SHALL require `app_user.expires_at` to be non-null when `role` is `external_auditor`,
-and SHALL require it to be null for every other role. The database SHALL reject an
-`external_auditor` account whose `expires_at` is more than 90 days after its `created_at`. The
-system SHALL NOT renew an expiry automatically.
-
-The system SHALL also store the record date window an auditor's access is bounded by, as
-`records_from` and `records_to`, mandatory for `external_auditor` and null for every other role,
-with `records_from` not after `records_to`.
-
-An account whose `expires_at` has passed SHALL be treated as inactive for every purpose, without
-any row being deleted.
-
-#### Scenario: An external auditor without an expiry is rejected
-
-- **WHEN** an `app_user` row is inserted with `role` `external_auditor` and a null `expires_at`
-- **THEN** the insert fails with a check violation
-
-#### Scenario: An expiry beyond 90 days is rejected
-
-- **WHEN** an `app_user` row is inserted with `role` `external_auditor` and an `expires_at` 91
-  days after `created_at`
-- **THEN** the insert fails with a check violation
-
-#### Scenario: An expiry within 90 days is accepted
-
-- **WHEN** an `app_user` row is inserted with `role` `external_auditor` and an `expires_at` 30
-  days after `created_at`
-- **THEN** the insert succeeds
-
-#### Scenario: An expiry on a non-auditor role is rejected
-
-- **WHEN** an `app_user` row is inserted with `role` `supervisor` and a non-null `expires_at`
-- **THEN** the insert fails with a check violation
-
-#### Scenario: An auditor without a record window is rejected
-
-- **WHEN** an `app_user` row is inserted with `role` `external_auditor`, a valid `expires_at` and
-  a null `records_from` or a null `records_to`
-- **THEN** the insert fails with a check violation
-
-#### Scenario: An inverted record window is rejected
-
-- **WHEN** an `app_user` row is inserted with `role` `external_auditor` and a `records_from`
-  later than its `records_to`
-- **THEN** the insert fails with a check violation
-
-#### Scenario: An expired auditor account is inactive
-
-- **WHEN** the current time is after an account's `expires_at`
-- **THEN** the account is reported as inactive
-- **AND** its row is still present, with its scope rows intact
-
-#### Scenario: An auditor account is revocable before it expires
-
-- **WHEN** `deactivated_at` is set on an `external_auditor` account before its `expires_at`
-- **THEN** the account is reported as inactive from that moment
 
 ### Requirement: Accounts are deactivated, never deleted
 
@@ -1347,10 +1411,9 @@ one `file`, an unexpected multipart field or an unusable file name. The system S
 - **THEN** the named scope is ignored
 - **AND** no `person` of `glencoe` is created or changed
 
-#### Scenario: Any other role is refused
+#### Scenario: A JHSC member is refused
 
-- **WHEN** an account whose `role` is `supervisor`, `jhsc_member`, `management` or
-  `external_auditor` submits a roster CSV
+- **WHEN** an account whose `role` is `jhsc_member` submits a roster CSV
 - **THEN** the request is refused
 - **AND** no `person` row is created or changed and no import record is written
 
@@ -1529,7 +1592,7 @@ partial file SHALL NOT be able to empty the roster.
 ### Requirement: An account gains the ability to sign in only through an invitation
 
 The system SHALL create the credential of an account only from a `user_invitation` row issued by
-an account whose `role` is `hs_coordinator`. There SHALL be no self-registration, no open sign-up
+an administrative account. There SHALL be no self-registration, no open sign-up
 form and no path by which an `app_user` row acquires a credential without an invitation having
 been issued for it and accepted.
 
@@ -1544,10 +1607,9 @@ that has no credential yet.
 - **THEN** a `user_invitation` row is created carrying that `user_id` and the coordinator's
   `app_user.id` as `issued_by_user_id`
 
-#### Scenario: A non-coordinator cannot invite
+#### Scenario: A JHSC member cannot invite
 
-- **WHEN** a session whose account `role` is `jhsc_member`, `supervisor`, `management` or
-  `external_auditor` issues an invitation
+- **WHEN** a session whose account `role` is `jhsc_member` issues an invitation
 - **THEN** the request is rejected and no `user_invitation` row is created
 
 #### Scenario: There is no self-registration path
@@ -1629,8 +1691,8 @@ against `app_credential.password_hash`. The password SHALL be stored only as a h
 memory-hard function, SHALL never be stored in `app_user`, and SHALL never be returned by any
 route.
 
-The system SHALL refuse to establish a session for an account whose `deactivated_at` is non-null,
-whose `expires_at` has passed, or that has no `app_credential` row. A refusal SHALL NOT reveal
+The system SHALL refuse to establish a session for an account whose `deactivated_at` is non-null
+or that has no `app_credential` row. A refusal SHALL NOT reveal
 which of those conditions applied, nor whether the email exists.
 
 #### Scenario: An active account with a credential signs in
@@ -1641,12 +1703,6 @@ which of those conditions applied, nor whether the email exists.
 #### Scenario: A deactivated account cannot sign in
 
 - **WHEN** an account whose `deactivated_at` is non-null presents its correct password
-- **THEN** no session is established
-
-#### Scenario: An expired auditor cannot sign in
-
-- **WHEN** an `external_auditor` account whose `expires_at` has passed presents its correct
-  password
 - **THEN** no session is established
 
 #### Scenario: An account created by the roster or by a seed cannot sign in
@@ -1758,9 +1814,9 @@ the stored identifier.
 
 #### Scenario: A changed role takes effect on the next request
 
-- **WHEN** an account's `role` is changed from `hs_coordinator` to `supervisor`
+- **WHEN** an account's `role` is changed from `jhsc_member` to `hs_coordinator`
 - **AND** the same unexpired session token is used for a subsequent request
-- **THEN** the resolved `role` is `supervisor`
+- **THEN** the resolved `role` is `hs_coordinator`
 
 #### Scenario: A revoked site leaves the scope on the next request
 
@@ -1805,8 +1861,8 @@ connection returned and handed to another request carries none of them.
 #### Scenario: A role supplied by the caller is ignored
 
 - **WHEN** a request carries a role in its query, body or headers claiming `hs_coordinator` for a
-  `supervisor` account
-- **THEN** the transaction's `app.role` is `supervisor`
+  `jhsc_member` account
+- **THEN** the transaction's `app.role` is `jhsc_member`
 - **AND** no row the elevated role would have unlocked is returned
 
 #### Scenario: The role does not survive the transaction
@@ -1914,8 +1970,8 @@ acknowledged submission. Loss of authentication SHALL NOT be such an act.
 
 ### Requirement: A session ends when the account loses the right to hold it
 
-The system SHALL revoke every live `app_session` of an account when the account is deactivated,
-when its `expires_at` passes, or when its credential is revoked.
+The system SHALL revoke every live `app_session` of an account when the account is deactivated or
+when its credential is revoked.
 Revocation SHALL be expressed by setting `app_session.revoked_at`, never by deleting the row, and
 a revoked session SHALL NOT be renewable.
 
@@ -1927,12 +1983,6 @@ able to end another account's.
 - **WHEN** `deactivated_at` is set on an account holding a live session
 - **THEN** the next request with that session token is rejected
 - **AND** the `app_session` row carries a non-null `revoked_at`
-
-#### Scenario: An auditor's session ends when the account expires
-
-- **WHEN** the current time passes an `external_auditor` account's `expires_at` while it holds a
-  live session
-- **THEN** the next request with that session token is rejected
 
 #### Scenario: The holder signs out
 
@@ -1949,37 +1999,6 @@ able to end another account's.
 
 - **WHEN** any role attempts to delete an `app_session` row
 - **THEN** the attempt fails and the row is still present when read back
-
-### Requirement: An external auditor's session is bounded by its record window
-
-The system SHALL restrict what an `external_auditor` session can read to records whose date falls
-within the account's `records_from` and `records_to`, in addition to its `site_scope`. An auditor
-session SHALL be read-only: it SHALL NOT be accepted by any route that creates or changes a
-record.
-
-#### Scenario: Records outside the window are not returned
-
-- **WHEN** an `external_auditor` session reads a collection that contains records dated before
-  `records_from` or after `records_to`
-- **THEN** those records are absent from the result
-
-#### Scenario: Records inside the window are returned
-
-- **WHEN** an `external_auditor` session reads a collection containing records dated within its
-  window and inside its `site_scope`
-- **THEN** those records are returned
-
-#### Scenario: An auditor cannot write
-
-- **WHEN** an `external_auditor` session is presented to any route that creates or modifies a
-  record
-- **THEN** the request is rejected and nothing is written
-
-#### Scenario: The window does not widen the site scope
-
-- **WHEN** an `external_auditor` session whose `site_scope` is `st-thomas` reads records dated
-  within its window
-- **THEN** no record of `glencoe` is returned
 
 ### Requirement: A credential belongs to exactly one account and is never shared
 
@@ -2089,8 +2108,8 @@ transaction.
 - **THEN** the request returns the same not-found response used for a nonexistent person
 - **AND** no person row is changed
 
-#### Scenario: Other roles cannot deactivate a worker
+#### Scenario: A JHSC member cannot deactivate a worker
 
-- **WHEN** an account whose `role` is `supervisor`, `jhsc_member`, `management` or `external_auditor` attempts to deactivate an active worker in its site scope
+- **WHEN** an account whose `role` is `jhsc_member` attempts to deactivate an active worker in its site scope
 - **THEN** the request is refused
 - **AND** the person remains active

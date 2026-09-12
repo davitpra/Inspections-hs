@@ -58,7 +58,7 @@ export function LocationsRoute(): React.JSX.Element {
       <>
         <h1>Locations</h1>
         <p className="notice">
-          Only the H&amp;S coordinator can administer locations.
+          Only H&amp;S coordinators and management can administer locations.
         </p>
       </>
     );

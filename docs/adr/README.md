@@ -43,7 +43,7 @@ bloquea el recorrido crítico.
 | [008](008-system-architecture.md)           | Arquitectura del sistema                          | Aceptada |
 | [009](009-data-residency.md)                | Residencia de datos (ex-S1)                       | Aceptada |
 | [010](010-target-devices.md)                | Dispositivos objetivo: Android (ex-S2)            | Aceptada |
-| [011](011-authentication.md)                | Autenticación: better-auth en apps/api (ex-S3)    | Aceptada |
+| [011](011-authentication.md)                | Autenticación: better-auth en apps/api (ex-S3)    | Parcialmente superada por ADR-022 |
 | [012](012-css-tokens-not-tailwind.md)       | CSS con tokens semánticos, no Tailwind + shadcn   | Aceptada |
 | [013](013-retirada-reportes-cumplimiento.md) | Retirada preproducción del reporte de cumplimiento | Aceptada |
 | [014](014-retirada-clasificacion-riesgo.md)  | Retirada preproducción de la clasificación de riesgo | Aceptada |
@@ -54,10 +54,14 @@ bloquea el recorrido crítico.
 | [019](019-el-coordinador-verifica-lo-que-ejecuto.md) | El coordinador de H&S verifica lo que él mismo declaró hecho | Aceptada |
 | [020](020-asignacion-editable-hasta-el-cierre.md) | La asignación es editable hasta el cierre | Superada |
 | [021](021-asignacion-congelada-al-declarar-el-trabajo.md) | La asignación se congela al declarar el trabajo hecho | Aceptada |
+| [022](022-reduccion-de-roles.md) | Tres roles y dos autoridades administrativas | Aceptada |
 
 Los ADR 001–008 conservan la numeración original citada en el encabezado de
 `docs/requisitos-v1.2.md`. Los 009–011 eran las "decisiones de contexto resueltas" S1, S2 y S3:
 son ADRs en todo salvo el nombre y se promueven para que los agentes las lean igual que al resto.
+
+ADR-022 supera únicamente el ciclo de vida del auditor externo y la excepción de registro de
+lecturas de ADR-011. Sus decisiones sobre autenticación, invitaciones y sesiones siguen vigentes.
 
 ---
 

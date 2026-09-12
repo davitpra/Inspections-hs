@@ -22,7 +22,11 @@ export type AccountErrorCode =
   | 'account_already_active'
   | 'account_role_not_removable'
   | 'account_already_inactive'
-  | 'account_role_without_jhsc_seat';
+  | 'account_role_without_jhsc_seat'
+  | 'account_promotion_forbidden'
+  | 'account_role_not_promotable'
+  | 'account_promotion_inactive'
+  | 'account_promotion_self';
 
 export class AccountException extends HttpException {
   constructor(
@@ -98,9 +102,9 @@ export const accountAlreadyActive = (): AccountException =>
 /**
  * `PATCH /accounts/:id` con `deactivated` (`remove-jhsc-access-from-roster`): el roster
  * administra el acceso que el roster otorgó, y eso es exactamente `jhsc_member`. Un
- * supervisor, otro coordinador o un auditor externo se dan de baja por el camino que los
- * dio de alta, con su propia confirmación — quitar de una lista de doscientas filas al
- * coordinador de la planta de al lado no puede ser un clic.
+ * una cuenta administrativa se da de baja por el camino que la dio de alta, con su propia
+ * confirmación — quitar de una lista de doscientas filas al coordinador de la planta de al
+ * lado no puede ser un clic.
  */
 export const accountRoleNotRemovable = (): AccountException =>
   new AccountException(
@@ -127,9 +131,8 @@ export const accountAlreadyInactive = (): AccountException =>
  * (`coordinator-jhsc-seat`): el `CHECK` de 0035 ya frena la escritura, y esto es lo que la
  * traduce a algo que el coordinador pueda leer — un 23514 crudo no dice qué se pidió mal.
  *
- * Los cuatro roles caen acá por motivos distintos y la respuesta es la misma a propósito:
- * un `jhsc_member` no necesita asiento porque su rol YA es el asiento, y un `supervisor`,
- * `management` o `external_auditor` no puede tener uno porque §4 no lo pone en el comité.
+ * Un `jhsc_member` no necesita asiento porque su rol YA es el asiento. Los dos roles
+ * administrativos sí pueden llevarlo.
  */
 export const accountRoleWithoutJhscSeat = (role: string): AccountException =>
   new AccountException(
@@ -138,4 +141,32 @@ export const accountRoleWithoutJhscSeat = (role: string): AccountException =>
       ? 'A JHSC member already sits on the committee by role'
       : `Role ${role} cannot hold a seat on the JHSC`,
     HttpStatus.CONFLICT,
+  );
+
+export const accountPromotionForbidden = (): AccountException =>
+  new AccountException(
+    'account_promotion_forbidden',
+    'Only management can promote an account to hs_coordinator',
+    HttpStatus.FORBIDDEN,
+  );
+
+export const accountRoleNotPromotable = (role: string): AccountException =>
+  new AccountException(
+    'account_role_not_promotable',
+    `Role ${role} cannot be promoted to hs_coordinator`,
+    HttpStatus.CONFLICT,
+  );
+
+export const accountPromotionInactive = (): AccountException =>
+  new AccountException(
+    'account_promotion_inactive',
+    'An inactive account cannot be promoted to hs_coordinator',
+    HttpStatus.CONFLICT,
+  );
+
+export const accountPromotionSelf = (): AccountException =>
+  new AccountException(
+    'account_promotion_self',
+    'You cannot promote your own account to hs_coordinator',
+    HttpStatus.FORBIDDEN,
   );

@@ -106,7 +106,8 @@ Lo que cruza rutas y no es un componente no vive en `routes/`, vive en un direct
 propio al mismo nivel que `api/` y `offline/`. La división es entre decidir y nombrar:
 
 - `src/permissions/` — **qué le ofrece la interfaz a quién**, y nada más:
-  `session.ts` (los predicados por rol), `actions.ts` (`canAttempt`), `incidents.ts`
+  `session.ts` (los predicados administrativos delegan en `isAdministrator`; `canPromote`
+  conserva la excepción exclusiva de `management`), `actions.ts` (`canAttempt`), `incidents.ts`
   (`availableTransitions`). Es comodidad, no garantía: la garantía es RLS y el rol que
   comprueba el servidor. Cada uno es una función pura con su `.test.ts` al lado, para
   poder probar la decisión sin renderizar.

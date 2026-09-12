@@ -5,6 +5,7 @@ import {
   accessCellClass,
   accessCellLabel,
   accountRoleLabel,
+  canPromoteAccount,
   canInvite,
   canDeactivateWorker,
   dialogFor,
@@ -252,10 +253,14 @@ describe('estado de acceso de la fila', () => {
 });
 
 describe('roleCellLabel', () => {
-  it('dice el rol de la cuenta cuando la hay', () => {
-    const row = withAccount({}, { id: ACCOUNT_ID, role: 'supervisor', active: true, can_sign_in: true });
+  it.each([
+    ['hs_coordinator', 'H&S coordinator'],
+    ['jhsc_member', 'JHSC member'],
+    ['management', 'Management'],
+  ] as const)('dice el rol %s de la cuenta', (role, label) => {
+    const row = withAccount({}, { id: ACCOUNT_ID, role, active: true, can_sign_in: true });
 
-    expect(roleCellLabel(row)).toBe('Supervisor');
+    expect(roleCellLabel(row)).toBe(label);
   });
 
   it('dice "Worker" para quien no tiene cuenta', () => {
@@ -342,7 +347,7 @@ describe('canInvite', () => {
   });
 
   it('no ofrece invitar si la cuenta dada de baja no era de jhsc_member', () => {
-    for (const role of ['hs_coordinator', 'supervisor', 'management', 'external_auditor'] as const) {
+    for (const role of ['hs_coordinator', 'management'] as const) {
       const row = withAccount({}, { id: ACCOUNT_ID, role, active: false, can_sign_in: false });
 
       expect(canInvite(row)).toBe(false);
@@ -415,11 +420,21 @@ describe('canRemoveJhscAccess', () => {
 
   // El roster administra el acceso que el roster otorga, y eso es jhsc_member.
   it('no ofrece quitar el acceso a un rol que no es jhsc_member', () => {
-    for (const role of ['hs_coordinator', 'supervisor', 'management', 'external_auditor'] as const) {
+    for (const role of ['hs_coordinator', 'management'] as const) {
       const row = withAccount({}, { id: ACCOUNT_ID, role, active: true, can_sign_in: true });
 
       expect(canRemoveJhscAccess(row)).toBe(false);
     }
+  });
+});
+
+describe('canPromoteAccount', () => {
+  it('acepta solo una cuenta activa de jhsc_member', () => {
+    expect(canPromoteAccount(withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true }))).toBe(true);
+    expect(canPromoteAccount(withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: false, can_sign_in: true }))).toBe(false);
+    expect(canPromoteAccount(withAccount({}, { id: ACCOUNT_ID, role: 'hs_coordinator', active: true, can_sign_in: true }))).toBe(false);
+    expect(canPromoteAccount(withAccount({}, { id: ACCOUNT_ID, role: 'management', active: true, can_sign_in: true }))).toBe(false);
+    expect(canPromoteAccount(withAccount())).toBe(false);
   });
 });
 
@@ -451,7 +466,7 @@ describe('las afordancias de una fila son mutuamente excluyentes', () => {
     withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: false }),
     withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true }),
     withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: false, can_sign_in: false }),
-    withAccount({}, { id: ACCOUNT_ID, role: 'supervisor', active: true, can_sign_in: true }),
+    withAccount({}, { id: ACCOUNT_ID, role: 'management', active: true, can_sign_in: true }),
   ];
 
   it('nunca ofrece invitar junto con quitar ni con reemitir', () => {
@@ -574,32 +589,33 @@ describe('rosterCounts', () => {
 });
 
 describe('jhscSeatAction — el asiento en el comité (coordinator-jhsc-seat)', () => {
-  const coordinator = (jhsc_seat: boolean, active = true) =>
-    withAccount({}, { id: ACCOUNT_ID, role: 'hs_coordinator', active, can_sign_in: true, jhsc_seat });
+  const administrator = (role: 'hs_coordinator' | 'management', jhsc_seat: boolean, active = true) =>
+    withAccount({}, { id: ACCOUNT_ID, role, active, can_sign_in: true, jhsc_seat });
 
   it('ofrece sentarse a la coordinadora que no está en el comité', () => {
-    expect(jhscSeatAction(coordinator(false))).toBe('grant');
+    expect(jhscSeatAction(administrator('hs_coordinator', false))).toBe('grant');
   });
 
   it('ofrece levantarse a la coordinadora que sí está', () => {
-    expect(jhscSeatAction(coordinator(true))).toBe('withdraw');
+    expect(jhscSeatAction(administrator('hs_coordinator', true))).toBe('withdraw');
   });
 
   /**
-   * Es el único rol al que el motor le deja el asiento: un `jhsc_member` ya está en el
-   * comité por su rol, y a los otros tres §4 no los pone ahí. Ofrecer el botón sería
-   * ofrecer algo que el servidor niega.
+   * Los dos roles administrativos admiten asiento; un `jhsc_member` ya está en el comité
+   * por su rol.
    */
-  it('no ofrece nada sobre ningún otro rol', () => {
-    for (const role of ['jhsc_member', 'supervisor', 'management', 'external_auditor'] as const) {
-      const row = withAccount({}, { id: ACCOUNT_ID, role, active: true, can_sign_in: true });
+  it('management admite las dos direcciones', () => {
+    expect(jhscSeatAction(administrator('management', false))).toBe('grant');
+    expect(jhscSeatAction(administrator('management', true))).toBe('withdraw');
+  });
 
-      expect(jhscSeatAction(row)).toBeNull();
-    }
+  it('no ofrece asiento a un miembro del JHSC', () => {
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true });
+    expect(jhscSeatAction(row)).toBeNull();
   });
 
   it('no ofrece nada sobre una cuenta a la que se le quitó el acceso', () => {
-    expect(jhscSeatAction(coordinator(false, false))).toBeNull();
+    expect(jhscSeatAction(administrator('hs_coordinator', false, false))).toBeNull();
   });
 
   it('no ofrece nada sobre una persona sin cuenta', () => {
@@ -731,6 +747,15 @@ describe('rowActions', () => {
     expect(rowActions(member, true)[0]?.text).toBe('Remove');
   });
 
+  it('management también ofrece promover al miembro activo', () => {
+    const member = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true });
+
+    expect(rowActions(member, true, true)).toEqual([
+      expect.objectContaining({ kind: 'remove' }),
+      expect.objectContaining({ kind: 'promote', text: 'Promote' }),
+    ]);
+  });
+
   // La dirección del asiento la resuelve `jhscSeatAction` una sola vez, y el botón la
   // hereda: afordancia y etiqueta no pueden hablar de direcciones distintas.
   it('la coordinadora ofrece sentarse, y levantarse si ya está sentada', () => {
@@ -843,6 +868,17 @@ describe('dialogFor', () => {
       userId: ACCOUNT_ID,
       label: personLabel(seated),
       action: 'withdraw',
+    });
+  });
+
+  it('la promoción viaja con el id de la cuenta', () => {
+    const member = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true });
+    const promotion = rowActions(member, true, true).find((action) => action.kind === 'promote')!;
+
+    expect(dialogFor(member, promotion)).toEqual({
+      kind: 'promote',
+      userId: ACCOUNT_ID,
+      label: personLabel(member),
     });
   });
 });

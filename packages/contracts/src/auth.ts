@@ -123,9 +123,6 @@ export const sessionSchema = z.object({
   personId: z.uuid(),
   role: roleSchema,
   siteScope: z.array(z.uuid()),
-  /** Solo para `external_auditor`: la ventana de registros que puede leer. */
-  recordsFrom: z.iso.date().nullable(),
-  recordsTo: z.iso.date().nullable(),
 
   /*
    * OPCIONALES, y el motivo NO es que el servidor pueda omitirlos —los manda siempre.

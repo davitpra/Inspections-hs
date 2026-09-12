@@ -24,7 +24,7 @@ export interface JobPayloads {
   'inspections.open-period': { now?: string };
 
   /**
-   * Escala las acciones correctivas vencidas: +3 días al supervisor, +7 a gerencia
+   * Escala las acciones correctivas vencidas: +3 días a coordinación, +7 a gerencia
    * (§3 R3). El trabajo que ADR-005 nombra primero entre sus motivos.
    *
    * `now` viaja en el payload por lo mismo que arriba, y acá se cobra dos veces: es

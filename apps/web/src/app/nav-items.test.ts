@@ -9,8 +9,6 @@ function account(role: Session['role']): Session {
     personId: '22222222-2222-4222-8222-222222222222',
     role,
     siteScope: ['33333333-3333-4333-8333-333333333333'],
-    recordsFrom: null,
-    recordsTo: null,
   };
 }
 
@@ -23,15 +21,14 @@ describe('visibleNavItems', () => {
     expect(NAV_ITEMS.some((item) => item.label === 'Corrective actions')).toBe(false);
   });
 
-  it('ofrece programación y roster solo al coordinador', () => {
-    const labels = visibleNavItems(account('hs_coordinator')).map((item) => item.label);
+  it.each(['hs_coordinator', 'management'] as const)('ofrece la administración a %s', (role) => {
+    const labels = visibleNavItems(account(role)).map((item) => item.label);
 
-    expect(labels).toContain('Scheduling');
-    expect(labels).toContain('People');
+    expect(labels).toEqual(expect.arrayContaining(['Scheduling', 'People', 'Templates', 'Locations']));
   });
 
-  it('no se los ofrece a un inspector, que no puede administrar ninguna de las dos', () => {
-    const labels = visibleNavItems(account('supervisor')).map((item) => item.label);
+  it('no se los ofrece a un miembro del JHSC', () => {
+    const labels = visibleNavItems(account('jhsc_member')).map((item) => item.label);
 
     expect(labels).not.toContain('Scheduling');
     expect(labels).not.toContain('People');

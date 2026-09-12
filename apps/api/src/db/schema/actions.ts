@@ -217,8 +217,8 @@ export const correctiveActionEvidence = pgTable(
 );
 
 /**
- * Los escalamientos ya ocurridos (migración 0011). §3 R3: +3 días al supervisor, +7 a
- * gerencia.
+ * Los escalamientos ya ocurridos (migraciones 0011 y 0046). §3 R3: +3 días al
+ * coordinador, +7 a gerencia.
  *
  * **El único `(actionId, level)` es la idempotencia del cron**: el trabajo corre todos
  * los días sobre una acción vencida hace un mes y escala una sola vez por nivel, no

@@ -65,7 +65,7 @@ describe('notificationSchema', () => {
 
   it('acepta los dos escalamientos', () => {
     for (const kind of [
-      'corrective_action_overdue_supervisor',
+      'corrective_action_overdue_coordinator',
       'corrective_action_overdue_management',
     ]) {
       expect(notificationSchema.safeParse(envelope(kind, OVERDUE)).success).toBe(true);
@@ -75,7 +75,7 @@ describe('notificationSchema', () => {
   it('acepta el escalamiento de una acción de investigación sin hallazgo', () => {
     expect(
       notificationSchema.safeParse(
-        envelope('corrective_action_overdue_supervisor', { ...OVERDUE, finding_id: null }),
+        envelope('corrective_action_overdue_coordinator', { ...OVERDUE, finding_id: null }),
       ).success,
     ).toBe(true);
   });

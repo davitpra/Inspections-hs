@@ -1,10 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import type {
-  CreatePersonRequest,
-  Person,
-  PersonWithAccount,
-  RosterImportReport,
-  RosterQuery,
+import {
+  isAdministrator,
+  type CreatePersonRequest,
+  type Person,
+  type PersonWithAccount,
+  type RosterImportReport,
+  type RosterQuery,
 } from '@hs/contracts';
 
 import { DbService } from '../db/db.service';
@@ -125,9 +126,9 @@ export class RosterService {
   }
 
   private requireCoordinator(
-    session: { role: string },
+    session: SessionScope,
     failure: () => Error,
   ): void {
-    if (session.role !== 'hs_coordinator') throw failure();
+    if (!isAdministrator(session.role)) throw failure();
   }
 }

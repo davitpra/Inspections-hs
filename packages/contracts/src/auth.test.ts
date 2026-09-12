@@ -13,8 +13,6 @@ function validSession() {
     personId: PERSON_ID,
     role: 'jhsc_member',
     siteScope: [SITE_ID],
-    recordsFrom: null,
-    recordsTo: null,
     email: 'ada.reid@example.com',
     firstName: 'Ada',
     lastName: 'Reid',

@@ -1,4 +1,4 @@
-import type { Session } from '@hs/contracts';
+import { isAdministrator, type Session } from '@hs/contracts';
 
 /**
  * Qué le ofrece la interfaz a cada cuenta.
@@ -17,17 +17,15 @@ import type { Session } from '@hs/contracts';
  *     programación de su planta es legítimo.
  *   - `/roster` no. Ahí el rol se comprueba también en la lectura, en el cliente y en el
  *     servidor: §4 dice que se elige a una persona sin poder ver su perfil, y un roster de
- *     solo lectura para un supervisor sería exactamente esa ficha.
+ *     solo lectura para un miembro del JHSC sería exactamente esa ficha.
  *
  *   - `/templates` tampoco. Ahí el rol se comprueba en la lectura, igual que en `/roster`,
  *     y por una razón propia: un borrador es una plantilla a medio pensar, y mostrarlo
  *     sería mostrar preguntas que la organización todavía no decidió hacer.
  *
- * **Una función por decisión y no una `isCoordinator`.** Hoy todas preguntan lo mismo, pero
- * son decisiones distintas: el día que `management` pueda generar el reporte de
- * cumplimiento sin administrar el roster, colapsarlas obligaría a separarlas de nuevo y a
- * revisar cada llamada para saber cuál era cuál. El nombre de cada una dice qué se está
- * preguntando, que es lo que un `role === 'hs_coordinator'` suelto no dice.
+ * **Una función por decisión.** Las decisiones administrativas delegan en la regla común de
+ * contracts, pero conservan nombres distintos para que una separación futura de permisos
+ * cambie la decisión correcta y no obligue a reconstruir qué preguntaba cada llamada.
  *
  * Van acá y no en cada ruta porque todas cruzan pantallas, y aparte del componente para
  * poder probarlas sin renderizar.
@@ -37,13 +35,17 @@ import type { Session } from '@hs/contracts';
  * a comprobar que existe, que es lo que hacía el `account?.role !== …` que reemplazan.
  */
 
+export function canAdminister(account: Session | null): account is Session {
+  return account !== null && isAdministrator(account.role);
+}
+
 export function canAdministerRoster(account: Session | null): account is Session {
-  return account?.role === 'hs_coordinator';
+  return canAdminister(account);
 }
 
 /** Quién puede aplicar un archivo completo al roster. */
 export function canImportRoster(account: Session | null): account is Session {
-  return account?.role === 'hs_coordinator';
+  return canAdminister(account);
 }
 
 /**
@@ -53,23 +55,23 @@ export function canImportRoster(account: Session | null): account is Session {
  * el otro, esta es la que cambia.
  */
 export function canAddPersonToRoster(account: Session | null): account is Session {
-  return account?.role === 'hs_coordinator';
+  return canAdminister(account);
 }
 
 /**
  * Quién ve el botón de invitar en la fila del roster (proposal — "el rol de la
  * invitación desde el roster es `jhsc_member` y solo ese"). Hoy coincide con
- * `canAdministerRoster` porque los dos preguntan lo mismo con los cinco roles
- * actuales, pero es la pregunta de invitar y no la de administrar el roster: el día
+ * `canAdministerRoster` porque los dos preguntan hoy por autoridad administrativa,
+ * pero es la pregunta de invitar y no la de administrar el roster: el día
  * que la consola se abra de lectura a otro rol sin darle el botón, esta es la que
  * cambia y `canAdministerRoster` no.
  */
 export function canInviteFromRoster(account: Session | null): account is Session {
-  return account?.role === 'hs_coordinator';
+  return canAdminister(account);
 }
 
 export function canAdministerScheduling(account: Session | null): account is Session {
-  return account?.role === 'hs_coordinator';
+  return canAdminister(account);
 }
 
 /**
@@ -83,12 +85,12 @@ export function canAdministerScheduling(account: Session | null): account is Ses
  * consume `/scheduling`: gatear eso rompería la consola de programación para todos.
  */
 export function canAuthorTemplates(account: Session | null): account is Session {
-  return account?.role === 'hs_coordinator';
+  return canAdminister(account);
 }
 
 /** Quién puede convertir un borrador guardado en una versión publicada. */
 export function canPublishTemplates(account: Session | null): account is Session {
-  return account?.role === 'hs_coordinator';
+  return canAdminister(account);
 }
 
 /**
@@ -101,9 +103,14 @@ export function canPublishTemplates(account: Session | null): account is Session
  * función compartida quería decir qué.
  */
 export function canDeactivateTemplates(account: Session | null): account is Session {
-  return account?.role === 'hs_coordinator';
+  return canAdminister(account);
 }
 
 export function canAdministerCatalog(account: Session | null): account is Session {
-  return account?.role === 'hs_coordinator';
+  return canAdminister(account);
+}
+
+/** La promoción es la única asimetría entre los dos roles administrativos. */
+export function canPromote(account: Session | null): account is Session {
+  return account?.role === 'management';
 }

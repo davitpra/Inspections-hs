@@ -6,7 +6,6 @@ import * as schema from './schema';
 import {
   withSessionScope,
   withSiteScope,
-  type ReadDescriptor,
   type SessionScope,
   type SiteScope,
 } from './site-scope';
@@ -61,20 +60,13 @@ export class DbService implements OnModuleDestroy {
 
   /**
    * ADR-011 — El alcance derivado de la sesión, que es por donde pasa todo request
-   * autenticado. Fija además la ventana de fechas del auditor externo y, para ese
-   * rol, escribe la entrada de lectura en la misma transacción (design D10).
+   * autenticado.
    */
   async withSession<T>(
     session: SessionScope,
     run: (db: NodePgDatabase<typeof schema>) => Promise<T>,
-    read?: ReadDescriptor,
   ): Promise<T> {
-    return withSessionScope(
-      this.pool,
-      session,
-      (client) => run(drizzle(client, { schema })),
-      read,
-    );
+    return withSessionScope(this.pool, session, (client) => run(drizzle(client, { schema })));
   }
 
   /**
@@ -83,15 +75,13 @@ export class DbService implements OnModuleDestroy {
    * CONFLICT DO NOTHING`, `RETURNING` compuesto— que el query builder no expresa sin
    * perder de vista lo que hace el motor.
    *
-   * Mantiene todo lo que hace `withSession`: la ventana de fechas del auditor externo
-   * y su registro de lecturas. Es la misma puerta, no un atajo alrededor.
+   * Mantiene todo lo que hace `withSession`. Es la misma puerta, no un atajo alrededor.
    */
   async withSessionClient<T>(
     session: SessionScope,
     run: (client: PoolClient) => Promise<T>,
-    read?: ReadDescriptor,
   ): Promise<T> {
-    return withSessionScope(this.pool, session, run, read);
+    return withSessionScope(this.pool, session, run);
   }
 
   /**

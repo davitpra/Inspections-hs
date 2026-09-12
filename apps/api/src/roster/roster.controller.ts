@@ -36,7 +36,7 @@ import { ROSTER_FILE_LIMIT, RosterUploadExceptionFilter } from './roster-upload.
  * `/people` y no `/roster`: el recurso son las personas; "roster" es la pantalla.
  *
  * **Esto no es el selector de sujeto.** Aquel vive en `GET /scheduled-inspections/:id/roster`,
- * devuelve cuatro columnas y lo puede llamar cualquiera; §4 dice que el supervisor elige a
+ * devuelve cuatro columnas y lo puede llamar cualquiera; §4 dice que quien reporta elige a
  * una persona *sin poder ver su perfil*, y esa frase ata a esa ruta, no a esta. Acá el rol se
  * comprueba en la lectura porque esta ruta SÍ devuelve el perfil. Conectar el selector de
  * incidentes a `/people` rompería lo único que las mantiene separadas.

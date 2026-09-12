@@ -1,5 +1,6 @@
 import {
   incidentTransitionsAvailable,
+  isAdministrator,
   type Incident,
   type IncidentTransition,
   type Session,
@@ -22,6 +23,12 @@ export function availableTransitions(
   if (session === null) return [];
 
   return incidentTransitionsAvailable(incident.state, incident.classification).filter(
-    (transition) => transition.roles.includes(session.role),
+    (transition) =>
+      transition.roles.includes(session.role) ||
+      (transition.roles.includes('hs_coordinator') && isAdministrator(session.role)),
   );
+}
+
+export function canReportIncident(session: Session | null): session is Session {
+  return session !== null && isAdministrator(session.role);
 }

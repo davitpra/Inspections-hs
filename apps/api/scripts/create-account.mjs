@@ -43,16 +43,11 @@ import pg from 'pg';
  *     --role jhsc_member --site st-thomas --actor coordinator@example.com
  */
 
-/**
- * Los cuatro roles internos. `external_auditor` queda afuera a propósito: el CHECK
- * `app_user_auditor_lifecycle` exige `expires_at` (≤ 90 días), `records_from` y
- * `records_to` juntos y coherentes, y son tres flags más y toda su validación para el rol
- * que se crea una vez cada mucho. Se rechaza por nombre, no por omisión.
- */
-const INTERNAL_ROLES = ['hs_coordinator', 'jhsc_member', 'supervisor', 'management'];
+/** Los tres roles admitidos por la plataforma (ADR-022). */
+const INTERNAL_ROLES = ['hs_coordinator', 'jhsc_member', 'management'];
 
 /** Los roles que normalmente llevan UNA planta (§6, pregunta cerrada 5). */
-const SINGLE_SITE_ROLES = ['jhsc_member', 'supervisor'];
+const SINGLE_SITE_ROLES = ['jhsc_member'];
 
 const USAGE = [
   'Uso: pnpm auth:create-account --employee <employeeNumber> --email <email>',
@@ -115,14 +110,6 @@ function parseArgs(argv) {
   }
 
   if (values.site.length === 0) throw new Error(`Falta --site\n\n${USAGE}`);
-
-  if (values.role === 'external_auditor') {
-    throw new Error(
-      'Este comando no crea cuentas de external_auditor. El CHECK app_user_auditor_lifecycle ' +
-        'exige expires_at (≤ 90 días), records_from y records_to juntos y coherentes, y esa alta ' +
-        'va por SQL. Ver la sección de auth del README.',
-    );
-  }
 
   if (!INTERNAL_ROLES.includes(values.role)) {
     throw new Error(`Rol inválido: ${values.role}. Los válidos son ${INTERNAL_ROLES.join(', ')}.`);
@@ -360,9 +347,6 @@ async function main() {
         personId: person.id,
         email: args.email,
         role: args.role,
-        expiresAt: null,
-        recordsFrom: null,
-        recordsTo: null,
         siteIds: sites.map((site) => site.id),
       });
 

@@ -42,7 +42,7 @@ vi.mock('@tanstack/react-router', () => ({
 }));
 
 function session(role: Session['role']): { account: Session } {
-  return { account: { userId: USER, personId: PERSON, role, siteScope: [SITE], recordsFrom: null, recordsTo: null } };
+  return { account: { userId: USER, personId: PERSON, role, siteScope: [SITE] } };
 }
 
 function rule(overrides: Partial<InspectionSchedule> = {}): InspectionSchedule {

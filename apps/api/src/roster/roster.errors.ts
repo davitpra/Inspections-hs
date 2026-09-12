@@ -38,7 +38,7 @@ export class RosterException extends HttpException {
  *
  * A diferencia de la consola de programación —que deja mirar a cualquiera y solo condiciona
  * la escritura—, acá el `GET` también pasa por esta comprobación: §4 dice que se elige a una
- * persona *sin poder ver su perfil*, y un roster de solo lectura para un supervisor es
+ * persona *sin poder ver su perfil*, y un roster de solo lectura para un miembro del JHSC es
  * exactamente esa ficha. Que la consola no escriba nada no relaja esto: el riesgo de §4 está
  * en la LECTURA, no en la escritura.
  */

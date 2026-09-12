@@ -4,6 +4,7 @@ import { JhscSeatDialog } from './JhscSeatDialog';
 import type { RosterDialog } from './presentation';
 import { ReissueDialog } from './ReissueDialog';
 import { RemoveAccessDialog } from './RemoveAccessDialog';
+import { PromoteDialog } from './PromoteDialog';
 
 /**
  * El modal que un acto de fila abrió, montado FUERA de la tabla — ver `RosterDialog`: la
@@ -67,6 +68,15 @@ export function RosterDialogs({
           userId={dialog.userId}
           personLabel={dialog.label}
           action={dialog.action}
+          siteId={siteId}
+          onClose={onClose}
+        />
+      );
+    case 'promote':
+      return (
+        <PromoteDialog
+          userId={dialog.userId}
+          personLabel={dialog.label}
           siteId={siteId}
           onClose={onClose}
         />

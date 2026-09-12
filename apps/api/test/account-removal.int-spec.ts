@@ -41,8 +41,16 @@ let accounts: AccountService;
 let coordinatorId: string;
 let narrowId: string;
 
-const asCoordinator = () => ({ userId: coordinatorId, role: 'hs_coordinator' as const });
-const asNarrowCoordinator = () => ({ userId: narrowId, role: 'hs_coordinator' as const });
+const asCoordinator = () => ({
+  userId: coordinatorId,
+  role: 'hs_coordinator' as const,
+  siteIds: [SITE_A, SITE_B],
+});
+const asNarrowCoordinator = () => ({
+  userId: narrowId,
+  role: 'hs_coordinator' as const,
+  siteIds: [SITE_A],
+});
 
 beforeAll(async () => {
   db = await startTestDatabase();
@@ -241,13 +249,13 @@ describe('quitar el acceso es un solo acto para los dos casos', () => {
 });
 
 describe('el permiso de la baja', () => {
-  it('ningún otro rol puede quitar el acceso', async () => {
+  it('un miembro del JHSC no puede quitar el acceso de otra cuenta', async () => {
     const member = await seedMember([SITE_A]);
 
-    for (const role of ['jhsc_member', 'supervisor', 'management', 'external_auditor']) {
+    for (const role of ['jhsc_member']) {
       const code = await codeOf(() =>
         accounts.update(
-          { userId: coordinatorId, role: role as never },
+          { userId: coordinatorId, role: role as never, siteIds: [SITE_A, SITE_B] },
           member,
           request({ deactivated: true }),
         ),
@@ -277,7 +285,7 @@ describe('el permiso de la baja', () => {
   });
 
   it('solo se da de baja un jhsc_member: el roster no administra otros roles', async () => {
-    for (const role of ['supervisor', 'management', 'hs_coordinator'] as const) {
+    for (const role of ['management', 'hs_coordinator'] as const) {
       const other = await createAccount(db.app, { role, siteIds: [SITE_A] });
 
       const code = await codeOf(() =>
@@ -417,14 +425,14 @@ describe('volver a invitar revive la cuenta que la persona ya tenía', () => {
   });
 
   /**
-   * Revivir como `jhsc_member` la cuenta dada de baja de un supervisor le cambiaría el rol
+   * Revivir como `jhsc_member` una cuenta administrativa dada de baja le cambiaría el rol
    * sin que nadie lo haya pedido. La pantalla no produce este caso; la guarda protege a
    * quien llame la API a mano.
    */
   it('no revive con un rol distinto del que la cuenta tenía', async () => {
-    const other = await createAccount(db.app, { role: 'supervisor', siteIds: [SITE_A] });
+    const other = await createAccount(db.app, { role: 'management', siteIds: [SITE_A] });
 
-    // La baja de un supervisor NO sale por la ruta —es lo que
+    // La baja de una cuenta administrativa NO sale por la ruta —es lo que
     // `account_role_not_removable` protege—, así que el estado se arma por SQL con el
     // alcance declarado, que es lo que el fanout diferido necesita al COMMIT.
     await inScope(db.app, [SITE_A], 'UPDATE app_user SET deactivated_at = now() WHERE id = $1', [

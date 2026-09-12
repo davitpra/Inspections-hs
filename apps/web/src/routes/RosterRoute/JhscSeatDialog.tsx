@@ -6,7 +6,7 @@ import { queryKeys } from '../../api/query-keys';
 import { PersonIcon } from '../../components/icons';
 
 /**
- * `coordinator-jhsc-seat` — Sienta a una cuenta de coordinador en el JHSC, o la levanta.
+ * `coordinator-jhsc-seat` — Sienta a una cuenta administrativa en el JHSC, o la levanta.
  *
  * **NO ES UNA ACCIÓN SOBRE EL ACCESO, y el diálogo tiene que decirlo.** Vive al lado de
  * `RemoveAccessDialog` y se parece, pero lo que hace es lo contrario de destructivo: la

@@ -20,24 +20,23 @@ import { z } from 'zod';
  */
 
 /**
- * Los cinco roles de la tabla de §4.
+ * Los tres roles vigentes de ADR-022.
  *
  * `jhsc_member` y no `inspector`: la nota de vocabulario de §4 exige un solo
  * término, y "inspector" queda para `inspection.inspector_id`, que es un campo y no
- * un permiso. El mismo conjunto está escrito como `CHECK` en la migración 0005. Si
+ * un permiso. El mismo conjunto está escrito como `CHECK` en la migración 0046. Si
  * uno cambia, el otro también.
  */
-export const ROLES = [
-  'hs_coordinator',
-  'jhsc_member',
-  'supervisor',
-  'management',
-  'external_auditor',
-] as const;
+export const ROLES = ['hs_coordinator', 'jhsc_member', 'management'] as const;
 
 export const roleSchema = z.enum(ROLES);
 
 export type Role = z.infer<typeof roleSchema>;
+
+/** La autoridad administrativa compartida por coordinador y gerencia (ADR-022). */
+export function isAdministrator(role: string): role is 'hs_coordinator' | 'management' {
+  return role === 'hs_coordinator' || role === 'management';
+}
 
 /**
  * Cómo se escribe cada rol cuando lo lee una persona.
@@ -53,9 +52,7 @@ export type Role = z.infer<typeof roleSchema>;
 export const ROLE_LABELS: Record<Role, string> = {
   hs_coordinator: 'H&S coordinator',
   jhsc_member: 'JHSC member',
-  supervisor: 'Supervisor',
   management: 'Management',
-  external_auditor: 'External auditor',
 };
 
 /**
@@ -95,7 +92,7 @@ export type Person = z.infer<typeof personSchema>;
  *
  * Lleva `employee_number` porque el nombre NO identifica: dos personas activas
  * pueden llamarse igual y el operador tiene que poder distinguirlas. No lleva nada
- * más: §4 dice que el supervisor elige a una persona **sin poder ver su perfil**.
+ * más: §4 dice que el administrador elige a una persona **sin poder ver su perfil**.
  * Solo se arma con las activas.
  */
 export const personOptionSchema = personSchema.pick({
@@ -164,7 +161,7 @@ export type DeactivatePersonRequest = z.infer<typeof deactivatePersonRequestSche
  * Sigue sin alcance, sin credencial y sin token: eso es `accountSchema` entero, y
  * colgarlo de cada fila del roster convertiría una lectura de 200 personas en una
  * lectura de 200 cuentas. `active` sigue el mismo predicado que `hs_account_is_active`
- * —`deactivated_at` nulo y `expires_at` futuro o nulo— y `can_sign_in` es si existe una
+ * —`deactivated_at` nulo— y `can_sign_in` es si existe una
  * `app_credential` activa: la pregunta que distingue "invitada" de "entrando".
  *
  * **El email SÍ viaja, y eso cambia lo que el design D2 decía.** La razón por la que
@@ -190,9 +187,9 @@ export const personAccountSchema = z.strictObject({
    * registro que se defiende ante un regulador. De paso, doscientas filas no cargan una
    * fecha que ninguna pantalla muestra.
    *
-   * Solo `hs_coordinator` puede tenerlo en `true` —el `CHECK` de 0035 lo fuerza—, y para
-   * `jhsc_member` es SIEMPRE `false`: ese rol ya ES el comité, y un segundo dato diciendo
-   * lo mismo obligaría a cada lectura a decidir cuál de los dos gana.
+   * Solo un rol administrativo puede tenerlo en `true` —el `CHECK` de 0046 lo fuerza—,
+   * y para `jhsc_member` es SIEMPRE `false`: ese rol ya ES el comité, y un segundo dato
+   * diciendo lo mismo obligaría a cada lectura a decidir cuál de los dos gana.
    */
   jhsc_seat: z.boolean(),
 });
@@ -220,18 +217,13 @@ export type SiteScope = z.infer<typeof siteScopeSchema>;
  * persona: la cuenta referencia al roster, no lo copia.
  *
  * `active` viene calculado por el servidor con el mismo predicado que
- * `hs_account_is_active`: `deactivated_at` nulo y `expires_at` en el futuro o nulo.
- * El cliente no lo recalcula — "vencida" es una condición de tiempo y el reloj del
- * dispositivo no es el reloj del sistema.
+ * `hs_account_is_active`: `deactivated_at` nulo.
  */
 export const accountSchema = z.strictObject({
   id: z.uuid(),
   person_id: z.uuid(),
   email: emailSchema,
   role: roleSchema,
-  expires_at: z.iso.datetime({ offset: true }).nullable(),
-  records_from: z.iso.date().nullable(),
-  records_to: z.iso.date().nullable(),
   deactivated_at: z.iso.datetime({ offset: true }).nullable(),
   active: z.boolean(),
   jhsc_seat: z.boolean(),
@@ -241,20 +233,9 @@ export const accountSchema = z.strictObject({
 export type Account = z.infer<typeof accountSchema>;
 
 /**
- * §5 riesgo I — El ciclo de vida del auditor externo. Default 30 días, máximo 90.
- *
- * El default vive acá y no en el motor porque un `CHECK` no puede distinguir "no lo
- * pusiste" de "pusiste 30". El máximo vive en los dos lados a propósito: acá para
- * dar un error legible antes de llegar a la base, y en el `CHECK` de la migración
- * porque una regla que solo vive en el contrato se saltea con un INSERT a mano.
- */
-export const AUDITOR_DEFAULT_DAYS = 30;
-export const AUDITOR_MAX_DAYS = 90;
-
-/**
  * Los campos del alta de una cuenta, compartidos entre el comando (`createAccountSchema`)
- * y la ruta HTTP (`createAccountRequestSchema`, design D4) para no repetir las dos reglas
- * del auditor externo en dos lugares. El alcance va aparte —es una lista de sitios— y la
+ * y la ruta HTTP (`createAccountRequestSchema`, design D4). El alcance va aparte —es una
+ * lista de sitios— y la
  * persona se referencia, nunca se crea desde acá: dar de alta a alguien en el roster es
  * una importación, no un efecto colateral de crearle una cuenta.
  */
@@ -263,36 +244,9 @@ const createAccountFields = z.strictObject({
   email: emailSchema,
   role: roleSchema,
   site_ids: z.array(z.uuid()).min(1),
-
-  /** Solo para `external_auditor`. Días de vigencia, 1 a 90. */
-  expires_in_days: z.int().min(1).max(AUDITOR_MAX_DAYS).default(AUDITOR_DEFAULT_DAYS),
-  records_from: z.iso.date().optional(),
-  records_to: z.iso.date().optional(),
 });
 
-/** Las dos reglas del auditor externo, iguales para el comando y para la ruta HTTP. */
-function withAuditorWindow<Schema extends z.ZodType<{
-  role: Role;
-  records_from?: string | undefined;
-  records_to?: string | undefined;
-}>>(schema: Schema) {
-  return schema
-    .refine(
-      (value) =>
-        value.role !== 'external_auditor' ||
-        (value.records_from !== undefined && value.records_to !== undefined),
-      'un auditor externo necesita la ventana de fechas de los registros que puede leer',
-    )
-    .refine(
-      (value) =>
-        value.records_from === undefined ||
-        value.records_to === undefined ||
-        value.records_from <= value.records_to,
-      'records_from no puede ser posterior a records_to',
-    );
-}
-
-export const createAccountSchema = withAuditorWindow(createAccountFields);
+export const createAccountSchema = createAccountFields;
 
 export type CreateAccount = z.infer<typeof createAccountSchema>;
 
@@ -302,9 +256,9 @@ export type CreateAccount = z.infer<typeof createAccountSchema>;
  * línea de órdenes —que reusa el mismo servicio— nunca lo pide: emitir la invitación ahí
  * sigue siendo `pnpm auth:bootstrap`.
  */
-export const createAccountRequestSchema = withAuditorWindow(
-  createAccountFields.extend({ invite: z.boolean().default(false) }),
-);
+export const createAccountRequestSchema = createAccountFields.extend({
+  invite: z.boolean().default(false),
+});
 
 export type CreateAccountRequest = z.infer<typeof createAccountRequestSchema>;
 
@@ -348,9 +302,8 @@ export type UpdateAccount = z.infer<typeof updateAccountSchema>;
  *
  * Hoy es exactamente `personAccountSchema` —el email dejó de ser lo que las separaba— y
  * por eso es un alias y no una copia. Conserva el nombre porque conserva el propósito:
- * esta lectura es de UNA cuenta y puede crecer con lo que solo tenga sentido de a una
- * (alcance, ventana del auditor externo), sin que eso se cuelgue de las doscientas filas
- * del roster.
+ * esta lectura es de UNA cuenta y puede crecer con lo que solo tenga sentido de a una,
+ * sin que eso se cuelgue de las doscientas filas del roster.
  */
 export const accountDetailSchema = personAccountSchema;
 
@@ -358,17 +311,17 @@ export type AccountDetail = z.infer<typeof accountDetailSchema>;
 
 /**
  * El pedido de `PATCH /accounts/:id` (design D5, ampliado por
- * `remove-jhsc-access-from-roster`). Sigue aparte de `updateAccountSchema` y sigue sin
- * exponer `role`: por acá no se cambia de rol, se administra el ACCESO de una cuenta que
- * ya tiene el suyo.
+ * `remove-jhsc-access-from-roster`). Sigue aparte de `updateAccountSchema` y no expone
+ * un rol libre: la única modificación de rol es la promoción literal declarada abajo.
  *
- * Tres actos, y el contrato dice que no se piden juntos:
+ * Cuatro actos, y el contrato dice que no se piden juntos:
  *
  * - corregir el `email` y reemitir el link (`invite`), que van juntos o sueltos;
  * - `deactivated: true` — quitar el acceso, que es lo que cancela una invitación pendiente
  *   y lo que saca del JHSC a quien ya entra: la misma escritura para los dos.
- * - `jhsc_seat` — sentar a una cuenta de coordinador en el comité, o levantarla
+ * - `jhsc_seat` — sentar a una cuenta administrativa en el comité, o levantarla
  *   (`coordinator-jhsc-seat`). No es acceso: la cuenta entra igual antes y después.
+ * - `promote_to` — promover a coordinador, como acto exclusivo de gerencia.
  *
  * **`z.literal(true)` y no un booleano**, y eso es lo que el tipo dice de más: por esta ruta
  * una cuenta solo se da de baja. Devolverle el acceso a alguien no es un `deactivated:
@@ -386,6 +339,9 @@ export const updateAccountRequestSchema = z
     invite: z.boolean().optional(),
     deactivated: z.literal(true).optional(),
 
+    /** Literal porque esta operación es una promoción concreta, no un cambio libre de rol. */
+    promote_to: z.literal('hs_coordinator').optional(),
+
     /**
      * Sentarse en el JHSC, o levantarse (`coordinator-jhsc-seat`, design D4).
      *
@@ -397,8 +353,8 @@ export const updateAccountRequestSchema = z
      * reversible sobre la misma columna, y partirlos inventaría una asimetría que el
      * dominio no tiene.
      *
-     * El servidor lo acepta solo sobre una cuenta ACTIVA de `hs_coordinator`: para
-     * `jhsc_member` el asiento es el rol, y ningún otro rol puede ocuparlo. Eso no se
+     * El servidor lo acepta solo sobre una cuenta administrativa ACTIVA: para
+     * `jhsc_member` el asiento es el rol. Eso no se
      * valida acá porque depende de la fila — es el `CHECK` de 0035, y un 409 legible antes.
      */
     jhsc_seat: z.boolean().optional(),
@@ -414,8 +370,20 @@ export const updateAccountRequestSchema = z
   .refine(
     (value) =>
       value.jhsc_seat === undefined ||
-      (value.deactivated === undefined && value.email === undefined && !value.invite),
+      (value.deactivated === undefined &&
+        value.email === undefined &&
+        !value.invite &&
+        value.promote_to === undefined),
     'el asiento en el JHSC es un acto solo: no se combina con la baja, el correo ni el link',
+  )
+  .refine(
+    (value) =>
+      value.promote_to === undefined ||
+      (value.deactivated === undefined &&
+        value.email === undefined &&
+        !value.invite &&
+        value.jhsc_seat === undefined),
+    'la promoción es un acto solo: no se combina con la baja, el correo, el link ni el asiento',
   );
 
 export type UpdateAccountRequest = z.infer<typeof updateAccountRequestSchema>;

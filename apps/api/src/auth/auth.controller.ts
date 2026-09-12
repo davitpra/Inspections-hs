@@ -2,6 +2,7 @@ import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req } from '@nestjs/
 import type { Request } from 'express';
 import {
   acceptInvitationRequestSchema,
+  isAdministrator,
   issueInvitationRequestSchema,
   refreshRequestSchema,
   revokeInvitationRequestSchema,
@@ -131,7 +132,7 @@ export class AuthController {
   ): Promise<void> {
     const { userId } = revokeSessionsRequestSchema.parse(body);
 
-    if (session.role !== 'hs_coordinator') {
+    if (!isAdministrator(session.role)) {
       throw forbidden("Only the HS coordinator can end another account's sessions");
     }
 
@@ -150,7 +151,7 @@ export class AuthController {
   ): Promise<void> {
     const { userId } = revokeSessionsRequestSchema.parse(body);
 
-    if (session.role !== 'hs_coordinator') {
+    if (!isAdministrator(session.role)) {
       throw forbidden('Only the HS coordinator can revoke a credential');
     }
 

@@ -12,6 +12,8 @@ import {
 
 import { reportIncident } from '../../api/incidents';
 import { queryKeys } from '../../api/query-keys';
+import { useAppSession } from '../../app/session-context';
+import { canReportIncident } from '../../permissions/incidents';
 import { BODY_PART_LABELS, CLASSIFICATION_LABELS, TREATMENT_LABELS } from '../../presentation/incidents';
 import { LocationPicker } from './LocationPicker';
 import { PersonPicker } from './PersonPicker';
@@ -25,7 +27,7 @@ import { PersonPicker } from './PersonPicker';
  * incidente»".
  *
  * **El selector de personas muestra número de empleado y nombre, y nada más.** §4 dice
- * que el supervisor elige a la persona afectada sin poder ver su perfil, y esta pantalla
+ * que quien reporta elige a la persona afectada sin poder ver su perfil, y esta pantalla
  * es donde esa regla se ve o no se ve.
  *
  * **No hay campo de foto ni de adjunto, y no es un olvido**: la foto de una persona
@@ -38,6 +40,7 @@ import { PersonPicker } from './PersonPicker';
  * plazos del MLITSD ya corren.
  */
 export function ReportIncidentRoute(): React.JSX.Element {
+  const { account } = useAppSession();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -70,6 +73,15 @@ export function ReportIncidentRoute(): React.JSX.Element {
     key: K,
     value: ReportIncidentRequest[K],
   ): void => setForm((previous) => ({ ...previous, [key]: value }));
+
+  if (!canReportIncident(account)) {
+    return (
+      <>
+        <h1>Report an incident</h1>
+        <p className="notice">Only H&amp;S coordinators and management can report incidents.</p>
+      </>
+    );
+  }
 
   return (
     <>
@@ -201,7 +213,7 @@ export function ReportIncidentRoute(): React.JSX.Element {
         </label>
 
         <label>
-          {/* Riesgo G: si el supervisor escribe en español, el registro conserva sus
+          {/* Riesgo G: si quien reporta escribe en español, el registro conserva sus
               palabras exactas y anota el idioma. No hay traducción. */}
           Language you wrote in
           <select

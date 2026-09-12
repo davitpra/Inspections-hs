@@ -41,8 +41,6 @@ function session(
     personId,
     role,
     siteScope: [SITE_A],
-    recordsFrom: null,
-    recordsTo: null,
   };
 }
 
@@ -338,7 +336,7 @@ describe('el próximo paso del hallazgo', () => {
 
   it('ofrece al responsable la transición que sale de open', () => {
     expect(
-      nextStep([action()], 'assigned', session('external_auditor'), itemFinding(GUARDS)),
+      nextStep([action()], 'assigned', session('jhsc_member'), itemFinding(GUARDS)),
     ).toMatchObject({
       label: 'Start work',
       control: { kind: 'progress', action: action() },
@@ -350,7 +348,7 @@ describe('el próximo paso del hallazgo', () => {
       nextStep(
         [action({ state: 'awaiting_verification' })],
         'verification',
-        session('supervisor'),
+        session('management'),
         itemFinding(GUARDS),
       ),
     ).toMatchObject({
@@ -398,7 +396,7 @@ describe('el próximo paso del hallazgo', () => {
     });
 
     expect(
-      nextStep([action()], 'assigned', session('supervisor'), reportedByOther)?.editableAssignment,
+      nextStep([action()], 'assigned', session('management'), reportedByOther)?.editableAssignment,
     ).toBeNull();
   });
 
@@ -444,7 +442,7 @@ describe('los campos y las salidas del paso, etapa por etapa', () => {
   }
 
   it('en Assigned no pide nada y ofrece una sola salida', () => {
-    expect(stepForm('open', offered('open', session('external_auditor')))).toEqual({
+    expect(stepForm('open', offered('open', session('jhsc_member')))).toEqual({
       fields: { evidence: false, reason: false, note: false },
       choices: [
         {
@@ -458,7 +456,7 @@ describe('los campos y las salidas del paso, etapa por etapa', () => {
   });
 
   it('en In progress pide la evidencia y la nota antes de declarar el trabajo hecho', () => {
-    expect(stepForm('in_progress', offered('in_progress', session('external_auditor')))).toEqual({
+    expect(stepForm('in_progress', offered('in_progress', session('jhsc_member')))).toEqual({
       fields: { evidence: true, reason: false, note: true },
       choices: [
         {
@@ -479,7 +477,7 @@ describe('los campos y las salidas del paso, etapa por etapa', () => {
     expect(
       stepForm(
         'awaiting_verification',
-        offered('awaiting_verification', session('supervisor')),
+        offered('awaiting_verification', session('management')),
       ),
     ).toEqual({
       fields: { evidence: false, reason: false, note: true },
@@ -505,7 +503,7 @@ describe('los campos y las salidas del paso, etapa por etapa', () => {
     expect(
       stepForm(
         'awaiting_verification',
-        offered('awaiting_verification', session('external_auditor')),
+        offered('awaiting_verification', session('jhsc_member')),
       ),
     ).toBeNull();
   });

@@ -30,6 +30,7 @@ export function RosterTable({
   ready,
   mayInvite,
   mayImport,
+  mayPromote,
   importTriggerRef,
   onImport,
   onAct,
@@ -39,6 +40,7 @@ export function RosterTable({
   ready: boolean;
   mayInvite: boolean;
   mayImport: boolean;
+  mayPromote: boolean;
   importTriggerRef: React.RefObject<HTMLButtonElement | null>;
   onImport: () => void;
   onAct: (dialog: RosterDialog) => void;
@@ -117,7 +119,7 @@ export function RosterTable({
               </thead>
               <tbody>
                 {visible.map((person) => {
-                  const actions = rowActions(person, mayInvite);
+                  const actions = rowActions(person, mayInvite, mayPromote);
 
                   return (
                     <tr key={person.id}>

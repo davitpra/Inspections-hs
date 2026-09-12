@@ -182,21 +182,29 @@ the server SHALL refuse a deactivated location.
 
 ### Requirement: A finding can be entered by hand and then has no item key
 
-The system SHALL accept a manually entered finding — a hazard seen outside an inspection — from a
-supervisor, manager or the HS coordinator, carrying its site, description, location and photos. A
+The system SHALL accept a manually entered finding — a hazard seen outside an inspection — from an
+`hs_coordinator` or a `management` account, carrying its site, description, location and photos, and
+SHALL refuse it from a `jhsc_member`, whose findings reach the system through the inspection they
+carried out. A
 manually entered finding SHALL have `inspection_id`,
 `template_version_item_id` and `item_key` all null, and a derived finding SHALL have all three
 set; the engine SHALL enforce that exactly one of the two origins holds. A manually entered
 finding SHALL therefore be absent from any grouping by `item_key`, which is the accepted
 consequence recorded in §4 and risk F.
 
-#### Scenario: A supervisor reports a hazard seen outside an inspection
+#### Scenario: A manager reports a hazard seen outside an inspection
 
-- **WHEN** a supervisor posts a finding with a site, a description, a `location_id` and one object
-  key
+- **WHEN** a `management` account posts a finding with a site, a description, a `location_id` and
+  one object key
 - **THEN** a `finding` row is created with `origin` `manual`
 - **AND** its `inspection_id`, `template_version_item_id` and `item_key` are null
 - **AND** no classification is stored for it
+
+#### Scenario: A JHSC member cannot enter a finding by hand
+
+- **WHEN** an account whose `role` is `jhsc_member` posts a manual finding
+- **THEN** the request is refused
+- **AND** no `finding` row is created
 
 #### Scenario: A half-derived finding cannot exist
 
@@ -326,9 +334,9 @@ presentation rule SHALL NOT replace server authorization.
 
 #### Scenario: A late commitment is read as late against its finding
 
-- **GIVEN** a recorded finding has a corrective action in `in_progress` whose deadline has passed and which has escalated to the supervisor
+- **GIVEN** a recorded finding has a corrective action in `in_progress` whose deadline has passed and which has escalated to the coordinator
 - **WHEN** the findings-only screen is read
-- **THEN** that corrective action is shown as past its deadline and as escalated to the supervisor
+- **THEN** that corrective action is shown as past its deadline and as escalated to the coordinator
 - **AND** its responsible person and deadline are shown without any further request
 
 #### Scenario: Existing corrective actions are read against their own finding

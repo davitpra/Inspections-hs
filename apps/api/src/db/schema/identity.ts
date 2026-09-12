@@ -1,4 +1,4 @@
-import { check, date, index, integer, jsonb, pgTable, text, timestamp, unique, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { check, index, integer, jsonb, pgTable, text, timestamp, unique, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 import { site } from './catalog';
@@ -15,14 +15,8 @@ import { site } from './catalog';
  * mecanismo. Si el SQL cambia, este espejo se actualiza a mano.
  */
 
-/** Los cinco roles, en el orden en que los lista la tabla de §4. */
-export const ROLES = [
-  'hs_coordinator',
-  'jhsc_member',
-  'supervisor',
-  'management',
-  'external_auditor',
-] as const;
+/** Los tres roles vigentes de ADR-022. */
+export const ROLES = ['hs_coordinator', 'jhsc_member', 'management'] as const;
 
 export type Role = (typeof ROLES)[number];
 
@@ -98,15 +92,10 @@ export const appUser = pgTable(
     // Exactamente uno de ROLES, forzado por CHECK en el motor.
     role: text('role').notNull().$type<Role>(),
 
-    // Solo para `external_auditor`, y obligatorios para ese rol: §5 riesgo I.
-    expiresAt: timestamp('expires_at', { withTimezone: true }),
-    recordsFrom: date('records_from'),
-    recordsTo: date('records_to'),
-
     // El asiento en el JHSC (0035): el momento en que esta cuenta se sentó en el
     // comité, o nulo. Es una POSICIÓN que la cuenta ocupa, no un rol que lleva — el
-    // `CHECK` de abajo la reserva para `hs_coordinator`, porque un `jhsc_member` ya
-    // está en el comité por su rol y ninguno de los otros tres puede estarlo.
+    // `CHECK` de abajo la reserva para los roles administrativos, porque un
+    // `jhsc_member` ya está en el comité por su rol.
     jhscSeatGrantedAt: timestamp('jhsc_seat_granted_at', { withTimezone: true }),
 
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -114,9 +103,9 @@ export const appUser = pgTable(
     deactivatedAt: timestamp('deactivated_at', { withTimezone: true }),
   },
   (table) => [
-    check('app_user_role_check', sql`${table.role} IN ('hs_coordinator', 'jhsc_member', 'supervisor', 'management', 'external_auditor')`),
+    check('app_user_role_check', sql`${table.role} IN ('hs_coordinator', 'jhsc_member', 'management')`),
 
-    check('app_user_jhsc_seat_check', sql`${table.jhscSeatGrantedAt} IS NULL OR ${table.role} = 'hs_coordinator'`),
+    check('app_user_jhsc_seat_check', sql`${table.jhscSeatGrantedAt} IS NULL OR ${table.role} IN ('hs_coordinator', 'management')`),
   ],
 );
 
@@ -243,7 +232,7 @@ export type PersonUpdate = Partial<
  * se reasigna de una persona a otra.
  */
 export type AppUserUpdate = Partial<
-  Pick<AppUser, 'email' | 'role' | 'expiresAt' | 'recordsFrom' | 'recordsTo' | 'deactivatedAt'>
+  Pick<AppUser, 'email' | 'role' | 'deactivatedAt' | 'jhscSeatGrantedAt'>
 >;
 
 /** Lo único mutable de una fila de alcance. Revocar es esto. */

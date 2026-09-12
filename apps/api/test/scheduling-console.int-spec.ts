@@ -359,15 +359,15 @@ describe('los candidatos a inspector', () => {
   });
 
   /**
-   * `coordinator-jhsc-seat` — el comité no es un rol. La coordinadora sentada se ofrece y
+   * `coordinator-jhsc-seat` — el comité no es un rol. Una cuenta administrativa sentada se ofrece y
    * se asigna como cualquier miembro; la que no se sentó no aparece y su asignación se
    * rechaza con un mensaje que habla del ASIENTO y no del rol, porque el rol no es lo que
    * le falta.
    */
-  it('ofrece a la coordinadora con asiento, y asignarla se acepta', async () => {
+  it('ofrece a management con asiento, y asignarla se acepta', async () => {
     const seated = await createAccount(db.app, {
       siteIds: [SITE_A],
-      role: 'hs_coordinator',
+      role: 'management',
       jhscSeat: true,
       firstName: 'Nadia',
       lastName: 'Ortiz',
@@ -393,8 +393,8 @@ describe('los candidatos a inspector', () => {
     expect(updated.inspector_id).toBe(seated.accountId);
   });
 
-  it('no ofrece a la coordinadora sin asiento, y asignarla dice que le falta el asiento', async () => {
-    const unseated = await createAccount(db.app, { siteIds: [SITE_A], role: 'hs_coordinator' });
+  it('no ofrece a management sin asiento, y asignarla dice que le falta el asiento', async () => {
+    const unseated = await createAccount(db.app, { siteIds: [SITE_A], role: 'management' });
 
     const rows = await stack.inspections.listInspectorCandidates(asCoordinator(), SITE_A);
     expect(rows.map((row) => row.id)).not.toContain(unseated.accountId);

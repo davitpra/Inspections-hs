@@ -809,7 +809,7 @@ async function ensureOverdueAction(pool, token) {
  * Los tres incidentes con su ciclo de vida.
  *
  * El reportante es el coordinador porque es la cuenta que este script tiene: §4 pone al
- * supervisor y a gerencia en la misma fila de la máquina de estados
+ * coordinador y a gerencia en la misma fila de la máquina de estados
  * (`INCIDENT_TRANSITIONS`, `from: null`), así que el registro es válido igual — lo que
  * cambia es quién figura, no qué se puede hacer con él.
  */

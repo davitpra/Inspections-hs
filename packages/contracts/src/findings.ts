@@ -5,7 +5,7 @@ import { z } from 'zod';
  * Requisitos §7 etapa 4 — El hallazgo.
  *
  * Un hallazgo nace de una respuesta negativa durante la ingesta, o de la entrada
- * manual de un supervisor (§5 riesgo F). En los dos casos lleva descripción,
+ * manual de una cuenta administrativa (§5 riesgo F). En los dos casos lleva descripción,
  * ubicación del catálogo cerrado y al menos una foto: es el R2 de §3, y sin los
  * tres el hallazgo no sirve para abrir una acción correctiva.
  *
@@ -60,7 +60,7 @@ export const FINDING_DESCRIPTION_MIN = 10;
 export const FINDING_DESCRIPTION_MAX = 2000;
 
 /**
- * Lo que el inspector describe al responder que no, o el supervisor al reportar
+ * Lo que el inspector describe al responder que no, o una cuenta administrativa al reportar
  * un peligro: los tres datos obligatorios de R2.
  *
  * `photo_object_keys` con `min(1)` es la foto obligatoria del contrato; el motor
@@ -91,7 +91,7 @@ export type SubmissionFindings = z.infer<typeof submissionFindingsSchema>;
 // La entrada manual
 
 /**
- * El hallazgo que no nace de una inspección: el peligro que un supervisor ve al
+ * El hallazgo que no nace de una inspección: el peligro que una cuenta administrativa ve al
  * pasar, o el casi-accidente que presenció (§5 riesgo F).
  *
  * `draft_finding_id` lo genera el cliente **antes de subir la primera foto**,

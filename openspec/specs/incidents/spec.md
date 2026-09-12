@@ -1,6 +1,6 @@
 ## Purpose
 
-Records a workplace accident in the third person — a supervisor reporting about a person of the
+Records a workplace accident in the third person — an administrative account reporting about a person of the
 roster who may have no account and whose profile the reporter never sees — as nine guided,
 version-stamped fields that are frozen on submission; drives it through an investigation to a
 close that no one can declare while its corrective actions are still open; computes and displays
@@ -22,13 +22,24 @@ system SHALL NOT expose any route that accepts an incident without an authentica
 SHALL NOT accept an incident whose `subject_person_id` is the reporter's own `person_id` — first
 person reporting is out of scope for v1.
 
-#### Scenario: A supervisor reports an incident about a roster person
+The system SHALL accept the report from an `hs_coordinator` or a `management` account and SHALL
+refuse it from a `jhsc_member` with `role_not_allowed`. Reporting on behalf of somebody else is an
+administrative act: the two roles that hold the roster are the two that may name a person in an
+accident record.
 
-- **WHEN** a supervisor submits an incident naming a `subject_person_id` of an active person of
-  their site, with the guided fields filled
-- **THEN** an `incident` row is created whose `reported_by` is the supervisor's `user_id`
+#### Scenario: A manager reports an incident about a roster person
+
+- **WHEN** a `management` account submits an incident naming a `subject_person_id` of an active
+  person of their site, with the guided fields filled
+- **THEN** an `incident` row is created whose `reported_by` is that account's `user_id`
 - **AND** whose `subject_person_id` is the named person
 - **AND** whose `site_id` is a site of the session's scope
+
+#### Scenario: A JHSC member cannot report an incident
+
+- **WHEN** an account whose `role` is `jhsc_member` submits an incident
+- **THEN** the request is rejected with the code `role_not_allowed`
+- **AND** no `incident` row is created
 
 #### Scenario: The subject has no account and that is the ordinary case
 
@@ -71,7 +82,7 @@ MAY have none.
 
 #### Scenario: The selector returns only what a selector needs
 
-- **WHEN** a supervisor lists the people available as an incident subject
+- **WHEN** an administrative account lists the people available as an incident subject
 - **THEN** each entry carries `employee_number` and the display name
 - **AND** no other roster attribute is present in the response
 
@@ -159,7 +170,7 @@ localise the interface: the platform remains English only.
 
 #### Scenario: Spanish text is stored verbatim with its language
 
-- **WHEN** a supervisor writes the narrative fields in Spanish and declares `es`
+- **WHEN** an administrative account writes the narrative fields in Spanish and declares `es`
 - **THEN** the stored text is byte-for-byte what was submitted
 - **AND** the row records `es` as the narrative language
 
@@ -283,6 +294,9 @@ the role allowed to make each transition and the data each demands SHALL be a da
 shared contracts, and the same table SHALL be enforced as a guard in the database, so that an
 illegal transition is refused twice — by the pure function and by the engine.
 
+Where the table names the HS coordinator it SHALL be read as naming `management` equally, under the
+administrative equivalence of the `identity` capability, and as excluding `jhsc_member`.
+
 #### Scenario: An event whose from_state is not the current state is refused
 
 - **GIVEN** an incident whose current state is `under_investigation`
@@ -294,11 +308,11 @@ illegal transition is refused twice — by the pure function and by the engine.
 - **WHEN** a transition from `reported` to `reported` is attempted
 - **THEN** the request is rejected as a transition that does not exist in the table
 
-#### Scenario: Only the coordinator investigates and closes
+#### Scenario: Only an administrative account investigates and closes
 
-- **WHEN** a supervisor attempts to move an incident to `under_investigation` or to `closed`
+- **WHEN** a `jhsc_member` attempts to move an incident to `under_investigation` or to `closed`
 - **THEN** the request is rejected with the code `role_not_allowed`
-- **AND** the same attempt by the HS coordinator is accepted
+- **AND** the same attempt by an `hs_coordinator` or a `management` account is accepted
 
 #### Scenario: Reopening is an event with a reason
 
@@ -466,7 +480,7 @@ belong to exactly one parent — a finding or an investigation — and never to 
 
 - **GIVEN** an action of an investigation three days past its `due_at` and not closed
 - **WHEN** the daily escalation runs
-- **THEN** the supervisors of the site are notified, exactly as for an action of a finding
+- **THEN** the HS coordinators of the site are notified, exactly as for an action of a finding
 
 #### Scenario: An action naming both parents is refused
 
@@ -671,17 +685,17 @@ hold SHALL be shown as not held by the system rather than as empty values of the
 
 The system SHALL restrict reading an incident, its events, its witnesses, its investigation and
 its causes to the account named in `reported_by`, to accounts whose role is `hs_coordinator` and
-to accounts whose role is `management`, within the site scope of the session. A supervisor SHALL
-NOT see an incident another supervisor filed, as §4 states. The restriction SHALL be enforced by
+to accounts whose role is `management`, within the site scope of the session. A `jhsc_member` SHALL
+NOT see an incident another account filed, as §4 states. The restriction SHALL be enforced by
 row level security on top of the site isolation policy and SHALL NOT be a filter written in an
 endpoint. An incident outside the reader's visibility SHALL be indistinguishable from one that
 does not exist.
 
-#### Scenario: A supervisor does not see another supervisor's incident
+#### Scenario: A JHSC member does not see an incident somebody else filed
 
-- **GIVEN** two supervisors of the same site, each having filed an incident
-- **WHEN** one of them lists incidents
-- **THEN** only their own is returned
+- **GIVEN** an incident filed by a `management` account of a site
+- **WHEN** a `jhsc_member` of that same site lists incidents
+- **THEN** that incident is not returned
 
 #### Scenario: The coordinator and management see every incident of their scope
 
@@ -697,19 +711,19 @@ does not exist.
 
 #### Scenario: An invisible incident is indistinguishable from a missing one
 
-- **WHEN** a supervisor requests by id an incident filed by someone else
+- **WHEN** a `jhsc_member` requests by id an incident filed by someone else
 - **THEN** the answer is the same as for an id that does not exist
 
 #### Scenario: The children follow the parent's visibility
 
-- **WHEN** a supervisor who cannot see an incident queries its events, witnesses, investigation or
-  causes
+- **WHEN** a `jhsc_member` who cannot see an incident queries its events, witnesses, investigation
+  or causes
 - **THEN** none of them return a row
 
 #### Scenario: The restriction is not an endpoint filter
 
-- **WHEN** the incident tables are queried directly within a transaction carrying a supervisor's
-  session variables
+- **WHEN** the incident tables are queried directly within a transaction carrying a `jhsc_member`
+  session's variables
 - **THEN** the rows they cannot see are absent from the result of the query itself
 
 ### Requirement: The HS coordinator is notified when an incident is reported, without the subject's name
@@ -722,7 +736,7 @@ NOT become the lateral leak of what the visibility rule just closed.
 
 #### Scenario: The coordinator finds the incident in their inbox
 
-- **WHEN** a supervisor reports an incident at St. Thomas
+- **WHEN** a management account reports an incident at St. Thomas
 - **THEN** the HS coordinators whose scope includes St. Thomas have a notification of kind
   `incident_reported`
 - **AND** it names the incident id and its classification

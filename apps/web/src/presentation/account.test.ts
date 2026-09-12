@@ -13,8 +13,6 @@ function session(overrides: Partial<Session> = {}): Session {
     personId: PERSON,
     role: 'hs_coordinator',
     siteScope: [SITE],
-    recordsFrom: null,
-    recordsTo: null,
     email: 'ada.reid@example.com',
     firstName: 'Ada',
     lastName: 'Reid',
