@@ -7,6 +7,7 @@ import { queryKeys } from '../../api/query-keys';
 import { useAppSession } from '../../app/session-context';
 import { CompletedInspectionsTable } from '../../components/CompletedInspectionsTable';
 import { AlertCircleIcon } from '../../components/icons';
+import { canReviewSiteInspections } from '../../permissions/session';
 import { inspectionsWithFindings } from '../../presentation/findings';
 import {
   completedInspections,
@@ -15,7 +16,7 @@ import {
 } from '../../presentation/inspections';
 
 /**
- * Los recorridos en los que esta cuenta encontró algo que arreglar, separados por tipo.
+ * Los recorridos que esta cuenta puede revisar y que dejaron algo que arreglar, separados por tipo.
  *
  * El historial contesta «qué cerré» y el reporte contesta «qué contesté»; esta pantalla
  * contesta la pregunta que se hace al día siguiente —«qué encontré»— y por eso ESCONDE LA
@@ -32,6 +33,7 @@ import {
  */
 export function FindingsRoute(): React.JSX.Element {
   const { account } = useAppSession();
+  const canReviewAll = canReviewSiteInspections(account);
 
   const scheduled = useQuery({
     queryKey: queryKeys.scheduledInspections(),
@@ -49,7 +51,9 @@ export function FindingsRoute(): React.JSX.Element {
     retry: false,
   });
 
-  const completed = account ? completedInspections(scheduled.data ?? [], account.userId) : [];
+  const completed = account
+    ? completedInspections(scheduled.data ?? [], account.userId, canReviewAll)
+    : [];
   const withFindings = inspectionsWithFindings(completed, findings.data ?? []);
   const types = inspectionTypeGroups(withFindings);
 
@@ -75,7 +79,9 @@ export function FindingsRoute(): React.JSX.Element {
             <h1>Findings</h1>
           </div>
           <p className="scheduling__subtitle">
-            Review every inspection where you recorded something to fix, grouped by type.
+            {canReviewAll
+              ? 'Review every inspection in your sites where a finding was recorded, grouped by type.'
+              : 'Review every inspection where you recorded something to fix, grouped by type.'}
           </p>
         </div>
       </header>
@@ -95,7 +101,11 @@ export function FindingsRoute(): React.JSX.Element {
       {!failed && !loaded ? <p className="status-card">Loading findings…</p> : null}
 
       {loaded && withFindings.length === 0 ? (
-        <p>None of the inspections you completed recorded a finding.</p>
+        <p>
+          {canReviewAll
+            ? 'None of the completed inspections in your sites recorded a finding.'
+            : 'None of the inspections you completed recorded a finding.'}
+        </p>
       ) : null}
 
       {loaded && types.length > 0 ? (
@@ -132,6 +142,7 @@ export function FindingsRoute(): React.JSX.Element {
                   to="/findings/$id"
                   actionLabel="View findings"
                   ariaLabel={`${group.templateName} inspections with findings`}
+                  showInspector={canReviewAll}
                 />
               </section>
             );

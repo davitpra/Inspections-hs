@@ -6,6 +6,7 @@ import { queryKeys } from '../../api/query-keys';
 import { useAppSession } from '../../app/session-context';
 import { CompletedInspectionsTable } from '../../components/CompletedInspectionsTable';
 import { CalendarIcon } from '../../components/icons';
+import { canReviewSiteInspections } from '../../permissions/session';
 import {
   completedInspections,
   inspectionTypeGroups,
@@ -13,7 +14,7 @@ import {
 } from '../../presentation/inspections';
 
 /**
- * Todo lo que esta cuenta cerró, separado por la identidad estable de cada plantilla.
+ * Todo lo que esta cuenta puede revisar, separado por la identidad estable de cada plantilla.
  *
  * Lee con la MISMA consulta y la MISMA clave que la pantalla de inicio, así que llegar acá
  * desde su cabecera no cuesta una llamada: es la caché ya tibia, leída con otro filtro.
@@ -25,6 +26,7 @@ import {
  */
 export function HistoricalInspectionsRoute(): React.JSX.Element {
   const { account } = useAppSession();
+  const canReviewAll = canReviewSiteInspections(account);
 
   const scheduled = useQuery({
     queryKey: queryKeys.scheduledInspections(),
@@ -38,7 +40,7 @@ export function HistoricalInspectionsRoute(): React.JSX.Element {
   });
 
   const completed = account
-    ? completedInspections(scheduled.data ?? [], account.userId)
+    ? completedInspections(scheduled.data ?? [], account.userId, canReviewAll)
     : [];
   const types = inspectionTypeGroups(completed);
   const loaded = scheduled.isSuccess && sites.isSuccess;
@@ -57,7 +59,9 @@ export function HistoricalInspectionsRoute(): React.JSX.Element {
             <h1>Historical inspections</h1>
           </div>
           <p className="scheduling__subtitle">
-            Review every inspection you completed, grouped by inspection type.
+            {canReviewAll
+              ? 'Review every completed inspection in your sites, grouped by inspection type.'
+              : 'Review every inspection you completed, grouped by inspection type.'}
           </p>
         </div>
       </header>
@@ -80,7 +84,11 @@ export function HistoricalInspectionsRoute(): React.JSX.Element {
       ) : null}
 
       {loaded && completed.length === 0 ? (
-        <p>You have not completed any inspections yet.</p>
+        <p>
+          {canReviewAll
+            ? 'No completed inspections have been recorded in your sites yet.'
+            : 'You have not completed any inspections yet.'}
+        </p>
       ) : null}
 
       {loaded && types.length > 0 ? (
@@ -111,6 +119,7 @@ export function HistoricalInspectionsRoute(): React.JSX.Element {
                   to="/inspections/$id/report"
                   actionLabel="View report"
                   ariaLabel={`${group.templateName} completed inspections`}
+                  showInspector={canReviewAll}
                 />
               </section>
             );

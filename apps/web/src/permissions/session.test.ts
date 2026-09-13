@@ -13,6 +13,7 @@ import {
   canInviteFromRoster,
   canImportRoster,
   canPromote,
+  canReviewSiteInspections,
 } from './session';
 
 const SITE = '11111111-1111-4111-8111-111111111111';
@@ -36,6 +37,7 @@ const permissions = [
   ['canPublishTemplates', canPublishTemplates],
   ['canDeactivateTemplates', canDeactivateTemplates],
   ['canAdministerCatalog', canAdministerCatalog],
+  ['canReviewSiteInspections', canReviewSiteInspections],
 ] as const;
 
 describe.each(permissions)('%s', (_name, allows) => {

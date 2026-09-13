@@ -124,19 +124,23 @@ export function assignmentState({
 }
 
 /**
- * Qué inspecciones de la planta son "las que cerré yo", y en qué orden se leen.
+ * Qué inspecciones completadas puede leer esta cuenta, y en qué orden se leen.
  *
  * `status` ya lo deriva el motor (`period-status.sql.ts`); acá no se vuelve a decidir qué
  * es "completado". El recorte por cuenta sí es del cliente: `GET /scheduled-inspections`
- * devuelve la planta entera —un miembro del JHSC viendo la programación de su sitio es
- * legítimo— y esto es lo que la reduce a lo propio.
+ * devuelve los sitios en alcance —un miembro del JHSC viendo la programación de su sitio es
+ * legítimo— y esto reduce la colección a lo propio salvo para cuentas administrativas.
  */
 export function completedInspections(
   scheduled: readonly ScheduledInspection[],
   userId: string,
+  canReviewAll: boolean,
 ): ScheduledInspection[] {
   return [...scheduled]
-    .filter((item) => item.inspector_id === userId && item.status === 'completed')
+    .filter(
+      (item) =>
+        item.status === 'completed' && (canReviewAll || item.inspector_id === userId),
+    )
     .sort((a, b) => b.period_start.localeCompare(a.period_start));
 }
 

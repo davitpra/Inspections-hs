@@ -141,8 +141,24 @@ describe('lo completado por este inspector', () => {
       scheduled({ id: 'still-open', inspector_id: 'user-1', status: 'open' }),
     ];
 
-    expect(completedInspections(items, 'user-1').map((item) => item.id)).toEqual(['mine']);
+    expect(completedInspections(items, 'user-1', false).map((item) => item.id)).toEqual(['mine']);
   });
+
+  it.each(['hs_coordinator', 'management'] as const)(
+    'para %s incluye lo completado por otros inspectores',
+    () => {
+      const items = [
+        scheduled({ id: 'mine', inspector_id: 'user-1' }),
+        scheduled({ id: 'other-inspector', inspector_id: 'user-2' }),
+        scheduled({ id: 'still-open', inspector_id: 'user-2', status: 'open' }),
+      ];
+
+      expect(completedInspections(items, 'user-1', true).map((item) => item.id)).toEqual([
+        'mine',
+        'other-inspector',
+      ]);
+    },
+  );
 
   it('lo más reciente primero, sin recortar', () => {
     const items = [
@@ -151,7 +167,7 @@ describe('lo completado por este inspector', () => {
       scheduled({ id: 'june', period_start: '2026-06-01' }),
     ];
 
-    expect(completedInspections(items, 'user-1').map((item) => item.id)).toEqual([
+    expect(completedInspections(items, 'user-1', false).map((item) => item.id)).toEqual([
       'july',
       'june',
       'may',

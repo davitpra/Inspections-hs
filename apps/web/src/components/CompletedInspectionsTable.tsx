@@ -2,6 +2,7 @@ import type { ScheduledInspection } from "@hs/contracts";
 import { Link } from "@tanstack/react-router";
 
 import { formatCivilDay, periodLabel } from "../presentation/dates";
+import { inspectorLabel } from "../presentation/scheduling";
 import { ExternalLinkIcon } from "./icons";
 
 /**
@@ -35,12 +36,14 @@ export function CompletedInspectionsTable({
   to,
   actionLabel,
   ariaLabel,
+  showInspector,
 }: {
   inspections: readonly ScheduledInspection[];
   siteName: (id: string) => string;
   to: "/inspections/$id/report" | "/findings/$id";
   actionLabel: string;
   ariaLabel: string;
+  showInspector: boolean;
 }): React.JSX.Element {
   return (
     <table
@@ -51,6 +54,7 @@ export function CompletedInspectionsTable({
         <tr>
           <th scope="col">Month</th>
           <th scope="col">Inspection</th>
+          {showInspector ? <th scope="col">Inspector</th> : null}
           <th scope="col">Site</th>
           <th scope="col">Completed on</th>
           <th scope="col">Status</th>
@@ -77,6 +81,9 @@ export function CompletedInspectionsTable({
                 item.template_name
               )}
             </td>
+            {showInspector ? (
+              <td data-label="Inspector">{inspectorLabel(item)}</td>
+            ) : null}
             <td data-label="Site">{siteName(item.site_id)}</td>
 
             <td data-label="Completed on">

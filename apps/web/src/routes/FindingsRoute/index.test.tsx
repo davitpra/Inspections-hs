@@ -90,7 +90,7 @@ function renderRoute(): void {
 }
 
 beforeEach(() => {
-  useAppSession.mockReturnValue({ account: { userId: USER }, ready: true });
+  useAppSession.mockReturnValue({ account: { userId: USER, role: 'jhsc_member' }, ready: true });
   listSites.mockResolvedValue([{ id: SITE, name: 'Glencoe' }]);
 });
 
@@ -163,7 +163,34 @@ describe('FindingsRoute', () => {
 
     const table = await screen.findByRole('table');
     expect(within(table).getAllByRole('row')).toHaveLength(2);
+    expect(within(table).queryByRole('columnheader', { name: 'Inspector' })).toBeNull();
   });
+
+  it.each(['hs_coordinator', 'management'] as const)(
+    '%s puede revisar hallazgos de inspecciones de otros inspectores',
+    async (role) => {
+      useAppSession.mockReturnValue({ account: { userId: USER, role }, ready: true });
+      listScheduled.mockResolvedValue([
+        scheduled({
+          id: 'theirs',
+          template_id: 'theirs',
+          template_name: 'Other inspection',
+          inspection_id: 'insp-theirs',
+          inspector_id: OTHER,
+          inspector_name: 'Jordan Lee',
+        }),
+      ]);
+      listFindings.mockResolvedValue([finding({ inspection_id: 'insp-theirs', reported_by: OTHER })]);
+
+      renderRoute();
+
+      const table = await screen.findByRole('table');
+      expect(within(table).getAllByRole('row')).toHaveLength(2);
+      expect(screen.getAllByText('Other inspection')).toHaveLength(2);
+      expect(within(table).getByRole('columnheader', { name: 'Inspector' })).toBeTruthy();
+      expect(within(table).getByText('Jordan Lee')).toBeTruthy();
+    },
+  );
 
   it('no crea una entrada para un hallazgo manual', async () => {
     listScheduled.mockResolvedValue([scheduled()]);

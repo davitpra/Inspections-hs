@@ -71,7 +71,7 @@ function renderRoute(): void {
 }
 
 beforeEach(() => {
-  useAppSession.mockReturnValue({ account: { userId: USER }, ready: true });
+  useAppSession.mockReturnValue({ account: { userId: USER, role: 'jhsc_member' }, ready: true });
   listSites.mockResolvedValue([
     { id: SITE, name: 'Glencoe' },
     { id: OTHER_SITE, name: 'St. Thomas' },
@@ -117,6 +117,7 @@ describe('HistoricalInspectionsRoute', () => {
       'May 2027',
     ]);
     expect(within(monthly).getAllByText('Glencoe')).toHaveLength(2);
+    expect(within(monthly).queryByRole('columnheader', { name: 'Inspector' })).toBeNull();
     expect(
       within(monthly).getAllByRole('link', { name: /View report/ })[0]?.getAttribute('href'),
     ).toBe('/inspections/monthly-july/report');
@@ -171,6 +172,38 @@ describe('HistoricalInspectionsRoute', () => {
     expect(screen.queryByText('Other inspection')).toBeNull();
     expect(screen.queryByText('Open inspection')).toBeNull();
   });
+
+  it.each(['hs_coordinator', 'management'] as const)(
+    '%s puede revisar lo que completaron otros inspectores',
+    async (role) => {
+      useAppSession.mockReturnValue({ account: { userId: USER, role }, ready: true });
+      listScheduled.mockResolvedValue([
+        scheduled({ id: 'mine' }),
+        scheduled({
+          id: 'theirs',
+          template_id: 'other',
+          template_name: 'Other inspection',
+          inspector_id: OTHER,
+          inspector_name: 'Jordan Lee',
+        }),
+        scheduled({
+          id: 'open',
+          template_id: 'open',
+          template_name: 'Open inspection',
+          status: 'open',
+          inspection_id: null,
+        }),
+      ]);
+
+      renderRoute();
+
+      expect(await screen.findAllByText('Other inspection')).toHaveLength(2);
+      expect(screen.getAllByRole('table')).toHaveLength(2);
+      expect(screen.getAllByRole('columnheader', { name: 'Inspector' })).toHaveLength(2);
+      expect(screen.getByText('Jordan Lee')).toBeTruthy();
+      expect(screen.queryByText('Open inspection')).toBeNull();
+    },
+  );
 
   it('muestra el estado vacío solo cuando la consulta terminó', async () => {
     listScheduled.mockResolvedValue([]);

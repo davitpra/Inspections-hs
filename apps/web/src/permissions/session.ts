@@ -74,6 +74,11 @@ export function canAdministerScheduling(account: Session | null): account is Ses
   return canAdminister(account);
 }
 
+/** Quién puede revisar las inspecciones completadas de todos sus sitios. */
+export function canReviewSiteInspections(account: Session | null): account is Session {
+  return canAdminister(account);
+}
+
 /**
  * Quién escribe plantillas (§6 — "el coordinador administra plantillas y roster").
  *
