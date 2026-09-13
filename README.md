@@ -64,7 +64,7 @@ pnpm demo:data
 ```
 
 Deja el entorno listo y dice con qué credenciales entrar. Concretamente: crea un
-`jhsc_member` con contraseña conocida, siembra roster, abre el período corriente
+  `inspector` con contraseña conocida, siembra roster, abre el período corriente
 —encolando el trabajo real, `inspections.open-period`— y le asigna la inspección de St.
 Thomas. La cuenta está activa y tiene alcance en el sitio: `requireInspector()` comprueba
 esas dos condiciones para cualquier rol vigente.
@@ -82,8 +82,8 @@ vez.
 
 ### Dar de alta a alguien
 
-**Un miembro del JHSC, por la pantalla.** `/roster` —coordinador o management— muestra, junto a
-cada persona sin cuenta, un botón "Invite as JHSC member". Pide el email, y con eso crea
+**Un inspector, por la pantalla.** `/roster` —coordinador o management— muestra, junto a
+cada persona sin cuenta, un botón "Invite as inspector". Pide el email, y con eso crea
 la cuenta y emite la invitación en un solo `POST /accounts` (design D4 del change que lo
 agregó): el sitio es el que la pantalla está mirando, no una elección aparte. El link de
 un solo uso se muestra ahí mismo para copiar —`https://<host>/accept-invitation?token=…`—
@@ -99,7 +99,7 @@ Tres pasos, y los tres son actos distintos a propósito (ADR-011):
 
    ```bash
    pnpm auth:create-account --employee ADP-1234 --email nombre@example.com \
-     --role jhsc_member --site st-thomas --actor coordinator@example.com
+      --role inspector --site st-thomas --actor coordinator@example.com
    ```
 
    `--actor` es la cuenta en cuyo nombre se da el alta: va a la cadena de auditoría de
@@ -108,7 +108,7 @@ Tres pasos, y los tres son actos distintos a propósito (ADR-011):
    idempotente y no crea personas: si no está en el roster, entra por `roster:import`.
 
    Es el **único `auth:*` que corre en producción**, y la razón es que no siembra ni
-   reemplaza ninguna credencial. Solo acepta `hs_coordinator`, `jhsc_member` y `management`.
+    reemplaza ninguna credencial. Solo acepta `coordinator`, `inspector` y `management`.
 
    Reusa el mismo `INSERT` que `POST /accounts` —`account.repository.ts`— compilado desde
    `dist/`, así que necesita `pnpm --filter api build` corrido antes; si falta, el comando
@@ -151,7 +151,7 @@ Necesita `pnpm demo:data` corrido antes, la API arriba y MinIO arriba (sube foto
 verdad). Es idempotente.
 
 Usa las dos cuentas y hacen falta las dos: el coordinador abre acciones,
-investiga y genera el reporte, y la cuenta de demo `jhsc_member` ejecuta las inspecciones.
+  investiga y genera el reporte, y la cuenta de demo `inspector` ejecuta las inspecciones.
 **No cambia ninguna contraseña.** La del inspector sale de `DEMO_PASSWORD` —es la cuenta
 que crea `demo:data`—; la del coordinador, de `DEMO_COORDINATOR_PASSWORD`, porque esa
 cuenta es real y puede tener ya la suya:
@@ -167,8 +167,8 @@ más:
 
 | Email                        | Contraseña                  | Rol              | Alcance              | Persona                                          |
 | ---------------------------- | --------------------------- | ---------------- | -------------------- | ------------------------------------------------ |
-| `coordinator@example.com`    | `DEMO_COORDINATOR_PASSWORD` | `hs_coordinator` | St. Thomas + Glencoe | Health and Safety Coordinator (`BOOTSTRAP-0001`) |
-| `demo.inspector@example.com` | `demo-inspector-2026`       | `jhsc_member`    | St. Thomas           | Dana Inspector (`DEMO-0001`)                     |
+| `coordinator@example.com`    | `DEMO_COORDINATOR_PASSWORD` | `coordinator` | St. Thomas + Glencoe | Health and Safety Coordinator (`BOOTSTRAP-0001`) |
+| `demo.inspector@example.com` | `demo-inspector-2026`       | `inspector`   | St. Thomas           | Dana Inspector (`DEMO-0001`)                     |
 
 Sin esas variables en el entorno la contraseña de las dos es `demo-inspector-2026`, el
 `DEFAULT_PASSWORD` de `scripts/demo-data.mjs`. **Es una contraseña de desarrollo y nada
@@ -300,11 +300,11 @@ quien declara hecho el trabajo no puede ser quien lo verifica.
 
 **Crear e invitar una cuenta de management.** `POST /auth/invitations` existe y lo puede
 llamar una cuenta administrativa, pero fuera del botón de `/roster` —que crea la cuenta e
-invita en un solo acto, y solo para `jhsc_member`— no hay pantalla para management: se crea
+  invita en un solo acto, y solo para `inspector`— no hay pantalla para management: se crea
 con `pnpm auth:create-account` y se invita con `pnpm auth:bootstrap` o con curl. La promoción
 de un miembro activo a coordinador sí está en `/roster` y solo la ofrece a management.
 
-Crear una cuenta de `jhsc_member` y aceptar la invitación, en cambio, ya no están acá: son
+Crear una cuenta de `inspector` y aceptar la invitación, en cambio, ya no están acá: son
 el botón de `/roster` (o `pnpm auth:create-account` para management) y
 `/accept-invitation` — ver "Dar de alta a alguien".
 

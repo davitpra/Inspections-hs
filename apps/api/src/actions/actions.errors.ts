@@ -75,7 +75,7 @@ export const invalidEvidence = (message: string): ActionException =>
 export const verifierIsExecutor = (): ActionException =>
   new ActionException(
     'verifier_is_executor',
-    'A corrective action is verified by someone other than whoever did the work, unless they are the HS coordinator',
+    'A corrective action is verified by someone other than whoever did the work, unless they are the coordinator',
     HttpStatus.FORBIDDEN,
   );
 

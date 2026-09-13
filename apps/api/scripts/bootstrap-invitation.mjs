@@ -9,7 +9,7 @@ import pg from 'pg';
  * de coordinador detrás.
  *
  * El huevo y la gallina: toda cuenta se da de alta por invitación de un
- * `hs_coordinator`, y la primera no puede — no hay coordinador que pueda iniciar
+ * `coordinator`, y la primera no puede — no hay coordinator que pueda iniciar
  * sesión todavía. `seeds/004_bootstrap_coordinator.sql` creó la identidad; este
  * comando le abre la puerta.
  *

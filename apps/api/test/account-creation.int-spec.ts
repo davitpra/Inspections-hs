@@ -32,12 +32,12 @@ let narrowId: string;
 
 const asCoordinator = () => ({
   userId: coordinatorId,
-  role: 'hs_coordinator' as const,
+  role: 'coordinator' as const,
   siteIds: [SITE_A, SITE_B],
 });
 const asNarrowCoordinator = () => ({
   userId: narrowId,
-  role: 'hs_coordinator' as const,
+  role: 'coordinator' as const,
   siteIds: [SITE_A],
 });
 
@@ -50,12 +50,12 @@ beforeAll(async () => {
   await registerSite(db.migrator, SITE_B, 'account-b', 'Account B');
 
   const coordinator = await createAccount(db.app, {
-    role: 'hs_coordinator',
+    role: 'coordinator',
     siteIds: [SITE_A, SITE_B],
   });
   coordinatorId = coordinator.accountId;
 
-  const narrow = await createAccount(db.app, { role: 'hs_coordinator', siteIds: [SITE_A] });
+  const narrow = await createAccount(db.app, { role: 'coordinator', siteIds: [SITE_A] });
   narrowId = narrow.accountId;
 }, 180_000);
 
@@ -93,7 +93,7 @@ function request(overrides: {
   return createAccountRequestSchema.parse({
     person_id: overrides.personId,
     email: overrides.email,
-    role: overrides.role ?? 'jhsc_member',
+    role: overrides.role ?? 'inspector',
     site_ids: overrides.siteIds,
     invite: overrides.invite ?? false,
   });
@@ -108,7 +108,7 @@ describe('el alta escribe app_user, user_site_scope y su auditoría', () => {
       request({ personId: person, email: email('nueva'), siteIds: [SITE_A] }),
     );
 
-    expect(result.account.role).toBe('jhsc_member');
+    expect(result.account.role).toBe('inspector');
     expect(result.account.active).toBe(true);
     expect(result.account.can_sign_in).toBe(false);
     expect(result.invitation).toBeUndefined();
@@ -122,7 +122,7 @@ describe('el alta escribe app_user, user_site_scope y su auditoría', () => {
 
 describe('el permiso no se escribe dos veces (design D3)', () => {
   it('un miembro del JHSC no puede crear una cuenta, y no crea nada', async () => {
-    for (const role of ['jhsc_member']) {
+    for (const role of ['inspector']) {
       const person = await createPerson(db.app, SITE_A, { lastName: `Rechazado-${role}` });
 
       const code = await codeOf(() =>
@@ -217,12 +217,12 @@ describe('GET /accounts/:id — el detalle de una cuenta (design D6)', () => {
   const asCoordinatorSession = () => ({
     userId: coordinatorId,
     siteIds: [SITE_A, SITE_B],
-    role: 'hs_coordinator' as const,
+    role: 'coordinator' as const,
   });
 
   it('el coordinador lee una cuenta de su alcance, con su email', async () => {
     const created = await createAccount(db.app, {
-      role: 'jhsc_member',
+      role: 'inspector',
       siteIds: [SITE_A],
       lastName: 'Detalle',
     });
@@ -234,17 +234,17 @@ describe('GET /accounts/:id — el detalle de una cuenta (design D6)', () => {
   });
 
   it('una cuenta fuera del alcance no se lee', async () => {
-    const created = await createAccount(db.app, { role: 'jhsc_member', siteIds: [SITE_B] });
+    const created = await createAccount(db.app, { role: 'inspector', siteIds: [SITE_B] });
 
-    const narrowSession = { userId: narrowId, siteIds: [SITE_A], role: 'hs_coordinator' as const };
+    const narrowSession = { userId: narrowId, siteIds: [SITE_A], role: 'coordinator' as const };
     const code = await codeOf(() => accounts.find(narrowSession, created.accountId));
 
     expect(code).toBe('account_not_found');
   });
 
   it('ningún otro rol lee el detalle de una cuenta', async () => {
-    const created = await createAccount(db.app, { role: 'jhsc_member', siteIds: [SITE_A] });
-    const session = { userId: coordinatorId, siteIds: [SITE_A, SITE_B], role: 'jhsc_member' as const };
+    const created = await createAccount(db.app, { role: 'inspector', siteIds: [SITE_A] });
+    const session = { userId: coordinatorId, siteIds: [SITE_A, SITE_B], role: 'inspector' as const };
 
     const code = await codeOf(() => accounts.find(session, created.accountId));
 
@@ -296,7 +296,7 @@ describe('PATCH /accounts/:id — reemitir y corregir el correo (design D5)', ()
   });
 
   it('un correo que ya es de otra cuenta se rechaza y no queda nada escrito', async () => {
-    const taken = await createAccount(db.app, { role: 'jhsc_member', siteIds: [SITE_A] });
+    const taken = await createAccount(db.app, { role: 'inspector', siteIds: [SITE_A] });
     const person = await createPerson(db.app, SITE_A, { lastName: 'CorreoTomado' });
     const created = await accounts.create(
       asCoordinator(),
@@ -330,7 +330,7 @@ describe('PATCH /accounts/:id — reemitir y corregir el correo (design D5)', ()
   });
 
   it('una cuenta que ya puede entrar rechaza reemitir y corregir el correo', async () => {
-    const created = await createAccount(db.app, { role: 'jhsc_member', siteIds: [SITE_A] });
+    const created = await createAccount(db.app, { role: 'inspector', siteIds: [SITE_A] });
     await grantCredential(stack, asCoordinator(), created.accountId, 'a-long-enough-password');
 
     const code = await codeOf(() =>

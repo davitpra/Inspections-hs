@@ -87,7 +87,7 @@ function document(): TemplateDocument {
   };
 }
 
-const sessionFor = (accountId: string, siteIds: string[], role = 'jhsc_member') => ({
+const sessionFor = (accountId: string, siteIds: string[], role = 'inspector') => ({
   userId: accountId,
   role,
   siteIds,
@@ -229,13 +229,13 @@ beforeAll(async () => {
   versionV1 = await publishVersion(db.migrator, templateId, 1, document());
   versionV2 = await publishVersion(db.migrator, templateId, 2, document());
 
-  inspector = await createAccount(db.app, { siteIds: [SITE_A], role: 'jhsc_member' });
+  inspector = await createAccount(db.app, { siteIds: [SITE_A], role: 'inspector' });
   coordinator = await createAccount(db.app, {
     siteIds: [SITE_A, SITE_B],
-    role: 'hs_coordinator',
+    role: 'coordinator',
   });
   supervisor = await createAccount(db.app, { siteIds: [SITE_A], role: 'management' });
-  auditor = await createAccount(db.app, { siteIds: [SITE_A], role: 'jhsc_member' });
+  auditor = await createAccount(db.app, { siteIds: [SITE_A], role: 'inspector' });
 }, 120_000);
 
 afterAll(async () => {
@@ -584,7 +584,7 @@ describe('la entrada manual', () => {
 
   it('un auditor externo no reporta nada', async () => {
     await expect(
-      findings.report(sessionFor(auditor.accountId, [SITE_A], 'jhsc_member'), manual()),
+      findings.report(sessionFor(auditor.accountId, [SITE_A], 'inspector'), manual()),
     ).rejects.toMatchObject({ response: { code: 'forbidden' } });
   });
 
@@ -717,7 +717,7 @@ describe('la retirada física de las marcas de recurrencia', () => {
 
 describe('el aislamiento por sitio', () => {
   it('un miembro del JHSC de una planta no ve los hallazgos de la otra', async () => {
-    const inspectorB = await createAccount(db.app, { siteIds: [SITE_B], role: 'jhsc_member' });
+    const inspectorB = await createAccount(db.app, { siteIds: [SITE_B], role: 'inspector' });
     const scheduledB = await scheduleInspection(db.app, {
       siteId: SITE_B,
       periodStart: nextPeriod(),
@@ -736,7 +736,7 @@ describe('el aislamiento por sitio', () => {
     expect(seenByA.every((finding) => finding.site_id === SITE_A)).toBe(true);
 
     const seenByCoordinator = await findings.list(
-      sessionFor(coordinator.accountId, [SITE_A, SITE_B], 'hs_coordinator'),
+      sessionFor(coordinator.accountId, [SITE_A, SITE_B], 'coordinator'),
     );
 
     expect(seenByCoordinator.some((finding) => finding.site_id === SITE_B)).toBe(true);
@@ -744,7 +744,7 @@ describe('el aislamiento por sitio', () => {
 
   it('un hallazgo de la otra planta se ve igual que uno que no existe', async () => {
     const all = await findings.list(
-      sessionFor(coordinator.accountId, [SITE_A, SITE_B], 'hs_coordinator'),
+      sessionFor(coordinator.accountId, [SITE_A, SITE_B], 'coordinator'),
     );
 
     const fromB = all.find((finding) => finding.site_id === SITE_B);
@@ -831,7 +831,7 @@ describe('el roster del hallazgo (ADR-017)', () => {
 
   it('un hallazgo fuera de alcance responde que no existe', async () => {
     const finding = await findings.report(
-      sessionFor(coordinator.accountId, [SITE_A, SITE_B], 'hs_coordinator'),
+      sessionFor(coordinator.accountId, [SITE_A, SITE_B], 'coordinator'),
       manualAt(SITE_B, locationB),
     );
 

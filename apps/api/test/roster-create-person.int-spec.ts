@@ -32,14 +32,14 @@ let supervisorId: string;
 
 const asCoordinator = () => ({
   userId: coordinatorId,
-  role: 'hs_coordinator',
+  role: 'coordinator',
   siteIds: [SITE_A, SITE_B],
 });
 
 /** Un coordinador que solo alcanza la planta A. Es con quien se prueba el borde. */
 const asNarrowCoordinator = () => ({
   userId: narrowId,
-  role: 'hs_coordinator',
+  role: 'coordinator',
   siteIds: [SITE_A],
 });
 
@@ -58,14 +58,14 @@ beforeAll(async () => {
 
   const coordinator = await createAccount(db.app, {
     siteIds: [SITE_A, SITE_B],
-    role: 'hs_coordinator',
+    role: 'coordinator',
   });
   coordinatorId = coordinator.accountId;
 
-  const narrow = await createAccount(db.app, { siteIds: [SITE_A], role: 'hs_coordinator' });
+  const narrow = await createAccount(db.app, { siteIds: [SITE_A], role: 'coordinator' });
   narrowId = narrow.accountId;
 
-  const supervisor = await createAccount(db.app, { siteIds: [SITE_A], role: 'jhsc_member' });
+  const supervisor = await createAccount(db.app, { siteIds: [SITE_A], role: 'inspector' });
   supervisorId = supervisor.accountId;
 }, 180_000);
 
@@ -188,7 +188,7 @@ describe('el sitio fuera del alcance', () => {
 
 describe('cualquier otro rol', () => {
   it('lo tiene prohibido', async () => {
-    for (const role of ['jhsc_member']) {
+    for (const role of ['inspector']) {
       await expect(
         roster.create(
           { userId: supervisorId, role, siteIds: [SITE_A] },

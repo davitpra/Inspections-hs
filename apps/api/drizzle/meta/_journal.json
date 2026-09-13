@@ -330,6 +330,20 @@
       "when": 1754524800046,
       "tag": "0047_jhsc_membership_by_role",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1754524800048,
+      "tag": "0048_rename_roles",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1754524800049,
+      "tag": "0049_correct_employee_number",
+      "breakpoints": true
     }
   ]
 }

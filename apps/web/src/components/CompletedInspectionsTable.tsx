@@ -54,7 +54,7 @@ export function CompletedInspectionsTable({
         <tr>
           <th scope="col">Month</th>
           <th scope="col">Inspection</th>
-          {showInspector ? <th scope="col">Inspector</th> : null}
+          {showInspector ? <th scope="col">Assigned to</th> : null}
           <th scope="col">Site</th>
           <th scope="col">Completed on</th>
           <th scope="col">Status</th>
@@ -82,7 +82,7 @@ export function CompletedInspectionsTable({
               )}
             </td>
             {showInspector ? (
-              <td data-label="Inspector">{inspectorLabel(item)}</td>
+              <td data-label="Assigned to">{inspectorLabel(item)}</td>
             ) : null}
             <td data-label="Site">{siteName(item.site_id)}</td>
 

@@ -39,8 +39,8 @@ let templates: TemplatesService;
 let coordinatorId: string;
 let supervisorId: string;
 
-const asCoordinator = () => ({ userId: coordinatorId, role: 'hs_coordinator', siteIds: [SITE] });
-const asSupervisor = () => ({ userId: supervisorId, role: 'jhsc_member', siteIds: [SITE] });
+const asCoordinator = () => ({ userId: coordinatorId, role: 'coordinator', siteIds: [SITE] });
+const asSupervisor = () => ({ userId: supervisorId, role: 'inspector', siteIds: [SITE] });
 
 /** Una sección con un ítem: el borrador publicable más chico que existe. */
 function usableDocument(itemKey: string): TemplateDraftDocument {
@@ -96,9 +96,9 @@ beforeAll(async () => {
 
   await registerSite(db.migrator, SITE, 'retiring', 'Retiring');
 
-  coordinatorId = (await createAccount(db.app, { siteIds: [SITE], role: 'hs_coordinator' }))
+  coordinatorId = (await createAccount(db.app, { siteIds: [SITE], role: 'coordinator' }))
     .accountId;
-  supervisorId = (await createAccount(db.app, { siteIds: [SITE], role: 'jhsc_member' })).accountId;
+  supervisorId = (await createAccount(db.app, { siteIds: [SITE], role: 'inspector' })).accountId;
 }, 120_000);
 
 afterAll(async () => {

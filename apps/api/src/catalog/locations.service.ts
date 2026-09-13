@@ -254,7 +254,7 @@ export class LocationsService {
 
   private requireCoordinator(session: SessionScope): void {
     if (!isAdministrator(session.role)) {
-      throw new ForbiddenException('Only the H&S coordinator can administer locations');
+      throw new ForbiddenException('Only the coordinator can administer locations');
     }
   }
 }

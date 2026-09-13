@@ -1,7 +1,7 @@
 /**
  * Qué hace que una cuenta pueda recibir una inspección en una planta, escrito UNA vez.
  *
- * La membresía del JHSC vuelve a derivarse del rol: `jhsc_member`, `hs_coordinator` y
+ * La membresía del JHSC vuelve a derivarse del rol: `inspector`, `coordinator` y
  * `management` pertenecen al comité mientras estén activos. Por eso la elegibilidad
  * ya no pregunta por un asiento separado, sino por actividad y alcance vigente.
  *

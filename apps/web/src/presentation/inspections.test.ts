@@ -144,7 +144,7 @@ describe('lo completado por este inspector', () => {
     expect(completedInspections(items, 'user-1', false).map((item) => item.id)).toEqual(['mine']);
   });
 
-  it.each(['hs_coordinator', 'management'] as const)(
+  it.each(['coordinator', 'management'] as const)(
     'para %s incluye lo completado por otros inspectores',
     () => {
       const items = [

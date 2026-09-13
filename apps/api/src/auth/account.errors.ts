@@ -44,7 +44,7 @@ export class AccountException extends HttpException {
 export const accountForbidden = (): AccountException =>
   new AccountException(
     'account_forbidden',
-    'Only the HS coordinator can create an account',
+     'Only the coordinator can create an account',
     HttpStatus.FORBIDDEN,
   );
 
@@ -104,7 +104,7 @@ export const accountAlreadyActive = (): AccountException =>
 
 /**
  * `PATCH /accounts/:id` con `deactivated` (`remove-jhsc-access-from-roster`): el roster
- * administra el acceso que el roster otorgó, y eso es exactamente `jhsc_member`. Un
+ * administra el acceso que el roster otorgó, y eso es exactamente `inspector`. Una
  * una cuenta administrativa se da de baja por el camino que la dio de alta, con su propia
  * confirmación — quitar de una lista de doscientas filas al coordinador de la planta de al
  * lado no puede ser un clic.
@@ -112,7 +112,7 @@ export const accountAlreadyActive = (): AccountException =>
 export const accountRoleNotRemovable = (): AccountException =>
   new AccountException(
     'account_role_not_removable',
-    'Only a JHSC member account can have access removed here',
+     'Only an inspector account can have access removed here',
     HttpStatus.FORBIDDEN,
   );
 
@@ -132,55 +132,55 @@ export const accountAlreadyInactive = (): AccountException =>
 export const accountPromotionForbidden = (): AccountException =>
   new AccountException(
     'account_promotion_forbidden',
-    'Only management can promote an account to hs_coordinator',
+     'Only management can promote an account to coordinator',
     HttpStatus.FORBIDDEN,
   );
 
 export const accountRoleNotPromotable = (role: string): AccountException =>
   new AccountException(
     'account_role_not_promotable',
-    `Role ${role} cannot be promoted to hs_coordinator`,
+     `Role ${role} cannot be promoted to coordinator`,
     HttpStatus.CONFLICT,
   );
 
 export const accountPromotionInactive = (): AccountException =>
   new AccountException(
     'account_promotion_inactive',
-    'An inactive account cannot be promoted to hs_coordinator',
+     'An inactive account cannot be promoted to coordinator',
     HttpStatus.CONFLICT,
   );
 
 export const accountPromotionSelf = (): AccountException =>
   new AccountException(
     'account_promotion_self',
-    'You cannot promote your own account to hs_coordinator',
+     'You cannot promote your own account to coordinator',
     HttpStatus.FORBIDDEN,
   );
 
 export const accountDemotionForbidden = (): AccountException =>
   new AccountException(
     'account_demotion_forbidden',
-    'Only management can demote an account to jhsc_member',
+     'Only management can demote an account to inspector',
     HttpStatus.FORBIDDEN,
   );
 
 export const accountRoleNotDemotable = (role: string): AccountException =>
   new AccountException(
     'account_role_not_demotable',
-    `Role ${role} cannot be demoted to jhsc_member`,
+     `Role ${role} cannot be demoted to inspector`,
     HttpStatus.CONFLICT,
   );
 
 export const accountDemotionInactive = (): AccountException =>
   new AccountException(
     'account_demotion_inactive',
-    'An inactive account cannot be demoted to jhsc_member',
+     'An inactive account cannot be demoted to inspector',
     HttpStatus.CONFLICT,
   );
 
 export const accountDemotionSelf = (): AccountException =>
   new AccountException(
     'account_demotion_self',
-    'You cannot demote your own account to jhsc_member',
+     'You cannot demote your own account to inspector',
     HttpStatus.FORBIDDEN,
   );

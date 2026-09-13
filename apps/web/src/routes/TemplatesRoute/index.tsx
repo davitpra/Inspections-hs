@@ -133,7 +133,7 @@ export function TemplatesRoute(): React.JSX.Element {
         // El aviso es un `.status-card` y no un `.status-card--error`: no falló nada, esta
         // pantalla no es suya.
         <p className="status-card">
-          <LockIcon size={20} /> Only H&amp;S coordinators and management can write
+           <LockIcon size={20} /> Only coordinators and management can write
           templates.
         </p>
       )}

@@ -67,7 +67,7 @@ export function RequirementPeriodRow({
         <span className={`annual-plan-row__status status-pill status-pill--${statusClassName(entry)}`}>{periodStatus(entry)}</span>
         {note ? <span className="annual-plan-row__note">{note}</span> : null}
       </td>
-      <td data-label="Inspector">{rowInspector(entry)}</td>
+       <td data-label="Assigned to">{rowInspector(entry)}</td>
       <td data-label="Visibility">{rowVisibility(entry, today)}</td>
       {/* Vacía cuando no hay nada que ofrecer, y no un «None» que en teléfono se apila
           como una fila más de la tarjeta (ver `:empty` en `index.css`). */}

@@ -25,7 +25,7 @@ export function DraftList({
       <thead>
         <tr>
           <th scope="col">Name</th>
-          <th scope="col">Version</th>
+           <th scope="col">Details</th>
           <th scope="col">Last saved</th>
           <th scope="col">Status</th>
           <th scope="col">Actions</th>

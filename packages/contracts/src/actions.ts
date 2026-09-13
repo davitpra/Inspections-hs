@@ -75,7 +75,7 @@ export type TransitionActor = Role | typeof ASSIGNEE | typeof FINDING_REPORTER;
  * Lo que una transición exige además del estado de origen.
  *
  * - `not_executor`: el actor no puede ser quien declaró el trabajo hecho. R3,
- *   "una persona distinta del ejecutor" — **salvo el `hs_coordinator`, que está
+ *   "una persona distinta del ejecutor" — **salvo el `coordinator`, que está
  *   exento** (ADR-019): es la única cuenta que declara trabajo hecho por una
  *   persona del roster sin usuario, y aplicarle la regla dejaba trabajo
  *   terminado retenido en `awaiting_verification`. Sigue entera para
@@ -122,29 +122,29 @@ export interface ActionTransition {
  * corregirse mientras el trabajo no se haya declarado hecho (ADR-021).
  */
 export const TRANSITIONS: readonly ActionTransition[] = [
-  { from: null, to: 'open', roles: ['hs_coordinator'], requires: [] },
+  { from: null, to: 'open', roles: ['coordinator'], requires: [] },
   {
     from: 'open',
     to: 'in_progress',
-    roles: [ASSIGNEE, FINDING_REPORTER, 'hs_coordinator'],
+    roles: [ASSIGNEE, FINDING_REPORTER, 'coordinator'],
     requires: [],
   },
   {
     from: 'in_progress',
     to: 'awaiting_verification',
-    roles: [ASSIGNEE, FINDING_REPORTER, 'hs_coordinator'],
+    roles: [ASSIGNEE, FINDING_REPORTER, 'coordinator'],
     requires: [],
   },
   {
     from: 'awaiting_verification',
     to: 'closed',
-    roles: ['hs_coordinator', 'management'],
+    roles: ['coordinator', 'management'],
     requires: ['not_executor'],
   },
   {
     from: 'awaiting_verification',
     to: 'in_progress',
-    roles: ['hs_coordinator', 'management'],
+    roles: ['coordinator', 'management'],
     requires: ['not_executor', 'reason'],
   },
 ] as const;
@@ -177,7 +177,7 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
  *
  * El orden es significativo: el cron los recorre de menor a mayor.
  */
-export const ESCALATION_LEVELS = ['hs_coordinator', 'management'] as const;
+export const ESCALATION_LEVELS = ['coordinator', 'management'] as const;
 
 export const escalationLevelSchema = z.enum(ESCALATION_LEVELS);
 
@@ -185,13 +185,13 @@ export type EscalationLevel = z.infer<typeof escalationLevelSchema>;
 
 /** +3 días al coordinador, +7 días a gerencia. ADR-022 conserva estos números. */
 export const ESCALATION_DAYS: Readonly<Record<EscalationLevel, number>> = {
-  hs_coordinator: 3,
+  coordinator: 3,
   management: 7,
 };
 
 /** Qué rol recibe cada escalón (§4, tabla de roles: "Gerencia recibe escalamientos"). */
 export const ESCALATION_RECIPIENT_ROLE: Readonly<Record<EscalationLevel, Role>> = {
-  hs_coordinator: 'hs_coordinator',
+  coordinator: 'coordinator',
   management: 'management',
 };
 

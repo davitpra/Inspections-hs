@@ -91,8 +91,9 @@ export function DraftRow({
         siempre, y porque dos borradores con nombres parecidos se distinguen por ella y no
         por el nombre.
       */}
-      <td data-label="Version" className="draft-row__meta">
-        {draftKindLabel(draft)}
+      <td data-label="Details" className="draft-row__meta">
+        <span>{draft.key}</span>{' '}
+        <span>{draftKindLabel(draft)}</span>
       </td>
 
       <td data-label="Last saved" className="draft-row__meta">

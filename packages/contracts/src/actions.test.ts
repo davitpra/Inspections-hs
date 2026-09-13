@@ -67,7 +67,7 @@ describe('la máquina de estados', () => {
   it('solo la creación sale de `null`, y solo lleva a `open`', () => {
     expect(transitionsFrom(null)).toHaveLength(1);
     expect(transitionsFrom(null)[0]?.to).toBe('open');
-    expect(transitionsFrom(null)[0]?.roles).toEqual(['hs_coordinator']);
+    expect(transitionsFrom(null)[0]?.roles).toEqual(['coordinator']);
   });
 
   it('toda transición que exige `not_executor` sale de `awaiting_verification`', () => {
@@ -112,13 +112,13 @@ describe('la máquina de estados', () => {
   });
 
   it('los verificadores son el coordinador y gerencia', () => {
-    expect([...VERIFIER_ROLES].sort()).toEqual(['hs_coordinator', 'management']);
+    expect([...VERIFIER_ROLES].sort()).toEqual(['coordinator', 'management']);
   });
 
   it('un miembro del JHSC no aparece en ninguna transición', () => {
     const actors = new Set(TRANSITIONS.flatMap((transition) => transition.roles));
 
-    expect(actors.has('jhsc_member')).toBe(false);
+    expect(actors.has('inspector')).toBe(false);
   });
 });
 
@@ -138,15 +138,15 @@ describe('el escalamiento', () => {
   });
 
   it('a los 4 días escala al coordinador', () => {
-    expect(escalationLevelsDue(DUE, at(4))).toEqual(['hs_coordinator']);
+    expect(escalationLevelsDue(DUE, at(4))).toEqual(['coordinator']);
   });
 
   it('a los 8 días escala a los dos niveles', () => {
-    expect(escalationLevelsDue(DUE, at(8))).toEqual(['hs_coordinator', 'management']);
+    expect(escalationLevelsDue(DUE, at(8))).toEqual(['coordinator', 'management']);
   });
 
   it('los umbrales son los +3 y +7 de R3', () => {
-    expect(ESCALATION_DAYS).toEqual({ hs_coordinator: 3, management: 7 });
+    expect(ESCALATION_DAYS).toEqual({ coordinator: 3, management: 7 });
   });
 });
 

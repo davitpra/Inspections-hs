@@ -10,6 +10,7 @@ import {
   type Person,
   type PersonWithAccount,
   type RosterImportReport,
+  type UpdatePersonRequest,
 } from '@hs/contracts';
 import { z } from 'zod';
 
@@ -26,8 +27,8 @@ import { get, post, send } from './request';
  * desde caché mostraría un roster viejo sin decir que lo es. El offline existe para que no
  * se pierda el trabajo de campo (ADR-001), y esto no es trabajo de campo.
  *
- * Las escrituras individuales sobre una persona son el alta y la baja lógica de un worker
- * sin cuenta. Corregir, transferir o reactivar siguen aplicándose mediante el CSV.
+ * Las escrituras individuales sobre una persona son el alta, la corrección y la baja lógica
+ * de un worker sin cuenta. Transferir o reactivar siguen aplicándose mediante el CSV.
  */
 
 /**
@@ -48,8 +49,8 @@ export async function listPeople(siteId: string): Promise<PersonWithAccount[]> {
 }
 
 /**
- * El alta de UNA persona (`add-person-to-roster-by-hand`). Solo crea: el CSV sigue
- * siendo lo único que corrige, transfiere o da de baja a alguien que ya existe.
+ * El alta de UNA persona (`add-person-to-roster-by-hand`). Solo crea: la corrección de sus
+ * datos se hace desde la fila y transferir o reactivar sigue siendo trabajo del CSV.
  */
 export async function createPerson(input: CreatePersonRequest): Promise<Person> {
   return post('/people', input, (value) => personSchema.parse(value));
@@ -62,6 +63,28 @@ export async function deactivatePerson(input: { personId: string }): Promise<Per
   );
 }
 
+/** Corrige únicamente los campos de persona que cambiaron en la fila del roster. */
+export async function updatePerson(
+  input: { personId: string } & UpdatePersonRequest,
+): Promise<Person> {
+  const { personId, ...body } = input;
+
+  return send('PATCH', `/people/${personId}`, body, (value) => personSchema.parse(value));
+}
+
+/** Corrige el email de una invitación pendiente sin emitir un nuevo enlace. */
+export async function correctAccountEmail(input: {
+  userId: string;
+  email: string;
+}): Promise<CreateAccountResponse> {
+  return send(
+    'PATCH',
+    `/accounts/${input.userId}`,
+    { email: input.email },
+    (value) => createAccountResponseSchema.parse(value),
+  );
+}
+
 /** Importa el archivo completo; el navegador agrega el boundary multipart. */
 export async function importRoster(input: { file: File }): Promise<RosterImportReport> {
   const body = new FormData();
@@ -71,7 +94,7 @@ export async function importRoster(input: { file: File }): Promise<RosterImportR
 }
 
 /**
- * Invita a una persona como `jhsc_member` (design D4/D7): da de alta la cuenta y emite la
+ * Invita a una persona como `inspector` (design D4/D7): da de alta la cuenta y emite la
  * invitación en un solo `POST /accounts`, con el sitio que la pantalla ya está mirando. El
  * token de un solo uso viaja en la respuesta y en ningún otro lado.
  *
@@ -90,7 +113,7 @@ export async function inviteAsJhscMember(input: {
     {
       person_id: input.personId,
       email: input.email,
-      role: 'jhsc_member',
+      role: 'inspector',
       site_ids: [input.siteId],
       invite: true,
     },
@@ -150,7 +173,7 @@ export async function promoteToCoordinator(input: {
   return send(
     'PATCH',
     `/accounts/${input.userId}`,
-    { promote_to: 'hs_coordinator' },
+    { promote_to: 'coordinator' },
     (value) => createAccountResponseSchema.parse(value),
   );
 }
@@ -162,7 +185,7 @@ export async function demoteToJhscMember(input: {
   return send(
     'PATCH',
     `/accounts/${input.userId}`,
-    { demote_to: 'jhsc_member' },
+    { demote_to: 'inspector' },
     (value) => createAccountResponseSchema.parse(value),
   );
 }

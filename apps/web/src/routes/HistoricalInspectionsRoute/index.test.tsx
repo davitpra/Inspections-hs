@@ -71,7 +71,7 @@ function renderRoute(): void {
 }
 
 beforeEach(() => {
-  useAppSession.mockReturnValue({ account: { userId: USER, role: 'jhsc_member' }, ready: true });
+  useAppSession.mockReturnValue({ account: { userId: USER, role: 'inspector' }, ready: true });
   listSites.mockResolvedValue([
     { id: SITE, name: 'Glencoe' },
     { id: OTHER_SITE, name: 'St. Thomas' },
@@ -173,7 +173,7 @@ describe('HistoricalInspectionsRoute', () => {
     expect(screen.queryByText('Open inspection')).toBeNull();
   });
 
-  it.each(['hs_coordinator', 'management'] as const)(
+  it.each(['coordinator', 'management'] as const)(
     '%s puede revisar lo que completaron otros inspectores',
     async (role) => {
       useAppSession.mockReturnValue({ account: { userId: USER, role }, ready: true });
@@ -199,7 +199,7 @@ describe('HistoricalInspectionsRoute', () => {
 
       expect(await screen.findAllByText('Other inspection')).toHaveLength(2);
       expect(screen.getAllByRole('table')).toHaveLength(2);
-      expect(screen.getAllByRole('columnheader', { name: 'Inspector' })).toHaveLength(2);
+      expect(screen.getAllByRole('columnheader', { name: 'Assigned to' })).toHaveLength(2);
       expect(screen.getByText('Jordan Lee')).toBeTruthy();
       expect(screen.queryByText('Open inspection')).toBeNull();
     },

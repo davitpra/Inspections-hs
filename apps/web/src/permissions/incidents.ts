@@ -25,7 +25,7 @@ export function availableTransitions(
   return incidentTransitionsAvailable(incident.state, incident.classification).filter(
     (transition) =>
       transition.roles.includes(session.role) ||
-      (transition.roles.includes('hs_coordinator') && isAdministrator(session.role)),
+      (transition.roles.includes('coordinator') && isAdministrator(session.role)),
   );
 }
 

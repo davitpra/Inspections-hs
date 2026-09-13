@@ -4,7 +4,7 @@ const request = vi.hoisted(() => vi.fn());
 
 vi.mock('./client', () => ({ sessionClient: { request } }));
 
-const { demoteToJhscMember, importRoster } = await import('./roster');
+const { correctAccountEmail, demoteToJhscMember, importRoster, updatePerson } = await import('./roster');
 
 describe('importRoster', () => {
   beforeEach(() => request.mockReset());
@@ -46,7 +46,7 @@ describe('demoteToJhscMember', () => {
     const response = {
       account: {
         id: '33333333-3333-4333-8333-333333333333',
-        role: 'jhsc_member',
+        role: 'inspector',
         active: true,
         can_sign_in: true,
         email: 'ada.reid@example.com',
@@ -60,7 +60,64 @@ describe('demoteToJhscMember', () => {
 
     expect(request).toHaveBeenCalledWith(
       '/accounts/33333333-3333-4333-8333-333333333333',
-      expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ demote_to: 'jhsc_member' }) }),
+      expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ demote_to: 'inspector' }) }),
+    );
+  });
+});
+
+describe('updatePerson', () => {
+  beforeEach(() => request.mockReset());
+
+  it('envía solo los campos de persona a PATCH /people/:id', async () => {
+    const response = {
+      id: '44444444-4444-4444-8444-444444444444',
+      site_id: '22222222-2222-4222-8222-222222222222',
+      employee_number: '10473',
+      first_name: 'Ada',
+      last_name: 'Reid',
+      deactivated_at: null,
+    };
+    request.mockResolvedValue({ ok: true, value: response });
+
+    await expect(
+      updatePerson({ personId: response.id, last_name: 'Reid', employee_number: '10473' }),
+    ).resolves.toEqual(response);
+
+    expect(request).toHaveBeenCalledWith(
+      `/people/${response.id}`,
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({ last_name: 'Reid', employee_number: '10473' }),
+      }),
+    );
+  });
+});
+
+describe('correctAccountEmail', () => {
+  beforeEach(() => request.mockReset());
+
+  it('envía solo email a PATCH /accounts/:id', async () => {
+    const response = {
+      account: {
+        id: '33333333-3333-4333-8333-333333333333',
+        role: 'inspector',
+        active: true,
+        can_sign_in: false,
+        email: 'new@example.com',
+      },
+    };
+    request.mockResolvedValue({ ok: true, value: response });
+
+    await expect(
+      correctAccountEmail({ userId: response.account.id, email: response.account.email }),
+    ).resolves.toEqual(response);
+
+    expect(request).toHaveBeenCalledWith(
+      `/accounts/${response.account.id}`,
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({ email: response.account.email }),
+      }),
     );
   });
 });

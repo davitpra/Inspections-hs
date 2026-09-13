@@ -5,20 +5,18 @@ an incident or made responsible for a corrective action without ever being given
 the small set of people who do sign in carry a single role and an explicit list of sites, so that
 "who may see this workplace" is a fact the database enforces rather than a convention the
 endpoints agree on.
-
 ## Requirements
-
 ### Requirement: Administrative authority is held by the coordinator and by management
 
-The system SHALL treat `hs_coordinator` and `management` as the two administrative roles, holding
+The system SHALL treat `coordinator` and `management` as the two administrative roles, holding
 the same permissions as each other with exactly one asymmetry: deciding who holds the coordinator
 role — promoting an account to it and demoting an account from it — which is management's alone.
 
-Where a requirement of this or of any other capability names `hs_coordinator` as the account
-permitted to perform an administrative act — or restricts such an act to `hs_coordinator` alone,
+Where a requirement of this or of any other capability names `coordinator` as the account
+permitted to perform an administrative act — or restricts such an act to `coordinator` alone,
 whether by naming it in the requirement text or by refusing "every other role" — that permission
 SHALL be read as naming `management` equally, and the refusal SHALL be read as excluding
-`jhsc_member` only. This equivalence SHALL be stated in one place so that a later decision to
+`inspector` only. This equivalence SHALL be stated in one place so that a later decision to
 separate the two roles changes one requirement rather than every requirement that names an
 administrative act.
 
@@ -33,11 +31,11 @@ account and the person, not against the role.
   the roster of `st-thomas`, creates a person, imports a roster file, creates an account, issues an
   invitation, saves or publishes a template, registers or renames a site, administers a location, or
   administers the annual plan of that site
-- **THEN** each request is accepted on the same terms as for an `hs_coordinator` of that scope
+- **THEN** each request is accepted on the same terms as for a `coordinator` of that scope
 
-#### Scenario: A JHSC member is still refused every administrative act
+#### Scenario: An inspector is still refused every administrative act
 
-- **WHEN** an account whose `role` is `jhsc_member` requests any of those acts
+- **WHEN** an account whose `role` is `inspector` requests any of those acts
 - **THEN** the request is refused, and nothing is created, changed or disclosed
 
 #### Scenario: The site scope still bounds a management account
@@ -48,19 +46,19 @@ account and the person, not against the role.
 
 #### Scenario: A coordinator does not decide who holds the coordinator role
 
-- **WHEN** an account whose `role` is `hs_coordinator` promotes a `jhsc_member` account or demotes
-  an `hs_coordinator` account
+- **WHEN** an account whose `role` is `coordinator` promotes an `inspector` account or demotes
+  a `coordinator` account
 - **THEN** the request is refused, and the target account's `role` is unchanged
 
-### Requirement: Management can demote a coordinator to JHSC member
+### Requirement: Management can demote a coordinator to inspector
 
 The system SHALL let an account whose `role` is `management` change the `role` of an active account
-from `hs_coordinator` to `jhsc_member`, and SHALL refuse that request to every other role, including
-`hs_coordinator`. A coordinator SHALL NOT be able to remove another coordinator, for the same reason
+from `coordinator` to `inspector`, and SHALL refuse that request to every other role, including
+`coordinator`. A coordinator SHALL NOT be able to remove another coordinator, for the same reason
 it cannot appoint one: the account that holds every administrative permission is never the account
 that decides who else holds them.
 
-The demotion SHALL be refused when the target account's current `role` is not `hs_coordinator`,
+The demotion SHALL be refused when the target account's current `role` is not `coordinator`,
 when the target account is inactive, when the target account is outside the requesting account's
 site scope, and when the requesting account is the target. A `management` account SHALL NOT be
 demotable. Refusing it SHALL leave `app_user.role` unchanged.
@@ -75,7 +73,7 @@ account SHALL lose its administrative authority on its next request, because the
 is resolved from `app_user` at each request.
 
 Demoting SHALL NOT interrupt the account's membership of the JHSC. A coordinator who was eligible as
-`inspector_id` SHALL continue to be eligible as `jhsc_member`, without any further act, because both
+`inspector_id` SHALL continue to be eligible once its role is `inspector`, without any further act, because both
 roles are on the committee.
 
 Demoting SHALL NOT alter any record related to the account rather than to its role: an action
@@ -83,20 +81,20 @@ assigned to its person, a finding it raised and an inspection it holds as `inspe
 as they were.
 
 The roster SHALL offer the demotion to a `management` account on the row of an active
-`hs_coordinator` account, and SHALL confirm it before it is executed.
+`coordinator` account, and SHALL confirm it before it is executed.
 
 #### Scenario: Management demotes a coordinator
 
 - **WHEN** an account whose `role` is `management` and whose scope contains `st-thomas` demotes an
-  active `hs_coordinator` account of `st-thomas`
-- **THEN** that account's `role` is `jhsc_member`
+  active `coordinator` account of `st-thomas`
+- **THEN** that account's `role` is `inspector`
 - **AND** a `user.role_changed` entry naming both roles and the acting account exists in the chain
   of every site in the demoted account's scope
 - **AND** its `person_id`, `email` and site scope are unchanged
 
 #### Scenario: A demoted coordinator keeps signing in
 
-- **GIVEN** an active `hs_coordinator` account holding an active credential and a live session
+- **GIVEN** an active `coordinator` account holding an active credential and a live session
 - **WHEN** an account whose `role` is `management` demotes it
 - **THEN** its credential carries a null `revoked_at` and its `app_session` row carries a null
   `revoked_at`
@@ -104,7 +102,7 @@ The roster SHALL offer the demotion to a `management` account on the row of an a
 
 #### Scenario: A demoted coordinator loses administration on the next request
 
-- **GIVEN** an active `hs_coordinator` account whose scope contains `st-thomas`, holding a live
+- **GIVEN** an active `coordinator` account whose scope contains `st-thomas`, holding a live
   session
 - **WHEN** an account whose `role` is `management` demotes it
 - **AND** that session requests the roster of `st-thomas`
@@ -113,34 +111,34 @@ The roster SHALL offer the demotion to a `management` account on the row of an a
 
 #### Scenario: A coordinator cannot demote
 
-- **WHEN** an account whose `role` is `hs_coordinator` demotes another `hs_coordinator` account
+- **WHEN** an account whose `role` is `coordinator` demotes another `coordinator` account
 - **THEN** the request is refused
 - **AND** the target account's `role` is unchanged
 
-#### Scenario: A JHSC member cannot demote
+#### Scenario: An inspector cannot demote
 
-- **WHEN** an account whose `role` is `jhsc_member` demotes an `hs_coordinator` account
+- **WHEN** an account whose `role` is `inspector` demotes a `coordinator` account
 - **THEN** the request is refused
 - **AND** the target account's `role` is unchanged
 
 #### Scenario: An account that is not a coordinator cannot be demoted
 
-- **WHEN** an account whose `role` is `management` demotes an account whose `role` is `jhsc_member`
+- **WHEN** an account whose `role` is `management` demotes an account whose `role` is `inspector`
   or `management`
 - **THEN** the request is refused with a reason naming the current role
 - **AND** that account's `role` is unchanged
 
 #### Scenario: An inactive account cannot be demoted
 
-- **WHEN** an account whose `role` is `management` demotes an `hs_coordinator` account whose
+- **WHEN** an account whose `role` is `management` demotes a `coordinator` account whose
   `deactivated_at` is non-null
 - **THEN** the request is refused
 - **AND** the account stays inactive with its `role` unchanged
 
 #### Scenario: A demotion outside the site scope is refused
 
-- **WHEN** an account whose `role` is `management` and whose scope is `st-thomas` only demotes an
-  `hs_coordinator` account scoped to `glencoe` alone
+- **WHEN** an account whose `role` is `management` and whose scope is `st-thomas` only demotes a
+  `coordinator` account scoped to `glencoe` alone
 - **THEN** the request is refused
 - **AND** that account's `role` is unchanged
 
@@ -152,24 +150,24 @@ The roster SHALL offer the demotion to a `management` account on the row of an a
 
 #### Scenario: A demoted coordinator keeps inspecting
 
-- **GIVEN** an active `hs_coordinator` account listed among the accounts eligible to be assigned an
+- **GIVEN** an active `coordinator` account listed among the accounts eligible to be assigned an
   inspection at its site
-- **WHEN** that account is demoted to `jhsc_member`
+- **WHEN** that account is demoted to `inspector`
 - **THEN** it is still listed among the eligible accounts of that site
 - **AND** assigning it as `inspector_id` of an inspection at that site is accepted
 
 #### Scenario: The roster offers the demotion to management only
 
 - **WHEN** the roster of a site is shown to an account whose `role` is `management`
-- **THEN** the row of an active `hs_coordinator` account offers the demotion, and no row of a
-  `jhsc_member` or `management` account does
-- **AND** when the same roster is shown to an account whose `role` is `hs_coordinator`, no row
+- **THEN** the row of an active `coordinator` account offers the demotion, and no row of an
+  `inspector` or `management` account does
+- **AND** when the same roster is shown to an account whose `role` is `coordinator`, no row
   offers it
 
 ### Requirement: Committee membership follows the account role
 
 The system SHALL derive membership of the Joint Health and Safety Committee from `app_user.role`
-alone. Every account of the closed set — `jhsc_member`, `hs_coordinator` and `management` — SHALL be
+alone. Every account of the closed set — `inspector`, `coordinator` and `management` — SHALL be
 on the committee for as long as it holds that role and is not deactivated.
 
 The system SHALL NOT store, expose or accept any separate record of committee membership. There
@@ -184,7 +182,7 @@ either type SHALL be written.
 
 #### Scenario: Every role is on the committee
 
-- **WHEN** an account whose `role` is `jhsc_member`, one whose `role` is `hs_coordinator` and one
+- **WHEN** an account whose `role` is `inspector`, one whose `role` is `coordinator` and one
   whose `role` is `management` are each considered for committee membership
 - **THEN** all three are on the committee, with no further condition than an active account
 
@@ -208,17 +206,17 @@ either type SHALL be written.
 - **THEN** the entry is present and unchanged
 - **AND** the chain verifies
 
-### Requirement: Management can promote a JHSC member to coordinator
+### Requirement: Management can promote an inspector to coordinator
 
 The system SHALL let an account whose `role` is `management` change the `role` of an active account
-from `jhsc_member` to `hs_coordinator`, and SHALL refuse that request to every other role, including
-`hs_coordinator`. A coordinator SHALL NOT be able to appoint another coordinator, so that the
+from `inspector` to `coordinator`, and SHALL refuse that request to every other role, including
+`coordinator`. A coordinator SHALL NOT be able to appoint another coordinator, so that the
 account that holds every administrative permission is never the account that decides who else holds
 them.
 
-The promotion and its inverse, the demotion of a coordinator to `jhsc_member`, SHALL be the only
+The promotion and its inverse, the demotion of a coordinator to `inspector`, SHALL be the only
 role changes the system exposes. The promotion SHALL be refused when the target
-account's current `role` is not `jhsc_member`, when the target account is inactive, when the target
+account's current `role` is not `inspector`, when the target account is inactive, when the target
 account is outside the requesting account's site scope, and when the requesting account is the
 target. Refusing it SHALL leave `app_user.role` unchanged.
 
@@ -230,64 +228,64 @@ Promoting SHALL NOT touch the account's `person_id`, `email`, site scope, creden
 invitations: the account is the same account, carrying a different role from that moment on.
 
 Promoting SHALL NOT interrupt the account's membership of the JHSC. A member who inspected as
-`jhsc_member` SHALL continue to be eligible as `inspector_id` as `hs_coordinator`, without any
+`inspector` SHALL continue to be eligible as `inspector_id` once its role is `coordinator`, without any
 further act, because both roles are on the committee.
 
-#### Scenario: Management promotes a JHSC member
+#### Scenario: Management promotes an inspector
 
 - **WHEN** an account whose `role` is `management` and whose scope contains `st-thomas` promotes an
-  active `jhsc_member` account of `st-thomas`
-- **THEN** that account's `role` is `hs_coordinator`
+  active `inspector` account of `st-thomas`
+- **THEN** that account's `role` is `coordinator`
 - **AND** a `user.role_changed` entry naming both roles and the acting account exists in the chain
   of every site in the promoted account's scope
 - **AND** its `person_id`, `email` and site scope are unchanged
 
 #### Scenario: A coordinator cannot promote
 
-- **WHEN** an account whose `role` is `hs_coordinator` promotes a `jhsc_member` account
+- **WHEN** an account whose `role` is `coordinator` promotes an `inspector` account
 - **THEN** the request is refused
 - **AND** the target account's `role` is unchanged
 
-#### Scenario: A JHSC member cannot promote
+#### Scenario: An inspector cannot promote
 
-- **WHEN** an account whose `role` is `jhsc_member` promotes another `jhsc_member` account
+- **WHEN** an account whose `role` is `inspector` promotes another `inspector` account
 - **THEN** the request is refused
 - **AND** the target account's `role` is unchanged
 
-#### Scenario: An account that is not a JHSC member cannot be promoted
+#### Scenario: An account that is not an inspector cannot be promoted
 
 - **WHEN** an account whose `role` is `management` promotes an account whose `role` is already
-  `hs_coordinator`
+  `coordinator`
 - **THEN** the request is refused with a reason naming the current role
 - **AND** that account's `role` is unchanged
 
 #### Scenario: An inactive account cannot be promoted
 
-- **WHEN** an account whose `role` is `management` promotes a `jhsc_member` account whose
+- **WHEN** an account whose `role` is `management` promotes an `inspector` account whose
   `deactivated_at` is non-null
 - **THEN** the request is refused
 - **AND** the account stays inactive with its `role` unchanged
 
 #### Scenario: A promotion outside the site scope is refused
 
-- **WHEN** an account whose `role` is `management` and whose scope is `st-thomas` only promotes a
-  `jhsc_member` account scoped to `glencoe` alone
+- **WHEN** an account whose `role` is `management` and whose scope is `st-thomas` only promotes an
+  `inspector` account scoped to `glencoe` alone
 - **THEN** the request is refused
 - **AND** that account's `role` is unchanged
 
 #### Scenario: A promoted member keeps inspecting
 
-- **GIVEN** an active `jhsc_member` account listed among the accounts eligible to be assigned an
+- **GIVEN** an active `inspector` account listed among the accounts eligible to be assigned an
   inspection at its site
-- **WHEN** that account is promoted to `hs_coordinator`
+- **WHEN** that account is promoted to `coordinator`
 - **THEN** it is still listed among the eligible accounts of that site
 - **AND** assigning it as `inspector_id` of an inspection at that site is accepted
 
 #### Scenario: A promoted member can be demoted back
 
-- **GIVEN** a `jhsc_member` account that management promoted to `hs_coordinator`
+- **GIVEN** an `inspector` account that management promoted to `coordinator`
 - **WHEN** an account whose `role` is `management` demotes it
-- **THEN** its `role` is `jhsc_member` again
+- **THEN** its `role` is `inspector` again
 - **AND** two `user.role_changed` entries, one per change, exist in the chain of every site in its
   scope
 
@@ -312,20 +310,50 @@ kind.
 
 ### Requirement: A person is identified by employee number, not by name
 
-The system SHALL store `person.employee_number` as the identity of a roster record: mandatory,
-unique across the whole organisation, and immutable once assigned. Names SHALL NOT be treated as
-identifying: two active people MAY carry the same `first_name` and `last_name`.
+The system SHALL store `person.employee_number` as the identity of a roster record: mandatory and
+unique across the whole organisation. Names SHALL NOT be treated as identifying: two active people
+MAY carry the same `first_name` and `last_name`.
+
+The employee number SHALL be correctable, because a number mistyped when the person was added is
+otherwise only fixable by splitting one person across two records. A correction SHALL keep the same
+`person.id`, so every record already referencing that person keeps referencing her, and SHALL be an
+audited event carrying the previous and the new number. `person.id` and `person.created_at` SHALL
+remain assigned once and SHALL NOT be changeable by any role.
+
+A corrected employee number SHALL NOT be remembered by the roster import: a later import that still
+carries the previous number SHALL treat it as a number no person carries.
 
 #### Scenario: A duplicate employee number is rejected
 
 - **WHEN** a second `person` row is inserted with an `employee_number` that already exists
 - **THEN** the insert fails with a unique violation
 
-#### Scenario: The employee number cannot be changed
+#### Scenario: The employee number can be corrected
 
-- **WHEN** any role runs `UPDATE person SET employee_number = <another value> WHERE id = <existing id>`
+- **WHEN** a session connected as the application role updates `person.employee_number` of an
+  existing person to a value no other person carries
+- **THEN** the statement succeeds and the new value is readable back
+- **AND** the person's `id` is unchanged
+- **AND** every record already referencing that person still resolves to her
+
+#### Scenario: Correcting to a number already in use is rejected
+
+- **WHEN** a session updates `person.employee_number` to a value another `person` already carries
+- **THEN** the statement fails with a unique violation
+- **AND** both people keep the `employee_number` they carried before
+
+#### Scenario: The identifier of a person cannot be changed
+
+- **WHEN** any role runs `UPDATE person SET id = <another value> WHERE id = <existing id>`
 - **THEN** the statement fails with SQLSTATE `HS001`
-- **AND** the stored `employee_number` is unchanged when read back
+- **AND** the stored `id` is unchanged when read back
+
+#### Scenario: An import carrying the previous number does not find the corrected person
+
+- **WHEN** a person's `employee_number` is corrected from `E-4471` to `E-4417`
+- **AND** a CSV is later imported carrying `E-4471`
+- **THEN** the import creates a new `person` with `employee_number` `E-4471`
+- **AND** the corrected person keeps `employee_number` `E-4417`
 
 #### Scenario: Two people may share a name
 
@@ -424,7 +452,7 @@ Reactivation SHALL be possible by setting `deactivated_at` back to null.
 - **THEN** reading the record back still resolves the person's `employee_number`,
   `first_name` and `last_name`
 
-### Requirement: The roster of a site is readable by the H&S coordinator
+### Requirement: The roster of a site is readable by the coordinator
 
 The system SHALL expose the roster of one site as a list of `person` rows carrying `id`,
 `site_id`, `employee_number`, `first_name`, `last_name` and `deactivated_at`, ordered by
@@ -439,22 +467,20 @@ whether it is active, whether it can already sign in and its `email`. It SHALL N
 account's scope, credential or any invitation token; reading the roster SHALL NOT become a
 way to read the account table.
 
-The listing SHALL be available only to an account whose `role` is `hs_coordinator`, and SHALL
+The listing SHALL be available only to an account whose `role` is `coordinator`, and SHALL
 be able to include people whose `deactivated_at` is non-null, which is what distinguishes it
 from the subject selection list.
 
-The system SHALL NOT expose any way to rename, transfer, reactivate or delete a single `person`
-through this listing or any companion route. It SHALL expose only the constrained deactivation of
-an active person with no account described separately below. Creating a person that does not exist
-yet SHALL be available as its own act, and loading the file itself SHALL remain available as a
-separate act that names no person and applies the whole file at once.
-Creating a person that does not exist yet SHALL be available as its own act, and loading the
-file itself SHALL remain available, as a separate act that names no person and applies the
-whole file at once.
+The system SHALL NOT expose any way to transfer, reactivate or delete a single `person` through
+this listing or any companion route. It SHALL expose only two writes on a single existing person,
+each described separately below: the constrained deactivation of an active person with no active
+account, and the correction of the name and employee number of an active person. Creating a person
+that does not exist yet SHALL be available as its own act, and loading the file itself SHALL remain
+available as a separate act that names no person and applies the whole file at once.
 
 #### Scenario: The coordinator reads the roster of a site in scope
 
-- **WHEN** an account whose `role` is `hs_coordinator` and whose scope contains `st-thomas`
+- **WHEN** an account whose `role` is `coordinator` and whose scope contains `st-thomas`
   requests the roster of `st-thomas`
 - **THEN** every `person` whose `site_id` is `st-thomas` is returned, ordered by `last_name`
   then `first_name`
@@ -472,9 +498,9 @@ whole file at once.
 - **THEN** the result is an empty list and no error is raised
 - **AND** no `person` of `glencoe` is disclosed, not even their `employee_number`
 
-#### Scenario: A JHSC member is refused
+#### Scenario: An inspector is refused
 
-- **WHEN** an account whose `role` is `jhsc_member` requests the roster of a site within its own scope
+- **WHEN** an account whose `role` is `inspector` requests the roster of a site within its own scope
 - **THEN** the request is refused
 - **AND** no `person` row is returned
 
@@ -493,8 +519,8 @@ whole file at once.
 #### Scenario: A person who holds an account is returned with its role
 
 - **WHEN** the roster of `st-thomas` is read
-- **AND** one of its people is referenced by an `app_user` row whose `role` is `jhsc_member`
-- **THEN** that row carries an account whose `role` is `jhsc_member`
+- **AND** one of its people is referenced by an `app_user` row whose `role` is `inspector`
+- **THEN** that row carries an account whose `role` is `inspector`
 
 #### Scenario: A person without an account is returned with none
 
@@ -524,9 +550,18 @@ whole file at once.
 - **AND** the other writes available over the roster remain the import of a whole CSV file and the
   creation of a person who does not exist yet
 
+#### Scenario: The listing offers only constrained single-person writes
+
+- **WHEN** the roster of a site is read
+- **THEN** no route accepts the `id` of one `person` to transfer, reactivate or delete them
+- **AND** a companion route accepts the `id` only to deactivate an active person with no active
+  account, or to correct the `first_name`, `last_name` and `employee_number` of an active person
+- **AND** the other writes available over the roster remain the import of a whole CSV file and the
+  creation of a person who does not exist yet
+
 ### Requirement: A person can be added to the roster one at a time
 
-The system SHALL allow an account whose `role` is `hs_coordinator` to create a single `person`
+The system SHALL allow an account whose `role` is `coordinator` to create a single `person`
 by naming its `employee_number`, `first_name`, `last_name` and the `site_id` it belongs to. The
 created row SHALL be returned carrying the same six fields the roster listing returns, with
 `deactivated_at` null: a person added by hand is active from the moment she exists.
@@ -551,7 +586,7 @@ mechanism that records a person created by the CSV import.
 
 #### Scenario: The coordinator adds a person to a site in scope
 
-- **WHEN** an account whose `role` is `hs_coordinator` and whose scope contains `st-thomas`
+- **WHEN** an account whose `role` is `coordinator` and whose scope contains `st-thomas`
   creates a person with an unused `employee_number` and `site_id` of `st-thomas`
 - **THEN** the person is created with `deactivated_at` null
 - **AND** the created row is returned carrying `id`, `site_id`, `employee_number`,
@@ -581,9 +616,9 @@ mechanism that records a person created by the CSV import.
 - **THEN** the request is refused
 - **AND** no `person` row is created
 
-#### Scenario: A JHSC member is refused
+#### Scenario: An inspector is refused
 
-- **WHEN** an account whose `role` is `jhsc_member` creates a person on a site within its own scope
+- **WHEN** an account whose `role` is `inspector` creates a person on a site within its own scope
 - **THEN** the request is refused
 - **AND** no `person` row is created
 
@@ -627,11 +662,11 @@ or by hand.
 - **AND** the existing person keeps her `first_name`, `last_name`, `site_id` and
   `deactivated_at`
 
-### Requirement: The H&S coordinator can create an account over HTTP
+### Requirement: The coordinator can create an account over HTTP
 
 The system SHALL expose a request that creates an `app_user` row and its `user_site_scope`
 rows for a person who already exists on the roster, available only to a session whose `role`
-is administrative. It SHALL be refused for `jhsc_member`, and refusing it SHALL create neither
+is administrative. It SHALL be refused for `inspector`, and refusing it SHALL create neither
 the account nor any scope row.
 
 The request SHALL name the person by `id`, the account's email, its role and the sites of its
@@ -664,15 +699,15 @@ is outside the scope of the requesting account.
 
 #### Scenario: An administrative account creates an account for a person on the roster
 
-- **WHEN** an `hs_coordinator` or a `management` account whose scope contains `st-thomas` requests
+- **WHEN** a `coordinator` or a `management` account whose scope contains `st-thomas` requests
   an account for a person of `st-thomas` with a role and that site
 - **THEN** an `app_user` row and one `user_site_scope` row are created
 - **AND** an audit entry naming the new account exists in the chain of `st-thomas`
 - **AND** the account cannot sign in
 
-#### Scenario: A JHSC member is refused
+#### Scenario: An inspector is refused
 
-- **WHEN** an account whose `role` is `jhsc_member` requests the creation of an account
+- **WHEN** an account whose `role` is `inspector` requests the creation of an account
 - **THEN** the request is refused
 - **AND** no `app_user` row is created
 
@@ -713,7 +748,7 @@ is outside the scope of the requesting account.
 
 #### Scenario: An inactive account of another role is not restored
 
-- **WHEN** a `jhsc_member` account is requested for a person whose existing inactive account
+- **WHEN** an `inspector` account is requested for a person whose existing inactive account
   carries the role `management`
 - **THEN** the request is refused
 - **AND** that account stays inactive and its role is unchanged
@@ -737,15 +772,15 @@ is outside the scope of the requesting account.
 - **THEN** no `app_credential` row exists for it
 - **AND** signing in with any password is refused until an invitation is accepted
 
-### Requirement: A person on the roster can be invited as a JHSC member in one act
+### Requirement: A person on the roster can be invited as an inspector in one act
 
 The system SHALL let an administrative account turn a person of the roster who has no access into an
-invited `jhsc_member` in a single act: the account is created with role `jhsc_member`, scoped
+invited `inspector` in a single act: the account is created with role `inspector`, scoped
 to the site whose roster is being read, and an invitation is issued for it. The one-time
 invitation token SHALL be returned to the coordinator exactly once and SHALL NOT be readable
 afterwards, which is the same rule the invitation already carries.
 
-A person whose `jhsc_member` account was withdrawn SHALL be invitable through this same act,
+A person whose `inspector` account was withdrawn SHALL be invitable through this same act,
 which restores the account they already had. The coordinator SHALL NOT be asked to tell the
 two cases apart, and the roster SHALL NOT present them differently.
 
@@ -753,26 +788,26 @@ The act SHALL be atomic: the account, its scope and the invitation SHALL all exi
 them SHALL. A failure SHALL leave the person without access, so that pressing the button
 again is a valid retry and not a request the system refuses for a state it created itself.
 
-Only `jhsc_member` SHALL be reachable this way. Every other role SHALL remain outside this act,
+Only `inspector` SHALL be reachable this way. Every other role SHALL remain outside this act,
 because the scope and the validity window they need are not expressible in it.
 
 #### Scenario: Inviting a person without an account
 
-- **WHEN** an `hs_coordinator` invites a person of `st-thomas` who holds no account
-- **THEN** an account with role `jhsc_member` scoped to `st-thomas` is created for that person
+- **WHEN** a `coordinator` invites a person of `st-thomas` who holds no account
+- **THEN** an account with role `inspector` scoped to `st-thomas` is created for that person
 - **AND** an invitation is issued for it and its one-time token is returned once
-- **AND** reading the roster again reports that person as holding a `jhsc_member` account that
+- **AND** reading the roster again reports that person as holding an `inspector` account that
   cannot yet sign in
 
 #### Scenario: Inviting a person whose access was withdrawn
 
-- **WHEN** an `hs_coordinator` invites a person whose `jhsc_member` account is inactive
+- **WHEN** a `coordinator` invites a person whose `inspector` account is inactive
 - **THEN** that same account is restored and an invitation is issued for it
 - **AND** accepting that invitation creates a credential and the account can sign in
 
 #### Scenario: Inviting a person who already holds an active account is refused
 
-- **WHEN** an `hs_coordinator` invites a person that an active `app_user` row already
+- **WHEN** a `coordinator` invites a person that an active `app_user` row already
   references
 - **THEN** the request is refused
 - **AND** no second account and no invitation are created
@@ -796,69 +831,6 @@ because the scope and the validity window they need are not expressible in it.
 - **WHEN** the invitation has been issued and its token returned
 - **THEN** no later request returns that token again
 
-### Requirement: A coordinator can withdraw the JHSC access they granted
-
-The system SHALL let an administrative account withdraw, from the roster of the site the account is
-scoped to, the access of an active `jhsc_member` account. Withdrawing SHALL revoke the
-account's pending invitation, revoke its credential, and set its `deactivated_at`, as one act
-that either happens whole or not at all.
-
-The same act SHALL serve an account that never signed in and one that signs in every day: an
-invitation nobody accepted and a member leaving the committee are the same fact — this account
-no longer grants access — and the system SHALL NOT offer two different withdrawals for it.
-What SHALL differ is how the act is named and confirmed, because cancelling an invitation
-makes a link stop working while removing a member ends a session that may be open.
-
-Withdrawing SHALL be confirmed before it is executed, and SHALL be refused for an account
-whose role is not `jhsc_member`: the roster administers the access the roster grants, and
-removing another administrative account is not a press away in a list of two hundred rows.
-
-Withdrawing an account that is already inactive SHALL be refused, so that the recorded
-`deactivated_at` stays the moment the access actually ended.
-
-Withdrawing SHALL NOT deactivate the person: losing access is not leaving the company, and the
-roster is maintained by the CSV import.
-
-#### Scenario: A pending invitation is cancelled
-
-- **WHEN** an `hs_coordinator` withdraws the access of a `jhsc_member` account that holds a
-  pending invitation and no credential
-- **THEN** the invitation carries a non-null `revoked_at` and its token is no longer accepted
-- **AND** the account carries a non-null `deactivated_at` and is reported as inactive
-
-#### Scenario: A member who signs in loses access
-
-- **WHEN** an `hs_coordinator` withdraws the access of a `jhsc_member` account that holds an
-  active credential and a live session
-- **THEN** the credential carries a non-null `revoked_at` and the account cannot sign in again
-- **AND** the `app_session` row carries a non-null `revoked_at`
-
-#### Scenario: The person stays on the roster
-
-- **WHEN** an `hs_coordinator` withdraws the access of a `jhsc_member` account
-- **THEN** the referenced `person` row's `deactivated_at` is unchanged
-
-#### Scenario: A JHSC member cannot withdraw access
-
-- **WHEN** a `jhsc_member` withdraws the access of another account
-- **THEN** the request is refused and the account stays active
-
-#### Scenario: Withdrawing twice is refused
-
-- **WHEN** an `hs_coordinator` withdraws the access of an account that is already inactive
-- **THEN** the request is refused and the recorded `deactivated_at` is unchanged
-
-#### Scenario: An account outside the coordinator's scope cannot be withdrawn
-
-- **WHEN** an `hs_coordinator` withdraws the access of an account of a person outside every
-  site of their scope
-- **THEN** the request is refused and the account stays active
-
-#### Scenario: Only an administrative account can withdraw access
-
-- **WHEN** an account whose role is `jhsc_member` withdraws another account's access
-- **THEN** the request is refused
-
 ### Requirement: Withdrawing access keeps the account's site scope
 
 The system SHALL leave the `user_site_scope` rows of a withdrawn account exactly as they were,
@@ -875,13 +847,13 @@ inactive regardless of what it reaches, and no session of it is accepted.
 
 #### Scenario: The withdrawal is recorded in the chain of every site the account reached
 
-- **WHEN** an `hs_coordinator` withdraws the access of an account scoped to two sites
+- **WHEN** a `coordinator` withdraws the access of an account scoped to two sites
 - **THEN** each of the two sites' chains carries one `user.deactivated` entry for that account
 - **AND** each entry names the coordinator as the acting account, not the withdrawn one
 
 #### Scenario: The scope survives the withdrawal
 
-- **WHEN** an `hs_coordinator` withdraws the access of an account scoped to two sites
+- **WHEN** a `coordinator` withdraws the access of an account scoped to two sites
 - **THEN** both `user_site_scope` rows still carry a null `revoked_at`
 
 #### Scenario: The kept scope grants nothing
@@ -914,7 +886,7 @@ access today. That they once had access, and when it ended, is what the audit ch
 
 ### Requirement: A coordinator can read the administrable detail of an account in their scope
 
-The system SHALL let the H&S coordinator read one account of a person in their site scope,
+The system SHALL let the coordinator read one account of a person in their site scope,
 reduced to what administering it requires: its `id`, `role`, whether it is active, whether it
 can sign in, and its `email`. This SHALL NOT be the roster listing: the roster SHALL continue
 to omit every account's `email`, scope and credential, and this reading exists precisely
@@ -922,22 +894,22 @@ because correcting an email needs to show the coordinator what is registered tod
 
 #### Scenario: The coordinator reads an account in scope
 
-- **WHEN** an `hs_coordinator` reads the account of a person in a site of their scope
+- **WHEN** a `coordinator` reads the account of a person in a site of their scope
 - **THEN** the account is returned with its `id`, `role`, `active`, `can_sign_in` and `email`
 
 #### Scenario: An account outside the coordinator's scope is not readable
 
-- **WHEN** an `hs_coordinator` reads an account of a person outside every site of their scope
+- **WHEN** a `coordinator` reads an account of a person outside every site of their scope
 - **THEN** no account is returned
 
 #### Scenario: Only the coordinator can read this detail
 
-- **WHEN** an account whose role is not `hs_coordinator` reads another account's detail
+- **WHEN** an account whose role is not `coordinator` reads another account's detail
 - **THEN** the request is refused
 
 ### Requirement: A coordinator can reissue the invitation of an account that never signed in
 
-The system SHALL let the H&S coordinator issue a new invitation, from the roster of the site
+The system SHALL let the coordinator issue a new invitation, from the roster of the site
 the account is scoped to, for an account that is active and holds no credential — the state
 the roster reports as holding a role it cannot yet sign in with. The new one-time token SHALL
 be returned exactly once, under the same rule as the first one.
@@ -972,7 +944,7 @@ working.
 
 #### Scenario: The coordinator reissues a link that was never copied
 
-- **WHEN** an `hs_coordinator` reissues the invitation of an account that holds no
+- **WHEN** a `coordinator` reissues the invitation of an account that holds no
   `app_credential` and whose `deactivated_at` is null
 - **THEN** a new `user_invitation` row is created for that account and its one-time token is
   returned once
@@ -980,7 +952,7 @@ working.
 
 #### Scenario: Reissuing corrects a mistyped email in the same act
 
-- **WHEN** an `hs_coordinator` reissues the invitation of an account that holds no
+- **WHEN** a `coordinator` reissues the invitation of an account that holds no
   `app_credential`, supplying an `email` different from the one on file and not used by any
   other account
 - **THEN** the account's `email` is updated to the supplied value
@@ -990,7 +962,7 @@ working.
 
 #### Scenario: Correcting the email to one already taken is refused
 
-- **WHEN** an `hs_coordinator` reissues the invitation of an account, supplying an `email`
+- **WHEN** a `coordinator` reissues the invitation of an account, supplying an `email`
   that already belongs to another account
 - **THEN** the request is refused
 - **AND** the account's `email` is unchanged
@@ -998,32 +970,32 @@ working.
 
 #### Scenario: Reissuing for an account that can already sign in is refused
 
-- **WHEN** an `hs_coordinator` reissues the invitation of an account that holds an
+- **WHEN** a `coordinator` reissues the invitation of an account that holds an
   `app_credential` whose `revoked_at` is null
 - **THEN** the request is refused and no `user_invitation` row is created
 - **AND** the existing `app_credential` is unchanged
 
 #### Scenario: Correcting the email of an account that can already sign in is refused
 
-- **WHEN** an `hs_coordinator` attempts to reissue and correct the `email` of an account that
+- **WHEN** a `coordinator` attempts to reissue and correct the `email` of an account that
   holds an `app_credential` whose `revoked_at` is null
 - **THEN** the request is refused and the account's `email` is unchanged
 
 #### Scenario: Withdrawing an account that can already sign in is allowed
 
-- **WHEN** an `hs_coordinator` withdraws the access of a `jhsc_member` account that holds an
+- **WHEN** a `coordinator` withdraws the access of an `inspector` account that holds an
   `app_credential` whose `revoked_at` is null
 - **THEN** the act is carried out and the account is reported as inactive
 
 #### Scenario: Reissuing for a deactivated account is refused
 
-- **WHEN** an `hs_coordinator` reissues the invitation of an account whose `deactivated_at` is
+- **WHEN** a `coordinator` reissues the invitation of an account whose `deactivated_at` is
   set
 - **THEN** the request is refused and no `user_invitation` row is created
 
 #### Scenario: Only the coordinator can reissue
 
-- **WHEN** an account whose role is not `hs_coordinator` reissues an invitation
+- **WHEN** an account whose role is not `coordinator` reissues an invitation
 - **THEN** the request is refused and no `user_invitation` row is created
 
 #### Scenario: The reissued token is shown once
@@ -1089,19 +1061,39 @@ identify one real person, or the immutability of the record proves nothing.
 ### Requirement: An account carries exactly one role from a closed set
 
 The system SHALL store `app_user.role` as a mandatory value restricted by the database to
-`hs_coordinator`, `jhsc_member` and `management`. An account
+`coordinator`, `inspector` and `management`. An account
 SHALL carry exactly one role: the schema SHALL NOT allow a set, a list or a second role row.
 
-`jhsc_member` SHALL be the single term for the people who carry out inspections; `inspector` SHALL
-NOT appear as a role value.
+`inspector` SHALL be the single role of the committee members who hold no administrative
+authority. The account assigned to carry out an inspection SHALL continue to be referenced by
+`inspection.inspector_id`, which is a field and not a permission: an account of any of the three
+roles MAY be assigned, and being assigned SHALL NOT change its role.
+
+`hs_coordinator` and `jhsc_member` SHALL NOT be accepted as role values. No account SHALL be able to
+be created, restored or changed into either of them. Every account that carried one of them SHALL
+carry `coordinator` or `inspector` respectively, with its scope, credentials, sessions and history
+otherwise unchanged.
 
 `supervisor` and `external_auditor` SHALL NOT be accepted as role values. No account SHALL be able
 to be created, restored or changed into either of them.
 
 #### Scenario: A role outside the closed set is rejected
 
-- **WHEN** an `app_user` row is inserted with `role` set to `inspector`
+- **WHEN** an `app_user` row is inserted with `role` set to `jhsc_member`
 - **THEN** the insert fails with a check violation
+
+#### Scenario: A retired role name is rejected
+
+- **WHEN** an `app_user` row is inserted with `role` set to `hs_coordinator`
+- **THEN** the insert fails with a check violation
+
+#### Scenario: Existing accounts carry the renamed roles
+
+- **GIVEN** an account whose `role` was `hs_coordinator` and one whose `role` was `jhsc_member`
+  before this change, each holding an active credential and a site scope
+- **WHEN** their accounts are read after the change
+- **THEN** the first carries `role` `coordinator` and the second `role` `inspector`
+- **AND** both keep their credential, their site scope and their `id`
 
 #### Scenario: A null role is rejected
 
@@ -1110,7 +1102,7 @@ to be created, restored or changed into either of them.
 
 #### Scenario: Each of the three roles is accepted
 
-- **WHEN** an `app_user` row is inserted for each of `hs_coordinator`, `jhsc_member`,
+- **WHEN** an `app_user` row is inserted for each of `coordinator`, `inspector`,
   `management`
 - **THEN** all three inserts succeed
 
@@ -1226,7 +1218,7 @@ any other account as a consequence of a site registration.
 
 #### Scenario: The registrant reaches the site it registered
 
-- **WHEN** an HS coordinator registers a site
+- **WHEN** a coordinator registers a site
 - **THEN** a `user_site_scope` row exists whose `user_id` is that account and whose `site_id` is the
   registered site
 - **AND** its `revoked_at` is null
@@ -1234,7 +1226,7 @@ any other account as a consequence of a site registration.
 
 #### Scenario: The registrant's next request carries the new site
 
-- **GIVEN** an HS coordinator has registered a site
+- **GIVEN** a coordinator has registered a site
 - **WHEN** that account's session scope is resolved for its next request
 - **THEN** the registered site is among the sites the session reaches
 
@@ -1247,14 +1239,14 @@ any other account as a consequence of a site registration.
 
 #### Scenario: No other account gains the new site
 
-- **GIVEN** a second account whose role is `hs_coordinator` and whose scope covers St. Thomas only
-- **WHEN** another HS coordinator registers a site
+- **GIVEN** a second account whose role is `coordinator` and whose scope covers St. Thomas only
+- **WHEN** another coordinator registers a site
 - **THEN** the second account's active `user_site_scope` rows are unchanged
 - **AND** the registered site is absent from the second account's site list
 
 #### Scenario: The grant is recorded on the new site's chain
 
-- **WHEN** an HS coordinator registers a site
+- **WHEN** a coordinator registers a site
 - **THEN** an `audit_log` entry whose `event_type` is `user.scope_granted` exists
 - **AND** its `site_id` is the registered site
 - **AND** its payload carries the registering account as its `account_id`
@@ -1280,7 +1272,7 @@ SHALL rely on the site's non-null `deactivated_at` to omit the site from active 
 
 #### Scenario: Deactivation changes no other account scopes
 
-- **WHEN** an HS coordinator deactivates a site
+- **WHEN** a coordinator deactivates a site
 - **THEN** no `user_site_scope` row for any account is inserted, deleted or revoked as a side effect
 
 ### Requirement: Site scope decides what an account can see, without any endpoint filtering
@@ -1289,24 +1281,24 @@ The system SHALL derive the `app.site_ids` of a transaction from the acting acco
 scope, and SHALL rely on the row-level security policies of the site-isolated tables for the
 resulting visibility. No endpoint SHALL filter by site in its query.
 
-A `jhsc_member` SHALL normally hold one site; `hs_coordinator` and `management`
+An `inspector` SHALL normally hold one site; `coordinator` and `management`
 SHALL be the roles that hold both. This SHALL be a property of the scope rows granted to the
 account, not of the role value: the role does not by itself widen or narrow what is visible.
 
 #### Scenario: A single-site member does not see the other workplace
 
-- **WHEN** a transaction runs with the scope of a `jhsc_member` account granted only `st-thomas`
+- **WHEN** a transaction runs with the scope of an `inspector` account granted only `st-thomas`
 - **THEN** reads of `person`, `location` and every other site-isolated table return only rows of
   `st-thomas`
 
 #### Scenario: The coordinator sees both workplaces
 
-- **WHEN** a transaction runs with the scope of an `hs_coordinator` account granted both sites
+- **WHEN** a transaction runs with the scope of a `coordinator` account granted both sites
 - **THEN** reads of site-isolated tables return rows of both sites
 
 #### Scenario: The role alone grants nothing
 
-- **WHEN** an account with role `hs_coordinator` has no active `user_site_scope` row
+- **WHEN** an account with role `coordinator` has no active `user_site_scope` row
 - **THEN** its effective scope is empty and reads of site-isolated tables return no rows
 
 ### Requirement: Accounts are deactivated, never deleted
@@ -1388,9 +1380,9 @@ active status, and SHALL NOT create a second person.
 - **THEN** no job imports the roster on its own
 - **AND** every import record corresponds to a file an operator submitted
 
-### Requirement: The H&S coordinator can import the roster over HTTP
+### Requirement: The coordinator can import the roster over HTTP
 
-The system SHALL let an account whose `role` is `hs_coordinator` import a roster CSV over HTTP by
+The system SHALL let an account whose `role` is `coordinator` import a roster CSV over HTTP by
 submitting exactly one file in the multipart field `file`, and SHALL apply it through the same
 importer as the server command: the same header columns, the same per-row validation, the same
 upsert by `employee_number`, and the same single transaction that writes the import record together
@@ -1411,7 +1403,7 @@ one `file`, an unexpected multipart field or an unusable file name. The system S
 
 #### Scenario: The coordinator imports a file from the console
 
-- **WHEN** an account whose `role` is `hs_coordinator` and whose scope contains `st-thomas`
+- **WHEN** an account whose `role` is `coordinator` and whose scope contains `st-thomas`
   submits a CSV whose rows all name `site_code` `st-thomas`
 - **THEN** every row is applied to the roster of `st-thomas`
 - **AND** the response reports the counts of rows read, applied and rejected
@@ -1433,9 +1425,9 @@ one `file`, an unexpected multipart field or an unusable file name. The system S
 - **THEN** the named scope is ignored
 - **AND** no `person` of `glencoe` is created or changed
 
-#### Scenario: A JHSC member is refused
+#### Scenario: An inspector is refused
 
-- **WHEN** an account whose `role` is `jhsc_member` submits a roster CSV
+- **WHEN** an account whose `role` is `inspector` submits a roster CSV
 - **THEN** the request is refused
 - **AND** no `person` row is created or changed and no import record is written
 
@@ -1624,14 +1616,14 @@ that has no credential yet.
 
 #### Scenario: The coordinator invites an account that has no credential
 
-- **WHEN** an `hs_coordinator` session issues an invitation for an `app_user` row that has no
+- **WHEN** a `coordinator` session issues an invitation for an `app_user` row that has no
   `app_credential`
 - **THEN** a `user_invitation` row is created carrying that `user_id` and the coordinator's
   `app_user.id` as `issued_by_user_id`
 
-#### Scenario: A JHSC member cannot invite
+#### Scenario: An inspector cannot invite
 
-- **WHEN** a session whose account `role` is `jhsc_member` issues an invitation
+- **WHEN** a session whose account `role` is `inspector` issues an invitation
 - **THEN** the request is rejected and no `user_invitation` row is created
 
 #### Scenario: There is no self-registration path
@@ -1830,15 +1822,17 @@ the stored identifier.
 
 #### Scenario: The role is displayed in the vocabulary of the role set
 
-- **WHEN** a client displays the role of an account whose `role` is `jhsc_member`
-- **THEN** it shows `JHSC member`
-- **AND** it does not show the identifier `jhsc_member`
+- **WHEN** a client displays the role of an account whose `role` is `inspector`
+- **THEN** it shows `Inspector`
+- **AND** an account whose `role` is `coordinator` shows `Coordinator`, and one whose `role` is
+  `management` shows `Management`
+- **AND** no client shows `JHSC member` or `H&S coordinator` as the name of a role
 
 #### Scenario: A changed role takes effect on the next request
 
-- **WHEN** an account's `role` is changed from `jhsc_member` to `hs_coordinator`
+- **WHEN** an account's `role` is changed from `inspector` to `coordinator`
 - **AND** the same unexpired session token is used for a subsequent request
-- **THEN** the resolved `role` is `hs_coordinator`
+- **THEN** the resolved `role` is `coordinator`
 
 #### Scenario: A revoked site leaves the scope on the next request
 
@@ -1882,9 +1876,9 @@ connection returned and handed to another request carries none of them.
 
 #### Scenario: A role supplied by the caller is ignored
 
-- **WHEN** a request carries a role in its query, body or headers claiming `hs_coordinator` for a
-  `jhsc_member` account
-- **THEN** the transaction's `app.role` is `jhsc_member`
+- **WHEN** a request carries a role in its query, body or headers claiming `coordinator` for an
+  `inspector` account
+- **THEN** the transaction's `app.role` is `inspector`
 - **AND** no row the elevated role would have unlocked is returned
 
 #### Scenario: The role does not survive the transaction
@@ -1896,9 +1890,10 @@ connection returned and handed to another request carries none of them.
 
 #### Scenario: A single-site member reaches only their own workplace
 
-- **WHEN** a `jhsc_member` account granted only `st-thomas` reads a site-isolated table through an
+- **WHEN** an `inspector` account granted only `st-thomas` reads a site-isolated table through an
   authenticated request
 - **THEN** only rows of `st-thomas` are returned, and no route filtered by site to achieve it
+
 ### Requirement: An access token is short-lived and is renewed by a refresh token
 
 The system SHALL issue, on a successful sign-in, an access token valid for minutes and a refresh
@@ -1997,7 +1992,7 @@ when its credential is revoked.
 Revocation SHALL be expressed by setting `app_session.revoked_at`, never by deleting the row, and
 a revoked session SHALL NOT be renewable.
 
-An account SHALL also be able to end its own sessions, and an `hs_coordinator` session SHALL be
+An account SHALL also be able to end its own sessions, and a `coordinator` session SHALL be
 able to end another account's.
 
 #### Scenario: Deactivating an account ends its sessions
@@ -2014,7 +2009,7 @@ able to end another account's.
 
 #### Scenario: The coordinator ends another account's session
 
-- **WHEN** an `hs_coordinator` session revokes the sessions of another account
+- **WHEN** a `coordinator` session revokes the sessions of another account
 - **THEN** that account's live sessions are revoked and its tokens are no longer accepted
 
 #### Scenario: A session row is never deleted
@@ -2059,13 +2054,13 @@ The system SHALL label the site people administration destination as “People�
 
 #### Scenario: Coordinator opens people administration
 
-- **WHEN** an H&S coordinator opens the site people administration destination
+- **WHEN** a coordinator opens the site people administration destination
 - **THEN** the navigation item is labeled “People”
 - **AND** the page heading is “People & Access”
 
 #### Scenario: Coordinator manages the people list
 
-- **WHEN** an H&S coordinator imports, adds, searches or manages access for people at a site
+- **WHEN** a coordinator imports, adds, searches or manages access for people at a site
 - **THEN** the visible action and status text refers to people and access without using “roster” as the name of the destination or list
 
 #### Scenario: Internal roster identifiers remain compatible
@@ -2075,7 +2070,7 @@ The system SHALL label the site people administration destination as “People�
 
 ### Requirement: An active worker can be deactivated from the roster
 
-The system SHALL allow an account whose `role` is `hs_coordinator` to deactivate an active
+The system SHALL allow an account whose `role` is `coordinator` to deactivate an active
 `person` with no active associated `app_user` by naming that person's `id`. This includes a person
 with no account and one whose associated account is inactive. The operation SHALL set
 `person.deactivated_at` to the server time and SHALL return the deactivated person. It SHALL never
@@ -2094,7 +2089,7 @@ transaction.
 
 #### Scenario: A coordinator deactivates an active worker in scope
 
-- **WHEN** an `hs_coordinator` confirms deactivation of an active `person` in scope whose account is `null` or inactive
+- **WHEN** a `coordinator` confirms deactivation of an active `person` in scope whose account is `null` or inactive
 - **THEN** the person's `deactivated_at` is set to the server time
 - **AND** the person row is returned with a non-null `deactivated_at`
 - **AND** the default active roster no longer includes that person
@@ -2130,8 +2125,153 @@ transaction.
 - **THEN** the request returns the same not-found response used for a nonexistent person
 - **AND** no person row is changed
 
-#### Scenario: A JHSC member cannot deactivate a worker
+#### Scenario: An inspector cannot deactivate a worker
 
-- **WHEN** an account whose `role` is `jhsc_member` attempts to deactivate an active worker in its site scope
+- **WHEN** an account whose `role` is `inspector` attempts to deactivate an active worker in its site scope
 - **THEN** the request is refused
 - **AND** the person remains active
+
+### Requirement: A coordinator can withdraw the inspector access they granted
+
+The system SHALL let an administrative account withdraw, from the roster of the site the account is
+scoped to, the access of an active `inspector` account. Withdrawing SHALL revoke the
+account's pending invitation, revoke its credential, and set its `deactivated_at`, as one act
+that either happens whole or not at all.
+
+The same act SHALL serve an account that never signed in and one that signs in every day: an
+invitation nobody accepted and a member leaving the committee are the same fact — this account
+no longer grants access — and the system SHALL NOT offer two different withdrawals for it.
+What SHALL differ is how the act is named and confirmed, because cancelling an invitation
+makes a link stop working while removing a member ends a session that may be open.
+
+Withdrawing SHALL be confirmed before it is executed, and SHALL be refused for an account
+whose role is not `inspector`: the roster administers the access the roster grants, and
+removing another administrative account is not a press away in a list of two hundred rows.
+
+Withdrawing an account that is already inactive SHALL be refused, so that the recorded
+`deactivated_at` stays the moment the access actually ended.
+
+Withdrawing SHALL NOT deactivate the person: losing access is not leaving the company, and the
+roster is maintained by the CSV import.
+
+#### Scenario: A pending invitation is cancelled
+
+- **WHEN** a `coordinator` withdraws the access of an `inspector` account that holds a
+  pending invitation and no credential
+- **THEN** the invitation carries a non-null `revoked_at` and its token is no longer accepted
+- **AND** the account carries a non-null `deactivated_at` and is reported as inactive
+
+#### Scenario: A member who signs in loses access
+
+- **WHEN** a `coordinator` withdraws the access of an `inspector` account that holds an
+  active credential and a live session
+- **THEN** the credential carries a non-null `revoked_at` and the account cannot sign in again
+- **AND** the `app_session` row carries a non-null `revoked_at`
+
+#### Scenario: The person stays on the roster
+
+- **WHEN** a `coordinator` withdraws the access of an `inspector` account
+- **THEN** the referenced `person` row's `deactivated_at` is unchanged
+
+#### Scenario: An inspector cannot withdraw access
+
+- **WHEN** an `inspector` withdraws the access of another account
+- **THEN** the request is refused and the account stays active
+
+#### Scenario: Withdrawing twice is refused
+
+- **WHEN** a `coordinator` withdraws the access of an account that is already inactive
+- **THEN** the request is refused and the recorded `deactivated_at` is unchanged
+
+#### Scenario: An account outside the coordinator's scope cannot be withdrawn
+
+- **WHEN** a `coordinator` withdraws the access of an account of a person outside every
+  site of their scope
+- **THEN** the request is refused and the account stays active
+
+#### Scenario: Only an administrative account can withdraw access
+
+- **WHEN** an account whose role is `inspector` withdraws another account's access
+- **THEN** the request is refused
+
+### Requirement: An active person can be corrected from the roster
+
+The system SHALL allow an account whose `role` is `coordinator` to correct the `first_name`,
+`last_name` and `employee_number` of an active `person` by naming that person's `id` and at least
+one of those fields. Each supplied value SHALL be non-empty once trimmed. The operation SHALL return
+the corrected person. It SHALL NOT change the person's `id`, `site_id` or `deactivated_at`, nor the
+account that references her.
+
+The target SHALL be resolved under the session's site scope through the row-level security policy.
+A person outside that scope SHALL be indistinguishable from a nonexistent person. The system SHALL
+refuse a person whose `deactivated_at` is non-null, and SHALL refuse an `employee_number` that
+another person already carries, leaving the person exactly as she was in both cases.
+
+The database SHALL record `person.renamed` when a name changes and `person.renumbered` when the
+employee number changes, in the same transaction. A request whose values equal the stored ones
+SHALL succeed without writing any audit entry.
+
+The roster interface SHALL offer this action on every active row, prefilled with the person's
+current values. When, and only when, the person is referenced by an active account that cannot yet
+sign in, the same dialog SHALL also offer to correct that account's `email`, under the rule that
+already governs correcting the email of such an account, and SHALL NOT issue a new invitation by
+doing so. For every other row the dialog SHALL NOT offer an email. After success the roster SHALL
+show the corrected values.
+
+#### Scenario: A coordinator corrects a mistyped name
+
+- **WHEN** a `coordinator` corrects the `last_name` of an active person in scope
+- **THEN** the person carries the new `last_name`
+- **AND** a `person.renamed` audit entry with the previous and the new name exists for her site
+
+#### Scenario: A coordinator corrects a mistyped employee number
+
+- **WHEN** a `coordinator` corrects the `employee_number` of an active person in scope to a
+  value no other person carries
+- **THEN** the person carries the new `employee_number` and the same `id`
+- **AND** a `person.renumbered` audit entry with the previous and the new number exists for her site
+
+#### Scenario: An employee number in use is refused
+
+- **WHEN** a `coordinator` corrects the `employee_number` of a person to one another person
+  already carries
+- **THEN** the request is refused
+- **AND** neither person is changed and no audit entry is written
+
+#### Scenario: An inactive person cannot be corrected
+
+- **WHEN** a `coordinator` attempts to correct a person whose `deactivated_at` is non-null
+- **THEN** the request is refused
+- **AND** the person is unchanged
+
+#### Scenario: A person outside the site scope is not disclosed
+
+- **WHEN** a coordinator names a person outside the session's site scope
+- **THEN** the request returns the same not-found response used for a nonexistent person
+- **AND** no person row is changed
+
+#### Scenario: An inspector cannot correct a person
+
+- **WHEN** an account whose `role` is `inspector` attempts to correct a person in its site scope
+- **THEN** the request is refused
+- **AND** the person is unchanged
+
+#### Scenario: An empty correction is refused
+
+- **WHEN** a coordinator names a person and supplies no field, or a field that is empty once trimmed
+- **THEN** the request is refused
+- **AND** the person is unchanged
+
+#### Scenario: The dialog offers the email of an invitation not yet accepted
+
+- **WHEN** a coordinator opens the correction of a person referenced by an active account that
+  cannot yet sign in
+- **THEN** the dialog shows that account's current `email` as correctable
+- **AND** saving a different `email` updates the account's `email` without creating a
+  `user_invitation` row
+
+#### Scenario: The dialog offers no email for anyone else
+
+- **WHEN** a coordinator opens the correction of a person with no account, with an inactive account,
+  or with an account that can already sign in
+- **THEN** the dialog offers `first_name`, `last_name` and `employee_number` only

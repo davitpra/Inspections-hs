@@ -42,14 +42,14 @@ const permissions = [
 
 describe.each(permissions)('%s', (_name, allows) => {
   it('se lo concede al coordinador', () => {
-    expect(allows(session('hs_coordinator'))).toBe(true);
+    expect(allows(session('coordinator'))).toBe(true);
   });
 
   it('se lo concede a management', () => {
     expect(allows(session('management'))).toBe(true);
   });
 
-  it.each(ROLES.filter((role) => role === 'jhsc_member'))('se lo niega a %s', (role) => {
+  it.each(ROLES.filter((role) => role === 'inspector'))('se lo niega a %s', (role) => {
     expect(allows(session(role))).toBe(false);
   });
 
@@ -61,8 +61,8 @@ describe.each(permissions)('%s', (_name, allows) => {
 describe('canPromote', () => {
   it('se lo concede solo a management', () => {
     expect(canPromote(session('management'))).toBe(true);
-    expect(canPromote(session('hs_coordinator'))).toBe(false);
-    expect(canPromote(session('jhsc_member'))).toBe(false);
+    expect(canPromote(session('coordinator'))).toBe(false);
+    expect(canPromote(session('inspector'))).toBe(false);
     expect(canPromote(null)).toBe(false);
   });
 });
@@ -70,8 +70,8 @@ describe('canPromote', () => {
 describe('canDemote', () => {
   it('se lo concede solo a management', () => {
     expect(canDemote(session('management'))).toBe(true);
-    expect(canDemote(session('hs_coordinator'))).toBe(false);
-    expect(canDemote(session('jhsc_member'))).toBe(false);
+    expect(canDemote(session('coordinator'))).toBe(false);
+    expect(canDemote(session('inspector'))).toBe(false);
     expect(canDemote(null)).toBe(false);
   });
 });

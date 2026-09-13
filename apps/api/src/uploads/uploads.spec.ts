@@ -15,7 +15,7 @@ const EVIDENCE_KEY = `${SITE_ID}/actions/${INSPECTION_ID}/evidence`;
 const session: SessionScope = {
   userId: USER_ID,
   siteIds: [SITE_ID],
-  role: 'jhsc_member',
+  role: 'inspector',
 };
 
 const request = {

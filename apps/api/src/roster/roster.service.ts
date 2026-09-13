@@ -6,6 +6,7 @@ import {
   type PersonWithAccount,
   type RosterImportReport,
   type RosterQuery,
+  type UpdatePersonRequest,
 } from '@hs/contracts';
 
 import { DbService } from '../db/db.service';
@@ -22,13 +23,13 @@ import {
   rosterForbidden,
   rosterImportForbidden,
 } from './roster.errors';
-import { deactivatePerson, findRoster, insertPerson } from './roster.repository';
+import { deactivatePerson, findRoster, insertPerson, updatePerson } from './roster.repository';
 
 /**
  * La consola del roster: poder ver quién trabaja en cada planta sin abrir `psql`.
  *
- * Además de importar y dar de alta, permite la baja estrecha de una persona sin cuenta.
- * No corrige nombres, no transfiere y no reactiva: eso sigue siendo del CSV.
+ * Además de importar y dar de alta, permite la baja estrecha de una persona sin cuenta y
+ * corregir los datos de una persona activa. No transfiere ni reactiva: eso sigue siendo del CSV.
  *
  * **El CSV gana (design D1).** Un alta a mano es un adelanto del archivo — "esta persona
  * ya empezó, el export es el lunes" — no una excepción a él: cuando el próximo CSV traiga
@@ -36,11 +37,11 @@ import { deactivatePerson, findRoster, insertPerson } from './roster.repository'
  * actualiza. `create` de acá abajo por eso solo INSERTA — nunca actualiza — y por eso el
  * número duplicado falla en vez de resolverse.
  *
- * Que el motor conceda `UPDATE (first_name, last_name, site_id, deactivated_at)` a
- * `hs_app` no es una invitación a usarlo desde un endpoint de a una persona: esos
- * privilegios existen para la importación. Si algún día hace falta corregir desde la
- * pantalla, es otro change, con su propia discusión sobre qué gana cuando el siguiente
- * CSV pise el cambio.
+   * Que el motor conceda `UPDATE (first_name, last_name, site_id, deactivated_at)` a
+   * `hs_app` no es una invitación a usarlo sin control desde un endpoint de a una persona:
+   * esos privilegios existen para la importación y la corrección de pantalla tiene su propio
+   * contrato, validación y auditoría. El siguiente CSV sigue siendo la autoridad sobre esos
+   * datos, según la política de importación vigente.
  */
 @Injectable()
 export class RosterService {
@@ -106,6 +107,31 @@ export class RosterService {
     return result.person;
   }
 
+  async update(
+    session: SessionScope,
+    personId: string,
+    request: UpdatePersonRequest,
+  ): Promise<Person> {
+    this.requireCoordinator(session, rosterForbidden);
+
+    try {
+      const result = await this.db.withSessionClient(session, (client) =>
+        updatePerson(client, personId, request),
+      );
+
+      if (result.status === 'not_found') throw personNotFound();
+      if (result.status === 'not_active') throw personNotActive();
+
+      return result.person;
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw personEmployeeNumberTaken(request.employee_number!);
+      }
+
+      throw error;
+    }
+  }
+
   async import(
     session: SessionScope,
     file: { text: string; sourceFilename: string },
@@ -131,4 +157,8 @@ export class RosterService {
   ): void {
     if (!isAdministrator(session.role)) throw failure();
   }
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  return (error as { code?: string }).code === '23505';
 }

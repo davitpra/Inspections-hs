@@ -21,7 +21,7 @@ import {
  *
  * **Ninguna lleva `WHERE site_id` NI `WHERE reported_by`, y esas dos ausencias son el
  * invariante.** El recorte por planta lo hace `hs_apply_site_isolation` y el recorte por
- * visibilidad lo hace la política `RESTRICTIVE` de 0012 (design D2). Un miembro del JHSC no ve
+ * visibilidad lo hace la política `RESTRICTIVE` de 0012 (design D2). Un inspector no ve
  * incidentes administrativos porque la política no se los devuelve, no porque este
  * archivo se acuerde de filtrar — y por eso un `SELECT *` crudo dentro de su transacción
  * tampoco se lo devuelve.

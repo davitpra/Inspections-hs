@@ -85,7 +85,7 @@ export async function createAccount(pool: Pool, spec: AccountSpec): Promise<Seed
         spec.id ?? null,
         personId,
         email,
-        spec.role ?? 'hs_coordinator',
+        spec.role ?? 'coordinator',
       ],
     );
 

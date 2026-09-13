@@ -17,7 +17,7 @@ import { COORDINATOR_ID, issueInvitation } from './bootstrap-invitation.mjs';
  *
  * POR QUÉ UNA CUENTA SEPARADA Y NO EL COORDINADOR SEMBRADO. La cuenta de demo necesita una
  * credencial conocida y un alcance propio; el coordinador del seed se reserva para el
- * bootstrap de la aplicación. `jhsc_member` es la identidad de campo de la demo, pero las
+ * bootstrap de la aplicación. `inspector` es la identidad de campo de la demo, pero las
  * cuentas activas de los tres roles son elegibles cuando tienen alcance vigente.
  *
  * Corre como `hs_app`, igual que `bootstrap-invitation.mjs`: los GRANT alcanzan
@@ -129,7 +129,7 @@ async function createInspector(pool) {
 
     await client.query(
       `INSERT INTO app_user (id, person_id, email, role)
-       VALUES ($1, $2, $3, 'jhsc_member')
+       VALUES ($1, $2, $3, 'inspector')
        ON CONFLICT (id) DO NOTHING`,
       [INSPECTOR.accountId, INSPECTOR.personId, INSPECTOR.email],
     );
@@ -412,7 +412,7 @@ async function main() {
         '',
         'Entorno de demo listo.',
         '',
-        `  email       ${INSPECTOR.email} (jhsc_member)`,
+         `  email       ${INSPECTOR.email} (inspector)`,
         alreadyHadCredential
           ? '  contraseña  la que se puso la primera vez que corrió esto'
           : `  contraseña  ${password}`,

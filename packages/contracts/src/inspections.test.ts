@@ -253,7 +253,7 @@ describe('inspectorOptionSchema', () => {
       first_name: 'Dana',
       last_name: 'Okafor',
       email: 'dana@example.com',
-      role: 'jhsc_member',
+      role: 'inspector',
     });
 
     expect(result.success).toBe(false);

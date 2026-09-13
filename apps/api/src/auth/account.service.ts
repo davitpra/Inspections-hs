@@ -276,7 +276,7 @@ async function withdraw(
   client: PoolClient,
   existing: { id: string; role: Role; active: boolean; email: string },
 ): Promise<{ response: CreateAccountResponse; withdrawn: boolean }> {
-  if (existing.role !== 'jhsc_member') throw accountRoleNotRemovable();
+  if (existing.role !== 'inspector') throw accountRoleNotRemovable();
   if (!existing.active) throw accountAlreadyInactive();
 
   await revokePending(client, existing.id);
@@ -316,16 +316,16 @@ async function promote(
     accountId,
     accountPromotionSelf,
   );
-  if (existing.role !== 'jhsc_member') throw accountRoleNotPromotable(existing.role);
+  if (existing.role !== 'inspector') throw accountRoleNotPromotable(existing.role);
   if (!existing.active) throw accountPromotionInactive();
 
-  await client.query("UPDATE app_user SET role = 'hs_coordinator' WHERE id = $1", [accountId]);
+  await client.query("UPDATE app_user SET role = 'coordinator' WHERE id = $1", [accountId]);
 
   return {
     response: {
       account: {
         id: existing.id,
-        role: 'hs_coordinator',
+        role: 'coordinator',
         active: true,
         can_sign_in: existing.can_sign_in,
         email: existing.email,
@@ -348,16 +348,16 @@ async function demote(
     accountId,
     accountDemotionSelf,
   );
-  if (existing.role !== 'hs_coordinator') throw accountRoleNotDemotable(existing.role);
+  if (existing.role !== 'coordinator') throw accountRoleNotDemotable(existing.role);
   if (!existing.active) throw accountDemotionInactive();
 
-  await client.query("UPDATE app_user SET role = 'jhsc_member' WHERE id = $1", [accountId]);
+  await client.query("UPDATE app_user SET role = 'inspector' WHERE id = $1", [accountId]);
 
   return {
     response: {
       account: {
         id: existing.id,
-        role: 'jhsc_member',
+        role: 'inspector',
         active: true,
         can_sign_in: existing.can_sign_in,
         email: existing.email,
@@ -420,10 +420,10 @@ async function roleChangeTarget(
  * cambió) en la cadena de cada planta que alcanza.
  *
    * **Solo revive con el MISMO rol.** Si la cuenta dada de baja era administrativa y el alta
-   * pide `jhsc_member`, se responde el conflicto de siempre en vez de cambiarle el rol: eso es
+   * pide `inspector`, se responde el conflicto de siempre en vez de cambiarle el rol: eso es
  * una decisión con su propio evento de auditoría, y no puede salir de apretar "invitar" en
  * una lista de doscientas filas. La pantalla nunca produce ese caso —`canInvite` solo ofrece
- * el botón sobre una cuenta inactiva de `jhsc_member`—, así que la guarda protege a quien
+  * el botón sobre una cuenta inactiva de `inspector`—, así que la guarda protege a quien
  * llame la API a mano.
  *
  * No re-otorga el alcance que ya tiene vivo: la baja nunca lo revocó (ver `withdraw`). Sí

@@ -7,9 +7,7 @@ every published row remains separately resolvable. It also defines what a publis
 response types an item can use, how conditional visibility is resolved, and what makes a set of
 answers valid against that version — with the same verdict on the offline device and on the
 server.
-
 ## Requirements
-
 ### Requirement: A template version is a frozen document
 
 The system SHALL store every published template version as an immutable JSONB document in
@@ -558,7 +556,7 @@ prevent.
 
 ### Requirement: A publishable draft becomes the next version of its template
 
-The system SHALL publish a live draft on the HS coordinator's request, writing in one
+The system SHALL publish a live draft on the coordinator's request, writing in one
 transaction the `template_version` row carrying the draft document with its positions derived
 from list order, and, when the draft names no template, the `template` row carrying the draft's
 `key` and `name` first.
@@ -580,7 +578,7 @@ so that the interface can name what was created rather than only that something 
 
 - **GIVEN** a live draft that names no template, whose document is publishable, with two
   sections of two questions each
-- **WHEN** the HS coordinator publishes it
+- **WHEN** the coordinator publishes it
 - **THEN** a `template` row exists carrying the draft's `key` and `name`
 - **AND** a `template_version` row exists for that template with `version` 1
 - **AND** a `template_item` row is registered for each of the four `item_key` values
@@ -589,7 +587,7 @@ so that the interface can name what was created rather than only that something 
 #### Scenario: Publishing a revision writes only a version
 
 - **GIVEN** a template published at version 1 and a publishable revision draft of it
-- **WHEN** the HS coordinator publishes the revision
+- **WHEN** the coordinator publishes the revision
 - **THEN** a `template_version` row exists for that template with `version` 2
 - **AND** the number of `template` rows is unchanged
 - **AND** the `template` row still carries the `key` and `name` it had
@@ -606,7 +604,7 @@ so that the interface can name what was created rather than only that something 
 #### Scenario: The item rows are derived, not sent
 
 - **GIVEN** a live draft whose document is publishable
-- **WHEN** the HS coordinator publishes it
+- **WHEN** the coordinator publishes it
 - **THEN** one `template_version_item` row exists for every question of the document
 - **AND** each row carries the `item_key`, `section_key`, `prompt`, `response_type` and
   `required` the document declared
@@ -644,7 +642,7 @@ and a draft it reports as incomplete is never accepted.
 #### Scenario: A draft with an empty section is refused
 
 - **GIVEN** a live draft with a section that has no questions
-- **WHEN** the HS coordinator publishes it
+- **WHEN** the coordinator publishes it
 - **THEN** the request is refused as `template_draft_not_publishable`
 - **AND** the refusal carries the issue naming that section
 - **AND** no `template`, `template_item` or `template_version` row is written
@@ -653,7 +651,7 @@ and a draft it reports as incomplete is never accepted.
 #### Scenario: An empty draft is refused
 
 - **GIVEN** a live draft whose document has no sections
-- **WHEN** the HS coordinator publishes it
+- **WHEN** the coordinator publishes it
 - **THEN** the request is refused as `template_draft_not_publishable`
 - **AND** the draft is still live
 
@@ -687,7 +685,7 @@ author threw the work away, the other says it became a record.
 #### Scenario: A published draft cannot be published twice
 
 - **GIVEN** a draft that has been published
-- **WHEN** the HS coordinator publishes it again
+- **WHEN** the coordinator publishes it again
 - **THEN** the request is refused as `template_draft_not_found`
 - **AND** the number of `template` and `template_version` rows is unchanged
 
@@ -744,7 +742,7 @@ publication. The refusal at publication is the authoritative one.
 - **GIVEN** a seeded template whose `key` is `monthly-general-inspection`
 - **AND** a live publishable draft that names no template and whose derived key is
   `monthly-general-inspection`
-- **WHEN** the HS coordinator publishes the draft
+- **WHEN** the coordinator publishes the draft
 - **THEN** the request is refused as `template_key_taken`
 - **AND** the draft is still live
 - **AND** no new `template` row exists
@@ -753,7 +751,7 @@ publication. The refusal at publication is the authoritative one.
 
 - **GIVEN** a publishable revision draft whose `key` is `monthly-general-inspection`, the key of
   the template it revises
-- **WHEN** the HS coordinator publishes it
+- **WHEN** the coordinator publishes it
 - **THEN** the request succeeds
 - **AND** the number of `template` rows is unchanged
 
@@ -771,7 +769,7 @@ schedule it nor publish it again under the same name.
 #### Scenario: A refused publication leaves no template row
 
 - **GIVEN** a live publishable draft whose derived key already belongs to a published template
-- **WHEN** the HS coordinator publishes it
+- **WHEN** the coordinator publishes it
 - **THEN** the number of `template`, `template_item` and `template_version` rows is unchanged
 - **AND** the draft's `published_at` is absent
 
@@ -779,7 +777,7 @@ schedule it nor publish it again under the same name.
 
 - **GIVEN** a live publishable draft one of whose `item_key` values is already registered in
   `template_item` under a different template
-- **WHEN** the HS coordinator publishes it
+- **WHEN** the coordinator publishes it
 - **THEN** the request is refused
 - **AND** no `template` row exists carrying the draft's `key`
 - **AND** the draft is still live
@@ -787,7 +785,7 @@ schedule it nor publish it again under the same name.
 #### Scenario: A refused revision leaves the template at its previous version
 
 - **GIVEN** a template published at version 1 and a revision draft that is refused at publication
-- **WHEN** the HS coordinator publishes it
+- **WHEN** the coordinator publishes it
 - **THEN** the highest `template_version` for that template is still 1
 - **AND** the draft's `published_at` is absent
 
@@ -814,7 +812,7 @@ concept is not asked again.
 
 - **GIVEN** a revision draft one of whose `item_key` values is registered to a different
   template
-- **WHEN** the HS coordinator publishes it
+- **WHEN** the coordinator publishes it
 - **THEN** the request is refused as `template_item_key_taken`
 - **AND** no `template_version` row is written for the template being revised
 - **AND** the draft is still live
@@ -823,21 +821,21 @@ concept is not asked again.
 
 - **GIVEN** a revision draft declaring an `item_key` whose `template_item` row carries
   `deactivated_at`
-- **WHEN** the HS coordinator publishes it
+- **WHEN** the coordinator publishes it
 - **THEN** the request is refused as `template_item_deactivated`
 - **AND** the refusal names that `item_key`
 - **AND** the draft is still live
 
-### Requirement: Publishing a template is the HS coordinator's
+### Requirement: Publishing a template is the coordinator's
 
 The system SHALL restrict publishing a template draft to an administrative account —
-`hs_coordinator` or `management` — and SHALL refuse `jhsc_member` as `template_draft_forbidden`,
+`coordinator` or `management` — and SHALL refuse `inspector` as `template_draft_forbidden`,
 the same code the other acts on a draft use: for the role that inspects, a draft is a document that
 does not exist.
 
-#### Scenario: A JHSC member cannot publish
+#### Scenario: An inspector cannot publish
 
-- **WHEN** an account whose role is `jhsc_member` publishes a draft
+- **WHEN** an account whose role is `inspector` publishes a draft
 - **THEN** the request is refused as `template_draft_forbidden`
 - **AND** no `template` or `template_version` row is written
 
@@ -875,7 +873,7 @@ seeded template is.
 
 ### Requirement: Revising a published template seeds a draft from its latest version
 
-The system SHALL create, on the HS coordinator's request over a published template, a
+The system SHALL create, on the coordinator's request over a published template, a
 `template_draft` bound to that template through `template_draft.template_id`, whose `document`
 is the document of the template's latest published version with its positions dropped, whose
 `key` and `name` are the template's own, and whose `site_ids` are the active plants of the
@@ -886,12 +884,12 @@ carrying the concept forward is the whole point of revising rather than starting
 
 The request SHALL be refused as `template_not_found` when the template does not exist or has been
 deactivated, and as `template_version_not_found` when it has no published version. It SHALL be
-restricted to an administrative account and refused to `jhsc_member` as `template_draft_forbidden`.
+restricted to an administrative account and refused to `inspector` as `template_draft_forbidden`.
 
 #### Scenario: The seeded draft repeats the published document
 
 - **GIVEN** a template published at version 2 with two sections of two questions each
-- **WHEN** the HS coordinator revises it
+- **WHEN** the coordinator revises it
 - **THEN** a draft exists whose `template_id` is that template
 - **AND** its document declares the same four `item_key` values in the same order
 - **AND** its `key` and `name` are the template's `key` and `name`
@@ -899,7 +897,7 @@ restricted to an administrative account and refused to `jhsc_member` as `templat
 #### Scenario: The seeded draft carries no position
 
 - **GIVEN** a template whose published document declares positions
-- **WHEN** the HS coordinator revises it
+- **WHEN** the coordinator revises it
 - **THEN** the stored draft document declares no `position` on any section or item
 
 #### Scenario: The published model is untouched by seeding
@@ -908,16 +906,16 @@ restricted to an administrative account and refused to `jhsc_member` as `templat
 - **THEN** the number of `template`, `template_item`, `template_version` and
   `template_version_item` rows is unchanged
 
-#### Scenario: A JHSC member cannot revise
+#### Scenario: An inspector cannot revise
 
-- **WHEN** an account whose role is `jhsc_member` revises a published template
+- **WHEN** an account whose role is `inspector` revises a published template
 - **THEN** the request is refused as `template_draft_forbidden`
 - **AND** no `template_draft` row is written
 
 #### Scenario: A template with no published version cannot be revised
 
 - **GIVEN** a `template` row with no `template_version`
-- **WHEN** the HS coordinator revises it
+- **WHEN** the coordinator revises it
 - **THEN** the request is refused as `template_version_not_found`
 
 ### Requirement: A template has at most one live revision
@@ -936,7 +934,7 @@ its previous revision ended either way.
 #### Scenario: Revising twice returns the same draft
 
 - **GIVEN** a template with a live revision draft
-- **WHEN** the HS coordinator revises that template again
+- **WHEN** the coordinator revises that template again
 - **THEN** the response names the draft that already exists
 - **AND** only one live `template_draft` row has that `template_id`
 
@@ -949,7 +947,7 @@ its previous revision ended either way.
 #### Scenario: A discarded revision frees the template
 
 - **GIVEN** a template whose revision draft has been discarded
-- **WHEN** the HS coordinator revises that template
+- **WHEN** the coordinator revises that template
 - **THEN** a new draft is created
 
 ### Requirement: A revision draft carries the identity of its template
@@ -1246,10 +1244,10 @@ configuration field belonging to a response type it no longer has.
 - **WHEN** its response type is changed to `yes_no` and the draft is saved
 - **THEN** the stored item carries none of `min`, `max` or `decimals`
 
-### Requirement: Authoring a template is the HS coordinator's
+### Requirement: Authoring a template is the coordinator's
 
 The system SHALL restrict reading, creating, saving, discarding and publishing a template draft
-to an administrative account — `hs_coordinator` or `management` — and SHALL refuse `jhsc_member`
+to an administrative account — `coordinator` or `management` — and SHALL refuse `inspector`
 with a code the interface can act on rather than a message it must parse.
 
 The restriction SHALL be by role and not by site scope, because a template carries no `site_id` by
@@ -1257,20 +1255,20 @@ design and a draft's `site_ids` describes where it is intended to be used rather
 it is. A draft remains organisation reference content, and restricting visibility by plant would
 reintroduce the per-plant duplication the model exists to avoid.
 
-#### Scenario: A JHSC member cannot read drafts
+#### Scenario: An inspector cannot read drafts
 
-- **WHEN** an account whose role is `jhsc_member` lists the template drafts
+- **WHEN** an account whose role is `inspector` lists the template drafts
 - **THEN** the request is refused as `template_draft_forbidden`
 
-#### Scenario: A JHSC member cannot save a draft
+#### Scenario: An inspector cannot save a draft
 
-- **WHEN** an account whose role is `jhsc_member` saves an existing draft
+- **WHEN** an account whose role is `inspector` saves an existing draft
 - **THEN** the request is refused as `template_draft_forbidden`
 - **AND** the stored draft is unchanged
 
-#### Scenario: A JHSC member cannot publish a draft
+#### Scenario: An inspector cannot publish a draft
 
-- **WHEN** an account whose role is `jhsc_member` publishes a draft
+- **WHEN** an account whose role is `inspector` publishes a draft
 - **THEN** the request is refused as `template_draft_forbidden`
 - **AND** no `template_version` row is written
 
@@ -1278,7 +1276,7 @@ reintroduce the per-plant duplication the model exists to avoid.
 
 - **WHEN** an account whose role is `management` lists, creates, saves, discards or publishes a
   template draft
-- **THEN** each request is accepted on the same terms as for an `hs_coordinator`
+- **THEN** each request is accepted on the same terms as for a `coordinator`
 
 #### Scenario: Drafts do not depend on the requester's site scope
 
@@ -1714,46 +1712,46 @@ The entries SHALL be ordered by name. Order by recency would rearrange the list 
 coordinator every time anything is published, and the list is read to find a known template far
 more often than to see what changed last.
 
-The console SHALL show the published templates to the HS coordinator only, on the same grounds
+The console SHALL show the published templates to the coordinator only, on the same grounds
 the drafts are: it is the authoring console, and the restriction is by role, not by site scope.
 
 #### Scenario: A published template appears in the console
 
 - **GIVEN** a template published from a draft
-- **WHEN** the HS coordinator opens the template console
+- **WHEN** the coordinator opens the template console
 - **THEN** the published templates include it with its `key` and version `1`
 - **AND** it is not listed among the drafts
 
 #### Scenario: A seeded template appears the same way
 
 - **GIVEN** a template loaded by a seed file
-- **WHEN** the HS coordinator opens the template console
+- **WHEN** the coordinator opens the template console
 - **THEN** it appears among the published templates
 - **AND** nothing distinguishes it from one published through the interface
 
 #### Scenario: A draft is not listed as published
 
 - **GIVEN** a live draft whose document is publishable
-- **WHEN** the HS coordinator opens the template console
+- **WHEN** the coordinator opens the template console
 - **THEN** it appears among the drafts
 - **AND** it does not appear among the published templates
 
 #### Scenario: An organisation with nothing published is told what fills the list
 
 - **GIVEN** no template has a published version
-- **WHEN** the HS coordinator opens the template console
+- **WHEN** the coordinator opens the template console
 - **THEN** the published templates section states that publishing a draft is what fills it
 
 #### Scenario: An archived template is not counted among the published
 
 - **GIVEN** one published template that is archived
-- **WHEN** the HS coordinator opens the template console
+- **WHEN** the coordinator opens the template console
 - **THEN** the published templates section does not list it
 - **AND** the count it reports does not include it
 
 ### Requirement: A deactivated published template can be archived without losing anything
 
-The system SHALL allow the HS coordinator to archive a published template only when its
+The system SHALL allow the coordinator to archive a published template only when its
 `deactivated_at` is non-null. Archiving SHALL set `template.archived_at` and SHALL NOT delete the
 `template` row, change any `template_version` document, or alter the schedule rules, scheduled
 inspections and submitted inspections that name it: a template retired months ago is still the
@@ -1762,20 +1760,20 @@ the record.
 
 An attempt to archive a template that is still active SHALL be refused with a stated reason, and
 so SHALL an attempt to archive one that is already archived. Archiving SHALL be restricted to the
-HS coordinator, on the same grounds as retiring one: it is the authoring console, and the
+coordinator, on the same grounds as retiring one: it is the authoring console, and the
 restriction is by role, not by site scope.
 
 #### Scenario: A retired template is archived
 
 - **GIVEN** a published template whose `deactivated_at` is non-null and whose `archived_at` is null
-- **WHEN** the HS coordinator archives it
+- **WHEN** the coordinator archives it
 - **THEN** its `archived_at` is set
 - **AND** its `deactivated_at` and its published versions are unchanged
 
 #### Scenario: An active template cannot be archived
 
 - **GIVEN** a published template whose `deactivated_at` is null
-- **WHEN** the HS coordinator attempts to archive it
+- **WHEN** the coordinator attempts to archive it
 - **THEN** the request is refused with a stated reason
 - **AND** its `archived_at` remains null
 
@@ -1786,16 +1784,16 @@ restriction is by role, not by site scope.
 - **THEN** that inspection still resolves the same `template_version_id` and document
 - **AND** the version is still readable by its own identifier
 
-#### Scenario: Only the HS coordinator archives
+#### Scenario: Only the coordinator archives
 
-- **WHEN** an account that is not the HS coordinator attempts to archive a retired template
+- **WHEN** an account that is not the coordinator attempts to archive a retired template
 - **THEN** the request is refused
 - **AND** the template's `archived_at` is unchanged
 
 ### Requirement: Archived templates are hidden by default and are restored before being reactivated
 
 The console SHALL omit templates whose `archived_at` is non-null from the default published list,
-and SHALL offer the HS coordinator a control to show them. A shown archived template SHALL be
+and SHALL offer the coordinator a control to show them. A shown archived template SHALL be
 identified as `Archived` and SHALL offer restoration as its only act.
 
 Restoring SHALL clear `archived_at` and SHALL leave `deactivated_at` non-null: the template returns
@@ -1810,14 +1808,14 @@ active ones, and an archived template is retired by definition.
 #### Scenario: An archived template is not in the default list
 
 - **GIVEN** one active published template and one archived published template
-- **WHEN** the HS coordinator opens the template console
+- **WHEN** the coordinator opens the template console
 - **THEN** the published list shows the active one
 - **AND** the archived one is omitted
 
 #### Scenario: The coordinator shows and restores an archived template
 
 - **GIVEN** an archived published template
-- **WHEN** the HS coordinator shows archived templates and restores it
+- **WHEN** the coordinator shows archived templates and restores it
 - **THEN** its `archived_at` is cleared
 - **AND** its `deactivated_at` remains non-null
 - **AND** it returns to the default list as `Deactivated`
@@ -1825,7 +1823,7 @@ active ones, and an archived template is retired by definition.
 #### Scenario: An archived template cannot be reactivated in one act
 
 - **GIVEN** an archived published template
-- **WHEN** the HS coordinator attempts to reactivate it
+- **WHEN** the coordinator attempts to reactivate it
 - **THEN** the request is refused with a stated reason
 - **AND** both its `archived_at` and its `deactivated_at` remain set
 
@@ -1837,7 +1835,7 @@ active ones, and an archived template is retired by definition.
 
 #### Scenario: A reader is offered no archive controls
 
-- **WHEN** an account that is not the HS coordinator opens the template console
+- **WHEN** an account that is not the coordinator opens the template console
 - **THEN** no control to show archived templates is offered
 - **AND** no archive or restore act is offered
 
@@ -1849,7 +1847,7 @@ act and its result are visible in one place.
 
 #### Scenario: The console reflects a publication
 
-- **GIVEN** the HS coordinator is looking at the template console with one live draft
+- **GIVEN** the coordinator is looking at the template console with one live draft
 - **WHEN** that draft is published
 - **THEN** the drafts no longer include it
 - **AND** the published templates include the template it produced
@@ -1944,7 +1942,7 @@ authors templates.
 #### Scenario: A role that cannot author templates can still read one
 
 - **GIVEN** a published template version
-- **WHEN** an account whose role is `jhsc_member` reads it
+- **WHEN** an account whose role is `inspector` reads it
 - **THEN** the response is the same document the coordinator reads
 
 #### Scenario: The account's plants do not change the answer
@@ -1966,7 +1964,7 @@ SHALL NOT offer any way to change its questions, its order, its response types o
 corrective actions, and SHALL state that what is shown is frozen and that correcting a template
 means publishing a new version.
 
-It SHALL offer the HS coordinator the act that statement names — starting a revision — and
+It SHALL offer the coordinator the act that statement names — starting a revision — and
 nothing else. That action writes a draft; it does not make the version editable.
 
 The settings that determine how a question is completed SHALL be legible: its `prompt`, its
@@ -2018,7 +2016,7 @@ rather than by exposing their numeric values.
 
 ### Requirement: A published version offers the revision that corrects it
 
-The system SHALL offer the HS coordinator, on the screen that shows a published version, the
+The system SHALL offer the coordinator, on the screen that shows a published version, the
 single action that can correct it: starting a revision of its template. The action SHALL lead to
 the editor for the seeded draft, and SHALL lead to the live revision draft when one already
 exists rather than announcing a conflict.
@@ -2028,14 +2026,14 @@ itself editable: what the screen shows stays frozen, and the correction happens 
 
 #### Scenario: The coordinator starts a revision from the version
 
-- **GIVEN** the HS coordinator reading a published version
+- **GIVEN** the coordinator reading a published version
 - **WHEN** the revision action is used
 - **THEN** the editor opens on a draft seeded from that template's latest version
 
 #### Scenario: The revision action leads to the work in progress
 
 - **GIVEN** a template with a live revision draft
-- **WHEN** the HS coordinator uses the revision action on that template's published version
+- **WHEN** the coordinator uses the revision action on that template's published version
 - **THEN** the editor opens on that same draft
 
 #### Scenario: An inspector is offered no revision

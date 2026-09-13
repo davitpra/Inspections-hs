@@ -40,12 +40,12 @@ export function PromoteDialog({
         </span>
         <div>
           <p className="jhsc-seat-dialog__eyebrow">Account role</p>
-          <h2>Promote {personLabel} to H&amp;S coordinator?</h2>
+          <h2>Promote {personLabel} to coordinator?</h2>
         </div>
       </div>
 
       <p className="jhsc-seat-dialog__text">
-        They will gain the same administrative access as an H&amp;S coordinator.
+        They will gain administrative access as a coordinator.
       </p>
       <p className="jhsc-seat-dialog__note">
         <strong>JHSC membership follows the account role.</strong>{' '}

@@ -98,7 +98,7 @@ function renderRoute(): void {
 
 beforeEach(() => {
   useParams.mockReturnValue({ scheduleId: RULE });
-  useAppSession.mockReturnValue(session('hs_coordinator'));
+  useAppSession.mockReturnValue(session('coordinator'));
   listSites.mockReset().mockResolvedValue([{ id: SITE, code: 'st-thomas', name: 'St. Thomas', deactivated_at: null } satisfies Site]);
   listTemplates.mockReset().mockResolvedValue([template()]);
   listInspectorCandidates.mockReset().mockResolvedValue([{ id: CANDIDATE, employee_number: 'E-1', first_name: 'Dana', last_name: 'Okafor' } satisfies InspectorOption]);
@@ -170,8 +170,8 @@ describe('operaciones por fila', () => {
     renderRoute();
     fireEvent.click((await screen.findAllByRole('button', { name: /^More actions for / }))[0]!);
     fireEvent.click(screen.getByRole('menuitem', { name: 'Assign inspector' }));
-    const dialog = screen.getByRole('dialog', { name: 'Assign inspector' });
-    const select = within(dialog).getByRole('combobox', { name: /Assign inspector for/ });
+    const dialog = screen.getByRole('dialog', { name: 'Assign account' });
+    const select = within(dialog).getByRole('combobox', { name: /Assign account for/ });
 
     await within(dialog).findByRole('option', { name: 'Dana Okafor (E-1)' });
     fireEvent.change(select, { target: { value: CANDIDATE } });
@@ -227,8 +227,8 @@ describe('operaciones por fila', () => {
     fireEvent.click(menus[0]!);
     fireEvent.click(screen.getByRole('menuitem', { name: 'Assign inspector' }));
 
-    const dialog = screen.getByRole('dialog', { name: 'Assign inspector' });
-    const select = within(dialog).getByRole('combobox', { name: /Assign inspector for/ });
+    const dialog = screen.getByRole('dialog', { name: 'Assign account' });
+    const select = within(dialog).getByRole('combobox', { name: /Assign account for/ });
     await within(dialog).findByRole('option', { name: 'Dana Okafor (E-1)' });
     fireEvent.change(select, { target: { value: CANDIDATE } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm assignment' }));
@@ -256,7 +256,7 @@ describe('operaciones por fila', () => {
   });
 
   it('retira todos los controles para un lector', async () => {
-    useAppSession.mockReturnValue(session('jhsc_member'));
+    useAppSession.mockReturnValue(session('inspector'));
     renderRoute();
 
     expect(await screen.findAllByRole('row')).toHaveLength(5);

@@ -311,7 +311,7 @@ describe('la presentación del estado propio del hallazgo', () => {
 
 describe('el próximo paso del hallazgo', () => {
   it('ofrece la asignación al coordinador cuando todavía no hay acciones', () => {
-    expect(nextStep([], 'raised', session('hs_coordinator'), itemFinding(GUARDS))).toEqual({
+    expect(nextStep([], 'raised', session('coordinator'), itemFinding(GUARDS))).toEqual({
       label: 'Create corrective action',
       control: { kind: 'create' },
       editableAssignment: null,
@@ -324,21 +324,21 @@ describe('el próximo paso del hallazgo', () => {
     const reportedFinding = itemFinding(GUARDS, { reported_by: reporterId });
 
     expect(
-      nextStep([], 'raised', session('jhsc_member', undefined, reporterId), reportedFinding)?.control,
+      nextStep([], 'raised', session('inspector', undefined, reporterId), reportedFinding)?.control,
     ).toEqual({ kind: 'create' });
   });
 
-  it('no ofrece la asignación a un jhsc_member que no reportó el hallazgo', () => {
+  it('no ofrece la asignación a un inspector que no reportó el hallazgo', () => {
     const reportedByOther = itemFinding(GUARDS, {
       reported_by: '99999999-9999-4999-8999-999999999999',
     });
 
-    expect(nextStep([], 'raised', session('jhsc_member'), reportedByOther)?.control).toBeNull();
+    expect(nextStep([], 'raised', session('inspector'), reportedByOther)?.control).toBeNull();
   });
 
   it('ofrece al responsable la transición que sale de open', () => {
     expect(
-      nextStep([action()], 'assigned', session('jhsc_member'), itemFinding(GUARDS)),
+      nextStep([action()], 'assigned', session('inspector'), itemFinding(GUARDS)),
     ).toMatchObject({
       label: 'Start work',
       control: { kind: 'progress', action: action() },
@@ -347,7 +347,7 @@ describe('el próximo paso del hallazgo', () => {
 
   it('ofrece Start work al reportante aunque la acción esté asignada a otra persona', () => {
     const reportedFinding = itemFinding(GUARDS, { reported_by: REPORTER });
-    const reporter = session('jhsc_member', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', REPORTER);
+    const reporter = session('inspector', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', REPORTER);
 
     expect(nextStep([action()], 'assigned', reporter, reportedFinding)).toMatchObject({
       label: 'Start work',
@@ -357,7 +357,7 @@ describe('el próximo paso del hallazgo', () => {
 
   it('ofrece Mark work done al reportante en una acción en curso', () => {
     const reportedFinding = itemFinding(GUARDS, { reported_by: REPORTER });
-    const reporter = session('jhsc_member', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', REPORTER);
+    const reporter = session('inspector', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', REPORTER);
 
     expect(
       nextStep([action({ state: 'in_progress' })], 'in_progress', reporter, reportedFinding),
@@ -386,7 +386,7 @@ describe('el próximo paso del hallazgo', () => {
       nextStep(
         [action({ state: 'in_progress' })],
         'in_progress',
-        session('jhsc_member', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'),
+        session('inspector', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'),
         itemFinding(GUARDS, { reported_by: REPORTER }),
       ),
     ).toMatchObject({
@@ -400,7 +400,7 @@ describe('el próximo paso del hallazgo', () => {
       nextStep(
         [action({ state: 'closed' })],
         'closed',
-        session('hs_coordinator'),
+        session('coordinator'),
         itemFinding(GUARDS),
       ),
     ).toBeNull();
@@ -408,7 +408,7 @@ describe('el próximo paso del hallazgo', () => {
 
   /** ADR-021: la corrección permanece disponible hasta que se declara el trabajo hecho. */
   it('ofrece Edit assignment junto a Start work en assigned', () => {
-    const step = nextStep([action()], 'assigned', session('hs_coordinator'), itemFinding(GUARDS));
+    const step = nextStep([action()], 'assigned', session('coordinator'), itemFinding(GUARDS));
 
     expect(step?.control).toEqual({ kind: 'progress', action: action() });
     expect(step?.editableAssignment).toEqual(action());
@@ -429,7 +429,7 @@ describe('el próximo paso del hallazgo', () => {
       nextStep(
         [action({ state: 'in_progress' })],
         'in_progress',
-        session('hs_coordinator'),
+        session('coordinator'),
         itemFinding(GUARDS),
       )?.editableAssignment,
     ).toEqual(action({ state: 'in_progress' }));
@@ -443,7 +443,7 @@ describe('el próximo paso del hallazgo', () => {
     const step = nextStep(
       [action({ state: 'awaiting_verification' })],
       'verification',
-      session('hs_coordinator'),
+      session('coordinator'),
       itemFinding(GUARDS),
     );
 
@@ -466,7 +466,7 @@ describe('los campos y las salidas del paso, etapa por etapa', () => {
   }
 
   it('en Assigned no pide nada y ofrece una sola salida', () => {
-    expect(stepForm('open', offered('open', session('jhsc_member')))).toEqual({
+    expect(stepForm('open', offered('open', session('inspector')))).toEqual({
       fields: { evidence: false, reason: false, note: false },
       choices: [
         {
@@ -480,7 +480,7 @@ describe('los campos y las salidas del paso, etapa por etapa', () => {
   });
 
   it('en In progress pide la evidencia y la nota antes de declarar el trabajo hecho', () => {
-    expect(stepForm('in_progress', offered('in_progress', session('jhsc_member')))).toEqual({
+    expect(stepForm('in_progress', offered('in_progress', session('inspector')))).toEqual({
       fields: { evidence: true, reason: false, note: true },
       choices: [
         {
@@ -527,7 +527,7 @@ describe('los campos y las salidas del paso, etapa por etapa', () => {
     expect(
       stepForm(
         'awaiting_verification',
-        offered('awaiting_verification', session('jhsc_member')),
+        offered('awaiting_verification', session('inspector')),
       ),
     ).toBeNull();
   });

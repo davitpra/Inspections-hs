@@ -14,7 +14,7 @@ import {
  * que en uno derivado es quien firmó el envío y en uno manual quien lo cargó. Es la misma
  * clase de regla que `canAttempt` aplica sobre una transición: una RELACIÓN con este
  * registro puntual, resuelta contra `session.userId` porque `reported_by` es una CUENTA
- * y no una persona del roster. Un `jhsc_member` que no reportó este hallazgo sigue sin
+ * y no una persona del roster. Un `inspector` que no reportó este hallazgo sigue sin
  * poder abrir nada.
  *
  * La interfaz ofrece el control; el servidor vuelve a autorizarlo en `ActionsService.create`.
@@ -25,7 +25,7 @@ export function canCreateAction(
 ): boolean {
   if (account === null) return false;
 
-  return account.role === 'hs_coordinator' || account.userId === finding.reported_by;
+  return account.role === 'coordinator' || account.userId === finding.reported_by;
 }
 
 /**
@@ -57,7 +57,7 @@ export function canEditAssignment(
  * alcanza para tomar esta decisión.
  *
  * Lo que esto **no** decide es la regla del verificador —quien ejecutó no cierra, salvo el
- * coordinador de H&S (ADR-019)—, porque necesita saber quién declaró el trabajo hecho y eso
+ * coordinador (ADR-019)—, porque necesita saber quién declaró el trabajo hecho y eso
  * depende del stream, no del rol. El botón se ofrece y el servidor responde
  * `verifier_is_executor` a quien todavía la tiene prohibida, que es un error que se lee.
  * Media regla copiada acá sería una que puede separarse de la otra mitad.

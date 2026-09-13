@@ -166,7 +166,7 @@ function lastSave(): {
 }
 
 beforeEach(() => {
-  useAppSession.mockReset().mockReturnValue(session('hs_coordinator'));
+  useAppSession.mockReset().mockReturnValue(session('coordinator'));
   getTemplateDraft.mockReset().mockResolvedValue(draft());
   listOrganizationLocations.mockReset().mockResolvedValue(SHARED);
   listCatalogLocations.mockReset().mockResolvedValue(PHYSICAL);
@@ -192,14 +192,14 @@ afterEach(() => {
 });
 
 describe('quién puede escribir plantillas', () => {
-  it.each(['jhsc_member'] as const)(
+  it.each(['inspector'] as const)(
     'se lo niega a %s, y sin llamar a la API',
     (role) => {
       useAppSession.mockReturnValue(session(role));
 
       renderRoute();
 
-      expect(screen.getByText(/Only H&S coordinators and management can write templates/)).toBeTruthy();
+      expect(screen.getByText(/Only coordinators and management can write templates/)).toBeTruthy();
       expect(getTemplateDraft).not.toHaveBeenCalled();
     },
   );
@@ -313,7 +313,7 @@ describe('el alcance de plantas', () => {
 
   it('agrega automáticamente un toggle para una planta nueva', async () => {
     useAppSession.mockReturnValue({
-      account: { ...session('hs_coordinator').account, siteScope: [ST_THOMAS, GLENCOE, WINDSOR] },
+      account: { ...session('coordinator').account, siteScope: [ST_THOMAS, GLENCOE, WINDSOR] },
     });
     listSites.mockResolvedValue([
       ...SITES,
@@ -334,7 +334,7 @@ describe('el alcance de plantas', () => {
   /** Con una sola planta administrada no hay nada que elegir. */
   it('no se dibuja cuando la cuenta administra una sola planta', async () => {
     useAppSession.mockReturnValue({
-      account: { ...session('hs_coordinator').account, siteScope: [ST_THOMAS] },
+      account: { ...session('coordinator').account, siteScope: [ST_THOMAS] },
     });
     getTemplateDraft.mockResolvedValue(draft({ site_ids: [ST_THOMAS] }));
 

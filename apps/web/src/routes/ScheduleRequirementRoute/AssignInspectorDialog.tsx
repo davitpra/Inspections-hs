@@ -8,9 +8,9 @@ import { PersonIcon } from '../../components/icons';
 import { candidateLabel, inspectorLabel } from '../../presentation/scheduling';
 
 /**
- * Elegir el inspector de un período, con confirmación separada.
+ * Elegir la cuenta asignada a un período, con confirmación separada.
  *
- * Era un `<select>` dentro de la celda «Inspector»: la columna del registro y el control
+ * Era un `<select>` dentro de la celda «Assigned to»: la columna del registro y el control
  * que la cambia eran la misma cosa, y la carga y el error de los candidatos engordaban
  * cada fila. Acá la celda vuelve a decir solo quién es, y elegir es un paso aparte.
  *
@@ -74,10 +74,10 @@ export function AssignInspectorDialog({
     <dialog
       ref={dialogRef}
       className="modal"
-      aria-label={reassigning ? 'Reassign inspector' : 'Assign inspector'}
+       aria-label={reassigning ? 'Reassign account' : 'Assign account'}
       onClose={() => { onClose(); returnFocusRef.current?.focus(); }}
     >
-      <div className="modal__head"><h2>{reassigning ? 'Reassign inspector' : 'Assign inspector'}</h2></div>
+       <div className="modal__head"><h2>{reassigning ? 'Reassign account' : 'Assign account'}</h2></div>
 
       <p className="modal__text">
         {reassigning
@@ -86,12 +86,12 @@ export function AssignInspectorDialog({
       </p>
 
       <div className="modal__form modal__form--spaced">
-        <label htmlFor={`${id}-assign`}>Inspector</label>
+         <label htmlFor={`${id}-assign`}>Assigned to</label>
         <div className="field-select">
           <span className="field-select__icon"><PersonIcon /></span>
           <select
             id={`${id}-assign`}
-            aria-label={`Assign inspector for ${label}`}
+             aria-label={`Assign account for ${label}`}
             value={chosen}
             disabled={assign.isPending}
             onChange={(event) => setChosen(event.target.value)}

@@ -134,7 +134,7 @@ async function openDraftMenu(name = 'Monthly electrical inspection'): Promise<HT
 }
 
 beforeEach(() => {
-  useAppSession.mockReset().mockReturnValue(session('hs_coordinator'));
+  useAppSession.mockReset().mockReturnValue(session('coordinator'));
   listTemplateDrafts.mockReset().mockResolvedValue([draft()]);
   listPublishedTemplates.mockReset().mockResolvedValue([]);
   createTemplateDraft.mockReset().mockResolvedValue({
@@ -165,7 +165,7 @@ afterEach(() => {
 });
 
 describe('quién puede escribir plantillas', () => {
-  it.each(['hs_coordinator', 'management'] as const)('se la ofrece a %s', async (role) => {
+  it.each(['coordinator', 'management'] as const)('se la ofrece a %s', async (role) => {
     useAppSession.mockReturnValue(session(role));
     renderRoute();
 
@@ -176,14 +176,14 @@ describe('quién puede escribir plantillas', () => {
    * Y sin disparar la consulta: pedir algo que el servidor va a negar con 403 solo sirve
    * para llenar el log. Es lo mismo que hace `RosterRoute`.
    */
-  it.each(['jhsc_member'] as const)(
+  it.each(['inspector'] as const)(
     'se la niega a %s, y sin llamar a la API',
     (role) => {
       useAppSession.mockReturnValue(session(role));
 
       renderRoute();
 
-      expect(screen.getByText(/Only H&S coordinators and management can write templates/)).toBeTruthy();
+      expect(screen.getByText(/Only coordinators and management can write templates/)).toBeTruthy();
       expect(listTemplateDrafts).not.toHaveBeenCalled();
     },
   );
@@ -481,7 +481,8 @@ describe('las plantillas publicadas', () => {
       .closest('section');
 
     expect(within(publishedBlock!).getByText('Monthly electrical inspection')).toBeTruthy();
-    expect(screen.queryByRole('heading', { name: 'Your drafts' })).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Your drafts' })).toBeTruthy();
+    expect(screen.getByText('No drafts yet')).toBeTruthy();
   });
 });
 

@@ -43,7 +43,7 @@ export class InvitationService {
     expiresInHours = INVITATION_DEFAULT_HOURS,
   ): Promise<IssueInvitationResponse> {
     if (!isAdministrator(actor.role)) {
-      throw forbidden('Only the HS coordinator can invite an account');
+      throw forbidden('Only the coordinator can invite an account');
     }
 
     const { rows: target } = await this.db.unscopedPool.query<{ id: string }>(
@@ -108,7 +108,7 @@ export class InvitationService {
 
   async revoke(actor: { userId: string; role: Role }, invitationId: string): Promise<void> {
     if (!isAdministrator(actor.role)) {
-      throw forbidden('Only the HS coordinator can revoke an invitation');
+      throw forbidden('Only the coordinator can revoke an invitation');
     }
 
     // Nunca un DELETE: una invitación revocada es parte del rastro de quién intentó

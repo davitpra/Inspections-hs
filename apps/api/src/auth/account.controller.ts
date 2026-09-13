@@ -12,7 +12,7 @@ import { AccountService } from './account.service';
 
 /**
  * `POST /accounts` — proposal: el único eslabón del alta que todavía exigía una
- * terminal. Solo `hs_coordinator`; el rol se comprueba en `AccountService.create`.
+   * terminal. Solo las cuentas administrativas; el rol se comprueba en `AccountService.create`.
  *
  * No crea personas ni credenciales: crea `app_user` y su `user_site_scope`, y —cuando
  * se pide— la invitación en el mismo acto (design D4).

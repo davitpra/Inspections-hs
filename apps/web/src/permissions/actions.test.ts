@@ -52,7 +52,7 @@ function finding(reportedBy = REPORTER_ACCOUNT): Pick<Finding, 'reported_by'> {
 describe('la creación de acciones (ADR-017)', () => {
   it('se ofrece al coordinador aunque no haya reportado el hallazgo', () => {
     for (const role of ROLES) {
-      expect(canCreateAction(session(role), finding())).toBe(role === 'hs_coordinator');
+      expect(canCreateAction(session(role), finding())).toBe(role === 'coordinator');
     }
   });
 
@@ -64,8 +64,8 @@ describe('la creación de acciones (ADR-017)', () => {
     }
   });
 
-  it('no se ofrece a un jhsc_member que no reportó este hallazgo', () => {
-    const otherJhsc = session('jhsc_member', PERSON, DEFAULT_ACCOUNT);
+  it('no se ofrece a un inspector que no reportó este hallazgo', () => {
+    const otherJhsc = session('inspector', PERSON, DEFAULT_ACCOUNT);
 
     expect(canCreateAction(otherJhsc, finding(REPORTER_ACCOUNT))).toBe(false);
   });
@@ -78,7 +78,7 @@ describe('la creación de acciones (ADR-017)', () => {
 describe('la edición de la asignación (ADR-021)', () => {
   it('se autoriza igual que abrir la acción: coordinador o quien reportó', () => {
     for (const role of ROLES) {
-      expect(canEditAssignment(session(role), finding())).toBe(role === 'hs_coordinator');
+      expect(canEditAssignment(session(role), finding())).toBe(role === 'coordinator');
       expect(
         canEditAssignment(session(role, PERSON, REPORTER_ACCOUNT), finding(REPORTER_ACCOUNT)),
       ).toBe(true);
@@ -106,7 +106,7 @@ describe('los botones del detalle', () => {
   });
 
   it('quien reportó puede empezar y declarar el trabajo hecho aunque no sea responsable', () => {
-    const reporter = session('jhsc_member', OTHER_PERSON, REPORTER_ACCOUNT);
+    const reporter = session('inspector', OTHER_PERSON, REPORTER_ACCOUNT);
 
     expect(offered('open', reporter)).toEqual(['in_progress']);
     expect(offered('in_progress', reporter)).toEqual(['awaiting_verification']);
@@ -120,7 +120,7 @@ describe('los botones del detalle', () => {
   });
 
   it('el coordinador puede avanzar en nombre de otro', () => {
-    const coordinator = session('hs_coordinator', OTHER_PERSON);
+    const coordinator = session('coordinator', OTHER_PERSON);
 
     expect(offered('open', coordinator)).toEqual(['in_progress']);
     expect(offered('in_progress', coordinator)).toEqual(['awaiting_verification']);
@@ -135,7 +135,7 @@ describe('los botones del detalle', () => {
 
   it('un miembro del JHSC que no es responsable no ve ningún botón', () => {
     for (const state of ['open', 'in_progress', 'awaiting_verification'] as const) {
-      expect(offered(state, session('jhsc_member', OTHER_PERSON))).toEqual([]);
+      expect(offered(state, session('inspector', OTHER_PERSON))).toEqual([]);
     }
   });
 
@@ -150,7 +150,7 @@ describe('los botones del detalle', () => {
   });
 
   it('el reportante no recibe las transiciones de verificación', () => {
-    const reporter = session('jhsc_member', OTHER_PERSON, REPORTER_ACCOUNT);
+    const reporter = session('inspector', OTHER_PERSON, REPORTER_ACCOUNT);
 
     expect(
       transitionsFrom('awaiting_verification').filter((transition) =>
@@ -160,7 +160,7 @@ describe('los botones del detalle', () => {
   });
 
   it('un reportante sin hallazgo y una cuenta sin sesión no pueden intentar', () => {
-    const reporter = session('jhsc_member', OTHER_PERSON, REPORTER_ACCOUNT);
+    const reporter = session('inspector', OTHER_PERSON, REPORTER_ACCOUNT);
     const execution = transitionsFrom('open')[0];
 
     expect(execution).toBeDefined();

@@ -240,7 +240,8 @@ export const correctiveActionEscalation = pgTable(
       .notNull()
       .references(() => site.id),
 
-    level: text('level').$type<EscalationLevel>().notNull(),
+    // `hs_coordinator` solo sobrevive en filas históricas inmutables (ADR-024).
+    level: text('level').$type<EscalationLevel | 'hs_coordinator'>().notNull(),
 
     dueAt: timestamp('due_at', { withTimezone: true }).notNull(),
     daysOverdue: integer('days_overdue').notNull(),

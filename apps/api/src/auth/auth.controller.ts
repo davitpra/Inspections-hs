@@ -133,7 +133,7 @@ export class AuthController {
     const { userId } = revokeSessionsRequestSchema.parse(body);
 
     if (!isAdministrator(session.role)) {
-      throw forbidden("Only the HS coordinator can end another account's sessions");
+      throw forbidden("Only the coordinator can end another account's sessions");
     }
 
     await this.sessions.revokeAllForUser(userId, 'revoked_by_coordinator');
@@ -152,7 +152,7 @@ export class AuthController {
     const { userId } = revokeSessionsRequestSchema.parse(body);
 
     if (!isAdministrator(session.role)) {
-      throw forbidden('Only the HS coordinator can revoke a credential');
+      throw forbidden('Only the coordinator can revoke a credential');
     }
 
     await this.credentials.revoke(userId, session.userId);

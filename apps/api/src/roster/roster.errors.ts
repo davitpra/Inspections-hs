@@ -45,14 +45,14 @@ export class RosterException extends HttpException {
 export const rosterForbidden = (): RosterException =>
   new RosterException(
     'roster_forbidden',
-    'Only the HS coordinator can view people and access',
+     'Only the coordinator can view people and access',
     HttpStatus.FORBIDDEN,
   );
 
 export const rosterImportForbidden = (): RosterException =>
   new RosterException(
     'roster_forbidden',
-    'Only the HS coordinator can import people',
+     'Only the coordinator can import people',
     HttpStatus.FORBIDDEN,
   );
 

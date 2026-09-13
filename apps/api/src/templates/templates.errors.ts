@@ -144,7 +144,7 @@ export const templateArchived = (): TemplateVersionException =>
 export const templateDraftForbidden = (): TemplateDraftException =>
   new TemplateDraftException(
     'template_draft_forbidden',
-    'Only the HS coordinator can author templates',
+    'Only the coordinator can author templates',
     HttpStatus.FORBIDDEN,
   );
 

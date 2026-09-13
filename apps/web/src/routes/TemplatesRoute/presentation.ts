@@ -58,7 +58,7 @@ export function draftCountLabel(count: number): string {
 export function draftKindLabel(draft: TemplateDraftSummary): string {
   return draft.template_id === null
     ? "New template"
-    : `Version ${draft.next_version}`;
+    : `Revision · version ${draft.next_version}`;
 }
 
 /**

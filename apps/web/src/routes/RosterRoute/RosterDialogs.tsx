@@ -5,6 +5,7 @@ import { ReissueDialog } from './ReissueDialog';
 import { RemoveAccessDialog } from './RemoveAccessDialog';
 import { PromoteDialog } from './PromoteDialog';
 import { DemoteDialog } from './DemoteDialog';
+import { EditPersonDialog } from './EditPersonDialog';
 
 /**
  * El modal que un acto de fila abrió, montado FUERA de la tabla — ver `RosterDialog`: la
@@ -25,6 +26,19 @@ export function RosterDialogs({
   onClose: () => void;
 }): React.JSX.Element {
   switch (dialog.kind) {
+    case 'edit':
+      return (
+        <EditPersonDialog
+          personId={dialog.personId}
+          firstName={dialog.firstName}
+          lastName={dialog.lastName}
+          employeeNumber={dialog.employeeNumber}
+          account={dialog.account}
+          label={dialog.label}
+          siteId={siteId}
+          onClose={onClose}
+        />
+      );
     case 'invite':
       return (
         <InviteDialog

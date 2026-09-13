@@ -7,7 +7,7 @@ import { PersonIcon } from '../../components/icons';
 import { InvitationLink } from './InvitationLink';
 
 /**
- * design D4/D7 — El modal de invitación: crea la cuenta como `jhsc_member` y emite la
+ * design D4/D7 — El modal de invitación: crea la cuenta como `inspector` y emite la
  * invitación en el mismo acto. El sitio es el que la consola ya está mirando (D7, no una
  * elección aparte); el email SÍ se pide — no está en `person` y no se puede derivar del
  * número de empleado.

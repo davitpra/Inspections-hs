@@ -73,7 +73,7 @@ export function TemplateDraftRoute(): React.JSX.Element {
       <>
         <h1>Template</h1>
         <p className="notice">
-          Only H&amp;S coordinators and management can write templates.
+           Only coordinators and management can write templates.
         </p>
       </>
     );

@@ -5,7 +5,7 @@
 | **Estado**                  | Aceptada                                                       |
 | **Fecha**                   | 2026-09-06                                                     |
 | **Supersede**               | Parte de ADR-011                                               |
-| **Superada por**            | —                                                              |
+| **Superada por**            | ADR-024 (parcial: vocabulario)                                 |
 | **Referencias**             | `docs/Requisitos_V1.2.md` §4, §5 riesgo I; ADR-002, ADR-004, ADR-008, ADR-011 |
 | **Changes que la consumen** | `reduce-roles-to-three`                                        |
 

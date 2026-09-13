@@ -128,7 +128,7 @@ beforeEach(() => {
   currentSiteScope = [ST_THOMAS, GLENCOE];
   currentSites = [...sites];
   currentLocations = [...locations];
-  useAppSession.mockReset().mockImplementation(() => ({ ...session('hs_coordinator'), reload: reloadSession }));
+  useAppSession.mockReset().mockImplementation(() => ({ ...session('coordinator'), reload: reloadSession }));
   listSites.mockReset().mockImplementation(() => Promise.resolve(currentSites));
   listOrganizationLocations.mockReset().mockResolvedValue(shared);
   listCatalogLocations.mockReset().mockImplementation(() => Promise.resolve(currentLocations));
@@ -161,14 +161,14 @@ afterEach(() => {
 });
 
 describe('quién puede administrar el catálogo', () => {
-  it.each(['jhsc_member'] as const)(
+  it.each(['inspector'] as const)(
     'se lo niega a %s, y sin llamar a la API',
     (role) => {
       useAppSession.mockReturnValue(session(role));
 
       renderRoute();
 
-      expect(screen.getByText(/Only H&S coordinators and management can administer locations/)).toBeTruthy();
+      expect(screen.getByText(/Only coordinators and management can administer locations/)).toBeTruthy();
       expect(screen.queryByRole('button', { name: 'Add site' })).toBeNull();
       expect(screen.queryByRole('button', { name: 'Manage sites' })).toBeNull();
       expect(listCatalogLocations).not.toHaveBeenCalled();

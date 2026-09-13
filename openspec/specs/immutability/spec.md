@@ -3,9 +3,7 @@
 Guarantees that regulatory records cannot be altered or erased once written, and that no site
 can read another site's rows — both enforced by the database engine itself rather than by
 application code, so an omission in an endpoint cannot defeat them.
-
 ## Requirements
-
 ### Requirement: Application role cannot update immutable rows
 
 The system SHALL revoke `UPDATE` on every immutable table from the application role, so that an
@@ -501,7 +499,7 @@ which workplace a record belongs to.
 
 The system SHALL apply to `incident` and its related tables a row level security policy that
 restricts reading to the transaction's own account when it is the row's `reported_by`, and to
-transactions whose declared role is `hs_coordinator` or `management`. That policy SHALL be
+transactions whose declared role is `coordinator` or `management`. That policy SHALL be
 composed with the site isolation policy so that both must hold — a coordinator still sees only the
 sites in scope, and a non-administrative account still sees only its own incidents within those
 sites. The
@@ -510,14 +508,14 @@ clause written in an endpoint, so that a query issued directly inside the transa
 to it too.
 
 The policy SHALL keep both of its branches even though the only role now restricted by the
-`reported_by` branch is `jhsc_member`, and even though a `jhsc_member` cannot report an incident:
+`reported_by` branch is `inspector`, and even though an `inspector` cannot report an incident:
 the branch is what makes the administrative exception explicit in the engine rather than implied by
 the absence of other roles, and it is the barrier that a future reporting role would inherit without
 a policy change.
 
 #### Scenario: Both policies must hold
 
-- **GIVEN** a `jhsc_member` of St. Thomas whose transaction declares that role and scope
+- **GIVEN** an `inspector` of St. Thomas whose transaction declares that role and scope
 - **WHEN** their transaction selects from `incident`
 - **THEN** no incident is returned, neither a St. Thomas one filed by somebody else nor any Glencoe
   row
@@ -530,7 +528,7 @@ a policy change.
 
 #### Scenario: A coordinator is still bound by site
 
-- **GIVEN** a transaction whose declared role is `hs_coordinator` and whose scope is St. Thomas
+- **GIVEN** a transaction whose declared role is `coordinator` and whose scope is St. Thomas
 - **WHEN** it selects from `incident`
 - **THEN** every St. Thomas incident is returned and no Glencoe incident is
 
@@ -542,7 +540,7 @@ a policy change.
 
 #### Scenario: The restriction survives a direct query
 
-- **WHEN** a raw `SELECT * FROM incident` is issued inside a `jhsc_member` transaction
+- **WHEN** a raw `SELECT * FROM incident` is issued inside an `inspector` transaction
 - **THEN** the rows they may not see are absent from the result of that statement
 
 #### Scenario: A write outside the visibility rule is rejected

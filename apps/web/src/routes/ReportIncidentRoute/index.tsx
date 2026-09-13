@@ -78,7 +78,7 @@ export function ReportIncidentRoute(): React.JSX.Element {
     return (
       <>
         <h1>Report an incident</h1>
-        <p className="notice">Only H&amp;S coordinators and management can report incidents.</p>
+         <p className="notice">Only coordinators and management can report incidents.</p>
       </>
     );
   }

@@ -40,14 +40,14 @@ import pg from 'pg';
  * lo que prueba que la tabla está bien concedida (0005 §GRANT).
  *
  *   pnpm auth:create-account --employee ADP-1234 --email nombre@example.com \
- *     --role jhsc_member --site st-thomas --actor coordinator@example.com
+ *     --role inspector --site st-thomas --actor coordinator@example.com
  */
 
 /** Los tres roles admitidos por la plataforma (ADR-022). */
-const INTERNAL_ROLES = ['hs_coordinator', 'jhsc_member', 'management'];
+const INTERNAL_ROLES = ['coordinator', 'inspector', 'management'];
 
 /** Los roles que normalmente llevan UNA planta (§6, pregunta cerrada 5). */
-const SINGLE_SITE_ROLES = ['jhsc_member'];
+const SINGLE_SITE_ROLES = ['inspector'];
 
 const USAGE = [
   'Uso: pnpm auth:create-account --employee <employeeNumber> --email <email>',
@@ -331,7 +331,7 @@ async function main() {
       // spec deliberadamente no puso en el motor.
       if (SINGLE_SITE_ROLES.includes(args.role) && sites.length > 1) {
         process.stderr.write(
-          `Aviso: ${args.role} con ${sites.length} plantas. Normalmente solo hs_coordinator y ` +
+          `Aviso: ${args.role} con ${sites.length} plantas. Normalmente solo coordinator y ` +
             'management llevan las dos.\n',
         );
       }

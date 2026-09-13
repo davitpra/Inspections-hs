@@ -67,7 +67,7 @@ beforeEach(() => {
   createSchedule.mockReset().mockResolvedValue(rule());
   updateSchedule.mockReset().mockResolvedValue(rule({ deactivated_at: '2026-08-05T00:00:00.000Z' }));
   listScheduled.mockReset().mockResolvedValue([inspection()]);
-  useAppSession.mockReset().mockReturnValue(session('hs_coordinator'));
+  useAppSession.mockReset().mockReturnValue(session('coordinator'));
 });
 
 afterEach(() => {
@@ -134,7 +134,7 @@ describe('detalle de periodo', () => {
 describe('requirements y permisos', () => {
   it('crea una regla no mensual con inspector por defecto y anchor', async () => {
     renderRoute();
-    fireEvent.click(await screen.findByRole('button', { name: 'Add requirement' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Add Inspection' }));
     const dialog = await screen.findByRole('dialog');
     await within(dialog).findByLabelText('Template');
     fireEvent.change(within(dialog).getByLabelText('Template'), { target: { value: OTHER_TEMPLATE } });
@@ -150,7 +150,7 @@ describe('requirements y permisos', () => {
       rule(),
       rule({ id: ARCHIVED_RULE, template_name: 'Archived workplace inspection', deactivated_at: '2025-01-01T00:00:00.000Z', archived_at: '2026-01-01T00:00:00.000Z' }),
     ]);
-    useAppSession.mockReturnValue(session('jhsc_member'));
+    useAppSession.mockReturnValue(session('inspector'));
     renderRoute();
     const requirements = await screen.findByRole('table', { name: 'Inspection requirements' });
     expect(within(requirements).getByRole('columnheader', { name: 'Default inspector' })).toBeTruthy();
@@ -176,7 +176,7 @@ describe('requirements y permisos', () => {
   it('distingue error de plantillas del vacío de plantillas', async () => {
     listTemplates.mockRejectedValue(new Error('connection failed'));
     renderRoute();
-    fireEvent.click(await screen.findByRole('button', { name: 'Add requirement' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Add Inspection' }));
     const dialog = await screen.findByRole('dialog');
     expect(await within(dialog).findByText(/could not be loaded/)).toBeTruthy();
     expect(within(dialog).getByRole('button', { name: 'Add requirement' }).hasAttribute('disabled')).toBe(true);

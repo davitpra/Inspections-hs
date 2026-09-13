@@ -352,6 +352,9 @@ roles pueden ejecutar inspecciones cuando tienen alcance vigente sobre el sitio.
 **Elegir un solo término y usarlo en tablas, endpoints y UI.** Recomendación: `jhsc_member`
 como rol, `inspector_id` como campo dentro de la inspección.
 
+La elección vigente es la de ADR-024: `inspector` es el rol y `inspector_id` se muestra en
+pantalla como **Assigned to**. El razonamiento original de esta nota se conserva como contexto.
+
 ---
 
 ## 5. Riesgos y decisiones abiertas

@@ -209,7 +209,7 @@ describe('PublishedTemplateRoute', () => {
   });
 
   it('el coordinador empieza la revisión y llega al borrador sembrado', async () => {
-    account.current = { role: 'hs_coordinator', siteScope: [ST_THOMAS, GLENCOE] };
+    account.current = { role: 'coordinator', siteScope: [ST_THOMAS, GLENCOE] };
 
     renderRoute();
 
@@ -229,7 +229,7 @@ describe('PublishedTemplateRoute', () => {
   });
 
   it('empezar la revisión no vuelve editable la versión', async () => {
-    account.current = { role: 'hs_coordinator', siteScope: [ST_THOMAS, GLENCOE] };
+    account.current = { role: 'coordinator', siteScope: [ST_THOMAS, GLENCOE] };
 
     renderRoute();
 
@@ -242,7 +242,7 @@ describe('PublishedTemplateRoute', () => {
   });
 
   it('si la revisión no se puede abrir, lo dice y no navega', async () => {
-    account.current = { role: 'hs_coordinator', siteScope: [ST_THOMAS, GLENCOE] };
+    account.current = { role: 'coordinator', siteScope: [ST_THOMAS, GLENCOE] };
     reviseTemplate.mockRejectedValue(new Error('offline'));
 
     renderRoute();

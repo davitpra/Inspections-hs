@@ -69,8 +69,8 @@ async function resolveImporter(pool, email) {
   // El roster lo administra el coordinador de HS (§4, tabla de roles). Es la única
   // verificación de rol del comando, y va acá y no en el módulo porque el módulo lo
   // va a llamar un endpoint que ya autorizó.
-  if (role !== 'hs_coordinator') {
-    throw new Error(`La cuenta ${email} tiene rol ${role}: el roster lo administra hs_coordinator.`);
+  if (role !== 'coordinator') {
+    throw new Error(`La cuenta ${email} tiene rol ${role}: el roster lo administra coordinator.`);
   }
 
   const scope = await pool.query(

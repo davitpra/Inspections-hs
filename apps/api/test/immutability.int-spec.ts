@@ -272,7 +272,7 @@ describe('el envío de una inspección y sus respuestas', () => {
       ],
     });
 
-    const account = await createAccount(db.app, { siteIds: [SITE_A], role: 'jhsc_member' });
+    const account = await createAccount(db.app, { siteIds: [SITE_A], role: 'inspector' });
     accountId = account.accountId;
 
     scheduledId = await scheduleInspection(db.app, {

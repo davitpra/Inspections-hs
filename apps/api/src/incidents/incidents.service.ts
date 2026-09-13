@@ -53,7 +53,7 @@ import {
 function hasRole(roles: readonly string[] | undefined, role: string): boolean {
   if (roles === undefined) return false;
 
-  return roles.includes(role) || (roles.includes('hs_coordinator') && isAdministrator(role));
+  return roles.includes(role) || (roles.includes('coordinator') && isAdministrator(role));
 }
 
 /**
@@ -278,7 +278,7 @@ export class IncidentsService {
     payload: RecordCauseRequest,
   ): Promise<Incident> {
     if (!isAdministrator(session.role)) {
-      throw incidentForbidden('Only the HS coordinator records the causes of an investigation');
+      throw incidentForbidden('Only the coordinator records the causes of an investigation');
     }
 
     return this.db.withSessionClient(session, async (client) => {
@@ -441,7 +441,7 @@ export class IncidentsService {
                 'occurred_at', i.occurred_at,
                 'reported_at', i.reported_at)
          FROM incident i
-         JOIN app_user u ON u.role = 'hs_coordinator'
+         JOIN app_user u ON u.role = 'coordinator'
                         AND u.deactivated_at IS NULL
          JOIN user_site_scope s ON s.user_id = u.id
                                AND s.site_id = i.site_id

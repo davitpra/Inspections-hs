@@ -121,7 +121,7 @@ describe('el período', () => {
 
 describe('la transición monótona de visibilidad anticipada', () => {
   it('permite false a true, pero rechaza volver a ocultar', async () => {
-    const actor = await createAccount(db.app, { siteIds: [SITE_A], role: 'hs_coordinator' });
+    const actor = await createAccount(db.app, { siteIds: [SITE_A], role: 'coordinator' });
     const id = await scheduleInspection(db.app, {
       siteId: SITE_A,
       periodStart: '2036-01-01',
@@ -151,7 +151,7 @@ describe('la transición monótona de visibilidad anticipada', () => {
   });
 
   it('conserva RLS y rechaza registros cancelados o enviados', async () => {
-    const actor = await createAccount(db.app, { siteIds: [SITE_A], role: 'hs_coordinator' });
+    const actor = await createAccount(db.app, { siteIds: [SITE_A], role: 'coordinator' });
     const outside = await scheduleInspection(db.app, {
       siteId: SITE_A,
       periodStart: '2036-02-01',
@@ -252,7 +252,7 @@ describe('la versión congelada', () => {
     await registerItems(db.migrator, templateA, ['a.exits']);
     versionA2 = await publishVersion(db.migrator, templateA, 2, documentFor('a.exits'));
 
-    const submittedBy = await createAccount(db.app, { siteIds: [SITE_A], role: 'jhsc_member' });
+    const submittedBy = await createAccount(db.app, { siteIds: [SITE_A], role: 'inspector' });
     await inScope(
       db.app,
       [SITE_A],
@@ -614,9 +614,9 @@ describe('el aislamiento por sitio', () => {
 
 describe('la auditoría', () => {
   it('registra alta, reasignación y cancelación con el actor y los dos valores', async () => {
-    const inspector = await createAccount(db.app, { siteIds: [SITE_A], role: 'jhsc_member' });
-    const other = await createAccount(db.app, { siteIds: [SITE_A], role: 'jhsc_member' });
-    const coordinator = await createAccount(db.app, { siteIds: [SITE_A], role: 'hs_coordinator' });
+    const inspector = await createAccount(db.app, { siteIds: [SITE_A], role: 'inspector' });
+    const other = await createAccount(db.app, { siteIds: [SITE_A], role: 'inspector' });
+    const coordinator = await createAccount(db.app, { siteIds: [SITE_A], role: 'coordinator' });
 
     const id = await scheduleInspection(db.app, {
       siteId: SITE_A,

@@ -137,7 +137,7 @@ function document(): TemplateDocument {
   };
 }
 
-const sessionFor = (accountId: string, siteIds: string[], role = 'jhsc_member') => ({
+const sessionFor = (accountId: string, siteIds: string[], role = 'inspector') => ({
   userId: accountId,
   role,
   siteIds,
@@ -277,9 +277,9 @@ beforeAll(async () => {
   versionV1 = await publishVersion(db.migrator, templateId, 1, document());
   versionV2 = await publishVersion(db.migrator, templateId, 2, document());
 
-  inspector = await createAccount(db.app, { siteIds: [SITE_A], role: 'jhsc_member' });
-  otherInspector = await createAccount(db.app, { siteIds: [SITE_A], role: 'jhsc_member' });
-  inspectorB = await createAccount(db.app, { siteIds: [SITE_B], role: 'jhsc_member' });
+  inspector = await createAccount(db.app, { siteIds: [SITE_A], role: 'inspector' });
+  otherInspector = await createAccount(db.app, { siteIds: [SITE_A], role: 'inspector' });
+  inspectorB = await createAccount(db.app, { siteIds: [SITE_B], role: 'inspector' });
 }, 120_000);
 
 afterAll(async () => {

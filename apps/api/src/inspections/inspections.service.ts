@@ -496,7 +496,7 @@ export class InspectionsService {
       const scheduled = await this.scheduledForAdvance(client, id);
 
       if (scheduled.inspector_id !== session.userId && !isAdministrator(session.role)) {
-        throw forbidden('Only the assigned inspector or an HS coordinator can advance the template version');
+         throw forbidden('Only the assigned inspector or a coordinator can advance the template version');
       }
 
       if (scheduled.cancelled_at !== null) {
@@ -738,7 +738,7 @@ export class InspectionsService {
 
   private requireCoordinator(session: SessionScope): void {
     if (!isAdministrator(session.role)) {
-      throw forbidden('Only the HS coordinator can administer inspection scheduling');
+      throw forbidden('Only the coordinator can administer inspection scheduling');
     }
   }
 

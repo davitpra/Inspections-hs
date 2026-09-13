@@ -19,7 +19,7 @@ let managerId: string;
 let coordinatorId: string;
 let memberId: string;
 
-const promotion = updateAccountRequestSchema.parse({ promote_to: 'hs_coordinator' });
+const promotion = updateAccountRequestSchema.parse({ promote_to: 'coordinator' });
 const asManager = () => ({
   userId: managerId,
   role: 'management' as const,
@@ -38,10 +38,10 @@ beforeAll(async () => {
     await createAccount(db.app, { role: 'management', siteIds: [SITE_A, SITE_B] })
   ).accountId;
   coordinatorId = (
-    await createAccount(db.app, { role: 'hs_coordinator', siteIds: [SITE_A, SITE_B] })
+    await createAccount(db.app, { role: 'coordinator', siteIds: [SITE_A, SITE_B] })
   ).accountId;
   memberId = (
-    await createAccount(db.app, { role: 'jhsc_member', siteIds: [SITE_A, SITE_B] })
+    await createAccount(db.app, { role: 'inspector', siteIds: [SITE_A, SITE_B] })
   ).accountId;
 }, 180_000);
 
@@ -69,26 +69,26 @@ async function codeOf(run: () => Promise<unknown>): Promise<string> {
   throw new Error('Se esperaba que la promoción fuera rechazada.');
 }
 
-describe('promoción de una cuenta a hs_coordinator', () => {
+describe('promoción de una cuenta a coordinator', () => {
   it('management promueve y el trigger audita ambos roles en cada sitio', async () => {
     const result = await accounts.update(asManager(), memberId, promotion);
 
-    expect(result.account.role).toBe('hs_coordinator');
-    expect(await roleOf(memberId)).toBe('hs_coordinator');
+    expect(result.account.role).toBe('coordinator');
+    expect(await roleOf(memberId)).toBe('coordinator');
 
     for (const siteId of [SITE_A, SITE_B]) {
       const entries = await auditEntries(db.app, siteId, 'user.role_changed');
       const entry = entries.find((row) => row.payload['account_id'] === memberId);
 
       expect(entry?.actor_user_id).toBe(managerId);
-      expect(entry?.payload['previous_role']).toBe('jhsc_member');
-      expect(entry?.payload['role']).toBe('hs_coordinator');
+      expect(entry?.payload['previous_role']).toBe('inspector');
+      expect(entry?.payload['role']).toBe('coordinator');
     }
   });
 
   it('un miembro promovido sigue siendo candidato sin un acto de asiento', async () => {
     const inspections = new InspectionsService(stack.db);
-    const target = await createAccount(db.app, { role: 'jhsc_member', siteIds: [SITE_A] });
+    const target = await createAccount(db.app, { role: 'inspector', siteIds: [SITE_A] });
     const session = { userId: managerId, role: 'management' as const, siteIds: [SITE_A] };
 
     expect(
@@ -103,18 +103,18 @@ describe('promoción de una cuenta a hs_coordinator', () => {
   });
 
   it('rechaza la promoción al coordinador y al miembro', async () => {
-    const memberActor = await createAccount(db.app, { role: 'jhsc_member', siteIds: [SITE_A] });
+    const memberActor = await createAccount(db.app, { role: 'inspector', siteIds: [SITE_A] });
 
     for (const actor of [
-      { userId: coordinatorId, role: 'hs_coordinator' as const, siteIds: [SITE_A, SITE_B] },
-      { userId: memberActor.accountId, role: 'jhsc_member' as const, siteIds: [SITE_A] },
+      { userId: coordinatorId, role: 'coordinator' as const, siteIds: [SITE_A, SITE_B] },
+      { userId: memberActor.accountId, role: 'inspector' as const, siteIds: [SITE_A] },
     ]) {
-      const target = await createAccount(db.app, { role: 'jhsc_member', siteIds: [SITE_A] });
+      const target = await createAccount(db.app, { role: 'inspector', siteIds: [SITE_A] });
 
       expect(await codeOf(() => accounts.update(actor, target.accountId, promotion))).toBe(
-        actor.role === 'hs_coordinator' ? 'account_promotion_forbidden' : 'account_forbidden',
+        actor.role === 'coordinator' ? 'account_promotion_forbidden' : 'account_forbidden',
       );
-      expect(await roleOf(target.accountId)).toBe('jhsc_member');
+      expect(await roleOf(target.accountId)).toBe('inspector');
     }
   });
 
@@ -129,7 +129,7 @@ describe('promoción de una cuenta a hs_coordinator', () => {
   });
 
   it('rechaza una cuenta inactiva', async () => {
-    const target = await createAccount(db.app, { role: 'jhsc_member', siteIds: [SITE_A] });
+    const target = await createAccount(db.app, { role: 'inspector', siteIds: [SITE_A] });
     await inScope(db.app, [SITE_A], 'UPDATE app_user SET deactivated_at = now() WHERE id = $1', [
       target.accountId,
     ]);
@@ -137,12 +137,12 @@ describe('promoción de una cuenta a hs_coordinator', () => {
     expect(await codeOf(() => accounts.update(asManager(), target.accountId, promotion))).toBe(
       'account_promotion_inactive',
     );
-    expect(await roleOf(target.accountId)).toBe('jhsc_member');
+    expect(await roleOf(target.accountId)).toBe('inspector');
   });
 
   it('rechaza una cuenta fuera del alcance', async () => {
     const narrowManager = await createAccount(db.app, { role: 'management', siteIds: [SITE_A] });
-    const target = await createAccount(db.app, { role: 'jhsc_member', siteIds: [SITE_B] });
+    const target = await createAccount(db.app, { role: 'inspector', siteIds: [SITE_B] });
 
     expect(
       await codeOf(() =>
@@ -153,7 +153,7 @@ describe('promoción de una cuenta a hs_coordinator', () => {
         ),
       ),
     ).toBe('account_out_of_scope');
-    expect(await roleOf(target.accountId)).toBe('jhsc_member');
+    expect(await roleOf(target.accountId)).toBe('inspector');
   });
 
   it('rechaza promover la propia cuenta', async () => {

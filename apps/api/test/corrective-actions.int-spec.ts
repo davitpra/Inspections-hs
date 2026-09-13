@@ -89,12 +89,12 @@ const sessionFor = (accountId: string, role: string, siteIds: string[]) => ({
   siteIds,
 });
 
-const asCoordinator = () => sessionFor(coordinator.accountId, 'hs_coordinator', [SITE_A, SITE_B]);
+const asCoordinator = () => sessionFor(coordinator.accountId, 'coordinator', [SITE_A, SITE_B]);
 const asSupervisor = () => sessionFor(supervisor.accountId, 'management', [SITE_A]);
 const asOtherSupervisor = () => sessionFor(otherSupervisor.accountId, 'management', [SITE_A]);
 const asManager = () => sessionFor(manager.accountId, 'management', [SITE_A]);
-const asInspector = () => sessionFor(inspector.accountId, 'jhsc_member', [SITE_A]);
-const asOtherJhsc = () => sessionFor(jhsc.accountId, 'jhsc_member', [SITE_A]);
+const asInspector = () => sessionFor(inspector.accountId, 'inspector', [SITE_A]);
+const asOtherJhsc = () => sessionFor(jhsc.accountId, 'inspector', [SITE_A]);
 
 let periodCursor = 0;
 
@@ -138,7 +138,7 @@ async function derivedFinding(
   };
 
   const accepted = await submissions.ingest(
-    sessionFor(account.accountId, 'jhsc_member', [siteId]),
+    sessionFor(account.accountId, 'inspector', [siteId]),
     payload,
   );
 
@@ -330,18 +330,18 @@ beforeAll(async () => {
   await registerItems(db.migrator, templateId, ITEM_KEYS);
   versionId = await publishVersion(db.migrator, templateId, 1, document());
 
-  inspector = await createAccount(db.app, { siteIds: [SITE_A], role: 'jhsc_member' });
-  inspectorB = await createAccount(db.app, { siteIds: [SITE_B], role: 'jhsc_member' });
+  inspector = await createAccount(db.app, { siteIds: [SITE_A], role: 'inspector' });
+  inspectorB = await createAccount(db.app, { siteIds: [SITE_B], role: 'inspector' });
   coordinator = await createAccount(db.app, {
     siteIds: [SITE_A, SITE_B],
-    role: 'hs_coordinator',
+    role: 'coordinator',
     firstName: 'Casey',
     lastName: 'Coordinator',
   });
   supervisor = await createAccount(db.app, { siteIds: [SITE_A], role: 'management' });
   otherSupervisor = await createAccount(db.app, { siteIds: [SITE_A], role: 'management' });
   manager = await createAccount(db.app, { siteIds: [SITE_A], role: 'management' });
-  jhsc = await createAccount(db.app, { siteIds: [SITE_A], role: 'jhsc_member' });
+  jhsc = await createAccount(db.app, { siteIds: [SITE_A], role: 'inspector' });
 
   rosterPerson = await createPerson(db.app, SITE_A);
   rosterPersonB = await createPerson(db.app, SITE_B);
@@ -927,7 +927,11 @@ describe('el verificador', () => {
   it('quien declaró el trabajo hecho no puede cerrar', async () => {
     const actionId = await openAction();
 
-    await awaitingVerification(actionId);
+    await actions.transition(asSupervisor(), actionId, { to: 'in_progress', evidence: [] });
+    await actions.transition(asSupervisor(), actionId, {
+      to: 'awaiting_verification',
+      evidence: [{ kind: 'after', object_key: evidenceKey(actionId) }],
+    });
 
     await expect(
       actions.transition(asSupervisor(), actionId, { to: 'closed', evidence: [] }),
@@ -1203,7 +1207,7 @@ describe('la creación', () => {
     });
 
     const accepted = await submissions.ingest(
-      sessionFor(inspector.accountId, 'jhsc_member', [SITE_A]),
+      sessionFor(inspector.accountId, 'inspector', [SITE_A]),
       {
         client_submission_id: randomUUID(),
         scheduled_inspection_id: scheduled,
@@ -1384,7 +1388,7 @@ describe('los permisos', () => {
     const { findingId, reporterAccountId } = await derivedFinding();
 
     const action = await actions.create(
-      sessionFor(reporterAccountId, 'jhsc_member', [SITE_A]),
+      sessionFor(reporterAccountId, 'inspector', [SITE_A]),
       findingId,
       {
         assignee_person_id: supervisor.personId,
@@ -1422,7 +1426,7 @@ describe('los permisos', () => {
     const { findingId } = await derivedFinding();
 
     await expect(
-      actions.create(sessionFor(jhsc.accountId, 'jhsc_member', [SITE_A]), findingId, {
+      actions.create(sessionFor(jhsc.accountId, 'inspector', [SITE_A]), findingId, {
         assignee_person_id: supervisor.personId,
         description: 'Install a fixed guard on the infeed of line 3',
         due_at: DUE_AT,
@@ -1434,7 +1438,7 @@ describe('los permisos', () => {
     const { findingId, reporterAccountId } = await derivedFinding(SITE_B);
 
     await expect(
-      actions.create(sessionFor(reporterAccountId, 'jhsc_member', [SITE_A]), findingId, {
+      actions.create(sessionFor(reporterAccountId, 'inspector', [SITE_A]), findingId, {
         assignee_person_id: supervisor.personId,
         description: 'Install a fixed guard on the infeed of line 3',
         due_at: DUE_AT,
@@ -1470,7 +1474,7 @@ describe('los permisos', () => {
     const actionId = await openAction();
 
     await expect(
-      actions.transition(sessionFor(jhsc.accountId, 'jhsc_member', [SITE_A]), actionId, {
+      actions.transition(sessionFor(jhsc.accountId, 'inspector', [SITE_A]), actionId, {
         to: 'in_progress',
         evidence: [],
       }),
@@ -1563,7 +1567,7 @@ describe('el escalamiento', () => {
 
     await escalation.run(daysAfter(action.due_at, 4));
 
-    expect((await escalationsOf(actionId)).map((row) => row.level)).toEqual(['hs_coordinator']);
+    expect((await escalationsOf(actionId)).map((row) => row.level)).toEqual(['coordinator']);
     expect(await notificationsFor(actionId, 'corrective_action_overdue_coordinator')).toBeGreaterThan(
       0,
     );
@@ -1577,7 +1581,7 @@ describe('el escalamiento', () => {
     await escalation.run(daysAfter(action.due_at, 8));
 
     expect((await escalationsOf(actionId)).map((row) => row.level)).toEqual([
-      'hs_coordinator',
+      'coordinator',
       'management',
     ]);
     expect(await notificationsFor(actionId, 'corrective_action_overdue_management')).toBeGreaterThan(
@@ -1978,7 +1982,7 @@ describe('la edición de la asignación vigente (ADR-021)', () => {
     const { actionId, reporterAccountId } = await amendable();
 
     const amended = await actions.replaceAssignment(
-      sessionFor(reporterAccountId, 'jhsc_member', [SITE_A]),
+      sessionFor(reporterAccountId, 'inspector', [SITE_A]),
       actionId,
       {
         assignee_person_id: rosterPerson,
@@ -2192,7 +2196,7 @@ describe('la edición de la asignación vigente (ADR-021)', () => {
       db.app,
       [SITE_A],
       'SELECT due_at FROM corrective_action_escalation WHERE action_id = $1 AND level = $2',
-      [actionId, 'supervisor'],
+      [actionId, 'coordinator'],
     );
     expect(new Date(one(escalated).due_at).toISOString()).toBe(LATER_DUE_AT);
   });
@@ -2372,11 +2376,15 @@ describe('la cadena de auditoría', () => {
     const before = await chainLength(SITE_A);
     const actionId = await openAction();
 
-    await awaitingVerification(actionId);
     await actions.replaceAssignment(asCoordinator(), actionId, {
       assignee_person_id: rosterPerson,
       description: 'Install an interlocked guard and document the final configuration',
       due_at: LATER_DUE_AT,
+    });
+    await actions.transition(asCoordinator(), actionId, { to: 'in_progress', evidence: [] });
+    await actions.transition(asCoordinator(), actionId, {
+      to: 'awaiting_verification',
+      evidence: [{ kind: 'after', object_key: evidenceKey(actionId) }],
     });
     await actions.transition(asCoordinator(), actionId, { to: 'closed', evidence: [] });
 
@@ -2436,7 +2444,7 @@ describe('la cadena de auditoría', () => {
     expect(escalated).toHaveLength(2);
     expect(escalated.every((row) => row.actor_user_id === null)).toBe(true);
     expect(escalated.map((row) => row.payload.level).sort()).toEqual([
-      'hs_coordinator',
+      'coordinator',
       'management',
     ]);
     expect(await chainIsIntact(SITE_A)).toBe(true);

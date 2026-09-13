@@ -12,7 +12,7 @@
 export function messageFor(code: string): string {
   switch (code) {
     case 'invitation_invalid':
-      return 'This invitation link is no longer usable. Ask the HS coordinator to issue a new one.';
+      return 'This invitation link is no longer usable. Ask the coordinator to issue a new one.';
 
     default:
       return 'Something went wrong setting your password. Check your connection and try again.';

@@ -101,12 +101,12 @@ beforeAll(async () => {
 
   coordinator = await createAccount(db.app, {
     siteIds: [SITE_A, SITE_CLOSED],
-    role: 'hs_coordinator',
+    role: 'coordinator',
   });
-  coordinatorB = await createAccount(db.app, { siteIds: [SITE_B], role: 'hs_coordinator' });
+  coordinatorB = await createAccount(db.app, { siteIds: [SITE_B], role: 'coordinator' });
   inspector = await createAccount(db.app, {
     siteIds: [SITE_A],
-    role: 'jhsc_member',
+    role: 'inspector',
     firstName: 'Dana',
     lastName: 'Okafor',
   });
@@ -118,8 +118,8 @@ afterAll(async () => {
 });
 
 describe('la visibilidad anticipada de un período abierto', () => {
-  const asCoordinator = () => session(coordinator, 'hs_coordinator', [SITE_A, SITE_CLOSED]);
-  const asInspector = () => session(inspector, 'jhsc_member', [SITE_A]);
+  const asCoordinator = () => session(coordinator, 'coordinator', [SITE_A, SITE_CLOSED]);
+  const asInspector = () => session(inspector, 'inspector', [SITE_A]);
 
   it('hace visible una asignación futura y audita al actor', async () => {
     const scheduledId = await scheduleInspection(db.app, {
@@ -169,7 +169,7 @@ describe('la visibilidad anticipada de un período abierto', () => {
       code: 'forbidden',
     });
     await expect(
-      stack.inspections.makeVisible(session(coordinatorB, 'hs_coordinator', [SITE_B]), scheduledId),
+      stack.inspections.makeVisible(session(coordinatorB, 'coordinator', [SITE_B]), scheduledId),
     ).rejects.toMatchObject({ code: 'inspection_not_found' });
     await expect(stack.inspections.makeVisible(asCoordinator(), scheduledId)).rejects.toMatchObject({
       code: 'visibility_not_advanceable',
@@ -221,9 +221,9 @@ describe('la visibilidad anticipada de un período abierto', () => {
 });
 
 describe('los candidatos a inspector', () => {
-  const asCoordinator = () => session(coordinator, 'hs_coordinator', [SITE_A, SITE_CLOSED]);
+  const asCoordinator = () => session(coordinator, 'coordinator', [SITE_A, SITE_CLOSED]);
 
-  it('devuelve al jhsc_member con alcance vigente, con su nombre', async () => {
+  it('devuelve al inspector con alcance vigente, con su nombre', async () => {
     const rows = await stack.inspections.listInspectorCandidates(asCoordinator(), SITE_A);
 
     const found = rows.find((row) => row.id === inspector.accountId);
@@ -283,7 +283,7 @@ describe('los candidatos a inspector', () => {
   });
 
   it('no ofrece a la cuenta desactivada', async () => {
-    const gone = await createAccount(db.app, { siteIds: [SITE_A], role: 'jhsc_member' });
+    const gone = await createAccount(db.app, { siteIds: [SITE_A], role: 'inspector' });
     await inScope(db.migrator, [SITE_A], 'UPDATE app_user SET deactivated_at = now() WHERE id = $1', [
       gone.accountId,
     ]);
@@ -293,7 +293,7 @@ describe('los candidatos a inspector', () => {
   });
 
   it('no ofrece a quien tiene el alcance revocado', async () => {
-    const revoked = await createAccount(db.app, { siteIds: [SITE_A], role: 'jhsc_member' });
+    const revoked = await createAccount(db.app, { siteIds: [SITE_A], role: 'inspector' });
     await inScope(
       db.migrator,
       [SITE_A],
@@ -305,8 +305,8 @@ describe('los candidatos a inspector', () => {
     expect(rows.map((row) => row.id)).not.toContain(revoked.accountId);
   });
 
-  it('no ofrece al jhsc_member que solo tiene alcance en la otra planta', async () => {
-    const elsewhere = await createAccount(db.app, { siteIds: [SITE_B], role: 'jhsc_member' });
+  it('no ofrece al inspector que solo tiene alcance en la otra planta', async () => {
+    const elsewhere = await createAccount(db.app, { siteIds: [SITE_B], role: 'inspector' });
 
     const rows = await stack.inspections.listInspectorCandidates(asCoordinator(), SITE_A);
     expect(rows.map((row) => row.id)).not.toContain(elsewhere.accountId);
@@ -324,7 +324,7 @@ describe('los candidatos a inspector', () => {
     // es además el caso real: alguien que se mudó de planta y conserva el alcance viejo.
     const transferred = await createAccount(db.app, {
       siteIds: [SITE_A, SITE_B],
-      role: 'jhsc_member',
+      role: 'inspector',
       personSiteId: SITE_B,
       firstName: 'Robin',
       lastName: 'Vasquez',
@@ -361,10 +361,10 @@ describe('los candidatos a inspector', () => {
     expect(updated.inspector_id).toBe(transferred.accountId);
   });
 
-  it('no se la puede pedir un jhsc_member', async () => {
+  it('no se la puede pedir un inspector', async () => {
     await expect(
       stack.inspections.listInspectorCandidates(
-        session(inspector, 'jhsc_member', [SITE_A]),
+        session(inspector, 'inspector', [SITE_A]),
         SITE_A,
       ),
     ).rejects.toMatchObject({ status: 403 });
@@ -378,7 +378,7 @@ describe('los candidatos a inspector', () => {
   it('no la puede pedir un coordinador para una planta fuera de su alcance', async () => {
     await expect(
       stack.inspections.listInspectorCandidates(
-        session(coordinatorB, 'hs_coordinator', [SITE_B]),
+        session(coordinatorB, 'coordinator', [SITE_B]),
         SITE_A,
       ),
     ).rejects.toMatchObject({ code: 'inspection_not_found' });
@@ -387,19 +387,19 @@ describe('los candidatos a inspector', () => {
 
 describe('el listado de plantas', () => {
   it('devuelve exactamente el alcance de la sesión', async () => {
-    const rows = await sites.list(session(coordinator, 'hs_coordinator', [SITE_A]));
+    const rows = await sites.list(session(coordinator, 'coordinator', [SITE_A]));
 
     expect(rows.map((row) => row.id)).toEqual([SITE_A]);
   });
 
   it('no devuelve la planta de la otra sesión', async () => {
-    const rows = await sites.list(session(coordinatorB, 'hs_coordinator', [SITE_B]));
+    const rows = await sites.list(session(coordinatorB, 'coordinator', [SITE_B]));
 
     expect(rows.map((row) => row.id)).not.toContain(SITE_A);
   });
 
   it('sin alcance declarado no devuelve nada', async () => {
-    const rows = await sites.list(session(coordinator, 'hs_coordinator', []));
+    const rows = await sites.list(session(coordinator, 'coordinator', []));
 
     expect(rows).toEqual([]);
   });
@@ -407,7 +407,7 @@ describe('el listado de plantas', () => {
   // Una regla o una inspección de una planta cerrada tiene que seguir resolviendo a un
   // nombre. Filtrar acá dejaría un UUID crudo en la pantalla.
   it('devuelve la planta desactivada, marcada', async () => {
-    const rows = await sites.list(session(coordinator, 'hs_coordinator', [SITE_A, SITE_CLOSED]));
+    const rows = await sites.list(session(coordinator, 'coordinator', [SITE_A, SITE_CLOSED]));
 
     const closed = rows.find((row) => row.id === SITE_CLOSED);
     expect(closed).toBeDefined();
@@ -415,14 +415,14 @@ describe('el listado de plantas', () => {
   });
 
   it('la puede leer cualquier rol dentro de su alcance', async () => {
-    const rows = await sites.list(session(inspector, 'jhsc_member', [SITE_A]));
+    const rows = await sites.list(session(inspector, 'inspector', [SITE_A]));
 
     expect(rows.map((row) => row.id)).toEqual([SITE_A]);
   });
 });
 
 describe('el listado de plantillas', () => {
-  const asCoordinator = () => session(coordinator, 'hs_coordinator', [SITE_A]);
+  const asCoordinator = () => session(coordinator, 'coordinator', [SITE_A]);
 
   it('omite la plantilla sin ninguna versión publicada', async () => {
     const rows = await templates.list(asCoordinator());
@@ -476,15 +476,15 @@ describe('el listado de plantillas', () => {
   });
 
   it('no depende del alcance: las dos plantas ven lo mismo', async () => {
-    const forA = await templates.list(session(coordinator, 'hs_coordinator', [SITE_A]));
-    const forB = await templates.list(session(coordinatorB, 'hs_coordinator', [SITE_B]));
+    const forA = await templates.list(session(coordinator, 'coordinator', [SITE_A]));
+    const forB = await templates.list(session(coordinatorB, 'coordinator', [SITE_B]));
 
     expect(forA.map((row) => row.id)).toEqual(forB.map((row) => row.id));
   });
 });
 
 describe('el estado en el listado de programadas', () => {
-  const asCoordinator = () => session(coordinator, 'hs_coordinator', [SITE_A]);
+  const asCoordinator = () => session(coordinator, 'coordinator', [SITE_A]);
 
   it('un período cerrado sin envío es missed', async () => {
     const scheduledId = await scheduleInspection(db.app, {
@@ -519,12 +519,12 @@ describe('el estado en el listado de programadas', () => {
 });
 
 describe('los nombres en el listado', () => {
-  const asCoordinator = () => session(coordinator, 'hs_coordinator', [SITE_A]);
+  const asCoordinator = () => session(coordinator, 'coordinator', [SITE_A]);
 
   it('nombra al asignado, y lo sigue nombrando después de desactivarlo', async () => {
     const leaving = await createAccount(db.app, {
       siteIds: [SITE_A],
-      role: 'jhsc_member',
+      role: 'inspector',
       firstName: 'Sam',
       lastName: 'Delacroix',
     });
@@ -586,7 +586,7 @@ describe('los nombres en el listado', () => {
     const after = new Date();
 
     const rules = await stack.inspections.listSchedules(
-      session(coordinator, 'hs_coordinator', [SITE_A, SITE_CLOSED]),
+      session(coordinator, 'coordinator', [SITE_A, SITE_CLOSED]),
     );
     const rule = rules.find(
       (item) => item.site_id === SITE_CLOSED && item.default_inspector_id === inspector.accountId,
@@ -601,7 +601,7 @@ describe('los nombres en el listado', () => {
 
 describe('la regla duplicada', () => {
   it('se rechaza con un código y no con un fallo sin manejar', async () => {
-    const asCoordinator = session(coordinatorB, 'hs_coordinator', [SITE_B]);
+    const asCoordinator = session(coordinatorB, 'coordinator', [SITE_B]);
 
     await stack.inspections.createSchedule(asCoordinator, {
       site_id: SITE_B,
@@ -618,7 +618,7 @@ describe('la regla duplicada', () => {
 });
 
 describe('el archivo de requisitos desactivados', () => {
-  const asCoordinator = () => session(coordinator, 'hs_coordinator', [SITE_A]);
+  const asCoordinator = () => session(coordinator, 'coordinator', [SITE_A]);
 
   it('archiva y restaura sin alterar la baja ni las inspecciones existentes', async () => {
     const template = await publishedArchiveTemplate();

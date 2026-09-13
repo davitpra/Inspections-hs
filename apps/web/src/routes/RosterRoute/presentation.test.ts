@@ -7,6 +7,7 @@ import {
   accountRoleLabel,
   canPromoteAccount,
   canDemoteAccount,
+  canEditPerson,
   canInvite,
   canDeactivateWorker,
   dialogFor,
@@ -19,10 +20,13 @@ import {
   personLabel,
   personInitials,
   personName,
+  personCorrection,
   reissueButtonLabel,
   removeButtonLabel,
   removeButtonText,
   demoteButtonLabel,
+  editPersonButtonLabel,
+  editPersonButtonText,
   roleCellClass,
   roleCellLabel,
   rosterCounts,
@@ -124,6 +128,16 @@ describe('addPersonButtonText', () => {
   });
 });
 
+describe('editPersonButtonText', () => {
+  it.each([
+    ['ready', 'Save'],
+    ['pending', 'Saving…'],
+    ['error', 'Try again'],
+  ] as const)('nombra el botón en %s', (state, label) => {
+    expect(editPersonButtonText(state)).toBe(label);
+  });
+});
+
 describe('personLabel', () => {
   it('siempre lleva el número de empleado — el nombre no identifica', () => {
     expect(personLabel(person())).toBe('Reid, Ada (10472)');
@@ -140,6 +154,12 @@ describe('personLabel', () => {
 describe('inviteButtonLabel', () => {
   it('identifica a la persona, no solo "Invite"', () => {
     expect(inviteButtonLabel(person())).toBe('Invite Reid, Ada (10472) to JHSC');
+  });
+});
+
+describe('editPersonButtonLabel', () => {
+  it('identifica a la persona que se va a corregir', () => {
+    expect(editPersonButtonLabel(person())).toBe('Edit Reid, Ada (10472)');
   });
 });
 
@@ -175,33 +195,33 @@ describe('accountRoleLabel', () => {
   it('usa ROLE_LABELS de contracts, nunca el identificador crudo', () => {
     const label = accountRoleLabel({
       id: ACCOUNT_ID,
-      role: 'jhsc_member',
+      role: 'inspector',
       active: true,
       can_sign_in: true,
       email: EMAIL,
     });
 
-    expect(label).toBe('JHSC member');
-    expect(label).not.toContain('jhsc_member');
+    expect(label).toBe('Inspector');
+    expect(label).not.toContain('inspector');
   });
 
   it('marca "(invited)" cuando todavía no puede iniciar sesión', () => {
     const label = accountRoleLabel({
       id: ACCOUNT_ID,
-      role: 'jhsc_member',
+      role: 'inspector',
       active: true,
       can_sign_in: false,
       email: EMAIL,
     });
 
-    expect(label).toBe('JHSC member (invited)');
+    expect(label).toBe('Inspector (invited)');
   });
 
 });
 
 describe('showsAccountRole', () => {
   it('muestra el rol de una cuenta activa', () => {
-    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true });
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'inspector', active: true, can_sign_in: true });
 
     expect(showsAccountRole(row)).toBe(true);
   });
@@ -212,7 +232,7 @@ describe('showsAccountRole', () => {
    * la cadena de auditoría.
    */
   it('no muestra ningún rol para una cuenta dada de baja', () => {
-    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: false, can_sign_in: false });
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'inspector', active: false, can_sign_in: false });
 
     expect(showsAccountRole(row)).toBe(false);
   });
@@ -226,11 +246,11 @@ describe('estado de acceso de la fila', () => {
   it('distingue acceso activo, invitación pendiente y ausencia de acceso con texto y clase', () => {
     const active = withAccount(
       {},
-      { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true },
+      { id: ACCOUNT_ID, role: 'inspector', active: true, can_sign_in: true },
     );
     const pending = withAccount(
       {},
-      { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: false },
+      { id: ACCOUNT_ID, role: 'inspector', active: true, can_sign_in: false },
     );
     const none = withAccount();
 
@@ -247,8 +267,8 @@ describe('estado de acceso de la fila', () => {
 
 describe('roleCellLabel', () => {
   it.each([
-    ['hs_coordinator', 'H&S coordinator'],
-    ['jhsc_member', 'JHSC member'],
+    ['coordinator', 'Coordinator'],
+    ['inspector', 'Inspector'],
     ['management', 'Management'],
   ] as const)('dice el rol %s de la cuenta', (role, label) => {
     const row = withAccount({}, { id: ACCOUNT_ID, role, active: true, can_sign_in: true });
@@ -266,7 +286,7 @@ describe('roleCellLabel', () => {
    * el texto de la celda.
    */
   it('vuelve a "Worker" cuando se le quitó el acceso a la cuenta', () => {
-    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: false, can_sign_in: false });
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'inspector', active: false, can_sign_in: false });
 
     expect(roleCellLabel(row)).toBe('Worker');
   });
@@ -283,7 +303,7 @@ describe('roleCellLabel', () => {
 
 describe('emailCellLabel', () => {
   it('dice el correo de la cuenta cuando la hay', () => {
-    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true });
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'inspector', active: true, can_sign_in: true });
 
     expect(emailCellLabel(row)).toBe(EMAIL);
   });
@@ -298,7 +318,7 @@ describe('emailCellLabel', () => {
    * el correo de una fila que dice "Worker" diría que esa dirección todavía tiene acceso.
    */
   it('no dice nada cuando se le quitó el acceso a la cuenta', () => {
-    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: false, can_sign_in: false });
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'inspector', active: false, can_sign_in: false });
 
     expect(emailCellLabel(row)).toBe('');
     expect(roleCellLabel(row)).toBe('Worker');
@@ -311,13 +331,13 @@ describe('canInvite', () => {
   });
 
   it('no ofrece invitar a quien ya tiene cuenta activa', () => {
-    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true });
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'inspector', active: true, can_sign_in: true });
 
     expect(canInvite(row)).toBe(false);
   });
 
   it('no ofrece invitar a quien tiene una invitación pendiente', () => {
-    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: false });
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'inspector', active: true, can_sign_in: false });
 
     expect(canInvite(row)).toBe(false);
   });
@@ -334,13 +354,13 @@ describe('canInvite', () => {
    * existía es cosa del servidor — `person_id` es único y no hay segunda cuenta posible.
    */
   it('ofrece invitar de nuevo a quien se le quitó el acceso', () => {
-    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: false, can_sign_in: false });
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'inspector', active: false, can_sign_in: false });
 
     expect(canInvite(row)).toBe(true);
   });
 
-  it('no ofrece invitar si la cuenta dada de baja no era de jhsc_member', () => {
-    for (const role of ['hs_coordinator', 'management'] as const) {
+  it('no ofrece invitar si la cuenta dada de baja no era de inspector', () => {
+    for (const role of ['coordinator', 'management'] as const) {
       const row = withAccount({}, { id: ACCOUNT_ID, role, active: false, can_sign_in: false });
 
       expect(canInvite(row)).toBe(false);
@@ -350,28 +370,66 @@ describe('canInvite', () => {
   it('no ofrece invitar de nuevo a quien además dejó la planta', () => {
     const row = withAccount(
       { deactivated_at: '2026-01-01T00:00:00.000Z' },
-      { id: ACCOUNT_ID, role: 'jhsc_member', active: false, can_sign_in: false },
+      { id: ACCOUNT_ID, role: 'inspector', active: false, can_sign_in: false },
     );
 
     expect(canInvite(row)).toBe(false);
   });
 });
 
+describe('canEditPerson', () => {
+  it('ofrece editar a cualquier persona activa', () => {
+    expect(canEditPerson(withAccount())).toBe(true);
+    expect(
+      canEditPerson(
+        withAccount({}, { id: ACCOUNT_ID, role: 'inspector', active: true, can_sign_in: true }),
+      ),
+    ).toBe(true);
+  });
+
+  it('no ofrece editar a una persona inactiva', () => {
+    expect(canEditPerson(withAccount({ deactivated_at: '2026-01-01T00:00:00.000Z' }))).toBe(false);
+  });
+});
+
+describe('personCorrection', () => {
+  const initial = {
+    firstName: 'Ada',
+    lastName: 'Reid',
+    employeeNumber: '10472',
+    email: 'ada@example.com',
+  };
+
+  it('devuelve solo los campos de persona que cambiaron y marca el email', () => {
+    expect(
+      personCorrection(initial, {
+        ...initial,
+        lastName: 'New',
+        email: 'new@example.com',
+      }),
+    ).toEqual({ person: { last_name: 'New' }, emailChanged: true });
+  });
+
+  it('no marca cambios cuando todos los valores son iguales', () => {
+    expect(personCorrection(initial, initial)).toEqual({ person: {}, emailChanged: false });
+  });
+});
+
 describe('canReissueInvitation', () => {
   it('ofrece reemitir cuando la cuenta está activa y todavía no puede entrar', () => {
-    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: false });
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'inspector', active: true, can_sign_in: false });
 
     expect(canReissueInvitation(row)).toBe(true);
   });
 
   it('no ofrece reemitir a quien ya puede entrar', () => {
-    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true });
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'inspector', active: true, can_sign_in: true });
 
     expect(canReissueInvitation(row)).toBe(false);
   });
 
   it('no ofrece reemitir a una cuenta inactiva', () => {
-    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: false, can_sign_in: false });
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'inspector', active: false, can_sign_in: false });
 
     expect(canReissueInvitation(row)).toBe(false);
   });
@@ -389,20 +447,20 @@ describe('reissueButtonLabel', () => {
 
 describe('canRemoveJhscAccess', () => {
   it('ofrece quitar el acceso a un miembro que ya entra', () => {
-    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true });
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'inspector', active: true, can_sign_in: true });
 
     expect(canRemoveJhscAccess(row)).toBe(true);
   });
 
   // El mismo acto para los dos: cancelar una invitación ES dar de baja la cuenta.
   it('ofrece quitar el acceso a una invitación que nadie aceptó', () => {
-    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: false });
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'inspector', active: true, can_sign_in: false });
 
     expect(canRemoveJhscAccess(row)).toBe(true);
   });
 
   it('no ofrece quitar el acceso dos veces a la misma cuenta', () => {
-    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: false, can_sign_in: false });
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'inspector', active: false, can_sign_in: false });
 
     expect(canRemoveJhscAccess(row)).toBe(false);
   });
@@ -411,9 +469,9 @@ describe('canRemoveJhscAccess', () => {
     expect(canRemoveJhscAccess(withAccount())).toBe(false);
   });
 
-  // El roster administra el acceso que el roster otorga, y eso es jhsc_member.
-  it('no ofrece quitar el acceso a un rol que no es jhsc_member', () => {
-    for (const role of ['hs_coordinator', 'management'] as const) {
+  // El roster administra el acceso que el roster otorga, y eso es inspector.
+  it('no ofrece quitar el acceso a un rol que no es inspector', () => {
+    for (const role of ['coordinator', 'management'] as const) {
       const row = withAccount({}, { id: ACCOUNT_ID, role, active: true, can_sign_in: true });
 
       expect(canRemoveJhscAccess(row)).toBe(false);
@@ -422,41 +480,41 @@ describe('canRemoveJhscAccess', () => {
 });
 
 describe('canPromoteAccount', () => {
-  it('acepta solo una cuenta activa de jhsc_member', () => {
-    expect(canPromoteAccount(withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true }))).toBe(true);
-    expect(canPromoteAccount(withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: false, can_sign_in: true }))).toBe(false);
-    expect(canPromoteAccount(withAccount({}, { id: ACCOUNT_ID, role: 'hs_coordinator', active: true, can_sign_in: true }))).toBe(false);
+  it('acepta solo una cuenta activa de inspector', () => {
+    expect(canPromoteAccount(withAccount({}, { id: ACCOUNT_ID, role: 'inspector', active: true, can_sign_in: true }))).toBe(true);
+    expect(canPromoteAccount(withAccount({}, { id: ACCOUNT_ID, role: 'inspector', active: false, can_sign_in: true }))).toBe(false);
+    expect(canPromoteAccount(withAccount({}, { id: ACCOUNT_ID, role: 'coordinator', active: true, can_sign_in: true }))).toBe(false);
     expect(canPromoteAccount(withAccount({}, { id: ACCOUNT_ID, role: 'management', active: true, can_sign_in: true }))).toBe(false);
     expect(canPromoteAccount(withAccount())).toBe(false);
   });
 });
 
 describe('canDemoteAccount', () => {
-  it('acepta solo una cuenta activa de hs_coordinator', () => {
-    expect(canDemoteAccount(withAccount({}, { id: ACCOUNT_ID, role: 'hs_coordinator', active: true, can_sign_in: true }))).toBe(true);
-    expect(canDemoteAccount(withAccount({}, { id: ACCOUNT_ID, role: 'hs_coordinator', active: false, can_sign_in: true }))).toBe(false);
-    expect(canDemoteAccount(withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true }))).toBe(false);
+  it('acepta solo una cuenta activa de coordinator', () => {
+    expect(canDemoteAccount(withAccount({}, { id: ACCOUNT_ID, role: 'coordinator', active: true, can_sign_in: true }))).toBe(true);
+    expect(canDemoteAccount(withAccount({}, { id: ACCOUNT_ID, role: 'coordinator', active: false, can_sign_in: true }))).toBe(false);
+    expect(canDemoteAccount(withAccount({}, { id: ACCOUNT_ID, role: 'inspector', active: true, can_sign_in: true }))).toBe(false);
     expect(canDemoteAccount(withAccount({}, { id: ACCOUNT_ID, role: 'management', active: true, can_sign_in: true }))).toBe(false);
     expect(canDemoteAccount(withAccount())).toBe(false);
   });
 
   it('nombra la transición y a la persona', () => {
-    expect(demoteButtonLabel(withAccount({}, { id: ACCOUNT_ID, role: 'hs_coordinator', active: true, can_sign_in: true }))).toBe(
-      'Demote Reid, Ada (10472) to JHSC member',
+    expect(demoteButtonLabel(withAccount({}, { id: ACCOUNT_ID, role: 'coordinator', active: true, can_sign_in: true }))).toBe(
+      'Demote Reid, Ada (10472) to inspector',
     );
   });
 });
 
 describe('removeButtonLabel / removeButtonText', () => {
   it('habla de cancelar la invitación cuando la persona todavía no entró', () => {
-    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: false });
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'inspector', active: true, can_sign_in: false });
 
     expect(removeButtonLabel(row)).toBe('Cancel the invitation of Reid, Ada (10472)');
     expect(removeButtonText(row)).toBe('Cancel invitation');
   });
 
   it('habla de quitar del JHSC cuando la persona ya entra', () => {
-    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true });
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'inspector', active: true, can_sign_in: true });
 
     expect(removeButtonLabel(row)).toBe('Remove Reid, Ada (10472) from JHSC');
     expect(removeButtonText(row)).toBe('Remove');
@@ -472,9 +530,9 @@ describe('las afordancias de una fila son mutuamente excluyentes', () => {
   const rows: PersonWithAccount[] = [
     withAccount(),
     withAccount({ deactivated_at: '2026-01-01T00:00:00.000Z' }),
-    withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: false }),
-    withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true }),
-    withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: false, can_sign_in: false }),
+    withAccount({}, { id: ACCOUNT_ID, role: 'inspector', active: true, can_sign_in: false }),
+    withAccount({}, { id: ACCOUNT_ID, role: 'inspector', active: true, can_sign_in: true }),
+    withAccount({}, { id: ACCOUNT_ID, role: 'inspector', active: false, can_sign_in: false }),
     withAccount({}, { id: ACCOUNT_ID, role: 'management', active: true, can_sign_in: true }),
   ];
 
@@ -494,7 +552,7 @@ describe('las afordancias de una fila son mutuamente excluyentes', () => {
     const never = withAccount();
     const withdrawn = withAccount(
       {},
-      { id: ACCOUNT_ID, role: 'jhsc_member', active: false, can_sign_in: false },
+      { id: ACCOUNT_ID, role: 'inspector', active: false, can_sign_in: false },
     );
 
     for (const affordance of [showsAccountRole, canInvite, canReissueInvitation, canRemoveJhscAccess]) {
@@ -510,7 +568,7 @@ describe('las afordancias de una fila son mutuamente excluyentes', () => {
   it('ofrece reemitir y cancelar juntos, y solo sobre una invitación pendiente', () => {
     const pending = withAccount(
       {},
-      { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: false },
+      { id: ACCOUNT_ID, role: 'inspector', active: true, can_sign_in: false },
     );
 
     expect(canReissueInvitation(pending) && canRemoveJhscAccess(pending)).toBe(true);
@@ -548,14 +606,14 @@ describe('sortRoster', () => {
 
 describe('roleCellClass', () => {
   it('quien ya entra se pinta como algo resuelto', () => {
-    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true });
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'inspector', active: true, can_sign_in: true });
 
     expect(roleCellClass(row)).toBe('status-pill status-pill--ready');
   });
 
   // Es lo mismo que la app pinta en ámbar en todas partes: algo que espera a alguien.
   it('la invitación sin aceptar se pinta como algo que espera', () => {
-    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: false });
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'inspector', active: true, can_sign_in: false });
 
     expect(roleCellClass(row)).toBe('status-pill status-pill--not-ready');
   });
@@ -566,7 +624,7 @@ describe('roleCellClass', () => {
   });
 
   it('la cuenta dada de baja se pinta como la de quien nunca tuvo una', () => {
-    const row = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: false, can_sign_in: false });
+    const row = withAccount({}, { id: ACCOUNT_ID, role: 'inspector', active: false, can_sign_in: false });
 
     expect(roleCellClass(row)).toBe('status-pill status-pill--not-opened');
   });
@@ -575,8 +633,8 @@ describe('roleCellClass', () => {
 describe('rosterCounts', () => {
   it('cuenta a todos, a los que entran, y a los que tienen una invitación esperando', () => {
     const counts = rosterCounts([
-      withAccount({ id: 'a' }, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true }),
-      withAccount({ id: 'b' }, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: false }),
+      withAccount({ id: 'a' }, { id: ACCOUNT_ID, role: 'inspector', active: true, can_sign_in: true }),
+      withAccount({ id: 'b' }, { id: ACCOUNT_ID, role: 'inspector', active: true, can_sign_in: false }),
       withAccount({ id: 'c' }),
     ]);
 
@@ -586,7 +644,7 @@ describe('rosterCounts', () => {
   // Para el roster, esa persona no tiene cuenta: no entra y no está esperando nada.
   it('la cuenta dada de baja no cuenta ni como acceso ni como invitación', () => {
     const counts = rosterCounts([
-      withAccount({ id: 'a' }, { id: ACCOUNT_ID, role: 'jhsc_member', active: false, can_sign_in: false }),
+      withAccount({ id: 'a' }, { id: ACCOUNT_ID, role: 'inspector', active: false, can_sign_in: false }),
     ]);
 
     expect(counts).toEqual({ total: 1, withAccess: 0, invited: 0 });
@@ -600,31 +658,31 @@ describe('rosterCounts', () => {
 describe('accountRoleLabel — la membresía sigue al rol', () => {
   const coordinator = (can_sign_in = true) => ({
     id: ACCOUNT_ID,
-    role: 'hs_coordinator' as const,
+    role: 'coordinator' as const,
     active: true,
     can_sign_in,
     email: EMAIL,
   });
 
   it('nombra a la coordinadora con su etiqueta de rol', () => {
-    expect(accountRoleLabel(coordinator())).toBe('H&S coordinator');
+    expect(accountRoleLabel(coordinator())).toBe('Coordinator');
   });
 
   it('conserva "(invited)" cuando todavía no puede iniciar sesión', () => {
-    expect(accountRoleLabel(coordinator(false))).toBe('H&S coordinator (invited)');
+    expect(accountRoleLabel(coordinator(false))).toBe('Coordinator (invited)');
   });
 
-  // `jhsc_member` ya dice que está en el comité; un sufijo repetiría lo mismo.
-  it('no le agrega nada a un JHSC member', () => {
+  // `inspector` ya dice que está en el comité; un sufijo repetiría lo mismo.
+  it('no le agrega nada a un Inspector', () => {
     const label = accountRoleLabel({
       id: ACCOUNT_ID,
-      role: 'jhsc_member',
+      role: 'inspector',
       active: true,
       can_sign_in: true,
       email: EMAIL,
     });
 
-    expect(label).toBe(ROLE_LABELS.jhsc_member);
+    expect(label).toBe(ROLE_LABELS.inspector);
   });
 });
 
@@ -638,24 +696,24 @@ describe('rowActions', () => {
     rowActions(row, true).map((action) => action.kind);
 
   it('worker activa: permite invitarla o quitarla del roster', () => {
-    expect(kinds(withAccount())).toEqual(['invite', 'deactivate']);
-    expect(rowActions(withAccount(), true)[1]?.text).toBe('Remove worker');
+    expect(kinds(withAccount())).toEqual(['edit', 'invite', 'deactivate']);
+    expect(rowActions(withAccount(), true)[2]?.text).toBe('Remove worker');
   });
 
   it('Worker con una cuenta inactiva también permite quitarla del roster', () => {
     const row = withAccount(
       {},
-      { id: ACCOUNT_ID, role: 'jhsc_member', active: false, can_sign_in: false },
+      { id: ACCOUNT_ID, role: 'inspector', active: false, can_sign_in: false },
     );
 
     expect(canDeactivateWorker(row)).toBe(true);
-    expect(kinds(row)).toEqual(['invite', 'deactivate']);
+    expect(kinds(row)).toEqual(['edit', 'invite', 'deactivate']);
   });
 
   it('una cuenta activa nunca permite quitar a la persona del roster', () => {
     const row = withAccount(
       {},
-      { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true },
+      { id: ACCOUNT_ID, role: 'inspector', active: true, can_sign_in: true },
     );
 
     expect(canDeactivateWorker(row)).toBe(false);
@@ -669,36 +727,38 @@ describe('rowActions', () => {
   it('invitación pendiente: reemitir el link y cancelarla', () => {
     const pending = withAccount(
       {},
-      { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: false },
+      { id: ACCOUNT_ID, role: 'inspector', active: true, can_sign_in: false },
     );
 
-    expect(kinds(pending)).toEqual(['reissue', 'remove']);
-    expect(rowActions(pending, true)[1]?.text).toBe('Cancel invitation');
+    expect(kinds(pending)).toEqual(['edit', 'reissue', 'remove']);
+    expect(rowActions(pending, true)[2]?.text).toBe('Cancel invitation');
   });
 
   it('miembro que ya entra: solo quitar', () => {
     const member = withAccount(
       {},
-      { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true },
+      { id: ACCOUNT_ID, role: 'inspector', active: true, can_sign_in: true },
     );
 
-    expect(kinds(member)).toEqual(['remove']);
-    expect(rowActions(member, true)[0]?.text).toBe('Remove');
+    expect(kinds(member)).toEqual(['edit', 'remove']);
+    expect(rowActions(member, true)[1]?.text).toBe('Remove');
   });
 
   it('management también ofrece promover al miembro activo', () => {
-    const member = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true });
+    const member = withAccount({}, { id: ACCOUNT_ID, role: 'inspector', active: true, can_sign_in: true });
 
     expect(rowActions(member, true, true)).toEqual([
+      expect.objectContaining({ kind: 'edit' }),
       expect.objectContaining({ kind: 'remove' }),
       expect.objectContaining({ kind: 'promote', text: 'Promote' }),
     ]);
   });
 
   it('management ofrece degradar al coordinador activo', () => {
-    const coordinator = withAccount({}, { id: ACCOUNT_ID, role: 'hs_coordinator', active: true, can_sign_in: true });
+    const coordinator = withAccount({}, { id: ACCOUNT_ID, role: 'coordinator', active: true, can_sign_in: true });
 
     expect(rowActions(coordinator, true, false, true)).toEqual([
+      expect.objectContaining({ kind: 'edit' }),
       expect.objectContaining({ kind: 'demote', text: 'Demote' }),
     ]);
   });
@@ -710,9 +770,9 @@ describe('rowActions', () => {
   it('sin permiso de invitar, ninguna fila ofrece nada', () => {
     const rows = [
       withAccount(),
-      withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: false }),
-      withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true }),
-      withAccount({}, { id: ACCOUNT_ID, role: 'hs_coordinator', active: true, can_sign_in: true }),
+      withAccount({}, { id: ACCOUNT_ID, role: 'inspector', active: true, can_sign_in: false }),
+      withAccount({}, { id: ACCOUNT_ID, role: 'inspector', active: true, can_sign_in: true }),
+      withAccount({}, { id: ACCOUNT_ID, role: 'coordinator', active: true, can_sign_in: true }),
     ];
 
     for (const row of rows) expect(rowActions(row, false)).toEqual([]);
@@ -721,7 +781,7 @@ describe('rowActions', () => {
   it('nombra a la persona en cada botón: "Invite" solo se anuncia igual en las 200 filas', () => {
     const pending = withAccount(
       {},
-      { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: false },
+      { id: ACCOUNT_ID, role: 'inspector', active: true, can_sign_in: false },
     );
 
     for (const action of rowActions(pending, true)) {
@@ -736,7 +796,39 @@ describe('rowActions', () => {
  * pregunta —por ejemplo `canSignIn`— no se puede releer después.
  */
 describe('dialogFor', () => {
-  const only = (row: PersonWithAccount) => dialogFor(row, rowActions(row, true)[0]!);
+  const only = (row: PersonWithAccount) =>
+    dialogFor(row, rowActions(row, true).find((action) => action.kind !== 'edit')!);
+
+  it('congela los campos de la persona al abrir Edit', () => {
+    const row = withAccount({ first_name: 'Ada', last_name: 'Reid', employee_number: '10472' });
+    const edit = rowActions(row, true).find((action) => action.kind === 'edit')!;
+
+    expect(dialogFor(row, edit)).toEqual({
+      kind: 'edit',
+      personId: row.id,
+      firstName: 'Ada',
+      lastName: 'Reid',
+      employeeNumber: '10472',
+      account: null,
+      label: personLabel(row),
+    });
+  });
+
+  it('solo congela el email de una invitación activa', () => {
+    const invited = withAccount(
+      {},
+      { id: ACCOUNT_ID, role: 'inspector', active: true, can_sign_in: false },
+    );
+    const edit = rowActions(invited, true).find((action) => action.kind === 'edit')!;
+
+    expect(dialogFor(invited, edit)).toMatchObject({
+      kind: 'edit',
+      account: { userId: ACCOUNT_ID, email: EMAIL },
+    });
+    expect(
+      dialogFor(withAccount({}, { id: ACCOUNT_ID, role: 'inspector', active: true, can_sign_in: true }), edit),
+    ).toMatchObject({ account: null });
+  });
 
   it('invitar viaja con el id de la PERSONA, que es la que todavía no tiene cuenta', () => {
     const row = withAccount();
@@ -747,16 +839,17 @@ describe('dialogFor', () => {
   it('reemitir y cancelar viajan con el id de la cuenta', () => {
     const pending = withAccount(
       {},
-      { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: false },
+      { id: ACCOUNT_ID, role: 'inspector', active: true, can_sign_in: false },
     );
-    const [reissue, remove] = rowActions(pending, true);
+    const reissue = rowActions(pending, true).find((action) => action.kind === 'reissue')!;
+    const remove = rowActions(pending, true).find((action) => action.kind === 'remove')!;
 
-    expect(dialogFor(pending, reissue!)).toEqual({
+    expect(dialogFor(pending, reissue)).toEqual({
       kind: 'reissue',
       userId: ACCOUNT_ID,
       label: personLabel(pending),
     });
-    expect(dialogFor(pending, remove!)).toEqual({
+    expect(dialogFor(pending, remove)).toEqual({
       kind: 'remove',
       userId: ACCOUNT_ID,
       label: personLabel(pending),
@@ -767,7 +860,7 @@ describe('dialogFor', () => {
   it('quitar copia `canSignIn`: es lo que decide si la pregunta es cancelar o quitar', () => {
     const member = withAccount(
       {},
-      { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true },
+      { id: ACCOUNT_ID, role: 'inspector', active: true, can_sign_in: true },
     );
 
     expect(only(member)).toMatchObject({ kind: 'remove', canSignIn: true });
@@ -775,7 +868,7 @@ describe('dialogFor', () => {
 
   it('dar de baja un worker viaja con el id de la persona, no con una cuenta', () => {
     const row = withAccount();
-    const deactivate = rowActions(row, true)[1]!;
+    const deactivate = rowActions(row, true).find((action) => action.kind === 'deactivate')!;
 
     expect(dialogFor(row, deactivate)).toEqual({
       kind: 'deactivate',
@@ -785,7 +878,7 @@ describe('dialogFor', () => {
   });
 
   it('la promoción viaja con el id de la cuenta', () => {
-    const member = withAccount({}, { id: ACCOUNT_ID, role: 'jhsc_member', active: true, can_sign_in: true });
+    const member = withAccount({}, { id: ACCOUNT_ID, role: 'inspector', active: true, can_sign_in: true });
     const promotion = rowActions(member, true, true).find((action) => action.kind === 'promote')!;
 
     expect(dialogFor(member, promotion)).toEqual({
@@ -796,7 +889,7 @@ describe('dialogFor', () => {
   });
 
   it('la degradación viaja con el id de la cuenta', () => {
-    const coordinator = withAccount({}, { id: ACCOUNT_ID, role: 'hs_coordinator', active: true, can_sign_in: true });
+    const coordinator = withAccount({}, { id: ACCOUNT_ID, role: 'coordinator', active: true, can_sign_in: true });
     const demotion = rowActions(coordinator, true, false, true).find((action) => action.kind === 'demote')!;
 
     expect(dialogFor(coordinator, demotion)).toEqual({

@@ -208,7 +208,7 @@ async function notifyCoordinators(
          JOIN user_site_scope s ON s.user_id = u.id
                                AND s.site_id = $1::uuid
                                AND s.revoked_at IS NULL
-        WHERE u.role = 'hs_coordinator'
+         WHERE u.role = 'coordinator'
           AND u.deactivated_at IS NULL
        ON CONFLICT (user_id, kind, dedupe_key) DO NOTHING`,
       [siteId, `${siteId}:${month}`, JSON.stringify(payload)],

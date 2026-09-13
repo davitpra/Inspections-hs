@@ -15,8 +15,8 @@ import { site } from './catalog';
  * mecanismo. Si el SQL cambia, este espejo se actualiza a mano.
  */
 
-/** Los tres roles vigentes de ADR-022. */
-export const ROLES = ['hs_coordinator', 'jhsc_member', 'management'] as const;
+/** Los tres roles vigentes de ADR-024. */
+export const ROLES = ['coordinator', 'inspector', 'management'] as const;
 
 export type Role = (typeof ROLES)[number];
 
@@ -97,7 +97,7 @@ export const appUser = pgTable(
     deactivatedAt: timestamp('deactivated_at', { withTimezone: true }),
   },
   (table) => [
-    check('app_user_role_check', sql`${table.role} IN ('hs_coordinator', 'jhsc_member', 'management')`),
+    check('app_user_role_check', sql`${table.role} IN ('coordinator', 'inspector', 'management')`),
 
   ],
 );

@@ -44,7 +44,7 @@ let outsider: { accountId: string };
 let coordinator: { accountId: string };
 
 /** Una sesión con el alcance dado. Es lo único que el servicio acepta como actor. */
-function sessionFor(accountId: string, siteIds: string[], role = 'jhsc_member') {
+function sessionFor(accountId: string, siteIds: string[], role = 'inspector') {
   return { userId: accountId, role, siteIds };
 }
 
@@ -85,12 +85,12 @@ beforeAll(async () => {
   await publishVersion(db.migrator, templateId, 1, documentFor('pkg.guard', 'Version one'));
   versionV2 = await publishVersion(db.migrator, templateId, 2, documentFor('pkg.guard', 'Version two'));
 
-  inspector = await createAccount(db.app, { siteIds: [SITE_A], role: 'jhsc_member' });
-  otherInspector = await createAccount(db.app, { siteIds: [SITE_A], role: 'jhsc_member' });
-  outsider = await createAccount(db.app, { siteIds: [SITE_B], role: 'jhsc_member' });
+  inspector = await createAccount(db.app, { siteIds: [SITE_A], role: 'inspector' });
+  otherInspector = await createAccount(db.app, { siteIds: [SITE_A], role: 'inspector' });
+  outsider = await createAccount(db.app, { siteIds: [SITE_B], role: 'inspector' });
   coordinator = await createAccount(db.app, {
     siteIds: [SITE_A, SITE_B],
-    role: 'hs_coordinator',
+    role: 'coordinator',
   });
 
   inspectionA = await scheduleInspection(db.app, {
@@ -205,7 +205,7 @@ describe('el aislamiento', () => {
    * de seguridad.
    */
   it('un coordinador con las dos plantas recibe solo lo de la planta de la inspección', async () => {
-    const session = sessionFor(coordinator.accountId, [SITE_A, SITE_B], 'hs_coordinator');
+    const session = sessionFor(coordinator.accountId, [SITE_A, SITE_B], 'coordinator');
 
     const locationsB = await stack.inspections.locationPackage(session, inspectionB);
     const rosterB = await stack.inspections.rosterPackage(session, inspectionB);
@@ -232,7 +232,7 @@ describe('el aislamiento', () => {
    * lo es — la comprobación que le importa a esta ruta sigue siendo el alcance de sitio.
    */
   it('una cuenta que no es la asignada igual lee el paquete, con el inspector que corresponde', async () => {
-    const session = sessionFor(coordinator.accountId, [SITE_A, SITE_B], 'hs_coordinator');
+    const session = sessionFor(coordinator.accountId, [SITE_A, SITE_B], 'coordinator');
 
     const version = await stack.inspections.templateVersionPackage(session, inspectionA);
 
@@ -241,7 +241,7 @@ describe('el aislamiento', () => {
 
   /** `inspectionB` se programó sin inspector (línea de arriba: sin `inspectorId`). */
   it('una inspección sin inspector sirve inspector_id en null', async () => {
-    const session = sessionFor(coordinator.accountId, [SITE_A, SITE_B], 'hs_coordinator');
+    const session = sessionFor(coordinator.accountId, [SITE_A, SITE_B], 'coordinator');
 
     const version = await stack.inspections.templateVersionPackage(session, inspectionB);
 
@@ -401,7 +401,7 @@ describe('una inspección cancelada', () => {
     });
 
     await stack.inspections.cancel(
-      sessionFor(coordinator.accountId, [SITE_A, SITE_B], 'hs_coordinator'),
+      sessionFor(coordinator.accountId, [SITE_A, SITE_B], 'coordinator'),
       cancelled,
       'Plant shut down that week',
     );

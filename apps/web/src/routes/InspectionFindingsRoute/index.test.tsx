@@ -252,7 +252,7 @@ beforeEach(() => {
   transitionAction.mockResolvedValue(actionDetail({ state: 'in_progress' }));
   replaceAssignment.mockResolvedValue(actionDetail());
   uploadEvidence.mockResolvedValue('actions/evidence.jpg');
-  useAppSession.mockReturnValue({ account: session('hs_coordinator') });
+  useAppSession.mockReturnValue({ account: session('coordinator') });
 });
 
 /**
@@ -479,7 +479,7 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
 
   /** ADR-017: quien reportó el hallazgo lo abre, aunque no sea el coordinador. */
   it('ofrece también a quien reportó el hallazgo, sin ser coordinador', async () => {
-    useAppSession.mockReturnValue({ account: session('jhsc_member') });
+    useAppSession.mockReturnValue({ account: session('inspector') });
 
     renderRoute();
     await creationForm();
@@ -488,11 +488,11 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
     expect(within(next).getByRole('form', { name: 'Create corrective action' })).toBeTruthy();
   });
 
-  it('no ofrece la creación a un jhsc_member que no reportó el hallazgo', async () => {
+  it('no ofrece la creación a un inspector que no reportó el hallazgo', async () => {
     getSubmittedInspection.mockResolvedValue(
       report({ findings: [finding({ reported_by: '77777777-7777-4777-8777-777777777777' })] }),
     );
-    useAppSession.mockReturnValue({ account: session('jhsc_member') });
+    useAppSession.mockReturnValue({ account: session('inspector') });
 
     renderRoute();
 
@@ -506,7 +506,7 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
       report({ findings: [finding({ state: 'assigned' })] }),
     );
     listActions.mockResolvedValue([action()]);
-    useAppSession.mockReturnValue({ account: session('jhsc_member') });
+    useAppSession.mockReturnValue({ account: session('inspector') });
 
     renderRoute();
 
@@ -526,7 +526,7 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
       Promise.resolve([action({ state: findingReads < 2 ? 'open' : 'in_progress' })]),
     );
     useAppSession.mockReturnValue({
-      account: { ...session('jhsc_member'), personId: '77777777-7777-4777-8777-777777777777' },
+      account: { ...session('inspector'), personId: '77777777-7777-4777-8777-777777777777' },
     });
 
     renderRoute();
@@ -573,7 +573,7 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
     );
     listActions.mockResolvedValue([action({ state: 'in_progress' })]);
     useAppSession.mockReturnValue({
-      account: { ...session('jhsc_member'), personId: '77777777-7777-4777-8777-777777777777' },
+      account: { ...session('inspector'), personId: '77777777-7777-4777-8777-777777777777' },
     });
 
     renderRoute();
@@ -678,7 +678,7 @@ describe('InspectionFindingsRoute — la ficha abierta', () => {
     getSubmittedInspection.mockResolvedValue(
       report({ findings: [finding({ reported_by: '77777777-7777-4777-8777-777777777777' })] }),
     );
-    useAppSession.mockReturnValue({ account: session('jhsc_member') });
+    useAppSession.mockReturnValue({ account: session('inspector') });
 
     renderRoute();
 
@@ -917,7 +917,7 @@ describe('InspectionFindingsRoute — avance de la acción', () => {
       reads += 1;
       return Promise.resolve([action(reads === 1 ? {} : { state: 'in_progress' })]);
     });
-    useAppSession.mockReturnValue({ account: session('jhsc_member') });
+    useAppSession.mockReturnValue({ account: session('inspector') });
 
     renderRoute();
     await submitStep('Start work');
@@ -1674,7 +1674,7 @@ describe('InspectionFindingsRoute — navegación entre etapas', () => {
       return Promise.resolve([action(reads === 1 ? {} : { state: 'in_progress' })]);
     });
     getAction.mockResolvedValue(actionDetail());
-    useAppSession.mockReturnValue({ account: session('jhsc_member') });
+    useAppSession.mockReturnValue({ account: session('inspector') });
 
     renderRoute();
 

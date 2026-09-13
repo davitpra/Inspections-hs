@@ -11,7 +11,7 @@ function validSession() {
   return {
     userId: USER_ID,
     personId: PERSON_ID,
-    role: 'jhsc_member',
+    role: 'inspector',
     siteScope: [SITE_ID],
     email: 'ada.reid@example.com',
     firstName: 'Ada',

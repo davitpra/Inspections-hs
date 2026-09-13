@@ -4,6 +4,7 @@ import {
   type PersonWithAccount,
   type RosterImportReport,
   type RosterRejection,
+  type UpdatePersonRequest,
 } from '@hs/contracts';
 
 export type ImportState = 'empty' | 'ready' | 'pending' | 'success' | 'error';
@@ -27,12 +28,19 @@ export function addPersonButtonText(state: AddPersonState): string {
   return state === 'pending' ? 'Adding…' : state === 'error' ? 'Try again' : 'Add person';
 }
 
+export type EditPersonState = 'ready' | 'pending' | 'error';
+
+export function editPersonButtonText(state: EditPersonState): string {
+  return state === 'pending' ? 'Saving…' : state === 'error' ? 'Try again' : 'Save';
+}
+
 /**
  * Cómo se lee la consola del roster: etiquetas, orden y búsqueda, sin marcado.
  *
- * La consola no corrige nombres ni transfiere personas fila por fila. Además de cómo se
- * muestra y encuentra el roster, este archivo decide qué acciones admite cada estado,
- * incluida la baja lógica estrecha de un worker sin cuenta.
+ * La consola corrige nombres y números de personas activas desde la fila, pero no las
+ * transfiere ni reactiva. Además de cómo se muestra y encuentra el roster, este archivo
+ * decide qué acciones admite cada estado, incluida la baja lógica estrecha de un worker sin
+ * cuenta.
  *
  * Aparte del componente por la misma razón que `scheduling-presentation.ts`: lo que
  * importa es la decisión y el nombre de cada cosa, y eso se prueba sin renderizar nada.
@@ -63,6 +71,10 @@ export function personInitials(person: Person): string {
  */
 export function personLabel(person: Person): string {
   return `${personName(person)} (${person.employee_number})`;
+}
+
+export function editPersonButtonLabel(person: Person): string {
+  return `Edit ${personLabel(person)}`;
 }
 
 /** El nombre accesible del botón corto de la fila. Ver `personLabel`. */
@@ -137,7 +149,7 @@ export function accountRoleLabel(account: NonNullable<PersonWithAccount['account
  *
  * La persona tiene que estar activa —quien ya no trabaja en la planta no entra al sistema
  * (proposal 4.5)— y tiene que **no tener acceso**, que es lo que significan los dos casos
- * de la segunda condición: nunca tuvo cuenta, o tuvo una de `jhsc_member` y se le quitó.
+ * de la segunda condición: nunca tuvo cuenta, o tuvo una de `inspector` y se le quitó.
  *
  * Los dos se ofrecen igual y con el mismo botón a propósito. Que del otro lado el segundo
  * caso reviva la cuenta que ya existía en vez de insertar una nueva —`app_user.person_id`
@@ -153,8 +165,13 @@ export function canInvite(person: PersonWithAccount): boolean {
   if (person.deactivated_at !== null) return false;
 
   return (
-    person.account === null || (!person.account.active && person.account.role === 'jhsc_member')
+    person.account === null || (!person.account.active && person.account.role === 'inspector')
   );
+}
+
+/** Solo una persona activa conserva un acto de corrección en el roster. */
+export function canEditPerson(person: PersonWithAccount): boolean {
+  return person.deactivated_at === null;
 }
 
 /**
@@ -186,13 +203,13 @@ export function reissueButtonLabel(person: PersonWithAccount): string {
  * escritura. Lo que sí cambia según `can_sign_in` es cómo se llama el botón, y eso está en
  * `removeButtonLabel`.
  *
- * `role === 'jhsc_member'` porque el roster administra el acceso que el roster otorga: un
+ * `role === 'inspector'` porque el roster administra el acceso que el roster otorga: una
  * una cuenta administrativa no se da de baja desde una lista de doscientas
  * filas. Es la misma regla que el servidor aplica, y acá está para no ofrecer un botón que
  * el servidor va a negar.
  */
 export function canRemoveJhscAccess(person: PersonWithAccount): boolean {
-  return person.account !== null && person.account.active && person.account.role === 'jhsc_member';
+  return person.account !== null && person.account.active && person.account.role === 'inspector';
 }
 
 /**
@@ -213,20 +230,20 @@ export function removeButtonText(person: PersonWithAccount): string {
 
 /** La promoción solo aplica a una cuenta activa que todavía es miembro del JHSC. */
 export function canPromoteAccount(person: PersonWithAccount): boolean {
-  return person.account !== null && person.account.active && person.account.role === 'jhsc_member';
+  return person.account !== null && person.account.active && person.account.role === 'inspector';
 }
 
 export function promoteButtonLabel(person: PersonWithAccount): string {
-  return `Promote ${personLabel(person)} to H&S coordinator`;
+  return `Promote ${personLabel(person)} to coordinator`;
 }
 
 /** La degradación solo aplica a una cuenta activa que actualmente es coordinador. */
 export function canDemoteAccount(person: PersonWithAccount): boolean {
-  return person.account !== null && person.account.active && person.account.role === 'hs_coordinator';
+  return person.account !== null && person.account.active && person.account.role === 'coordinator';
 }
 
 export function demoteButtonLabel(person: PersonWithAccount): string {
-  return `Demote ${personLabel(person)} to JHSC member`;
+  return `Demote ${personLabel(person)} to inspector`;
 }
 
 /**
@@ -356,6 +373,7 @@ export function rosterCounts(people: readonly PersonWithAccount[]): {
 }
 
 export type RosterActionKind =
+  | 'edit'
   | 'invite'
   | 'reissue'
   | 'remove'
@@ -394,6 +412,15 @@ export function rowActions(
   if (!mayInvite) return [];
 
   const actions: RosterRowAction[] = [];
+
+  if (canEditPerson(person)) {
+    actions.push({
+      kind: 'edit',
+      text: 'Edit',
+      label: editPersonButtonLabel(person),
+      className: 'roster__action',
+    });
+  }
 
   if (canInvite(person)) {
     actions.push({
@@ -463,6 +490,15 @@ export function rowActions(
  * cambiar de texto debajo del cursor.
  */
 export type RosterDialog =
+  | {
+      kind: 'edit';
+      personId: string;
+      firstName: string;
+      lastName: string;
+      employeeNumber: string;
+      account: { userId: string; email: string } | null;
+      label: string;
+    }
   | { kind: 'invite'; personId: string; label: string }
   | { kind: 'deactivate'; personId: string; label: string }
   | { kind: 'reissue'; userId: string; label: string }
@@ -473,6 +509,20 @@ export type RosterDialog =
 /** Ver `RosterDialog`. Los actos de cuenta se resuelven después de los dos de persona. */
 export function dialogFor(person: PersonWithAccount, action: RosterRowAction): RosterDialog {
   const label = personLabel(person);
+
+  if (action.kind === 'edit') {
+    return {
+      kind: 'edit',
+      personId: person.id,
+      firstName: person.first_name,
+      lastName: person.last_name,
+      employeeNumber: person.employee_number,
+      account: canReissueInvitation(person)
+        ? { userId: person.account!.id, email: person.account!.email }
+        : null,
+      label,
+    };
+  }
 
   if (action.kind === 'invite') return { kind: 'invite', personId: person.id, label };
   if (action.kind === 'deactivate') return { kind: 'deactivate', personId: person.id, label };
@@ -489,4 +539,29 @@ export function dialogFor(person: PersonWithAccount, action: RosterRowAction): R
   if (action.kind === 'demote') return { kind: 'demote', userId, label };
 
   throw new Error('Accion de roster desconocida.');
+}
+
+export interface EditPersonValues {
+  firstName: string;
+  lastName: string;
+  employeeNumber: string;
+  email: string;
+}
+
+export function personCorrection(
+  initial: EditPersonValues,
+  current: EditPersonValues,
+): { person: Partial<UpdatePersonRequest>; emailChanged: boolean } {
+  const person: Partial<UpdatePersonRequest> = {};
+
+  if (current.firstName !== initial.firstName) person.first_name = current.firstName;
+  if (current.lastName !== initial.lastName) person.last_name = current.lastName;
+  if (current.employeeNumber !== initial.employeeNumber) {
+    person.employee_number = current.employeeNumber;
+  }
+
+  return {
+    person,
+    emailChanged: current.email !== initial.email,
+  };
 }

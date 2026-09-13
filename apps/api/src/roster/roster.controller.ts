@@ -22,6 +22,7 @@ import {
   type Person,
   type PersonWithAccount,
   type RosterImportReport,
+  updatePersonRequestSchema,
 } from '@hs/contracts';
 
 import { CurrentSession } from '../auth/session.decorator';
@@ -41,8 +42,8 @@ import { ROSTER_FILE_LIMIT, RosterUploadExceptionFilter } from './roster-upload.
  * comprueba en la lectura porque esta ruta SÍ devuelve el perfil. Conectar el selector de
  * incidentes a `/people` rompería lo único que las mantiene separadas.
  *
- * Las escrituras por persona son el alta y la baja estrecha de un worker sin cuenta.
- * Renombrar, transferir y reactivar siguen sin ruta.
+ * Las escrituras por persona son el alta, la baja estrecha de un worker sin cuenta y la
+ * corrección de una persona activa. Transferir y reactivar siguen sin ruta.
  */
 @Controller()
 export class RosterController {
@@ -68,13 +69,16 @@ export class RosterController {
   }
 
   @Patch('people/:personId')
-  async deactivate(
+  async update(
     @CurrentSession() session: SessionContext,
     @Param('personId', new ParseUUIDPipe()) personId: string,
     @Body() body: unknown,
   ): Promise<Person> {
-    deactivatePersonRequestSchema.parse(body);
-    return this.roster.deactivate(session, personId);
+    if (deactivatePersonRequestSchema.safeParse(body).success) {
+      return this.roster.deactivate(session, personId);
+    }
+
+    return this.roster.update(session, personId, updatePersonRequestSchema.parse(body));
   }
 
   @Post('people/import')

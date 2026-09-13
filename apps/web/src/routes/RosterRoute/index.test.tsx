@@ -25,6 +25,8 @@ const demoteToJhscMember = vi.hoisted(() => vi.fn());
 const importRoster = vi.hoisted(() => vi.fn());
 const createPerson = vi.hoisted(() => vi.fn());
 const deactivatePerson = vi.hoisted(() => vi.fn());
+const updatePerson = vi.hoisted(() => vi.fn());
+const correctAccountEmail = vi.hoisted(() => vi.fn());
 const useAppSession = vi.hoisted(() => vi.fn());
 
 vi.mock('../../api/inspections', () => ({ listSites }));
@@ -39,6 +41,8 @@ vi.mock('../../api/roster', () => ({
   importRoster,
   createPerson,
   deactivatePerson,
+  updatePerson,
+  correctAccountEmail,
 }));
 vi.mock('../../app/session-context', () => ({ useAppSession }));
 
@@ -66,7 +70,7 @@ function account(
 ): NonNullable<PersonWithAccount['account']> {
   return {
     id: ACCOUNT,
-    role: 'jhsc_member',
+    role: 'inspector',
     active: true,
     can_sign_in: true,
     email: EMAIL,
@@ -121,7 +125,9 @@ beforeEach(() => {
   importRoster.mockReset();
   createPerson.mockReset();
   deactivatePerson.mockReset();
-  useAppSession.mockReset().mockReturnValue(session('hs_coordinator'));
+  updatePerson.mockReset();
+  correctAccountEmail.mockReset();
+  useAppSession.mockReset().mockReturnValue(session('coordinator'));
 });
 
 describe('dar de baja un worker desde el roster', () => {
@@ -192,11 +198,11 @@ afterEach(() => {
 
 describe('quién puede entrar', () => {
   it('al miembro del JHSC le avisa y NO pide nada al servidor', async () => {
-    useAppSession.mockReturnValue(session('jhsc_member'));
+    useAppSession.mockReturnValue(session('inspector'));
 
     renderRoute();
 
-    expect(await screen.findByText(/Only H&S coordinators and management/i)).toBeTruthy();
+    expect(await screen.findByText(/Only coordinators and management/i)).toBeTruthy();
 
     // Lo que importa no es el aviso, es que no se dispare una consulta que el servidor
     // va a negar igual.
@@ -433,12 +439,90 @@ describe('agregar una persona (add-person-to-roster-by-hand)', () => {
   });
 
   it('un miembro del JHSC no ve el botón', async () => {
-    useAppSession.mockReturnValue(session('jhsc_member'));
+    useAppSession.mockReturnValue(session('inspector'));
 
     renderRoute();
 
-    expect(await screen.findByText(/Only H&S coordinators and management/i)).toBeTruthy();
+    expect(await screen.findByText(/Only coordinators and management/i)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Add person' })).toBeNull();
+  });
+});
+
+describe('corregir una persona desde el roster', () => {
+  async function openEdit(
+    row = person(),
+    client?: QueryClient,
+  ): Promise<void> {
+    listPeople.mockResolvedValue([row]);
+    renderRoute(client);
+    await screen.findByRole('rowheader', { name: `${row.last_name}, ${row.first_name}` });
+    clickRowAction(`${row.last_name}, ${row.first_name}`, 'Edit');
+    await screen.findByRole('dialog');
+  }
+
+  it('abre un diálogo con los campos de persona precargados', async () => {
+    await openEdit(person({ first_name: 'Grace', last_name: 'Hopper', employee_number: '10473' }));
+
+    expect((screen.getByLabelText('First name') as HTMLInputElement).value).toBe('Grace');
+    expect((screen.getByLabelText('Last name') as HTMLInputElement).value).toBe('Hopper');
+    expect((screen.getByLabelText('Employee number') as HTMLInputElement).value).toBe('10473');
+    expect(screen.queryByLabelText('Email')).toBeNull();
+  });
+
+  it('muestra email solo para una invitación activa', async () => {
+    await openEdit(person({ account: account({ can_sign_in: false }) }));
+    expect((screen.getByLabelText('Email') as HTMLInputElement).value).toBe(EMAIL);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    cleanup();
+    await openEdit(person({ account: account({ can_sign_in: true }) }));
+    expect(screen.queryByLabelText('Email')).toBeNull();
+  });
+
+  it('guarda solo el campo de persona cambiado y refresca el roster', async () => {
+    updatePerson.mockResolvedValue(person({ last_name: 'New' }));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+    await openEdit(person(), client);
+
+    fireEvent.change(screen.getByLabelText('Last name'), { target: { value: 'New' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() =>
+      expect(updatePerson).toHaveBeenCalledWith({ personId: ADA, last_name: 'New' }),
+    );
+    expect(correctAccountEmail).not.toHaveBeenCalled();
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['roster', SITE] });
+  });
+
+  it('si solo cambia el email no envía un parche de persona', async () => {
+    const invited = person({ account: account({ can_sign_in: false }) });
+    correctAccountEmail.mockResolvedValue({ account: invited.account });
+    await openEdit(invited);
+
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'new@example.com' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() =>
+      expect(correctAccountEmail).toHaveBeenCalledWith({
+        userId: ACCOUNT,
+        email: 'new@example.com',
+      }),
+    );
+    expect(updatePerson).not.toHaveBeenCalled();
+  });
+
+  it('muestra un 409 y conserva abierto el diálogo', async () => {
+    updatePerson.mockRejectedValue(new Error('employee_number is already in use'));
+    await openEdit();
+
+    fireEvent.change(screen.getByLabelText('Employee number'), { target: { value: '10473' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect((await screen.findByRole('alert')).textContent).toContain('already in use');
+    expect(screen.getByRole('dialog')).toBeTruthy();
   });
 });
 
@@ -454,7 +538,7 @@ describe('la lista', () => {
    * aparece el selector, y elegir la otra vuelve a pedir con ese `site_id`.
    */
   it('cambiar de planta vuelve a pedir con la otra', async () => {
-    useAppSession.mockReturnValue(session('hs_coordinator', [SITE, SITE_B]));
+    useAppSession.mockReturnValue(session('coordinator', [SITE, SITE_B]));
     listSites.mockResolvedValue([site(), site(SITE_B, 'Glencoe')]);
 
     renderRoute();
@@ -472,7 +556,7 @@ describe('la lista', () => {
    */
   it('no ofrece una planta dada de baja, y pide el roster de la activa', async () => {
     const closed = { ...site(SITE, 'St. Thomas'), deactivated_at: '2026-08-21T12:00:00.000Z' };
-    useAppSession.mockReturnValue(session('hs_coordinator', [SITE, SITE_B]));
+    useAppSession.mockReturnValue(session('coordinator', [SITE, SITE_B]));
     listSites.mockResolvedValue([closed, site(SITE_B, 'Glencoe')]);
 
     renderRoute();
@@ -589,8 +673,8 @@ describe('las columnas Role y Actions (proposal)', () => {
 
     renderRoute();
 
-    expect(await screen.findByText('JHSC member')).toBeTruthy();
-    expect(screen.queryByText('jhsc_member')).toBeNull();
+    expect(await screen.findByText('Inspector')).toBeTruthy();
+    expect(screen.queryByText('inspector')).toBeNull();
   });
 
   /**
@@ -729,7 +813,7 @@ describe('las columnas Role y Actions (proposal)', () => {
     fireEvent.click(screen.getByRole('button', { name: /Generate link/i }));
 
     // La fila ya muestra el rol —el refetch llegó— y el link sigue en pantalla, en el modal.
-    expect(await screen.findByText('JHSC member (invited)')).toBeTruthy();
+    expect(await screen.findByText('Inspector (invited)')).toBeTruthy();
     expect(within(openRowMenu('Reid, Ada')).queryByRole('menuitem', { name: 'Invite to JHSC' })).toBeNull();
     expect(screen.getByRole('button', { name: /Copy invitation link/i })).toBeTruthy();
   });
@@ -832,7 +916,7 @@ describe('reemitir el link (reissue-invitation-link-from-roster)', () => {
     ]);
     getAccount.mockResolvedValue({
       id: ACCOUNT,
-      role: 'jhsc_member',
+      role: 'inspector',
       active: true,
       can_sign_in: false,
       email: 'ada.reid@example.com',
@@ -865,7 +949,7 @@ describe('reemitir el link (reissue-invitation-link-from-roster)', () => {
     ]);
     getAccount.mockResolvedValue({
       id: ACCOUNT,
-      role: 'jhsc_member',
+      role: 'inspector',
       active: true,
       can_sign_in: false,
       email: 'ada.reid@example.com',
@@ -903,7 +987,7 @@ describe('reemitir el link (reissue-invitation-link-from-roster)', () => {
     ]);
     getAccount.mockResolvedValue({
       id: ACCOUNT,
-      role: 'jhsc_member',
+      role: 'inspector',
       active: true,
       can_sign_in: false,
       email: 'ada.reidd@example.com',
@@ -964,15 +1048,15 @@ describe('quitar el acceso (remove-jhsc-access-from-roster)', () => {
   });
 
   // El roster no quita desde esta acción el acceso de una cuenta administrativa.
-  it('no ofrece quitar el acceso de una cuenta que no es jhsc_member', async () => {
+  it('no ofrece quitar el acceso de una cuenta que no es inspector', async () => {
     listPeople.mockResolvedValue([
-      person({ id: ADA, account: { ...member, role: 'hs_coordinator' } }),
+      person({ id: ADA, account: { ...member, role: 'coordinator' } }),
     ]);
 
     renderRoute();
     await screen.findByRole('rowheader', { name: 'Reid, Ada' });
 
-    expect(screen.queryByRole('button', { name: 'More actions for Reid, Ada' })).toBeNull();
+    expect(within(openRowMenu('Reid, Ada')).queryByRole('menuitem', { name: 'Remove' })).toBeNull();
   });
 
   it('confirma antes de quitar, y solo llama al servidor al confirmar', async () => {
@@ -1018,7 +1102,7 @@ describe('quitar el acceso (remove-jhsc-access-from-roster)', () => {
     renderRoute();
     await screen.findByRole('rowheader', { name: 'Reid, Ada' });
 
-    expect(screen.queryByText(/JHSC member/i)).toBeNull();
+    expect(screen.queryByText(/Inspector/i)).toBeNull();
     expect(screen.getByText('Worker')).toBeTruthy();
     const menu = openRowMenu('Reid, Ada');
     expect(within(menu).getByRole('menuitem', { name: 'Invite to JHSC' })).toBeTruthy();
@@ -1073,7 +1157,7 @@ describe('quitar el acceso (remove-jhsc-access-from-roster)', () => {
 
   // Una cuenta administrativa inactiva no se revive, pero la fila sigue siendo un Worker que
   // el coordinador puede quitar del roster.
-  it('solo ofrece quitar al Worker cuando la cuenta inactiva no era de jhsc_member', async () => {
+  it('solo ofrece quitar al Worker cuando la cuenta inactiva no era de inspector', async () => {
     listPeople.mockResolvedValue([
       person({ id: ADA, account: { ...removed, role: 'management' } }),
     ]);
@@ -1092,7 +1176,7 @@ describe('promover a coordinador', () => {
     useAppSession.mockReturnValue(session('management'));
     listPeople.mockResolvedValue([person({ account: account() })]);
     promoteToCoordinator.mockResolvedValue({
-      account: account({ role: 'hs_coordinator' }),
+      account: account({ role: 'coordinator' }),
     });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const invalidate = vi.spyOn(client, 'invalidateQueries');
@@ -1122,9 +1206,9 @@ describe('promover a coordinador', () => {
 describe('degradar a miembro del JHSC', () => {
   it('management confirma, degrada y refresca el rol', async () => {
     useAppSession.mockReturnValue(session('management'));
-    listPeople.mockResolvedValue([person({ account: account({ role: 'hs_coordinator' }) })]);
+    listPeople.mockResolvedValue([person({ account: account({ role: 'coordinator' }) })]);
     demoteToJhscMember.mockResolvedValue({
-      account: account({ role: 'jhsc_member' }),
+      account: account({ role: 'inspector' }),
     });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const invalidate = vi.spyOn(client, 'invalidateQueries');
@@ -1132,12 +1216,12 @@ describe('degradar a miembro del JHSC', () => {
     await screen.findByRole('rowheader', { name: 'Reid, Ada' });
 
     clickRowAction('Reid, Ada', 'Demote');
-    expect(screen.getByRole('heading', { name: /Demote Reid, Ada \(10472\) to JHSC member\?/i })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: /Demote Reid, Ada \(10472\) to inspector\?/i })).toBeTruthy();
     expect(screen.getByText(/administrative access from their next action/i)).toBeTruthy();
     expect(screen.getByText(/stay on the JHSC/i)).toBeTruthy();
     expect(demoteToJhscMember).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Demote to JHSC member' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Demote to inspector' }));
 
     await waitFor(() => expect(demoteToJhscMember).toHaveBeenCalledWith({ userId: ACCOUNT }));
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['roster', SITE] });
@@ -1145,16 +1229,16 @@ describe('degradar a miembro del JHSC', () => {
   });
 
   it('un coordinador no recibe la acción de degradación', async () => {
-    listPeople.mockResolvedValue([person({ account: account({ role: 'hs_coordinator' }) })]);
+    listPeople.mockResolvedValue([person({ account: account({ role: 'coordinator' }) })]);
     renderRoute();
     await screen.findByRole('rowheader', { name: 'Reid, Ada' });
 
-    expect(screen.queryByRole('button', { name: 'More actions for Reid, Ada' })).toBeNull();
+    expect(within(openRowMenu('Reid, Ada')).queryByRole('menuitem', { name: 'Demote' })).toBeNull();
   });
 
-  it('una fila jhsc_member no recibe la acción de degradación', async () => {
+  it('una fila inspector no recibe la acción de degradación', async () => {
     useAppSession.mockReturnValue(session('management'));
-    listPeople.mockResolvedValue([person({ account: account({ role: 'jhsc_member' }) })]);
+    listPeople.mockResolvedValue([person({ account: account({ role: 'inspector' }) })]);
     renderRoute();
     await screen.findByRole('rowheader', { name: 'Reid, Ada' });
 

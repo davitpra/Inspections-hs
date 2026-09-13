@@ -135,7 +135,7 @@ frozen template version read returns: the complete document, its `template_versi
 `version`, the inspection's `site_id` and the inspection's `inspector_id`.
 
 The request SHALL be restricted to the account the inspection is assigned to and to accounts
-whose role is `hs_coordinator`, and SHALL be refused as forbidden to every other account.
+whose role is `coordinator`, and SHALL be refused as forbidden to every other account.
 Advancing SHALL be resolvable only within the requester's session scope, on the same terms as
 every other read of the field package.
 
@@ -187,7 +187,7 @@ request that writes nothing SHALL add no entry.
 #### Scenario: An account that is neither the inspector nor a coordinator is refused
 
 - **GIVEN** a scheduled inspection assigned to another account
-- **WHEN** an account whose role is `jhsc_member` requests the advance
+- **WHEN** an account whose role is `inspector` requests the advance
 - **THEN** the request is refused as forbidden
 - **AND** `template_version_id` is unchanged
 
@@ -563,7 +563,7 @@ reported as not found and SHALL lead back to the scheduling surface.
 
 ### Requirement: Each owed period of a requirement is planned on its own row
 
-The system SHALL offer an `hs_coordinator`, on each row of the annual plan, the operation
+The system SHALL offer a `coordinator`, on each row of the annual plan, the operation
 valid for that period and no other.
 
 A period that has not been opened SHALL offer one action to open it, SHALL identify the
@@ -627,7 +627,7 @@ its inspector, without any of those controls.
 
 #### Scenario: A reader cannot plan
 
-- **WHEN** an account whose role is `jhsc_member` opens the annual plan of a requirement
+- **WHEN** an account whose role is `inspector` opens the annual plan of a requirement
 - **THEN** every owed period, its status and its inspector are readable
 - **AND** no control to open a period or to assign an inspector is offered
 
@@ -665,7 +665,7 @@ SHALL use the same selected year and SHALL lead to entries present in the curren
 
 ### Requirement: Schedule requirements are configured as one focused operation
 
-The system SHALL let an `hs_coordinator` create an inspection requirement by selecting a published
+The system SHALL let a `coordinator` create an inspection requirement by selecting a published
 `template_id`, `frequency_months`, an applicable `anchor_month` and an optional
 `default_inspector_id` before confirmation. Before creation, the surface SHALL describe the annual
 cadence produced by the selected frequency and anchor and SHALL state that `frequency_months` and
@@ -705,7 +705,7 @@ deactivated and archived requirements as well as active ones.
 
 #### Scenario: A reader cannot administer requirements
 
-- **WHEN** an account whose role is `jhsc_member` views the scheduling surface
+- **WHEN** an account whose role is `inspector` views the scheduling surface
 - **THEN** the current requirements and their default inspectors are readable
 - **AND** no control to create, update, deactivate or reactivate a requirement is offered
 - **AND** each requirement still leads to its annual plan
@@ -720,8 +720,8 @@ deactivated and archived requirements as well as active ones.
 
 The system SHALL let a reader select an owed-period entry of the annual schedule to inspect its
 period label, template, status and inspector without placing a form in every entry of that
-schedule, which spans every requirement of the site across twelve months. For an
-`hs_coordinator`, the focused period view SHALL expose the operations valid for that entry: opening
+schedule, which spans every requirement of the site across twelve months. For a
+`coordinator`, the focused period view SHALL expose the operations valid for that entry: opening
 an unopened period, confirming an inspector assignment, cancelling an eligible scheduled inspection
 with a reason, or scheduling a cancelled period again. Other roles SHALL receive the same readable
 detail without administrative controls.
@@ -782,7 +782,7 @@ attempted the operation.
 
 ### Requirement: The coordinator can open an owed month ahead of the automatic job
 
-The system SHALL let an account whose role is `hs_coordinator` open a not-yet-opened month
+The system SHALL let an account whose role is `coordinator` open a not-yet-opened month
 directly from the year projection, creating the scheduled inspection for that `site_id`,
 `template_id` and `period_start` and optionally naming its `inspector_id` in the same act. No
 other role SHALL be offered or allowed that operation.
@@ -819,15 +819,15 @@ the row cannot be corrected afterwards.
 - **AND** version `3` of that template is published before the period begins
 - **THEN** the scheduled inspection's `template_version` is still `2`
 
-#### Scenario: A JHSC member is not offered the operation
+#### Scenario: An inspector is not offered the operation
 
-- **WHEN** an account whose role is `jhsc_member` views the year projection
+- **WHEN** an account whose role is `inspector` views the year projection
 - **THEN** no control to open a month is offered
 - **AND** a request to create a scheduled inspection from that account is rejected as forbidden
 
 ### Requirement: A coordinator can make an assigned future period visible early
 
-The system SHALL let an account whose role is `hs_coordinator` advance `visible_early` from
+The system SHALL let an account whose role is `coordinator` advance `visible_early` from
 `false` to `true` on an opened scheduled inspection whose `inspector_id` is non-null, whose
 `period_start` is later than the current civil month, and which is neither cancelled nor
 completed. The operation SHALL make that inspection appear in the assigned inspector's pending
@@ -841,7 +841,7 @@ error inside the confirmation when the request fails.
 
 - **GIVEN** an opened scheduled inspection with `visible_early` equal to `false`, a non-null
   `inspector_id`, and a future `period_start`
-- **WHEN** an `hs_coordinator` confirms `Make visible`
+- **WHEN** a `coordinator` confirms `Make visible`
 - **THEN** `visible_early` becomes `true`
 - **AND** the scheduled inspection appears in that inspector's pending list
 - **AND** its year-plan row reads `Visible`
@@ -849,20 +849,20 @@ error inside the confirmation when the request fails.
 #### Scenario: An unassigned future period is not offered the operation
 
 - **GIVEN** an opened scheduled inspection with a null `inspector_id` and a future `period_start`
-- **WHEN** an `hs_coordinator` opens its row menu
+- **WHEN** a `coordinator` opens its row menu
 - **THEN** `Make visible` is not offered
 - **AND** assigning an inspector remains available
 
 #### Scenario: A closed inspection cannot change visibility
 
 - **GIVEN** a scheduled inspection that is cancelled or completed
-- **WHEN** an `hs_coordinator` requests early visibility
+- **WHEN** a `coordinator` requests early visibility
 - **THEN** the request is rejected
 - **AND** `visible_early` is unchanged
 
 #### Scenario: A non-coordinator cannot change visibility
 
-- **WHEN** an account whose role is not `hs_coordinator` requests early visibility
+- **WHEN** an account whose role is not `coordinator` requests early visibility
 - **THEN** the request is rejected as forbidden
 - **AND** `visible_early` is unchanged
 
@@ -873,11 +873,11 @@ error inside the confirmation when the request fails.
 - **THEN** the confirmation remains open with the failure
 - **AND** the year-plan row continues to read `Not visible`
 
-### Requirement: Only the HS coordinator schedules, reassigns and cancels
+### Requirement: Only the coordinator schedules, reassigns and cancels
 
 The system SHALL restrict creating and deactivating schedule rules, scheduling an inspection
 outside the automatic calendar, reassigning `inspector_id` and cancelling a scheduled inspection to
-accounts whose role is `hs_coordinator`. `inspector_id` SHALL reference an account that is not
+accounts whose role is `coordinator`. `inspector_id` SHALL reference an account that is not
 deactivated and whose active site scope includes the inspection's `site_id`. The role SHALL NOT be
 part of that question: every account of the closed set is on the committee, so there is no role a
 scheduled inspection can be refused for. Every one of these operations SHALL be recorded in the
@@ -887,21 +887,21 @@ An account refused as `inspector_id` SHALL be refused for one of exactly two rea
 refusal SHALL say which: the account does not exist or is deactivated, or it has no active scope
 over the inspection's site.
 
-#### Scenario: A JHSC member cannot reassign an inspection
+#### Scenario: An inspector cannot reassign an inspection
 
-- **WHEN** an account whose role is `jhsc_member` requests a change of `inspector_id` on a
+- **WHEN** an account whose role is `inspector` requests a change of `inspector_id` on a
   scheduled inspection
 - **THEN** the request is rejected as forbidden
 - **AND** `inspector_id` is unchanged
 
-#### Scenario: A JHSC member cannot create a schedule rule
+#### Scenario: An inspector cannot create a schedule rule
 
-- **WHEN** an account whose role is `jhsc_member` requests the creation of a schedule rule
+- **WHEN** an account whose role is `inspector` requests the creation of a schedule rule
 - **THEN** the request is rejected as forbidden
 
 #### Scenario: An inspector without scope for the site is rejected
 
-- **WHEN** the coordinator assigns as `inspector_id` an account whose role is `jhsc_member` but
+- **WHEN** the coordinator assigns as `inspector_id` an account whose role is `inspector` but
   whose active site scope does not include the inspection's `site_id`
 - **THEN** the request is rejected and names the site the account lacks
 
@@ -919,15 +919,15 @@ over the inspection's site.
 
 #### Scenario: A coordinator can be assigned an inspection
 
-- **WHEN** the coordinator assigns as `inspector_id` an `hs_coordinator` account whose active site
+- **WHEN** the coordinator assigns as `inspector_id` a `coordinator` account whose active site
   scope includes the inspection's `site_id`
 - **THEN** the assignment is accepted
 - **AND** the inspection appears among what that account still owes
 
 #### Scenario: A promoted member stays assignable
 
-- **GIVEN** a `jhsc_member` account with active scope for the site
-- **WHEN** that account is promoted to `hs_coordinator`
+- **GIVEN** an `inspector` account with active scope for the site
+- **WHEN** that account is promoted to `coordinator`
 - **AND** the coordinator assigns it as `inspector_id` of an inspection at that site
 - **THEN** the assignment is accepted, with no act between the promotion and the assignment
 
@@ -969,7 +969,7 @@ row is outside the reader's scope SHALL still be listed, without its name, rathe
 
 #### Scenario: An account refused as inspector is never offered
 
-- **GIVEN** an account whose role is `jhsc_member` but whose scope for the site has been revoked,
+- **GIVEN** an account whose role is `inspector` but whose scope for the site has been revoked,
   and one that has been deactivated
 - **WHEN** the eligible accounts for that site are listed
 - **THEN** neither appears
@@ -984,21 +984,21 @@ row is outside the reader's scope SHALL still be listed, without its name, rathe
 
 #### Scenario: A coordinator is offered
 
-- **GIVEN** an `hs_coordinator` account with active scope for the site
+- **GIVEN** a `coordinator` account with active scope for the site
 - **WHEN** the eligible accounts for that site are listed
 - **THEN** the account appears
 
 #### Scenario: An eligible account whose person row is out of scope is still offered
 
-- **GIVEN** an account whose role is `jhsc_member` with active scope for St. Thomas, whose `person`
+- **GIVEN** an account whose role is `inspector` with active scope for St. Thomas, whose `person`
   row belongs to Glencoe
 - **WHEN** a coordinator whose scope covers only St. Thomas lists the eligible accounts
 - **THEN** the account is listed with a null `first_name` and a null `last_name`
 - **AND** assigning it to a St. Thomas inspection is accepted
 
-#### Scenario: A JHSC member cannot list the eligible accounts
+#### Scenario: An inspector cannot list the eligible accounts
 
-- **WHEN** an account whose role is `jhsc_member` requests the eligible accounts of its own site
+- **WHEN** an account whose role is `inspector` requests the eligible accounts of its own site
 - **THEN** the request is rejected as forbidden
 
 #### Scenario: A site outside the session scope returns nothing
@@ -1139,7 +1139,7 @@ a change that has to state how it is shown.
 
 #### Scenario: Opening a period notifies the coordinator
 
-- **GIVEN** an active `hs_coordinator` account whose site scope includes St. Thomas
+- **GIVEN** an active `coordinator` account whose site scope includes St. Thomas
 - **WHEN** the opening job creates the St. Thomas inspection for the current period
 - **THEN** a `notification` row exists for that account with `kind` `inspection_period_opened`
 - **AND** its payload names the period and the inspections opened
@@ -1172,7 +1172,7 @@ a change that has to state how it is shown.
 
 #### Scenario: A coordinator outside the site scope is not notified
 
-- **GIVEN** an active `hs_coordinator` account whose site scope covers only Glencoe
+- **GIVEN** an active `coordinator` account whose site scope covers only Glencoe
 - **WHEN** the opening job creates the St. Thomas inspection for the current period
 - **THEN** no notification for St. Thomas is created for that account
 
@@ -1872,8 +1872,8 @@ supporting surfaces SHALL NOT be repeated in an individual inspection detail.
 
 The system SHALL present to a signed-in account the scheduled inspections whose period was
 completed, each identified by its month, its site and the date it was completed, ordered most
-recent first within its inspection type. An `hs_coordinator` or `management` account SHALL see
-completed inspections for every site in its active site scope, while a `jhsc_member` account
+recent first within its inspection type. A `coordinator` or `management` account SHALL see
+completed inspections for every site in its active site scope, while an `inspector` account
 SHALL see only completed inspections assigned to that account. For administrative accounts, each
 history row SHALL also identify the inspector who completed the inspection by the available
 inspector name.
@@ -1881,7 +1881,7 @@ inspector name.
 The home screen SHALL retain a way to reach the complete history. The history SHALL present one
 named section per `template_id` for which a completed inspection is available to the account, and
 each section SHALL contain the complete chronological list for that `template_id` on the same page.
-The sections SHALL be ordered by inspection type name. For `hs_coordinator` and `management`, the
+The sections SHALL be ordered by inspection type name. For `coordinator` and `management`, the
 history SHALL include completed inspections assigned to other accounts when those inspections
 belong to a site in the account's active site scope.
 
@@ -1914,7 +1914,7 @@ completed history.
 
 #### Scenario: A coordinator reviews completed inspections in the active site scope
 
-- **GIVEN** an `hs_coordinator` whose active site scope contains a site where two inspectors each completed inspections
+- **GIVEN** a `coordinator` whose active site scope contains a site where two inspectors each completed inspections
 - **WHEN** the coordinator views the complete history
 - **THEN** the history presents completed inspections assigned to both inspectors
 
@@ -1926,7 +1926,7 @@ completed history.
 
 #### Scenario: Administrative history identifies the completing inspector
 
-- **GIVEN** an `hs_coordinator` or `management` account reviewing a completed inspection assigned to another account
+- **GIVEN** a `coordinator` or `management` account reviewing a completed inspection assigned to another account
 - **WHEN** the account views the complete history
 - **THEN** the inspection row presents the assigned inspector's name
 
@@ -1941,6 +1941,7 @@ completed history.
 - **GIVEN** an inspector with an overdue assignment and no submission for it
 - **WHEN** the inspector views the complete history
 - **THEN** that month is not listed
+
 ### Requirement: A submitted inspection can be read back against the version it was written under
 
 The system SHALL return, for a scheduled inspection that has been submitted, the record of
@@ -2061,7 +2062,7 @@ answers or its findings. The record is immutable and reading it is a read.
 
 ### Requirement: Deactivated inspection requirements can be archived without changing obligations
 
-The system SHALL allow an `hs_coordinator` to archive an inspection requirement only when its
+The system SHALL allow a `coordinator` to archive an inspection requirement only when its
 `deactivated_at` is non-null. Archiving SHALL set `archived_at`, SHALL NOT delete the
 `inspection_schedule` row, and SHALL NOT change the periods the rule produced or the months it
 historically owed. An attempt to archive an active requirement SHALL be refused with a stated
@@ -2071,14 +2072,14 @@ reason.
 
 - **GIVEN** an inspection requirement whose `deactivated_at` is non-null and whose `archived_at`
   is null
-- **WHEN** an `hs_coordinator` archives the requirement
+- **WHEN** a `coordinator` archives the requirement
 - **THEN** its `archived_at` is set
 - **AND** its `deactivated_at` and existing scheduled inspections are unchanged
 
 #### Scenario: An active requirement cannot be archived
 
 - **GIVEN** an inspection requirement whose `deactivated_at` is null
-- **WHEN** an `hs_coordinator` attempts to archive it
+- **WHEN** a `coordinator` attempts to archive it
 - **THEN** the request is refused with a stated reason
 - **AND** its `archived_at` remains null
 
@@ -2092,7 +2093,7 @@ reason.
 ### Requirement: Archived inspection requirements are hidden by default and can be restored
 
 The scheduling surface SHALL omit requirements whose `archived_at` is non-null from the default
-requirements table. It SHALL offer an `hs_coordinator` a control to show archived requirements,
+requirements table. It SHALL offer a `coordinator` a control to show archived requirements,
 identify them as `Archived`, and restore one when no other non-archived requirement exists for the
 same `site_id` and `template_id`. Restoration SHALL clear `archived_at` while leaving
 `deactivated_at` non-null. Accounts without scheduling administration permission SHALL NOT receive
@@ -2110,7 +2111,7 @@ archive or restore controls.
 
 - **GIVEN** an archived requirement with no other non-archived requirement for the same `site_id`
   and `template_id`
-- **WHEN** an `hs_coordinator` shows archived requirements and restores it
+- **WHEN** a `coordinator` shows archived requirements and restores it
 - **THEN** its `archived_at` is cleared
 - **AND** its `deactivated_at` remains non-null
 - **AND** it returns to the default table as `Deactivated`
@@ -2119,7 +2120,7 @@ archive or restore controls.
 
 - **GIVEN** an archived requirement and another non-archived requirement with the same `site_id`
   and `template_id`
-- **WHEN** an `hs_coordinator` attempts to restore the archived requirement
+- **WHEN** a `coordinator` attempts to restore the archived requirement
 - **THEN** the request is refused with a stated reason
 - **AND** its `archived_at` remains set
 
@@ -2158,3 +2159,26 @@ The system SHALL allow the inspector to navigate calendar years and read the rec
 - **GIVEN** an assigned scheduled inspection appears in the annual matrix
 - **WHEN** the inspector selects its cell
 - **THEN** the system presents that period's recorded details without administrative controls
+
+### Requirement: The account assigned to an inspection is labelled by the assignment, not by a role
+
+The system SHALL label the account referenced by `inspection.inspector_id` as **Assigned to** wherever
+the scheduling console, the annual plan of a requirement and the period dialog show that account or
+offer the control that chooses it. Those surfaces SHALL NOT label it "Inspector", because `inspector`
+names a role and the assigned account MAY hold any of the three roles.
+
+The field `inspector_id`, the endpoint that lists the accounts eligible to be assigned, and the rule
+that decides eligibility SHALL be unchanged by this label.
+
+#### Scenario: A coordinator assigned to a period is not shown under a role name
+
+- **GIVEN** a scheduled inspection whose `inspector_id` references an active `coordinator` account
+- **WHEN** a coordinator views that period in the annual plan and in its period dialog
+- **THEN** the account is shown under the label `Assigned to`
+- **AND** no column, field or control of those views is labelled `Inspector`
+
+#### Scenario: The assignment control carries the same label
+
+- **GIVEN** an opened period that can be assigned
+- **WHEN** a coordinator opens the operation that chooses its account
+- **THEN** the control that selects the account is labelled `Assigned to`

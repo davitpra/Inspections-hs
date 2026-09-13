@@ -20,38 +20,37 @@ import { z } from 'zod';
  */
 
 /**
- * Los tres roles vigentes de ADR-022.
+ * Los tres roles vigentes de ADR-024.
  *
- * `jhsc_member` y no `inspector`: la nota de vocabulario de §4 exige un solo
- * término, y "inspector" queda para `inspection.inspector_id`, que es un campo y no
- * un permiso. El mismo conjunto está escrito como `CHECK` en la migración 0046. Si
- * uno cambia, el otro también.
+ * `inspector` es un rol. `inspection.inspector_id` sigue siendo el campo técnico de
+ * asignación y se muestra como "Assigned to". El mismo conjunto está escrito como
+ * `CHECK` en las migraciones 0046 y 0048. Si uno cambia, el otro también (ADR-024).
  */
-export const ROLES = ['hs_coordinator', 'jhsc_member', 'management'] as const;
+export const ROLES = ['coordinator', 'inspector', 'management'] as const;
 
 export const roleSchema = z.enum(ROLES);
 
 export type Role = z.infer<typeof roleSchema>;
 
 /** La autoridad administrativa compartida por coordinador y gerencia (ADR-022). */
-export function isAdministrator(role: string): role is 'hs_coordinator' | 'management' {
-  return role === 'hs_coordinator' || role === 'management';
+export function isAdministrator(role: string): role is 'coordinator' | 'management' {
+  return role === 'coordinator' || role === 'management';
 }
 
 /**
  * Cómo se escribe cada rol cuando lo lee una persona.
  *
- * Vive acá y no en la web porque el vocabulario de §4 es uno solo: `jhsc_member` se
- * muestra "JHSC member" y nunca "Inspector", que es lo que alguien escribiría si cada
- * pantalla inventara su etiqueta. No es i18n —la UI es solo inglés
+ * Vive acá y no en la web porque ADR-024 fija un vocabulario compartido: `inspector` se
+ * muestra "Inspector" y `inspection.inspector_id` se muestra "Assigned to". No es i18n
+ * —la UI es solo inglés
  * (`openspec/config.yaml`)—, es la traducción del identificador al término del dominio.
  *
  * `Record<Role, string>` a propósito: agregar un rol a `ROLES` sin etiquetarlo no
  * compila.
  */
 export const ROLE_LABELS: Record<Role, string> = {
-  hs_coordinator: 'H&S coordinator',
-  jhsc_member: 'JHSC member',
+  coordinator: 'Coordinator',
+  inspector: 'Inspector',
   management: 'Management',
 };
 
@@ -107,9 +106,9 @@ export type PersonOption = z.infer<typeof personOptionSchema>;
 /**
  * Qué pedazo del roster de una planta pide la consola.
  *
- * La consola no corrige nombres ni transfiere personas. Sus escrituras individuales son el
- * alta de una persona nueva y la baja estrecha de un worker sin cuenta; el CSV sigue siendo
- * la fuente de verdad capaz de aplicar el resto de cambios.
+ * La consola permite corregir nombres y números de personas activas, además del alta de una
+ * persona nueva y la baja estrecha de un worker sin cuenta. Transferir o reactivar sigue siendo
+ * trabajo del CSV.
  *
  * `site_id` es obligatorio y eso acota la respuesta al roster de UNA planta, que es lo
  * que sostiene la decisión de no paginar: doscientas filas entran en una pantalla de
@@ -152,6 +151,20 @@ export const deactivatePersonRequestSchema = z.strictObject({
 });
 
 export type DeactivatePersonRequest = z.infer<typeof deactivatePersonRequestSchema>;
+
+/** Corrección parcial de una persona activa desde la fila del roster. */
+export const updatePersonRequestSchema = z
+  .strictObject({
+    first_name: nameSchema.optional(),
+    last_name: nameSchema.optional(),
+    employee_number: employeeNumberSchema.optional(),
+  })
+  .refine(
+    (value) => Object.values(value).some((entry) => entry !== undefined),
+    'an update must change at least one person field',
+  );
+
+export type UpdatePersonRequest = z.infer<typeof updatePersonRequestSchema>;
 
 /**
  * La cuenta que referencia a una persona del roster, reducida a lo que decide si el
@@ -322,9 +335,9 @@ export const updateAccountRequestSchema = z
     deactivated: z.literal(true).optional(),
 
     /** Literal porque esta operación es una promoción concreta, no un cambio libre de rol. */
-    promote_to: z.literal('hs_coordinator').optional(),
+    promote_to: z.literal('coordinator').optional(),
     /** Literal porque esta operación es una degradación concreta, no un cambio libre de rol. */
-    demote_to: z.literal('jhsc_member').optional(),
+    demote_to: z.literal('inspector').optional(),
   })
   .refine(
     (value) => Object.values(value).some((entry) => entry !== undefined),

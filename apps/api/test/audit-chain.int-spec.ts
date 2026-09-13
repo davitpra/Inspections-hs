@@ -289,7 +289,7 @@ describe('el envío de una inspección en la cadena', () => {
 
   const sessionFor = (accountId: string) => ({
     userId: accountId,
-    role: 'jhsc_member',
+    role: 'inspector',
     siteIds: [SITE_SUBMIT],
   });
 
@@ -364,7 +364,7 @@ describe('el envío de una inspección en la cadena', () => {
 
     inspector = await createAccount(db.app, {
       siteIds: [SITE_SUBMIT],
-      role: 'jhsc_member',
+      role: 'inspector',
     });
   }, 120_000);
 

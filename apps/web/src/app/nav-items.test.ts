@@ -21,14 +21,14 @@ describe('visibleNavItems', () => {
     expect(NAV_ITEMS.some((item) => item.label === 'Corrective actions')).toBe(false);
   });
 
-  it.each(['hs_coordinator', 'management'] as const)('ofrece la administración a %s', (role) => {
+  it.each(['coordinator', 'management'] as const)('ofrece la administración a %s', (role) => {
     const labels = visibleNavItems(account(role)).map((item) => item.label);
 
     expect(labels).toEqual(expect.arrayContaining(['Scheduling', 'People', 'Templates', 'Locations']));
   });
 
   it('no se los ofrece a un miembro del JHSC', () => {
-    const labels = visibleNavItems(account('jhsc_member')).map((item) => item.label);
+    const labels = visibleNavItems(account('inspector')).map((item) => item.label);
 
     expect(labels).not.toContain('Scheduling');
     expect(labels).not.toContain('People');

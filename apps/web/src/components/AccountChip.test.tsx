@@ -13,7 +13,7 @@ function session(overrides: Partial<Session> = {}): Session {
   return {
     userId: USER,
     personId: PERSON,
-    role: 'hs_coordinator',
+    role: 'coordinator',
     siteScope: [SITE],
     email: 'ada.reid@example.com',
     firstName: 'Ada',
@@ -31,18 +31,18 @@ describe('AccountChip', () => {
     render(<AccountChip account={session()} />);
 
     expect(screen.getByText('Ada Reid')).toBeTruthy();
-    expect(screen.getByText('H&S coordinator')).toBeTruthy();
+    expect(screen.getByText('Coordinator')).toBeTruthy();
   });
 
   /**
-   * El rol se muestra con el término de §4 y NUNCA con el identificador: "JHSC member",
-   * no `jhsc_member` y no "Inspector", que es lo que alguien escribiría a mano.
+   * El rol se muestra con el término de §4 y NUNCA con el identificador: "Inspector",
+   * no `inspector` y no "Inspector", que es lo que alguien escribiría a mano.
    */
   it('escribe el rol con el vocabulario del dominio, no con el identificador', () => {
-    render(<AccountChip account={session({ role: 'jhsc_member' })} />);
+    render(<AccountChip account={session({ role: 'inspector' })} />);
 
-    expect(screen.getByText('JHSC member')).toBeTruthy();
-    expect(screen.queryByText('jhsc_member')).toBeNull();
+    expect(screen.getByText('Inspector')).toBeTruthy();
+    expect(screen.queryByText('inspector')).toBeNull();
   });
 
   /**
@@ -56,7 +56,7 @@ describe('AccountChip', () => {
     );
 
     expect(screen.getByText('ada.reid@example.com')).toBeTruthy();
-    expect(screen.getByText('H&S coordinator')).toBeTruthy();
+    expect(screen.getByText('Coordinator')).toBeTruthy();
   });
 
   it('cae al rol cuando no trae ni nombre ni email, y no lo escribe dos veces', () => {
@@ -66,7 +66,7 @@ describe('AccountChip', () => {
       />,
     );
 
-    expect(screen.getAllByText('H&S coordinator')).toHaveLength(1);
+    expect(screen.getAllByText('Coordinator')).toHaveLength(1);
   });
 
   it('deja el email a mano aunque el nombre ocupe la línea', () => {

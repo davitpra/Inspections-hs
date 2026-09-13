@@ -5,6 +5,7 @@ import { Test } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { AuthModule } from '../src/auth/auth.module';
+import { ZodExceptionFilter } from '../src/common/zod-exception.filter';
 import { SessionService } from '../src/auth/session.service';
 import { DbModule } from '../src/db/db.module';
 import { RosterModule } from '../src/roster/roster.module';
@@ -50,6 +51,21 @@ async function post(token: string, form: FormData, query = ''): Promise<Response
   });
 }
 
+async function patchPerson(
+  token: string,
+  personId: string,
+  patch: Record<string, unknown>,
+): Promise<Response> {
+  return fetch(`${baseUrl}/people/${personId}`, {
+    method: 'PATCH',
+    headers: {
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(patch),
+  });
+}
+
 async function body(response: Response): Promise<Record<string, unknown>> {
   return response.json() as Promise<Record<string, unknown>>;
 }
@@ -86,11 +102,11 @@ beforeAll(async () => {
 
   const coordinator = await createAccount(db.app, {
     siteIds: [SITE_A],
-    role: 'hs_coordinator',
+    role: 'coordinator',
   });
   coordinatorId = coordinator.accountId;
 
-  for (const role of ['jhsc_member']) {
+  for (const role of ['inspector']) {
     const account = await createAccount(db.app, {
       siteIds: [SITE_A],
       role,
@@ -107,6 +123,7 @@ beforeAll(async () => {
     imports: [DbModule, AuthModule, RosterModule],
   }).compile();
   app = moduleRef.createNestApplication();
+  app.useGlobalFilters(new ZodExceptionFilter());
   await app.listen(0, '127.0.0.1');
   const address = app.getHttpServer().address() as AddressInfo;
   baseUrl = `http://127.0.0.1:${address.port}`;
@@ -124,6 +141,32 @@ beforeAll(async () => {
 afterAll(async () => {
   await app?.close();
   await db?.stop();
+});
+
+describe('PATCH /people/:personId', () => {
+  it('corrige una persona y rechaza un cuerpo vacío como invalid_request', async () => {
+    const personId = await createPerson(db.app, SITE_A, {
+      employeeNumber: 'PATCH-1',
+      firstName: 'Before',
+      lastName: 'Name',
+    });
+
+    const changed = await patchPerson(coordinatorToken, personId, {
+      first_name: 'After',
+      employee_number: 'PATCH-2',
+    });
+    expect(changed.status).toBe(200);
+    expect(await body(changed)).toMatchObject({
+      id: personId,
+      first_name: 'After',
+      last_name: 'Name',
+      employee_number: 'PATCH-2',
+    });
+
+    const empty = await patchPerson(coordinatorToken, personId, {});
+    expect(empty.status).toBe(400);
+    expect(await body(empty)).toMatchObject({ code: 'invalid_request' });
+  });
 });
 
 describe('POST /people/import', () => {
@@ -184,7 +227,7 @@ describe('POST /people/import', () => {
       'SELECT count(*)::text AS count FROM audit_log',
     );
 
-    for (const role of ['jhsc_member']) {
+    for (const role of ['inspector']) {
       const response = await post(
         tokens.get(role)!,
         upload(csv(`ROLE-${role},No,Crear,http-a,active`, 'HTTP-1,No,Cambiar,http-a,active')),

@@ -43,12 +43,12 @@ let narrowId: string;
 
 const asCoordinator = () => ({
   userId: coordinatorId,
-  role: 'hs_coordinator' as const,
+  role: 'coordinator' as const,
   siteIds: [SITE_A, SITE_B],
 });
 const asNarrowCoordinator = () => ({
   userId: narrowId,
-  role: 'hs_coordinator' as const,
+  role: 'coordinator' as const,
   siteIds: [SITE_A],
 });
 
@@ -61,12 +61,12 @@ beforeAll(async () => {
   await registerSite(db.migrator, SITE_B, 'removal-b', 'Removal B');
 
   const coordinator = await createAccount(db.app, {
-    role: 'hs_coordinator',
+    role: 'coordinator',
     siteIds: [SITE_A, SITE_B],
   });
   coordinatorId = coordinator.accountId;
 
-  const narrow = await createAccount(db.app, { role: 'hs_coordinator', siteIds: [SITE_B] });
+  const narrow = await createAccount(db.app, { role: 'coordinator', siteIds: [SITE_B] });
   narrowId = narrow.accountId;
 }, 180_000);
 
@@ -94,7 +94,7 @@ async function codeOf(run: () => Promise<unknown>): Promise<string> {
 
 /** Un miembro del JHSC, con el alcance que se le pida. */
 async function seedMember(siteIds: readonly string[]): Promise<string> {
-  const member = await createAccount(db.app, { role: 'jhsc_member', siteIds });
+  const member = await createAccount(db.app, { role: 'inspector', siteIds });
 
   return member.accountId;
 }
@@ -128,7 +128,7 @@ function newAccount(overrides: {
   return createAccountRequestSchema.parse({
     person_id: overrides.personId,
     email: overrides.email,
-    role: overrides.role ?? 'jhsc_member',
+    role: overrides.role ?? 'inspector',
     site_ids: overrides.siteIds,
     invite: overrides.invite ?? false,
   });
@@ -252,7 +252,7 @@ describe('el permiso de la baja', () => {
   it('un miembro del JHSC no puede quitar el acceso de otra cuenta', async () => {
     const member = await seedMember([SITE_A]);
 
-    for (const role of ['jhsc_member']) {
+    for (const role of ['inspector']) {
       const code = await codeOf(() =>
         accounts.update(
           { userId: coordinatorId, role: role as never, siteIds: [SITE_A, SITE_B] },
@@ -284,8 +284,8 @@ describe('el permiso de la baja', () => {
     expect((await accountRow(member)).active).toBe(true);
   });
 
-  it('solo se da de baja un jhsc_member: el roster no administra otros roles', async () => {
-    for (const role of ['management', 'hs_coordinator'] as const) {
+  it('solo se da de baja un inspector: el roster no administra otros roles', async () => {
+    for (const role of ['management', 'coordinator'] as const) {
       const other = await createAccount(db.app, { role, siteIds: [SITE_A] });
 
       const code = await codeOf(() =>
@@ -425,7 +425,7 @@ describe('volver a invitar revive la cuenta que la persona ya tenía', () => {
   });
 
   /**
-   * Revivir como `jhsc_member` una cuenta administrativa dada de baja le cambiaría el rol
+   * Revivir como `inspector` una cuenta administrativa dada de baja le cambiaría el rol
    * sin que nadie lo haya pedido. La pantalla no produce este caso; la guarda protege a
    * quien llame la API a mano.
    */

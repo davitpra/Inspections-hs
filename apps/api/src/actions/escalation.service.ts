@@ -13,7 +13,7 @@ import { ESCALATE_OVERDUE_CRON, ESCALATE_OVERDUE_JOB, SITE_TIME_ZONE } from '../
 
 /**
  * ADR-005, ADR-022 y §3 R3 — El escalamiento de las acciones vencidas: +3 días al
- * coordinador, +7 a gerencia.
+ * coordinator, +7 a gerencia.
  *
  * DOS PROPIEDADES QUE NO ESTÁN EN ESTE ARCHIVO, y es donde tienen que no estar:
  *
@@ -140,12 +140,12 @@ async function overdueWithoutEscalation(
        ) s ON true
       WHERE s.to_state IS DISTINCT FROM 'closed'
         AND a.due_at < $1::timestamptz - make_interval(days => $2::int)
-        AND NOT EXISTS (
-          SELECT 1 FROM corrective_action_escalation x
-           WHERE x.action_id = a.id AND x.level = $3
-        )
+         AND NOT EXISTS (
+           SELECT 1 FROM corrective_action_escalation x
+            WHERE x.action_id = a.id AND x.level = ANY($3::text[])
+         )
       FOR UPDATE OF a`,
-    [now, ESCALATION_DAYS[level], level],
+     [now, ESCALATION_DAYS[level], LEVEL_ALIASES[level]],
   );
 
   if (candidates.length === 0) return [];
@@ -236,6 +236,12 @@ async function notifyRecipients(
  * contenido en vez de por el destinatario.
  */
 export const NOTIFICATION_KIND: Readonly<Record<EscalationLevel, string>> = {
-  hs_coordinator: 'corrective_action_overdue_coordinator',
+  coordinator: 'corrective_action_overdue_coordinator',
   management: 'corrective_action_overdue_management',
+};
+
+/** Alias de lectura: el nivel histórico no se reescribe en la tabla inmutable. */
+export const LEVEL_ALIASES: Readonly<Record<EscalationLevel, readonly string[]>> = {
+  coordinator: ['coordinator', 'hs_coordinator'],
+  management: ['management'],
 };

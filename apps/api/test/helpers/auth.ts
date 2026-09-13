@@ -67,7 +67,7 @@ export async function grantCredential(
   password: string,
 ): Promise<void> {
   const invitation = await stack.invitations.issue(
-    coordinator as { userId: string; role: 'hs_coordinator' },
+    coordinator as { userId: string; role: 'coordinator' },
     targetUserId,
   );
 

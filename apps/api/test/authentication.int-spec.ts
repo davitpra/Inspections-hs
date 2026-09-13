@@ -52,7 +52,7 @@ let db: TestDatabase;
 let stack: AuthStack;
 
 /** El coordinador, que es quien invita a todos los demás. */
-let coordinator: { userId: string; role: 'hs_coordinator'; email: string };
+let coordinator: { userId: string; role: 'coordinator'; email: string };
 
 beforeAll(async () => {
   db = await startTestDatabase();
@@ -62,12 +62,12 @@ beforeAll(async () => {
   await registerSite(db.migrator, SITE_B, 'auth-b', 'Auth B');
 
   const account = await createAccount(db.app, {
-    role: 'hs_coordinator',
+    role: 'coordinator',
     siteIds: [SITE_A, SITE_B],
     email: 'coordinator@auth.test',
   });
 
-  coordinator = { userId: account.accountId, role: 'hs_coordinator', email: account.email };
+  coordinator = { userId: account.accountId, role: 'coordinator', email: account.email };
 }, 240_000);
 
 afterAll(async () => {
@@ -85,7 +85,7 @@ async function account(spec: {
   withCredential?: boolean;
 }) {
   const created = await createAccount(db.app, {
-    role: spec.role ?? 'jhsc_member',
+    role: spec.role ?? 'inspector',
     siteIds: spec.siteIds ?? [SITE_A],
     email: spec.email,
     firstName: spec.firstName,
@@ -135,12 +135,12 @@ describe('la invitación es la única puerta al sistema', () => {
   });
 
   it('ningún otro rol puede invitar', async () => {
-    const member = await account({ role: 'jhsc_member', withCredential: false });
+    const member = await account({ role: 'inspector', withCredential: false });
     const target = await account({ withCredential: false });
 
     const code = await codeOf(() =>
       stack.invitations.issue(
-        { userId: member.accountId, role: 'jhsc_member' as never },
+        { userId: member.accountId, role: 'inspector' as never },
         target.accountId,
       ),
     );
@@ -612,7 +612,7 @@ describe('ninguna ruta acepta un sitio, un alcance ni un actor', () => {
       email: 'someone@auth.test',
       password: 'whatever',
       siteId: SITE_B,
-      role: 'hs_coordinator',
+      role: 'coordinator',
     });
 
     expect(parsed).not.toHaveProperty('siteId');
@@ -621,12 +621,12 @@ describe('ninguna ruta acepta un sitio, un alcance ni un actor', () => {
 
   it('un miembro del JHSC no puede administrar ninguna cuenta', async () => {
     const member = await createAccount(db.app, {
-      role: 'jhsc_member',
+      role: 'inspector',
       siteIds: [SITE_A],
       email: 'member-write@auth.test',
     });
     const victim = await account({ withCredential: false, email: 'auditor-victim@auth.test' });
-    const actor = { userId: member.accountId, role: 'jhsc_member' as const };
+    const actor = { userId: member.accountId, role: 'inspector' as const };
 
     // Los dos verbos administrativos que quedan con chequeo de rol EN EL SERVICIO. El
     // tercero era `twoFactor.reset`, y se fue con el segundo factor; los demás
@@ -642,7 +642,7 @@ describe('la auditoría de la autenticación', () => {
     const created = await account({
       siteIds: [SITE_A, SITE_B],
       email: 'two-sites@auth.test',
-      role: 'jhsc_member',
+      role: 'inspector',
     });
 
     const beforeA = await auditEntries(db.app, SITE_A, 'auth.signed_in');

@@ -2,7 +2,7 @@
 
 Records what was found wrong — derived from a negative inspection answer or entered by hand —
 with the description, location and photo that make it actionable, and with the risk
-classification and control hierarchy level the HS coordinator assigns to it afterwards.
+classification and control hierarchy level the coordinator assigns to it afterwards.
 ## Requirements
 ### Requirement: Every negative answer of an accepted submission produces one finding
 
@@ -180,9 +180,9 @@ the server SHALL refuse a deactivated location.
 
 ### Requirement: A finding can be entered by hand and then has no item key
 
-The system SHALL accept a manually entered finding — a hazard seen outside an inspection — from an
-`hs_coordinator` or a `management` account, carrying its site, description, location and photos, and
-SHALL refuse it from a `jhsc_member`, whose findings reach the system through the inspection they
+The system SHALL accept a manually entered finding — a hazard seen outside an inspection — from a
+`coordinator` or a `management` account, carrying its site, description, location and photos, and
+SHALL refuse it from an `inspector`, whose findings reach the system through the inspection they
 carried out. A
 manually entered finding SHALL have `inspection_id`,
 `template_version_item_id` and `item_key` all null, and a derived finding SHALL have all three
@@ -198,9 +198,9 @@ consequence recorded in §4 and risk F.
 - **AND** its `inspection_id`, `template_version_item_id` and `item_key` are null
 - **AND** no classification is stored for it
 
-#### Scenario: A JHSC member cannot enter a finding by hand
+#### Scenario: An inspector cannot enter a finding by hand
 
-- **WHEN** an account whose `role` is `jhsc_member` posts a manual finding
+- **WHEN** an account whose `role` is `inspector` posts a manual finding
 - **THEN** the request is refused
 - **AND** no `finding` row is created
 
@@ -231,20 +231,20 @@ endpoint. A listing SHALL carry, for each finding, its origin, its description, 
 its photos. A request for a finding outside the session's scope SHALL be answered exactly as one
 for a finding that does not exist.
 
-#### Scenario: A JHSC member of one site does not see the other's findings
+#### Scenario: An inspector of one site does not see the other's findings
 
 - **GIVEN** findings in St. Thomas and in Glencoe
-- **WHEN** a JHSC member scoped to St. Thomas lists findings
+- **WHEN** an inspector scoped to St. Thomas lists findings
 - **THEN** only the St. Thomas findings are returned
 
 #### Scenario: The coordinator sees both sites
 
-- **WHEN** the HS coordinator, scoped to both sites, lists findings
+- **WHEN** the coordinator, scoped to both sites, lists findings
 - **THEN** findings of both sites are returned
 
 #### Scenario: A finding of the other site is indistinguishable from a missing one
 
-- **WHEN** a JHSC member scoped to St. Thomas requests a Glencoe finding by id
+- **WHEN** an inspector scoped to St. Thomas requests a Glencoe finding by id
 - **THEN** the response is `finding_not_found`
 - **AND** the body reveals nothing about its site, location or description
 
@@ -286,7 +286,7 @@ present this identically.
 ### Requirement: Coordinators open a corrective action from the finding that justifies it
 
 The system SHALL offer, on the findings-only reading of a submitted inspection, a control to
-create a corrective action for each recorded finding, to an authenticated `hs_coordinator`
+create a corrective action for each recorded finding, to an authenticated `coordinator`
 account or to the account named by that finding's `reported_by`, and to no other account. The
 assignee choices SHALL contain only active people of that finding's site. The system SHALL
 associate every existing corrective action with its own recorded finding and SHALL use those
@@ -299,21 +299,21 @@ presentation rule SHALL NOT replace server authorization.
 #### Scenario: The coordinator is offered the creation control
 
 - **GIVEN** a submitted inspection recorded a finding
-- **WHEN** an `hs_coordinator` reads the findings-only screen
+- **WHEN** a `coordinator` reads the findings-only screen
 - **THEN** a control to create a corrective action is shown for that finding
 
 #### Scenario: The finding's reporter is offered the creation control (ADR-017)
 
-- **GIVEN** a submitted inspection recorded a finding whose `reported_by` names a
-  `jhsc_member` account
+- **GIVEN** a submitted inspection recorded a finding whose `reported_by` names an
+  `inspector` account
 - **WHEN** that account reads the findings-only screen
 - **THEN** a control to create a corrective action is shown for that finding
 
-#### Scenario: Another JHSC member reads the same finding without the control
+#### Scenario: Another inspector reads the same finding without the control
 
 - **GIVEN** a submitted inspection recorded a finding whose `reported_by` names a different
-  `jhsc_member` account
-- **WHEN** a `jhsc_member` who did not raise that finding reads the findings-only screen
+  `inspector` account
+- **WHEN** an `inspector` who did not raise that finding reads the findings-only screen
 - **THEN** no control to create a corrective action is shown for that finding
 
 #### Scenario: Existing corrective actions drive only their own finding
@@ -326,7 +326,7 @@ presentation rule SHALL NOT replace server authorization.
 #### Scenario: Another role reads the commitments without being offered creation
 
 - **GIVEN** a recorded finding already has one corrective action
-- **WHEN** a `jhsc_member` who did not raise that finding reads the findings-only screen
+- **WHEN** an `inspector` who did not raise that finding reads the findings-only screen
 - **THEN** that corrective action is shown with its description, responsible person, deadline and state
 - **AND** no control to create a corrective action is shown
 
@@ -487,7 +487,7 @@ move a finding backward as well as forward.
 #### Scenario: Starting the action moves the finding into work
 
 - **GIVEN** a finding in `assigned` whose only action is `open`
-- **WHEN** the assigned person or an `hs_coordinator` moves that action to `in_progress`
+- **WHEN** the assigned person or a `coordinator` moves that action to `in_progress`
 - **THEN** the same transaction appends a finding state event from `assigned` to `in_progress`
 
 #### Scenario: The least advanced action determines state
@@ -563,7 +563,7 @@ Assigned, In progress, Verification and Closed. The system SHALL identify the st
 SHALL NOT rely on colour alone. The system SHALL use corrective actions only to identify the
 blocking commitment, its nearest deadline and the permitted next transition; it SHALL NOT
 recalculate the finding state from those actions. For a raised finding, the system SHALL offer
-creation of a corrective action to an authenticated `hs_coordinator` or to the account named by
+creation of a corrective action to an authenticated `coordinator` or to the account named by
 `reported_by`, and to no other account (ADR-017). The system SHALL accept that composition within
 the finding's next step itself, without leaving the findings-only reading or opening a separate
 view, and SHALL NOT present the control that begins the composition alongside the composition it
@@ -650,7 +650,7 @@ and SHALL NOT report that nothing was recorded there.
 
 #### Scenario: A raised finding a reader cannot assign is not folded
 
-- **GIVEN** `finding.state` is `raised` and a `jhsc_member` who did not raise it reads the screen
+- **GIVEN** `finding.state` is `raised` and an `inspector` who did not raise it reads the screen
 - **WHEN** the findings-only screen is read
 - **THEN** the lifecycle states are presented without asking for a gesture first
 - **AND** Raised is the lifecycle state opened by default
@@ -746,7 +746,7 @@ and SHALL NOT report that nothing was recorded there.
 #### Scenario: A reader who cannot act is told who owes the step
 
 - **GIVEN** a finding has `state` `in_progress` and its blocking action belongs to another person
-- **WHEN** a `jhsc_member` who did not raise the finding reads the findings-only screen
+- **WHEN** an `inspector` who did not raise the finding reads the findings-only screen
 - **THEN** no next step control is offered
 - **AND** the blocking action's `assignee_name` is named as who the finding is waiting on
 
@@ -837,7 +837,7 @@ action and every cached Finding reading whose persisted state may have changed.
 #### Scenario: A reader who may write nothing is offered no next step
 
 - **GIVEN** a recorded finding has a corrective action the reader may not advance
-- **WHEN** a `jhsc_member` reads the findings-only screen
+- **WHEN** an `inspector` reads the findings-only screen
 - **THEN** no next step control is offered to that reader
 - **AND** the screen says the action is waiting on someone else
 
@@ -879,7 +879,7 @@ action and every cached Finding reading whose persisted state may have changed.
 ### Requirement: An active finding exposes its current assignment for correction
 
 The system SHALL present `Edit assignment` in the current next step of an `assigned` or
-`in_progress` finding to an authenticated `hs_coordinator` or the account named by `reported_by`, and
+`in_progress` finding to an authenticated `coordinator` or the account named by `reported_by`, and
 to no other account. It SHALL decide that offer on the derived state of the corrective action that
 holds the finding in its stage, using the same editable-state rule the server applies. The inline form
 SHALL contain the current `assignee_person_id`, `description` and `due_at`. A successful submission
@@ -914,7 +914,7 @@ offer no assignment editing.
 
 #### Scenario: An unauthorized reader cannot edit an assignment
 
-- **GIVEN** an `assigned` or `in_progress` finding whose reader is neither an `hs_coordinator` nor
+- **GIVEN** an `assigned` or `in_progress` finding whose reader is neither a `coordinator` nor
   its `reported_by`
 - **WHEN** the current next step is presented
 - **THEN** no `Edit assignment` control is offered
@@ -939,10 +939,10 @@ account can review a completed inspection that recorded a finding. Each section 
 matching inspections most recent first on the same page, and each inspection SHALL offer its
 existing findings-only reading. The sections SHALL be ordered by inspection type name.
 
-An `hs_coordinator` or `management` account SHALL be able to review findings from completed
+A `coordinator` or `management` account SHALL be able to review findings from completed
 inspections assigned to any account when the inspection belongs to a site in its active site
 scope. Each findings row presented to an administrative account SHALL identify the inspector who
-completed the inspection by the available inspector name. A `jhsc_member` account SHALL be able to
+completed the inspection by the available inspector name. An `inspector` account SHALL be able to
 review only findings from completed inspections assigned to that account.
 
 The findings sections SHALL exclude clean inspections, inspections outside the reader's active
@@ -962,21 +962,21 @@ type. They SHALL derive findings from the reader's existing site-scoped finding 
 - **WHEN** the account views findings
 - **THEN** that inspection is presented once in its type section
 
-#### Scenario: Clean and foreign inspections are excluded for a JHSC member
+#### Scenario: Clean and foreign inspections are excluded for an inspector
 
 - **GIVEN** the account completed a clean inspection and another account completed an inspection that recorded a finding
-- **WHEN** the `jhsc_member` account views findings
+- **WHEN** the `inspector` account views findings
 - **THEN** neither inspection is presented in a type section
 
 #### Scenario: Administrative accounts can review foreign findings in scope
 
-- **GIVEN** an `hs_coordinator` or `management` account and another account completed an inspection in a site within the administrator's active site scope, and that inspection recorded a finding
+- **GIVEN** a `coordinator` or `management` account and another account completed an inspection in a site within the administrator's active site scope, and that inspection recorded a finding
 - **WHEN** the administrative account views findings
 - **THEN** the completed inspection is presented in its inspection type section
 
 #### Scenario: Administrative findings identify the completing inspector
 
-- **GIVEN** an `hs_coordinator` or `management` account reviewing a finding from an inspection assigned to another account
+- **GIVEN** a `coordinator` or `management` account reviewing a finding from an inspection assigned to another account
 - **WHEN** the administrative account views findings
 - **THEN** the inspection row presents the assigned inspector's name
 

@@ -393,7 +393,7 @@ describe('la importación es una sola transacción', () => {
     try {
       await expect(
         service.withSessionClient(
-          { userId: coordinator, role: 'hs_coordinator', siteIds: [SITE_A] },
+          { userId: coordinator, role: 'coordinator', siteIds: [SITE_A] },
           (client) =>
             applyRosterRows(
               client,

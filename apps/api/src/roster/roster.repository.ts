@@ -1,5 +1,11 @@
 import type { PoolClient } from 'pg';
-import type { CreatePersonRequest, Person, PersonWithAccount, RosterQuery } from '@hs/contracts';
+import type {
+  CreatePersonRequest,
+  Person,
+  PersonWithAccount,
+  RosterQuery,
+  UpdatePersonRequest,
+} from '@hs/contracts';
 
 /**
  * La consulta del roster, ahora con la cuenta de cada persona (proposal: "GET /people
@@ -132,6 +138,39 @@ export async function deactivatePerson(
   );
 
   return { status: 'deactivated', person: toPerson(rows[0]!) };
+}
+
+export type UpdatePersonResult =
+  | { status: 'updated'; person: Person }
+  | { status: 'not_found' }
+  | { status: 'not_active' };
+
+/** Corrige los datos permitidos de una persona visible y activa. */
+export async function updatePerson(
+  client: PoolClient,
+  personId: string,
+  input: UpdatePersonRequest,
+): Promise<UpdatePersonResult> {
+  const locked = await client.query<{ deactivated_at: Date | null }>(
+    `SELECT deactivated_at FROM person WHERE id = $1 FOR UPDATE`,
+    [personId],
+  );
+  const [current] = locked.rows;
+
+  if (current === undefined) return { status: 'not_found' };
+  if (current.deactivated_at !== null) return { status: 'not_active' };
+
+  const { rows } = await client.query<PersonRow>(
+    `UPDATE person
+        SET first_name = COALESCE($2, first_name),
+            last_name = COALESCE($3, last_name),
+            employee_number = COALESCE($4, employee_number)
+      WHERE id = $1
+      RETURNING id, site_id, employee_number, first_name, last_name, deactivated_at`,
+    [personId, input.first_name ?? null, input.last_name ?? null, input.employee_number ?? null],
+  );
+
+  return { status: 'updated', person: toPerson(rows[0]!) };
 }
 
 interface PersonRow extends Record<string, unknown> {

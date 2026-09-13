@@ -74,7 +74,7 @@ export function PeriodDialog({
               <dd><span className={`status-pill status-pill--${inspection.status}`}>{STATUS_LABELS[inspection.status]}</span></dd>
             </div>
             <div>
-              <dt className="field-label">Inspector</dt>
+               <dt className="field-label">Assigned to</dt>
               <dd>{inspectorLabel(inspection)}</dd>
             </div>
             {inspection.cancellation_reason ? (

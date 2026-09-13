@@ -181,7 +181,7 @@ export function IncidentRoute(): React.JSX.Element {
       ))}
 
       {available.length === 0 ? (
-        <p>Nothing for you to do here: the HS coordinator moves this one along.</p>
+         <p>Nothing for you to do here: the coordinator moves this one along.</p>
       ) : null}
 
       {error ? <p className="notice">{error}</p> : null}

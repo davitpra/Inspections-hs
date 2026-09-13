@@ -8,7 +8,8 @@ import { createAccount, createPerson, selectablePeople } from './helpers/identit
 import { inScope, startTestDatabase, type TestDatabase } from './helpers/postgres';
 
 /**
- * La consola del roster: leer quién trabaja en cada planta y dar de baja un worker sin cuenta.
+ * La consola del roster: leer quién trabaja en cada planta, corregir personas activas y dar de
+ * baja un worker sin cuenta.
  *
  * LAS DOS PRUEBAS QUE JUSTIFICAN EL ARCHIVO son las dos mitades del aislamiento:
  *
@@ -18,7 +19,7 @@ import { inScope, startTestDatabase, type TestDatabase } from './helpers/postgre
  *   - Cualquier rol que no sea el coordinador recibe 403 **en la lectura**. Esta ruta
  *     devuelve el perfil completo, y §4 dice que se elige a una persona sin poder verlo.
  *
- * Lo que el motor prohíbe por su cuenta —DELETE, cambiar `employee_number`— ya está en
+ * Lo que el motor prohíbe por su cuenta —DELETE y cambiar `id`— ya está en
  * `immutability.int-spec.ts` y no se repite acá.
  */
 
@@ -38,14 +39,14 @@ let supervisorId: string;
 
 const asCoordinator = () => ({
   userId: coordinatorId,
-  role: 'hs_coordinator',
+  role: 'coordinator',
   siteIds: [SITE_A, SITE_B],
 });
 
 /** Un coordinador que solo alcanza la planta A. Es con quien se prueba el borde. */
 const asNarrowCoordinator = () => ({
   userId: narrowId,
-  role: 'hs_coordinator',
+  role: 'coordinator',
   siteIds: [SITE_A],
 });
 
@@ -65,14 +66,14 @@ beforeAll(async () => {
 
   const coordinator = await createAccount(db.app, {
     siteIds: [SITE_A, SITE_B],
-    role: 'hs_coordinator',
+    role: 'coordinator',
   });
   coordinatorId = coordinator.accountId;
 
-  const narrow = await createAccount(db.app, { siteIds: [SITE_A], role: 'hs_coordinator' });
+  const narrow = await createAccount(db.app, { siteIds: [SITE_A], role: 'coordinator' });
   narrowId = narrow.accountId;
 
-  const supervisor = await createAccount(db.app, { siteIds: [SITE_A], role: 'jhsc_member' });
+  const supervisor = await createAccount(db.app, { siteIds: [SITE_A], role: 'inspector' });
   supervisorId = supervisor.accountId;
 
   // Apellidos elegidos para que el orden sea comprobable y no coincida con el de alta.
@@ -142,7 +143,7 @@ describe('leer el roster de una planta', () => {
   });
 
   it('lo niega a cualquier rol que no sea el coordinador, también en la lectura', async () => {
-    for (const role of ['jhsc_member']) {
+    for (const role of ['inspector']) {
       await expect(
         roster.list(
           { userId: supervisorId, role, siteIds: [SITE_A] },
@@ -227,7 +228,7 @@ describe('dar de baja un worker desde su fila', () => {
 
   it('rechaza una persona cuya cuenta sigue activa', async () => {
     const linked = await createAccount(db.app, {
-      role: 'jhsc_member',
+      role: 'inspector',
       siteIds: [SITE_A],
       lastName: 'ConCuenta',
     });
@@ -239,7 +240,7 @@ describe('dar de baja un worker desde su fila', () => {
 
   it('permite la baja si la cuenta asociada ya está inactiva y no la modifica', async () => {
     const linked = await createAccount(db.app, {
-      role: 'jhsc_member',
+      role: 'inspector',
       siteIds: [SITE_A],
       lastName: 'CuentaInactiva',
     });
@@ -296,7 +297,7 @@ describe('dar de baja un worker desde su fila', () => {
   it('lo niega a cualquier rol que no sea el coordinador', async () => {
     const id = await createPerson(db.app, SITE_A, { lastName: 'Protegida' });
 
-    for (const role of ['jhsc_member']) {
+    for (const role of ['inspector']) {
       await expect(
         roster.deactivate({ userId: supervisorId, role, siteIds: [SITE_A] }, id),
       ).rejects.toMatchObject({ response: { code: 'roster_forbidden' } });
@@ -304,10 +305,111 @@ describe('dar de baja un worker desde su fila', () => {
   });
 });
 
+describe('corregir una persona activa desde su fila', () => {
+  it('corrige nombre y número dentro del alcance, conservando el id', async () => {
+    const id = await createPerson(db.app, SITE_A, {
+      employeeNumber: 'RA-CORRECT-OLD',
+      firstName: 'Original',
+      lastName: 'Nombre',
+    });
+
+    const result = await roster.update(asCoordinator(), id, {
+      first_name: 'Corregida',
+      employee_number: 'RA-CORRECT-NEW',
+    });
+
+    expect(result).toMatchObject({
+      id,
+      first_name: 'Corregida',
+      last_name: 'Nombre',
+      employee_number: 'RA-CORRECT-NEW',
+      site_id: SITE_A,
+      deactivated_at: null,
+    });
+  });
+
+  it('rechaza un número duplicado sin cambiar ni auditar a la persona', async () => {
+    const target = await createPerson(db.app, SITE_A, {
+      employeeNumber: 'RA-DUP-TARGET',
+      lastName: 'Target',
+    });
+    await createPerson(db.app, SITE_A, { employeeNumber: 'RA-DUP-TAKEN' });
+
+    await expect(
+      roster.update(asCoordinator(), target, { employee_number: 'RA-DUP-TAKEN' }),
+    ).rejects.toMatchObject({ response: { code: 'person_employee_number_taken' } });
+
+    const person = await roster.list(asCoordinator(), { site_id: SITE_A, status: 'all' });
+    expect(person.find((row) => row.id === target)).toMatchObject({
+      employee_number: 'RA-DUP-TARGET',
+      last_name: 'Target',
+    });
+
+    const events = await inScope<{ event_type: string }>(
+      db.migrator,
+      [SITE_A],
+      `SELECT event_type FROM audit_log WHERE payload->>'person_id' = $1 ORDER BY seq`,
+      [target],
+    );
+    expect(events.map((event) => event.event_type)).toEqual(['person.created']);
+  });
+
+  it('rechaza a una persona inactiva', async () => {
+    const id = await createPerson(db.app, SITE_A, { employeeNumber: 'RA-INACTIVE-EDIT' });
+    await inScope(db.app, [SITE_A], 'UPDATE person SET deactivated_at = now() WHERE id = $1', [id]);
+
+    await expect(roster.update(asCoordinator(), id, { last_name: 'No cambia' })).rejects.toMatchObject({
+      response: { code: 'person_not_active' },
+    });
+  });
+
+  it('trata una persona de otro sitio como inexistente', async () => {
+    const outside = await createPerson(db.app, SITE_B, { employeeNumber: 'RB-EDIT-OUTSIDE' });
+
+    await expect(
+      roster.update(asNarrowCoordinator(), outside, { last_name: 'No se revela' }),
+    ).rejects.toMatchObject({ response: { code: 'person_not_found' } });
+  });
+
+  it('lo niega a un inspector', async () => {
+    const id = await createPerson(db.app, SITE_A, { employeeNumber: 'RA-EDIT-ROLE' });
+
+    await expect(
+      roster.update(
+        { userId: supervisorId, role: 'inspector', siteIds: [SITE_A] },
+        id,
+        { first_name: 'No autorizado' },
+      ),
+    ).rejects.toMatchObject({ response: { code: 'roster_forbidden' } });
+  });
+
+  it('no escribe auditoría si todos los valores son iguales', async () => {
+    const id = await createPerson(db.app, SITE_A, {
+      employeeNumber: 'RA-EQUAL',
+      firstName: 'Same',
+      lastName: 'Values',
+    });
+
+    await roster.update(asCoordinator(), id, {
+      first_name: 'Same',
+      last_name: 'Values',
+      employee_number: 'RA-EQUAL',
+    });
+
+    const events = await inScope<{ event_type: string }>(
+      db.migrator,
+      [SITE_A],
+      `SELECT event_type FROM audit_log WHERE payload->>'person_id' = $1 ORDER BY seq`,
+      [id],
+    );
+    expect(events.map((event) => event.event_type)).toEqual(['person.created']);
+  });
+});
+
 describe('la cuenta que viaja junto a cada persona (design D1/D2)', () => {
   it('una persona con cuenta vuelve con su rol', async () => {
     const withAccount = await createAccount(db.app, {
-      role: 'jhsc_member',
+      role: 'inspector',
       siteIds: [SITE_A],
       firstName: 'Fatima',
       lastName: 'Bello',
@@ -316,7 +418,7 @@ describe('la cuenta que viaja junto a cada persona (design D1/D2)', () => {
     const rows = await roster.list(asCoordinator(), { site_id: SITE_A, status: 'active' });
     const row = rows.find((entry) => entry.id === withAccount.personId);
 
-    expect(row?.account).toMatchObject({ id: withAccount.accountId, role: 'jhsc_member' });
+    expect(row?.account).toMatchObject({ id: withAccount.accountId, role: 'inspector' });
   });
 
   it('una persona sin cuenta vuelve con null, sin error', async () => {
@@ -344,7 +446,7 @@ describe('la cuenta que viaja junto a cada persona (design D1/D2)', () => {
 
   it('una cuenta invitada y no aceptada vuelve con can_sign_in en falso, y en verdadero después de aceptar', async () => {
     const invited = await createAccount(db.app, {
-      role: 'jhsc_member',
+      role: 'inspector',
       siteIds: [SITE_A],
       lastName: 'Pendiente',
     });
@@ -356,7 +458,7 @@ describe('la cuenta que viaja junto a cada persona (design D1/D2)', () => {
 
     await grantCredential(
       auth,
-      { userId: coordinatorId, role: 'hs_coordinator' },
+      { userId: coordinatorId, role: 'coordinator' },
       invited.accountId,
       'a-long-enough-password',
     );

@@ -40,7 +40,7 @@ export function DemoteDialog({
         </span>
         <div>
           <p className="jhsc-seat-dialog__eyebrow">Account role</p>
-          <h2>Demote {personLabel} to JHSC member?</h2>
+          <h2>Demote {personLabel} to inspector?</h2>
         </div>
       </div>
 
@@ -62,7 +62,7 @@ export function DemoteDialog({
           onClick={() => demotion.mutate()}
           disabled={demotion.isPending}
         >
-          {demotion.isPending ? 'Demoting…' : 'Demote to JHSC member'}
+          {demotion.isPending ? 'Demoting…' : 'Demote to inspector'}
         </button>
         <button type="button" onClick={() => dialogRef.current?.close()}>
           Cancel

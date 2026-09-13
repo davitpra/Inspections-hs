@@ -28,11 +28,11 @@ describe('los umbrales del escalamiento', () => {
   });
 
   it('cuatro días escalan al coordinador y solo al coordinador', () => {
-    expect(escalationLevelsDue(DUE, at(4))).toEqual(['hs_coordinator']);
+    expect(escalationLevelsDue(DUE, at(4))).toEqual(['coordinator']);
   });
 
   it('ocho días escalan a los dos niveles', () => {
-    expect(escalationLevelsDue(DUE, at(8))).toEqual(['hs_coordinator', 'management']);
+    expect(escalationLevelsDue(DUE, at(8))).toEqual(['coordinator', 'management']);
   });
 
   it('dentro del plazo no escala', () => {
@@ -40,7 +40,7 @@ describe('los umbrales del escalamiento', () => {
   });
 
   it('los umbrales son los +3 y +7 que R3 fija', () => {
-    expect(ESCALATION_DAYS.hs_coordinator).toBe(3);
+    expect(ESCALATION_DAYS.coordinator).toBe(3);
     expect(ESCALATION_DAYS.management).toBe(7);
   });
 });
@@ -54,17 +54,17 @@ describe('los umbrales del escalamiento', () => {
  */
 describe('los destinatarios', () => {
   it('el escalón del coordinador va a coordinadores, el de gerencia a gerencia', () => {
-    expect(ESCALATION_RECIPIENT_ROLE.hs_coordinator).toBe('hs_coordinator');
+    expect(ESCALATION_RECIPIENT_ROLE.coordinator).toBe('coordinator');
     expect(ESCALATION_RECIPIENT_ROLE.management).toBe('management');
   });
 
   it('cada nivel tiene su propio tipo de notificación', () => {
-    expect(NOTIFICATION_KIND.hs_coordinator).toBe('corrective_action_overdue_coordinator');
+    expect(NOTIFICATION_KIND.coordinator).toBe('corrective_action_overdue_coordinator');
     expect(NOTIFICATION_KIND.management).toBe('corrective_action_overdue_management');
   });
 
   it('los dos niveles están cubiertos y no hay un tercero', () => {
-    expect(ESCALATION_LEVELS).toEqual(['hs_coordinator', 'management']);
+    expect(ESCALATION_LEVELS).toEqual(['coordinator', 'management']);
     expect(Object.keys(NOTIFICATION_KIND)).toEqual([...ESCALATION_LEVELS]);
     expect(Object.keys(ESCALATION_RECIPIENT_ROLE)).toEqual([...ESCALATION_LEVELS]);
   });

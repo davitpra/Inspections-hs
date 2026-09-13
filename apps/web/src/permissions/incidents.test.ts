@@ -55,19 +55,19 @@ function incident(overrides: Partial<Incident> = {}): Incident {
 }
 
 describe('qué botones ofrece la pantalla', () => {
-  it.each(['hs_coordinator', 'management'] as const)('%s puede reportar', (role) => {
+  it.each(['coordinator', 'management'] as const)('%s puede reportar', (role) => {
     expect(canReportIncident(session(role))).toBe(true);
   });
 
   it('un miembro del JHSC no puede reportar', () => {
-    expect(canReportIncident(session('jhsc_member'))).toBe(false);
+    expect(canReportIncident(session('inspector'))).toBe(false);
   });
 
   it('un miembro del JHSC no puede investigar ni cerrar', () => {
-    expect(availableTransitions(incident(), session('jhsc_member'))).toEqual([]);
+    expect(availableTransitions(incident(), session('inspector'))).toEqual([]);
   });
 
-  it.each(['hs_coordinator', 'management'] as const)('%s puede investigar y cerrar', (role) => {
+  it.each(['coordinator', 'management'] as const)('%s puede investigar y cerrar', (role) => {
     const available = availableTransitions(incident(), session(role));
 
     expect(available.map((transition) => transition.to).sort()).toEqual([
@@ -84,7 +84,7 @@ describe('qué botones ofrece la pantalla', () => {
   it('una lesión crítica no ofrece el cierre directo, ni siquiera al coordinador', () => {
     const available = availableTransitions(
       incident({ classification: 'critical_injury' }),
-      session('hs_coordinator'),
+      session('coordinator'),
     );
 
     expect(available.map((transition) => transition.to)).toEqual(['under_investigation']);
@@ -98,8 +98,8 @@ describe('qué botones ofrece la pantalla', () => {
     const closed = incident({ state: 'closed' });
 
     expect(
-      availableTransitions(closed, session('hs_coordinator')).map((transition) => transition.to),
+      availableTransitions(closed, session('coordinator')).map((transition) => transition.to),
     ).toEqual(['under_investigation']);
-    expect(availableTransitions(closed, session('jhsc_member'))).toEqual([]);
+    expect(availableTransitions(closed, session('inspector'))).toEqual([]);
   });
 });

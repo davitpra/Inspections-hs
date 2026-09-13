@@ -115,17 +115,41 @@ describe('la identidad de una persona es el número de empleado', () => {
     ).rejects.toMatchObject({ code: UNIQUE_VIOLATION });
   });
 
-  it('cambiar el número de empleado se rechaza con HS001, incluso como dueño de la tabla', async () => {
+  it('hs_app puede corregir el número y conserva el id', async () => {
     const id = await createPerson(db.migrator, SITE_A, { employeeNumber: 'FROZEN-1' });
 
+    await withSiteScope(db.app, { siteIds: [SITE_A], userId: actor }, (client) =>
+      client.query('UPDATE person SET employee_number = $1 WHERE id = $2', ['FROZEN-2', id]),
+    );
+
+    expect(await personById(db.migrator, [SITE_A], id)).toMatchObject({
+      id,
+      employee_number: 'FROZEN-2',
+    });
+  });
+
+  it('corregir al número de otra persona falla con unique violation', async () => {
+    const id = await createPerson(db.migrator, SITE_A, { employeeNumber: 'FROZEN-3' });
+    const other = await createPerson(db.migrator, SITE_A, { employeeNumber: 'FROZEN-4' });
+
     await expect(
-      inScope(db.migrator, [SITE_A], 'UPDATE person SET employee_number = $1 WHERE id = $2', [
-        'FROZEN-2',
-        id,
-      ]),
+      withSiteScope(db.app, { siteIds: [SITE_A], userId: actor }, (client) =>
+        client.query('UPDATE person SET employee_number = $1 WHERE id = $2', ['FROZEN-4', id]),
+      ),
+    ).rejects.toMatchObject({ code: UNIQUE_VIOLATION });
+
+    expect((await personById(db.migrator, [SITE_A], id)).employee_number).toBe('FROZEN-3');
+    expect((await personById(db.migrator, [SITE_A], other)).employee_number).toBe('FROZEN-4');
+  });
+
+  it('cambiar el id se rechaza con HS001, incluso como dueño de la tabla', async () => {
+    const id = await createPerson(db.migrator, SITE_A, { employeeNumber: 'FROZEN-5' });
+
+    await expect(
+      inScope(db.migrator, [SITE_A], 'UPDATE person SET id = gen_random_uuid() WHERE id = $1', [id]),
     ).rejects.toMatchObject({ code: APPEND_ONLY });
 
-    expect((await personById(db.migrator, [SITE_A], id)).employee_number).toBe('FROZEN-1');
+    expect((await personById(db.migrator, [SITE_A], id)).id).toBe(id);
   });
 
   it('dos personas activas pueden llamarse igual — el nombre no identifica', async () => {
@@ -379,10 +403,10 @@ describe('el email de la cuenta', () => {
 
 // ---------------------------------------------------------------------------
 describe('el rol es uno, de un conjunto cerrado', () => {
-  it('"inspector" no es un rol — es un campo de la inspección', async () => {
-    await expect(
-      createAccount(db.migrator, { siteIds: [SITE_A], role: 'inspector' }),
-    ).rejects.toMatchObject({ code: CHECK_VIOLATION });
+  it('"inspector" es un rol de cuenta y también nombra el campo de la inspección', async () => {
+    const created = await createAccount(db.migrator, { siteIds: [SITE_A], role: 'inspector' });
+
+    expect(created.accountId).toBeTruthy();
   });
 
   it('un rol nulo se rechaza', async () => {
@@ -399,7 +423,7 @@ describe('el rol es uno, de un conjunto cerrado', () => {
   });
 
   it('los tres roles de ADR-022 se aceptan y los retirados se rechazan', async () => {
-    for (const role of ['hs_coordinator', 'jhsc_member', 'management']) {
+    for (const role of ['coordinator', 'inspector', 'management']) {
       const seeded = await createAccount(db.migrator, { siteIds: [SITE_A], role });
       expect(seeded.accountId).toBeTruthy();
     }
@@ -551,7 +575,7 @@ describe('el alcance por sitio', () => {
 // ---------------------------------------------------------------------------
 describe('el alcance manda, el rol no', () => {
   it('una cuenta sin alcance vigente no ve ninguna fila aislada, aunque sea coordinadora', async () => {
-    const seeded = await createAccount(db.migrator, { siteIds: [SITE_A], role: 'hs_coordinator' });
+    const seeded = await createAccount(db.migrator, { siteIds: [SITE_A], role: 'coordinator' });
 
     await inScope(
       db.migrator,
@@ -583,22 +607,22 @@ describe('el alcance manda, el rol no', () => {
    * El recorrido completo, sin atajos: el coordinador invita, el titular acepta y fija
    * su contraseña, entra con email y contraseña, y el alcance sale del token.
    */
-  it('un jhsc_member que INICIÓ SESIÓN de verdad no ve la otra planta', async () => {
+  it('un inspector que INICIÓ SESIÓN de verdad no ve la otra planta', async () => {
     const stack = createAuthStack(db.appUrl);
 
     try {
       const coordinator = await createAccount(db.migrator, {
         siteIds: [SITE_A, SITE_B],
-        role: 'hs_coordinator',
+        role: 'coordinator',
       });
 
-      const member = await createAccount(db.migrator, { siteIds: [SITE_A], role: 'jhsc_member' });
+      const member = await createAccount(db.migrator, { siteIds: [SITE_A], role: 'inspector' });
       const atB = await createPerson(db.migrator, SITE_B);
 
       const password = 'a-long-enough-password';
       await grantCredential(
         stack,
-        { userId: coordinator.accountId, role: 'hs_coordinator' },
+        { userId: coordinator.accountId, role: 'coordinator' },
         member.accountId,
         password,
       );
@@ -646,6 +670,44 @@ describe('la auditoría de la identidad la escribe el motor', () => {
     expect(renamed!.event_type).toBe('person.renamed');
     expect(renamed!.payload.previous_last_name).toBe('Antes');
     expect(renamed!.payload.last_name).toBe('Después');
+  });
+
+  it('renumerar escribe una entrada con los dos números', async () => {
+    const id = await createPerson(db.migrator, SITE_A, { employeeNumber: 'AUD-OLD' });
+
+    await withSiteScope(db.app, { siteIds: [SITE_A], userId: actor }, (client) =>
+      client.query('UPDATE person SET employee_number = $1 WHERE id = $2', ['AUD-NEW', id]),
+    );
+
+    const [, renumbered] = await entriesFor(SITE_A, 'person_id', id);
+
+    expect(renumbered!.event_type).toBe('person.renumbered');
+    expect(renumbered!.payload.previous_employee_number).toBe('AUD-OLD');
+    expect(renumbered!.payload.employee_number).toBe('AUD-NEW');
+  });
+
+  it('un cambio de nombre y número escribe dos entradas independientes', async () => {
+    const id = await createPerson(db.migrator, SITE_A, {
+      employeeNumber: 'AUD-BOTH-OLD',
+      firstName: 'Nombre anterior',
+    });
+
+    await withSiteScope(db.app, { siteIds: [SITE_A], userId: actor }, (client) =>
+      client.query(
+        'UPDATE person SET first_name = $1, employee_number = $2 WHERE id = $3',
+        ['Nombre nuevo', 'AUD-BOTH-NEW', id],
+      ),
+    );
+
+    const entries = await entriesFor(SITE_A, 'person_id', id);
+
+    expect(entries.map((entry) => entry.event_type)).toEqual([
+      'person.created',
+      'person.renamed',
+      'person.renumbered',
+    ]);
+    expect(entries[2]!.payload.previous_employee_number).toBe('AUD-BOTH-OLD');
+    expect(entries[2]!.payload.employee_number).toBe('AUD-BOTH-NEW');
   });
 
   it('desactivar y reactivar son dos eventos distintos', async () => {
@@ -731,7 +793,7 @@ describe('la auditoría de la cuenta se abre por planta del alcance', () => {
 
       expect(created).toHaveLength(1);
       expect(created[0]!.payload.person_id).toBe(seeded.personId);
-      expect(created[0]!.payload.role).toBe('hs_coordinator');
+      expect(created[0]!.payload.role).toBe('coordinator');
     }
   });
 
@@ -755,11 +817,11 @@ describe('la auditoría de la cuenta se abre por planta del alcance', () => {
   it('cambiar el rol escribe una entrada por planta, con el rol anterior y el nuevo', async () => {
     const seeded = await createAccount(db.migrator, {
       siteIds: [SITE_A, SITE_B],
-      role: 'jhsc_member',
+      role: 'inspector',
     });
 
     await inScope(db.migrator, [SITE_A, SITE_B], 'UPDATE app_user SET role = $1 WHERE id = $2', [
-      'hs_coordinator',
+      'coordinator',
       seeded.accountId,
     ]);
 
@@ -768,8 +830,8 @@ describe('la auditoría de la cuenta se abre por planta del alcance', () => {
         (entry) => entry.event_type === 'user.role_changed',
       );
 
-      expect(changed!.payload.previous_role).toBe('jhsc_member');
-      expect(changed!.payload.role).toBe('hs_coordinator');
+      expect(changed!.payload.previous_role).toBe('inspector');
+      expect(changed!.payload.role).toBe('coordinator');
     }
   });
 

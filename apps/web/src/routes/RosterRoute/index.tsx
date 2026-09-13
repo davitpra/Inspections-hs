@@ -39,9 +39,10 @@ import { RosterTable } from "./RosterTable";
  * SÍ devuelve el perfil. Si alguien conecta el `PersonPicker` de los incidentes a
  * `GET /people`, rompe lo único que las mantiene separadas.
  *
- * Nombres y planta se corrigen desde el CSV. La pantalla ofrece esa importación completa,
- * el alta de UNA persona y la baja lógica estrecha de un worker sin cuenta. El CSV sigue
- * mandando: una fila posterior con el mismo número puede actualizar o reactivar a la persona.
+ * Nombres y números se corrigen desde la fila; la planta se corrige desde el CSV. La pantalla
+ * ofrece esa importación completa, el alta de UNA persona y la baja lógica estrecha de un worker
+ * sin cuenta. El CSV sigue mandando: una fila posterior con el mismo número puede actualizar o
+ * reactivar a la persona.
  *
  * ONLINE y fuera del precacheo: un roster servido desde caché es un roster viejo que no
  * dice que lo es (ADR-001).
@@ -56,7 +57,7 @@ export function RosterRoute(): React.JSX.Element {
       <>
         <h1>People &amp; Access</h1>
         <p className="notice">
-          Only H&amp;S coordinators and management can manage people and access.
+           Only coordinators and management can manage people and access.
         </p>
       </>
     );

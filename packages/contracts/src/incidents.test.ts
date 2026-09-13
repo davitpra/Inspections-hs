@@ -77,15 +77,15 @@ describe('la máquina de estados del incidente', () => {
     for (const transition of INCIDENT_TRANSITIONS) {
       if (transition.from === null) continue;
 
-      expect(transition.roles).toEqual(['hs_coordinator']);
+      expect(transition.roles).toEqual(['coordinator']);
     }
   });
 
   it('el reporte lo hacen gerencia y coordinador, nunca el JHSC', () => {
     const report = incidentTransitionFor(null, 'reported');
 
-    expect(report?.roles).toEqual(['management', 'hs_coordinator']);
-    expect(report?.roles).not.toContain('jhsc_member');
+    expect(report?.roles).toEqual(['management', 'coordinator']);
+    expect(report?.roles).not.toContain('inspector');
   });
 
   it('los dos caminos al cierre exigen que no queden acciones abiertas', () => {

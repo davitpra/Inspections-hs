@@ -151,31 +151,31 @@ export const INCIDENT_TRANSITIONS: readonly IncidentTransition[] = [
   {
     from: null,
     to: 'reported',
-    roles: ['management', 'hs_coordinator'],
+    roles: ['management', 'coordinator'],
     requires: [],
   },
   {
     from: 'reported',
     to: 'under_investigation',
-    roles: ['hs_coordinator'],
+    roles: ['coordinator'],
     requires: ['method'],
   },
   {
     from: 'reported',
     to: 'closed',
-    roles: ['hs_coordinator'],
+    roles: ['coordinator'],
     requires: ['reason', 'investigation_optional', 'no_open_actions'],
   },
   {
     from: 'under_investigation',
     to: 'closed',
-    roles: ['hs_coordinator'],
+    roles: ['coordinator'],
     requires: ['root_cause', 'no_open_actions'],
   },
   {
     from: 'closed',
     to: 'under_investigation',
-    roles: ['hs_coordinator'],
+    roles: ['coordinator'],
     requires: ['reason'],
   },
 ];

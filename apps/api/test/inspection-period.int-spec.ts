@@ -81,8 +81,8 @@ beforeAll(async () => {
   await registerItems(db.migrator, templateId, ['p.guard']);
   versionV1 = await publishVersion(db.migrator, templateId, 1, documentFor('p.guard'));
 
-  coordinator = await createAccount(db.app, { siteIds: [SITE_A], role: 'hs_coordinator' });
-  inspector = await createAccount(db.app, { siteIds: [SITE_A], role: 'jhsc_member' });
+  coordinator = await createAccount(db.app, { siteIds: [SITE_A], role: 'coordinator' });
+  inspector = await createAccount(db.app, { siteIds: [SITE_A], role: 'inspector' });
 }, 180_000);
 
 afterAll(async () => {
@@ -161,7 +161,7 @@ describe('la notificación al coordinador', () => {
 
   beforeAll(async () => {
     // Un coordinador cuyo alcance es solo la otra planta: no le corresponde enterarse.
-    outsider = await createAccount(db.app, { siteIds: [SITE_B], role: 'hs_coordinator' });
+    outsider = await createAccount(db.app, { siteIds: [SITE_B], role: 'coordinator' });
 
     await createSchedule(db.app, SITE_A, templateId, inspector.accountId);
     await stack.openPeriod.run(new Date('2026-11-10T12:00:00Z'));
@@ -212,7 +212,7 @@ describe('la notificación al coordinador', () => {
   });
 
   it('marcar como leída es lo único que cambia, y no se deshace', async () => {
-    const session = { userId: coordinator.accountId, role: 'hs_coordinator', siteIds: [SITE_A] };
+    const session = { userId: coordinator.accountId, role: 'coordinator', siteIds: [SITE_A] };
     const inbox = await stack.notifications.inbox(session);
     const target = one(inbox);
 
@@ -238,13 +238,13 @@ describe('los permisos de la programación', () => {
     siteIds: [SITE_A],
   });
 
-  it('un jhsc_member no puede reasignar', async () => {
+  it('un inspector no puede reasignar', async () => {
     const rows = await scheduledForPeriod(db.app, [SITE_A], AUGUST);
     const target = one(rows);
 
     await expect(
       stack.inspections.assignInspector(
-        session(inspector.accountId, 'jhsc_member'),
+        session(inspector.accountId, 'inspector'),
         target.id,
         inspector.accountId,
       ),
@@ -255,10 +255,10 @@ describe('los permisos de la programación', () => {
   });
 
   it('un miembro no puede crear una regla', async () => {
-    const member = await createAccount(db.app, { siteIds: [SITE_A], role: 'jhsc_member' });
+    const member = await createAccount(db.app, { siteIds: [SITE_A], role: 'inspector' });
 
     await expect(
-      stack.inspections.createSchedule(session(member.accountId, 'jhsc_member'), {
+      stack.inspections.createSchedule(session(member.accountId, 'inspector'), {
         site_id: SITE_A,
         template_id: templateId,
       }),
@@ -268,13 +268,13 @@ describe('los permisos de la programación', () => {
   it('acepta como inspector a una cuenta management con alcance vigente', async () => {
     const manager = await createAccount(db.app, { siteIds: [SITE_A], role: 'management' });
     const current = (await stack.inspections.listSchedules(
-      session(coordinator.accountId, 'hs_coordinator'),
+      session(coordinator.accountId, 'coordinator'),
     )).find((rule) => rule.site_id === SITE_A && rule.deactivated_at === null);
 
     expect(current).toBeDefined();
 
     const schedule = await stack.inspections.updateSchedule(
-      session(coordinator.accountId, 'hs_coordinator'),
+      session(coordinator.accountId, 'coordinator'),
       current!.id,
       {
         default_inspector_id: manager.accountId,
@@ -291,7 +291,7 @@ describe('los permisos de la programación', () => {
     ]);
 
     await expect(
-      stack.inspections.createSchedule(session(coordinator.accountId, 'hs_coordinator'), {
+      stack.inspections.createSchedule(session(coordinator.accountId, 'coordinator'), {
         site_id: SITE_A,
         template_id: templateId,
         default_inspector_id: manager.accountId,
@@ -300,10 +300,10 @@ describe('los permisos de la programación', () => {
   });
 
   it('rechaza como inspector a quien no tiene alcance en la planta, y nombra el sitio', async () => {
-    const elsewhere = await createAccount(db.app, { siteIds: [SITE_B], role: 'jhsc_member' });
+    const elsewhere = await createAccount(db.app, { siteIds: [SITE_B], role: 'inspector' });
 
     await expect(
-      stack.inspections.schedule(session(coordinator.accountId, 'hs_coordinator'), {
+      stack.inspections.schedule(session(coordinator.accountId, 'coordinator'), {
         site_id: SITE_A,
         template_id: templateId,
         period_start: '2027-03-01',
@@ -316,7 +316,7 @@ describe('los permisos de la programación', () => {
     const unpublished = await createTemplate(db.migrator, 'never-published');
 
     await expect(
-      stack.inspections.createSchedule(session(coordinator.accountId, 'hs_coordinator'), {
+      stack.inspections.createSchedule(session(coordinator.accountId, 'coordinator'), {
         site_id: SITE_A,
         template_id: unpublished,
       }),
@@ -328,11 +328,11 @@ describe('el pendiente de cada inspector', () => {
   let other: { accountId: string };
 
   beforeAll(async () => {
-    other = await createAccount(db.app, { siteIds: [SITE_A], role: 'jhsc_member' });
+    other = await createAccount(db.app, { siteIds: [SITE_A], role: 'inspector' });
 
     const coordinatorSession = {
       userId: coordinator.accountId,
-      role: 'hs_coordinator',
+      role: 'coordinator',
       siteIds: [SITE_A],
     };
 
@@ -359,7 +359,7 @@ describe('el pendiente de cada inspector', () => {
   it('lista solo lo propio', async () => {
     const mine = await stack.inspections.pendingFor({
       userId: other.accountId,
-      role: 'jhsc_member',
+      role: 'inspector',
       siteIds: [SITE_A],
     });
 
@@ -368,7 +368,7 @@ describe('el pendiente de cada inspector', () => {
 
     const theirs = await stack.inspections.pendingFor({
       userId: inspector.accountId,
-      role: 'jhsc_member',
+      role: 'inspector',
       siteIds: [SITE_A],
     });
 
@@ -378,7 +378,7 @@ describe('el pendiente de cada inspector', () => {
   it('pone lo vencido primero y lo marca', async () => {
     const mine = await stack.inspections.pendingFor({
       userId: other.accountId,
-      role: 'jhsc_member',
+      role: 'inspector',
       siteIds: [SITE_A],
     });
 
@@ -391,21 +391,21 @@ describe('el pendiente de cada inspector', () => {
   it('una inspección cancelada desaparece del pendiente', async () => {
     const before = await stack.inspections.pendingFor({
       userId: other.accountId,
-      role: 'jhsc_member',
+      role: 'inspector',
       siteIds: [SITE_A],
     });
 
     const target = one(before);
 
     await stack.inspections.cancel(
-      { userId: coordinator.accountId, role: 'hs_coordinator', siteIds: [SITE_A] },
+      { userId: coordinator.accountId, role: 'coordinator', siteIds: [SITE_A] },
       target.id,
       'plant shutdown for the month',
     );
 
     const after = await stack.inspections.pendingFor({
       userId: other.accountId,
-      role: 'jhsc_member',
+      role: 'inspector',
       siteIds: [SITE_A],
     });
 
@@ -424,7 +424,7 @@ describe('el pendiente de cada inspector', () => {
     const submissions = new SubmissionsService(stack.db);
 
     const scheduled = await stack.inspections.schedule(
-      { userId: coordinator.accountId, role: 'hs_coordinator', siteIds: [SITE_A] },
+      { userId: coordinator.accountId, role: 'coordinator', siteIds: [SITE_A] },
       {
         site_id: SITE_A,
         template_id: templateId,
@@ -433,7 +433,7 @@ describe('el pendiente de cada inspector', () => {
       },
     );
 
-    const session = { userId: other.accountId, role: 'jhsc_member', siteIds: [SITE_A] };
+    const session = { userId: other.accountId, role: 'inspector', siteIds: [SITE_A] };
 
     expect((await stack.inspections.pendingFor(session)).map((row) => row.id)).toContain(
       scheduled.id,
@@ -457,7 +457,7 @@ describe('el pendiente de cada inspector', () => {
   it('no devuelve nada sin alcance de sitio', async () => {
     const none = await stack.inspections.pendingFor({
       userId: other.accountId,
-      role: 'jhsc_member',
+      role: 'inspector',
       siteIds: [],
     });
 
@@ -470,8 +470,8 @@ describe('la visibilidad temprana de un período abierto a mano', () => {
   let coordinatorSession: { userId: string; role: string; siteIds: string[] };
 
   beforeAll(async () => {
-    other = await createAccount(db.app, { siteIds: [SITE_A], role: 'jhsc_member' });
-    coordinatorSession = { userId: coordinator.accountId, role: 'hs_coordinator', siteIds: [SITE_A] };
+    other = await createAccount(db.app, { siteIds: [SITE_A], role: 'inspector' });
+    coordinatorSession = { userId: coordinator.accountId, role: 'coordinator', siteIds: [SITE_A] };
   });
 
   it('un período futuro sin visible_early no aparece en el pendiente', async () => {
@@ -484,7 +484,7 @@ describe('la visibilidad temprana de un período abierto a mano', () => {
 
     const mine = await stack.inspections.pendingFor({
       userId: other.accountId,
-      role: 'jhsc_member',
+      role: 'inspector',
       siteIds: [SITE_A],
     });
 
@@ -502,7 +502,7 @@ describe('la visibilidad temprana de un período abierto a mano', () => {
 
     const mine = await stack.inspections.pendingFor({
       userId: other.accountId,
-      role: 'jhsc_member',
+      role: 'inspector',
       siteIds: [SITE_A],
     });
 

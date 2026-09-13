@@ -74,11 +74,11 @@ const sessionFor = (accountId: string, role: string, siteIds: string[]) => ({
   siteIds,
 });
 
-const asCoordinator = () => sessionFor(coordinator.accountId, 'hs_coordinator', [SITE_A, SITE_B]);
+const asCoordinator = () => sessionFor(coordinator.accountId, 'coordinator', [SITE_A, SITE_B]);
 const asSupervisor = () => sessionFor(supervisor.accountId, 'management', [SITE_A]);
 const asOtherSupervisor = () => sessionFor(otherSupervisor.accountId, 'management', [SITE_A]);
 const asManager = () => sessionFor(manager.accountId, 'management', [SITE_A]);
-const asJhsc = () => sessionFor(jhsc.accountId, 'jhsc_member', [SITE_A]);
+const asJhsc = () => sessionFor(jhsc.accountId, 'inspector', [SITE_A]);
 const asSupervisorB = () => sessionFor(supervisorB.accountId, 'management', [SITE_B]);
 
 function payload(overrides: Partial<ReportIncidentRequest> = {}): ReportIncidentRequest {
@@ -130,7 +130,7 @@ async function investigated(
 async function stateOf(incidentId: string, siteIds = [SITE_A]): Promise<string> {
   const rows = await inSession<{ to_state: string }>(
     db.app,
-    { siteIds, userId: coordinator.accountId, role: 'hs_coordinator' },
+    { siteIds, userId: coordinator.accountId, role: 'coordinator' },
     `SELECT DISTINCT ON (e.incident_id) e.to_state
        FROM incident_event e
       WHERE e.incident_id = $1
@@ -145,7 +145,7 @@ async function stateOf(incidentId: string, siteIds = [SITE_A]): Promise<string> 
 async function openActionOn(incidentId: string): Promise<string> {
   const rows = await inSession<{ id: string }>(
     db.app,
-    { siteIds: [SITE_A], userId: coordinator.accountId, role: 'hs_coordinator' },
+    { siteIds: [SITE_A], userId: coordinator.accountId, role: 'coordinator' },
     'SELECT id FROM investigation WHERE incident_id = $1',
     [incidentId],
   );
@@ -188,12 +188,12 @@ beforeAll(async () => {
 
   coordinator = await createAccount(db.app, {
     siteIds: [SITE_A, SITE_B],
-    role: 'hs_coordinator',
+    role: 'coordinator',
   });
   supervisor = await createAccount(db.app, { siteIds: [SITE_A], role: 'management' });
   otherSupervisor = await createAccount(db.app, { siteIds: [SITE_A], role: 'management' });
   manager = await createAccount(db.app, { siteIds: [SITE_A], role: 'management' });
-  jhsc = await createAccount(db.app, { siteIds: [SITE_A], role: 'jhsc_member' });
+  jhsc = await createAccount(db.app, { siteIds: [SITE_A], role: 'inspector' });
   supervisorB = await createAccount(db.app, { siteIds: [SITE_B], role: 'management' });
 
   subject = await createPerson(db.app, SITE_A);
@@ -399,7 +399,7 @@ describe('la máquina de estados, por los dos caminos', () => {
     await expect(
       inSession(
         db.app,
-        { siteIds: [SITE_A], userId: coordinator.accountId, role: 'hs_coordinator' },
+        { siteIds: [SITE_A], userId: coordinator.accountId, role: 'coordinator' },
         `INSERT INTO incident_event
            (incident_id, site_id, position, from_state, to_state, actor_user_id)
          VALUES ($1, $2, 2, 'reported', 'closed', $3)`,
@@ -408,18 +408,20 @@ describe('la máquina de estados, por los dos caminos', () => {
     ).rejects.toSatisfy((error) => sqlstate(error) === 'HS008');
   });
 
-  it('solo el coordinador investiga, cierra y reabre', async () => {
-    const incidentId = await report();
-
-    // Quien VE el incidente y no puede moverlo recibe `forbidden`.
+  it('las cuentas administrativas investigan, cierran y reabren', async () => {
+    // La equivalencia administrativa permite a ambas cuentas mover el incidente.
     for (const session of [asSupervisor(), asManager()]) {
+      const incidentId = await report();
+
       await expect(
         incidents.transition(session, incidentId, {
           to: 'under_investigation',
           method: 'five_whys',
         }),
-      ).rejects.toMatchObject({ response: { code: 'forbidden' } });
+      ).resolves.toMatchObject({ state: 'under_investigation' });
     }
+
+    const incidentId = await report();
 
     // El miembro del JHSC ni siquiera lo ve, así que recibe "no existe" — y esa
     // diferencia es deseable: un `forbidden` le confirmaría que hay un incidente ahí.
@@ -484,7 +486,7 @@ describe('la máquina de estados, por los dos caminos', () => {
 
     const events = await inSession<{ count: string }>(
       db.app,
-      { siteIds: [SITE_A], userId: coordinator.accountId, role: 'hs_coordinator' },
+      { siteIds: [SITE_A], userId: coordinator.accountId, role: 'coordinator' },
       'SELECT count(*) FROM incident_event WHERE incident_id = $1',
       [incidentId],
     );
@@ -552,7 +554,7 @@ describe('la guarda que da sentido a la máquina: no se cierra con acciones abie
     await expect(
       inSession(
         db.app,
-        { siteIds: [SITE_A], userId: coordinator.accountId, role: 'hs_coordinator' },
+        { siteIds: [SITE_A], userId: coordinator.accountId, role: 'coordinator' },
         `INSERT INTO incident_event
            (incident_id, site_id, position, from_state, to_state, actor_user_id)
          VALUES ($1, $2, 2, 'under_investigation', 'closed', $3)`,
@@ -603,7 +605,7 @@ describe('la investigación obligatoria y la causa raíz', () => {
     await expect(
       inSession(
         db.app,
-        { siteIds: [SITE_A], userId: coordinator.accountId, role: 'hs_coordinator' },
+        { siteIds: [SITE_A], userId: coordinator.accountId, role: 'coordinator' },
         `INSERT INTO incident_event
            (incident_id, site_id, position, from_state, to_state, actor_user_id, reason)
          VALUES ($1, $2, 1, 'reported', 'closed', $3, 'closing without investigating')`,
@@ -658,7 +660,7 @@ describe('la investigación obligatoria y la causa raíz', () => {
     await expect(
       inSession(
         db.app,
-        { siteIds: [SITE_A], userId: coordinator.accountId, role: 'hs_coordinator' },
+        { siteIds: [SITE_A], userId: coordinator.accountId, role: 'coordinator' },
         `INSERT INTO investigation (incident_id, site_id, method, opened_by)
          VALUES ($1, $2, 'cause_tree', $3)`,
         [incidentId, SITE_A, coordinator.accountId],
@@ -672,7 +674,7 @@ describe('la investigación obligatoria y la causa raíz', () => {
     await expect(
       inSession(
         db.app,
-        { siteIds: [SITE_A], userId: coordinator.accountId, role: 'hs_coordinator' },
+        { siteIds: [SITE_A], userId: coordinator.accountId, role: 'coordinator' },
         `UPDATE investigation_cause SET statement = 'another cause'`,
       ),
     ).rejects.toSatisfy((error) => sqlstate(error) === '42501');
@@ -754,7 +756,7 @@ describe('la inmutabilidad de las cinco tablas', () => {
   const asMigratorSession = () => ({
     siteIds: [SITE_A],
     userId: coordinator.accountId,
-    role: 'hs_coordinator',
+    role: 'coordinator',
   });
 
   it('el rol de migración lo frena el trigger, no el privilegio', async () => {
@@ -827,7 +829,7 @@ describe('la visibilidad angosta', () => {
 
 
     const ids = (
-      await incidents.list(sessionFor(coordinator.accountId, 'hs_coordinator', [SITE_A]))
+      await incidents.list(sessionFor(coordinator.accountId, 'coordinator', [SITE_A]))
     ).map((incident) => incident.id);
 
     expect(ids).not.toContain(atB.id);
@@ -850,7 +852,7 @@ describe('la visibilidad angosta', () => {
 
     const rows = await inSession<{ id: string }>(
       db.app,
-      { siteIds: [SITE_A], userId: jhsc.accountId, role: 'jhsc_member' },
+      { siteIds: [SITE_A], userId: jhsc.accountId, role: 'inspector' },
       'SELECT id FROM incident',
     );
 
@@ -865,7 +867,7 @@ describe('la visibilidad angosta', () => {
     for (const table of ['incident_event', 'incident_witness']) {
       const rows = await inSession<{ count: string }>(
         db.app,
-        { siteIds: [SITE_A], userId: jhsc.accountId, role: 'jhsc_member' },
+        { siteIds: [SITE_A], userId: jhsc.accountId, role: 'inspector' },
         `SELECT count(*) FROM ${table} WHERE incident_id = $1`,
         [theirs],
       );
@@ -875,7 +877,7 @@ describe('la visibilidad angosta', () => {
 
     const investigations = await inSession<{ count: string }>(
       db.app,
-      { siteIds: [SITE_A], userId: jhsc.accountId, role: 'jhsc_member' },
+      { siteIds: [SITE_A], userId: jhsc.accountId, role: 'inspector' },
       'SELECT count(*) FROM investigation WHERE incident_id = $1',
       [theirs],
     );
@@ -914,7 +916,7 @@ describe('la visibilidad angosta', () => {
 
     const asCoordinatorFirst = await inSession<{ count: string }>(
       single,
-      { siteIds: [SITE_A], userId: coordinator.accountId, role: 'hs_coordinator' },
+      { siteIds: [SITE_A], userId: coordinator.accountId, role: 'coordinator' },
       'SELECT count(*)::text AS count FROM incident',
     );
 
@@ -1320,7 +1322,7 @@ describe('el segundo padre de la acción correctiva', () => {
     const incidentId = await investigated();
     const rows = await inSession<{ id: string }>(
       db.app,
-      { siteIds: [SITE_A], userId: coordinator.accountId, role: 'hs_coordinator' },
+      { siteIds: [SITE_A], userId: coordinator.accountId, role: 'coordinator' },
       'SELECT id FROM investigation WHERE incident_id = $1',
       [incidentId],
     );
@@ -1370,7 +1372,7 @@ describe('el segundo padre de la acción correctiva', () => {
     const incidentId = await investigated();
     const rows = await inSession<{ id: string }>(
       db.app,
-      { siteIds: [SITE_A], userId: coordinator.accountId, role: 'hs_coordinator' },
+      { siteIds: [SITE_A], userId: coordinator.accountId, role: 'coordinator' },
       'SELECT id FROM investigation WHERE incident_id = $1',
       [incidentId],
     );
@@ -1413,7 +1415,7 @@ describe('el segundo padre de la acción correctiva', () => {
     const incidentId = await investigated();
     const rows = await inSession<{ id: string }>(
       db.app,
-      { siteIds: [SITE_A], userId: coordinator.accountId, role: 'hs_coordinator' },
+      { siteIds: [SITE_A], userId: coordinator.accountId, role: 'coordinator' },
       'SELECT id FROM investigation WHERE incident_id = $1',
       [incidentId],
     );
@@ -1427,7 +1429,7 @@ describe('el segundo padre de la acción correctiva', () => {
       await expect(
         inSession(
           db.app,
-          { siteIds: [SITE_A], userId: coordinator.accountId, role: 'hs_coordinator' },
+          { siteIds: [SITE_A], userId: coordinator.accountId, role: 'coordinator' },
           `INSERT INTO corrective_action
            (site_id, finding_id, investigation_id, assignee_person_id, description,
                due_at, created_by)

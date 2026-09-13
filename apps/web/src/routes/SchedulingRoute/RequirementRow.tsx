@@ -89,7 +89,7 @@ export function RequirementRow({
       </td>
       {/* La etiqueta de teléfono se acorta a «Inspector»: va en la misma línea que la
           frecuencia y «Default» no agrega nada que la columna no diga en escritorio. */}
-      <td data-label="Inspector" className="requirement-row__inspector">
+       <td data-label="Assigned to" className="requirement-row__inspector">
         {rule.default_inspector_name ?? "None"}
       </td>
       <td className="requirement-row__status">

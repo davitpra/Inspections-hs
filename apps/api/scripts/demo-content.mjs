@@ -926,8 +926,8 @@ async function main() {
     const tokens = { inspector: inspector.token, coordinator: coordinator.token };
 
     log(
-      `Cuentas listas: ${INSPECTOR.email} (jhsc_member) y ${COORDINATOR_EMAIL} ` +
-        `(hs_coordinator${coordinatorHadCredential ? ', ya tenía credencial' : ''}).`,
+      `Cuentas listas: ${INSPECTOR.email} (inspector) y ${COORDINATOR_EMAIL} ` +
+        `(coordinator${coordinatorHadCredential ? ', ya tenía credencial' : ''}).`,
     );
 
     const references = await readReferences(pool);
@@ -994,11 +994,11 @@ async function main() {
         'Historial de demo listo. Con qué entrar en http://localhost:5173:',
         '',
         `  ${COORDINATOR_EMAIL} / ${coordinatorPassword}`,
-        '    hs_coordinator. Ve las dos plantas y TODAS las pantallas salvo el pendiente:',
+        '    coordinator. Ve las dos plantas y TODAS las pantallas salvo el pendiente:',
         '    hallazgos, acciones e incidentes.',
         '',
         `  ${INSPECTOR.email} / ${password}`,
-         '    jhsc_member. La cuenta tiene la inspección del mes: `/` tiene la del mes',
+         '    inspector. La cuenta tiene la inspección del mes: `/` tiene la del mes',
         '    corriente, y de ahí salen preparar, capturar y revisar.',
         '',
         'La bandeja de espera (`/outbox`) vive en el dispositivo y no se puede sembrar:',

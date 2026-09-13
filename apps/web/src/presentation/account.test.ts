@@ -11,7 +11,7 @@ function session(overrides: Partial<Session> = {}): Session {
   return {
     userId: USER,
     personId: PERSON,
-    role: 'hs_coordinator',
+    role: 'coordinator',
     siteScope: [SITE],
     email: 'ada.reid@example.com',
     firstName: 'Ada',
@@ -34,7 +34,7 @@ describe('displayName', () => {
   it('cae al rol cuando no trae ni nombre ni email', () => {
     expect(
       displayName(session({ firstName: undefined, lastName: undefined, email: undefined })),
-    ).toBe('H&S coordinator');
+    ).toBe('Coordinator');
   });
 });
 
@@ -54,6 +54,6 @@ describe('initials', () => {
   it('cae a la primera letra del rol cuando no hay ni nombre ni email', () => {
     expect(
       initials(session({ firstName: undefined, lastName: undefined, email: undefined })),
-    ).toBe('H');
+    ).toBe('C');
   });
 });

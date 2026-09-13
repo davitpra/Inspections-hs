@@ -18,6 +18,7 @@ import {
   rosterImportReportSchema,
   rosterQuerySchema,
   updateAccountRequestSchema,
+  updatePersonRequestSchema,
 } from './identity.js';
 
 const PERSON_ID = '11111111-1111-4111-8111-111111111111';
@@ -41,14 +42,14 @@ function validAccountInput() {
   return {
     person_id: PERSON_ID,
     email: 'ada.reid@example.com',
-    role: 'jhsc_member' as const,
+    role: 'inspector' as const,
     site_ids: [SITE_ID],
   };
 }
 
 describe('roleSchema', () => {
   it('acepta los tres roles vigentes', () => {
-    for (const role of ['hs_coordinator', 'jhsc_member', 'management']) {
+    for (const role of ['coordinator', 'inspector', 'management']) {
       expect(roleSchema.safeParse(role).success).toBe(true);
     }
   });
@@ -58,8 +59,9 @@ describe('roleSchema', () => {
     expect(roleSchema.safeParse('external_auditor').success).toBe(false);
   });
 
-  it('rechaza "inspector" — no es un rol, es un campo de la inspección', () => {
-    expect(roleSchema.safeParse('inspector').success).toBe(false);
+  it('rechaza los identificadores de roles retirados', () => {
+    expect(roleSchema.safeParse('hs_coordinator').success).toBe(false);
+    expect(roleSchema.safeParse('jhsc_member').success).toBe(false);
   });
 });
 
@@ -159,6 +161,40 @@ describe('createPersonRequestSchema — el alta a mano (add-person-to-roster-by-
   });
 });
 
+describe('updatePersonRequestSchema — la corrección desde el roster', () => {
+  it('acepta cada campo por separado y los tres juntos', () => {
+    for (const input of [
+      { first_name: 'Ada' },
+      { last_name: 'Reid' },
+      { employee_number: '10473' },
+      { first_name: 'Ada', last_name: 'Reid', employee_number: '10473' },
+    ]) {
+      expect(updatePersonRequestSchema.safeParse(input).success).toBe(true);
+    }
+  });
+
+  it('recorta los campos suministrados', () => {
+    const result = updatePersonRequestSchema.safeParse({
+      first_name: '  Ada  ',
+      last_name: '  Reid  ',
+      employee_number: ' 10473 ',
+    });
+
+    expect(result.success && result.data).toEqual({
+      first_name: 'Ada',
+      last_name: 'Reid',
+      employee_number: '10473',
+    });
+  });
+
+  it('rechaza un objeto vacío, campos en blanco, claves desconocidas y deactivated', () => {
+    expect(updatePersonRequestSchema.safeParse({}).success).toBe(false);
+    expect(updatePersonRequestSchema.safeParse({ first_name: '   ' }).success).toBe(false);
+    expect(updatePersonRequestSchema.safeParse({ nickname: 'Ada' }).success).toBe(false);
+    expect(updatePersonRequestSchema.safeParse({ deactivated: true }).success).toBe(false);
+  });
+});
+
 describe('personOptionSchema', () => {
   it('lleva el número de empleado, que es lo que distingue a dos homónimos', () => {
     const result = personOptionSchema.safeParse({
@@ -252,7 +288,7 @@ describe('personWithAccountSchema', () => {
       ...validPerson(),
       account: {
         id: ACCOUNT_ID,
-        role: 'jhsc_member',
+        role: 'inspector',
         active: true,
         can_sign_in: false,
         email: 'ada.reid@example.com',
@@ -265,7 +301,7 @@ describe('personWithAccountSchema', () => {
   it('rechaza una cuenta sin email — la fila del roster dice a qué dirección se invitó', () => {
     const result = personAccountSchema.safeParse({
       id: ACCOUNT_ID,
-      role: 'jhsc_member',
+      role: 'inspector',
       active: true,
       can_sign_in: false,
     });
@@ -276,7 +312,7 @@ describe('personWithAccountSchema', () => {
   it('sigue rechazando lo que NO es el mínimo del design D2: alcance, credencial, token', () => {
     const result = personAccountSchema.safeParse({
       id: ACCOUNT_ID,
-      role: 'jhsc_member',
+      role: 'inspector',
       active: true,
       can_sign_in: false,
       email: 'ada.reid@example.com',
@@ -325,7 +361,7 @@ describe('createAccountResponseSchema', () => {
     const result = createAccountResponseSchema.safeParse({
       account: {
         id: ACCOUNT_ID,
-        role: 'jhsc_member',
+        role: 'inspector',
         active: true,
         can_sign_in: false,
         email: 'ada.reid@example.com',
@@ -339,7 +375,7 @@ describe('createAccountResponseSchema', () => {
     const result = createAccountResponseSchema.safeParse({
       account: {
         id: ACCOUNT_ID,
-        role: 'jhsc_member',
+        role: 'inspector',
         active: true,
         can_sign_in: false,
         email: 'ada.reid@example.com',
@@ -424,7 +460,7 @@ describe('accountDetailSchema — la lectura de una cuenta (reissue-invitation-l
   it('acepta la cuenta con su email', () => {
     const result = accountDetailSchema.safeParse({
       id: ACCOUNT_ID,
-      role: 'jhsc_member',
+      role: 'inspector',
       active: true,
       can_sign_in: false,
       email: 'ada.reid@example.com',
@@ -436,7 +472,7 @@ describe('accountDetailSchema — la lectura de una cuenta (reissue-invitation-l
   it('rechaza un campo que no es del roster reducido ni del email', () => {
     const result = accountDetailSchema.safeParse({
       id: ACCOUNT_ID,
-      role: 'jhsc_member',
+      role: 'inspector',
       active: true,
       can_sign_in: false,
       email: 'ada.reid@example.com',
@@ -474,14 +510,14 @@ describe('updateAccountRequestSchema — el pedido de PATCH /accounts/:id (desig
 
   it('acepta únicamente la promoción literal a coordinador', () => {
     expect(
-      updateAccountRequestSchema.safeParse({ promote_to: 'hs_coordinator' }).success,
+      updateAccountRequestSchema.safeParse({ promote_to: 'coordinator' }).success,
     ).toBe(true);
     expect(updateAccountRequestSchema.safeParse({ promote_to: 'management' }).success).toBe(false);
   });
 
-  it('acepta únicamente la degradación literal a miembro del JHSC', () => {
-    expect(updateAccountRequestSchema.safeParse({ demote_to: 'jhsc_member' }).success).toBe(true);
-    expect(updateAccountRequestSchema.safeParse({ demote_to: 'hs_coordinator' }).success).toBe(false);
+  it('acepta únicamente la degradación literal a inspector', () => {
+    expect(updateAccountRequestSchema.safeParse({ demote_to: 'inspector' }).success).toBe(true);
+    expect(updateAccountRequestSchema.safeParse({ demote_to: 'coordinator' }).success).toBe(false);
   });
 
   it('rechaza combinar la promoción con otro acto', () => {
@@ -491,20 +527,20 @@ describe('updateAccountRequestSchema — el pedido de PATCH /accounts/:id (desig
       { invite: true },
     ]) {
       expect(
-        updateAccountRequestSchema.safeParse({ promote_to: 'hs_coordinator', ...other }).success,
+        updateAccountRequestSchema.safeParse({ promote_to: 'coordinator', ...other }).success,
       ).toBe(false);
     }
   });
 
   it('rechaza combinar la degradación con otro acto', () => {
     for (const other of [
-      { promote_to: 'hs_coordinator' as const },
+      { promote_to: 'coordinator' as const },
       { deactivated: true as const },
       { email: 'ada.reid@example.com' },
       { invite: true },
     ]) {
       expect(
-        updateAccountRequestSchema.safeParse({ demote_to: 'jhsc_member', ...other }).success,
+        updateAccountRequestSchema.safeParse({ demote_to: 'inspector', ...other }).success,
       ).toBe(false);
     }
   });
@@ -551,7 +587,7 @@ describe('updateAccountRequestSchema — el pedido de PATCH /accounts/:id (desig
 
 describe('isAdministrator', () => {
   it('admite coordinador y gerencia, no al miembro JHSC', () => {
-    expect(ROLES.filter(isAdministrator)).toEqual(['hs_coordinator', 'management']);
-    expect(isAdministrator('jhsc_member')).toBe(false);
+    expect(ROLES.filter(isAdministrator)).toEqual(['coordinator', 'management']);
+    expect(isAdministrator('inspector')).toBe(false);
   });
 });

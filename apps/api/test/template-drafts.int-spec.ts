@@ -47,7 +47,7 @@ let coordinatorId: string;
 let supervisorId: string;
 let otherSupervisorId: string;
 
-const asCoordinator = () => ({ userId: coordinatorId, role: 'hs_coordinator', siteIds: [SITE] });
+const asCoordinator = () => ({ userId: coordinatorId, role: 'coordinator', siteIds: [SITE] });
 
 /** Una sección con un ítem: el borrador publicable más chico que existe. */
 function usableDocument(itemKey = 'guard.fitted'): TemplateDraftDocument {
@@ -92,14 +92,14 @@ beforeAll(async () => {
   await registerSite(db.migrator, SITE, 'drafts', 'Drafts');
   await registerSite(db.migrator, OTHER_SITE, 'drafts-other', 'Drafts other');
 
-  const coordinator = await createAccount(db.app, { siteIds: [SITE], role: 'hs_coordinator' });
+  const coordinator = await createAccount(db.app, { siteIds: [SITE], role: 'coordinator' });
   coordinatorId = coordinator.accountId;
 
-  const supervisor = await createAccount(db.app, { siteIds: [SITE], role: 'jhsc_member' });
+  const supervisor = await createAccount(db.app, { siteIds: [SITE], role: 'inspector' });
   supervisorId = supervisor.accountId;
   const otherSupervisor = await createAccount(db.app, {
     siteIds: [OTHER_SITE],
-    role: 'jhsc_member',
+    role: 'inspector',
   });
   otherSupervisorId = otherSupervisor.accountId;
 }, 120_000);
@@ -220,7 +220,7 @@ describe('lo que el motor permite y lo que no', () => {
 
 describe('quién puede escribir plantillas', () => {
   it('lo niega a todo rol que no sea el coordinador, también en la lectura', async () => {
-    for (const role of ['jhsc_member']) {
+    for (const role of ['inspector']) {
       const other = { userId: supervisorId, role, siteIds: [SITE] };
       const rejected = { response: { code: 'template_draft_forbidden' } };
 
@@ -244,7 +244,7 @@ describe('quién puede escribir plantillas', () => {
     const wide = await templates.listDrafts(asCoordinator());
     const narrow = await templates.listDrafts({
       userId: coordinatorId,
-      role: 'hs_coordinator',
+      role: 'coordinator',
       siteIds: [],
     });
 
@@ -721,11 +721,11 @@ describe('publicar un borrador', () => {
       published.template_version_id,
     );
     const supervisorRead = await templates.getPublishedVersion(
-      { userId: supervisorId, role: 'jhsc_member', siteIds: [SITE] },
+      { userId: supervisorId, role: 'inspector', siteIds: [SITE] },
       published.template_version_id,
     );
     const otherPlantRead = await templates.getPublishedVersion(
-      { userId: otherSupervisorId, role: 'jhsc_member', siteIds: [OTHER_SITE] },
+      { userId: otherSupervisorId, role: 'inspector', siteIds: [OTHER_SITE] },
       published.template_version_id,
     );
 
@@ -835,7 +835,7 @@ describe('publicar un borrador', () => {
     const draft = await newDraft('Forbidden publication');
 
     await expect(
-      templates.publishDraft({ userId: supervisorId, role: 'jhsc_member', siteIds: [SITE] }, draft.id),
+      templates.publishDraft({ userId: supervisorId, role: 'inspector', siteIds: [SITE] }, draft.id),
     ).rejects.toMatchObject({ response: { code: 'template_draft_forbidden' } });
   });
 
@@ -857,7 +857,7 @@ describe('publicar un borrador', () => {
     const published = await templates.publishDraft(asCoordinator(), draft.id);
     const offered = await templates.list({
       userId: coordinatorId,
-      role: 'hs_coordinator',
+      role: 'coordinator',
       siteIds: [OTHER_SITE],
     });
 
@@ -910,7 +910,7 @@ async function countPublished(): Promise<Record<string, string>> {
 describe('el alcance de plantas de un borrador', () => {
   it('nace con todo el alcance de la cuenta que lo creó', async () => {
     const draft = await templates.createDraft(
-      { userId: coordinatorId, role: 'hs_coordinator', siteIds: [SITE, OTHER_SITE] },
+      { userId: coordinatorId, role: 'coordinator', siteIds: [SITE, OTHER_SITE] },
       { name: 'Born with both plants' },
     );
 
@@ -919,12 +919,12 @@ describe('el alcance de plantas de un borrador', () => {
 
    it('se puede achicar y el guardado lo devuelve', async () => {
     const draft = await templates.createDraft(
-      { userId: coordinatorId, role: 'hs_coordinator', siteIds: [SITE, OTHER_SITE] },
+      { userId: coordinatorId, role: 'coordinator', siteIds: [SITE, OTHER_SITE] },
       { name: 'Narrowed to one plant' },
     );
 
     const saved = await templates.saveDraft(
-      { userId: coordinatorId, role: 'hs_coordinator', siteIds: [SITE, OTHER_SITE] },
+      { userId: coordinatorId, role: 'coordinator', siteIds: [SITE, OTHER_SITE] },
       draft.id,
       {
         name: draft.name,
@@ -976,12 +976,12 @@ describe('el alcance de plantas de un borrador', () => {
 
   it('el alcance NO recorta quién ve el borrador: no es aislamiento', async () => {
     const narrowed = await templates.createDraft(
-      { userId: coordinatorId, role: 'hs_coordinator', siteIds: [SITE, OTHER_SITE] },
+      { userId: coordinatorId, role: 'coordinator', siteIds: [SITE, OTHER_SITE] },
       { name: 'Visible to every coordinator' },
     );
 
     await templates.saveDraft(
-      { userId: coordinatorId, role: 'hs_coordinator', siteIds: [SITE, OTHER_SITE] },
+      { userId: coordinatorId, role: 'coordinator', siteIds: [SITE, OTHER_SITE] },
       narrowed.id,
       {
         name: narrowed.name,
@@ -993,7 +993,7 @@ describe('el alcance de plantas de un borrador', () => {
     // Una cuenta cuyo alcance es SOLO la otra planta lo sigue viendo entero.
     const listed = await templates.listDrafts({
       userId: coordinatorId,
-      role: 'hs_coordinator',
+      role: 'coordinator',
       siteIds: [SITE],
     });
 
@@ -1002,7 +1002,7 @@ describe('el alcance de plantas de un borrador', () => {
 
   it('rechaza una planta dada de baja y no escribe nada', async () => {
     const draft = await templates.createDraft(
-      { userId: coordinatorId, role: 'hs_coordinator', siteIds: [SITE, OTHER_SITE] },
+      { userId: coordinatorId, role: 'coordinator', siteIds: [SITE, OTHER_SITE] },
       { name: 'Deactivated plant save' },
     );
 
@@ -1013,7 +1013,7 @@ describe('el alcance de plantas de un borrador', () => {
     try {
       await expect(
         templates.saveDraft(
-          { userId: coordinatorId, role: 'hs_coordinator', siteIds: [SITE, OTHER_SITE] },
+          { userId: coordinatorId, role: 'coordinator', siteIds: [SITE, OTHER_SITE] },
           draft.id,
           {
             name: draft.name,
@@ -1040,7 +1040,7 @@ describe('el alcance de plantas de un borrador', () => {
 
     try {
       const draft = await templates.createDraft(
-        { userId: coordinatorId, role: 'hs_coordinator', siteIds: [SITE, OTHER_SITE] },
+        { userId: coordinatorId, role: 'coordinator', siteIds: [SITE, OTHER_SITE] },
         { name: 'Active plants only' },
       );
 
@@ -1054,12 +1054,12 @@ describe('el alcance de plantas de un borrador', () => {
 
   it('sigue leyendo el alcance guardado aunque después se dé de baja una planta', async () => {
     const draft = await templates.createDraft(
-      { userId: coordinatorId, role: 'hs_coordinator', siteIds: [SITE, OTHER_SITE] },
+      { userId: coordinatorId, role: 'coordinator', siteIds: [SITE, OTHER_SITE] },
       { name: 'Reads retired plant scope' },
     );
 
     await templates.saveDraft(
-      { userId: coordinatorId, role: 'hs_coordinator', siteIds: [SITE, OTHER_SITE] },
+      { userId: coordinatorId, role: 'coordinator', siteIds: [SITE, OTHER_SITE] },
       draft.id,
       {
         name: draft.name,

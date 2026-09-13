@@ -190,7 +190,7 @@ describe('el sitio tiene identidad estable y no se borra', () => {
 
   it('la aplicación puede dar de alta una planta desde el servicio', async () => {
     const created = await sites.create(
-      { userId: ACTOR, role: 'hs_coordinator', siteIds: [SITE_A, SITE_B] },
+      { userId: ACTOR, role: 'coordinator', siteIds: [SITE_A, SITE_B] },
       { code: 'catalog-c', name: 'Catalog C' },
     );
 
@@ -694,13 +694,13 @@ describe('el catálogo se carga por seed', () => {
 describe('dar de alta desde la consola', () => {
   const asCoordinator = () => ({
     userId: ACTOR,
-    role: 'hs_coordinator',
+    role: 'coordinator',
     siteIds: [SITE_A, SITE_B],
   });
 
   it('da alcance solo al coordinador que la registra', async () => {
     const other = await createAccount(db.migrator, {
-      role: 'hs_coordinator',
+      role: 'coordinator',
       siteIds: [SITE_A],
     });
     const created = await sites.create(asCoordinator(), {
@@ -720,7 +720,7 @@ describe('dar de alta desde la consola', () => {
       'SELECT site_id FROM user_site_scope WHERE user_id = $1 AND site_id = $2 AND revoked_at IS NULL',
       [other.accountId, created.id],
     )).toHaveLength(0);
-    expect((await sites.list({ userId: other.accountId, role: 'hs_coordinator', siteIds: [SITE_A] }))
+    expect((await sites.list({ userId: other.accountId, role: 'coordinator', siteIds: [SITE_A] }))
       .map((site) => site.id)).not.toContain(created.id);
   });
 
@@ -760,7 +760,7 @@ describe('dar de alta desde la consola', () => {
     await sites.create(asCoordinator(), { code, name: 'First plant' });
 
     await expect(
-      sites.create({ userId: ACTOR, role: 'jhsc_member', siteIds: [SITE_A, SITE_B] }, {
+      sites.create({ userId: ACTOR, role: 'inspector', siteIds: [SITE_A, SITE_B] }, {
         code: uniqueCode('site-member'),
         name: 'Forbidden plant',
       }),
@@ -860,7 +860,7 @@ describe('dar de alta desde la consola', () => {
   it('el motor rechaza una planta fuera del alcance, no el servicio', async () => {
     await expect(
       locations.createLocation(
-        { userId: ACTOR, role: 'hs_coordinator', siteIds: [SITE_A] },
+        { userId: ACTOR, role: 'coordinator', siteIds: [SITE_A] },
         SITE_B,
         { code: uniqueCode('outside'), name: 'Outside the scope' },
       ),
@@ -869,7 +869,7 @@ describe('dar de alta desde la consola', () => {
 
   it('y con la planta en el alcance, crear ahí funciona', async () => {
     const created = await locations.createLocation(
-      { userId: ACTOR, role: 'hs_coordinator', siteIds: [SITE_B] },
+      { userId: ACTOR, role: 'coordinator', siteIds: [SITE_B] },
       SITE_B,
       { code: uniqueCode('inside'), name: `Inside ${uniqueCode('i')}` },
     );
@@ -878,7 +878,7 @@ describe('dar de alta desde la consola', () => {
   });
 
   it('se lo niega al miembro del JHSC', async () => {
-    for (const role of ['jhsc_member']) {
+    for (const role of ['inspector']) {
       const other = { userId: ACTOR, role, siteIds: [SITE_A] };
 
       await expect(
@@ -894,7 +894,7 @@ describe('dar de alta desde la consola', () => {
 describe('retirar una ubicación compartida desde la consola', () => {
   const asCoordinator = (siteIds: string[] = [SITE_A, SITE_B]) => ({
     userId: ACTOR,
-    role: 'hs_coordinator',
+    role: 'coordinator',
     siteIds,
   });
 
@@ -948,7 +948,7 @@ describe('retirar una ubicación compartida desde la consola', () => {
 
     await expect(
       locations.deactivateOrganizationLocation(
-        { userId: ACTOR, role: 'jhsc_member', siteIds: [SITE_A] },
+        { userId: ACTOR, role: 'inspector', siteIds: [SITE_A] },
         shared.id,
       ),
     ).rejects.toThrow(/coordinator/);
@@ -977,7 +977,7 @@ describe('retirar una ubicación compartida desde la consola', () => {
 });
 
 describe('gestionar una planta desde la consola de ubicaciones', () => {
-  const coordinator = { userId: ACTOR, role: 'hs_coordinator', siteIds: [SITE_A, SITE_B] };
+  const coordinator = { userId: ACTOR, role: 'coordinator', siteIds: [SITE_A, SITE_B] };
 
   it('renombra solo al coordinador y conserva el code', async () => {
     const renamed = await sites.update(coordinator, SITE_A, { name: 'Catalog A managed' });
@@ -989,7 +989,7 @@ describe('gestionar una planta desde la consola de ubicaciones', () => {
     });
 
     await expect(
-      sites.update({ ...coordinator, role: 'jhsc_member' }, SITE_A, { name: 'Not allowed' }),
+      sites.update({ ...coordinator, role: 'inspector' }, SITE_A, { name: 'Not allowed' }),
     ).rejects.toThrow(/coordinator/);
 
     await expect(
@@ -1161,7 +1161,7 @@ describe('gestionar una planta desde la consola de ubicaciones', () => {
     await expect(sites.reactivate({ ...coordinator, siteIds: [SITE_A] }, SITE_B)).rejects.toThrow(
       /not found/,
     );
-    await expect(sites.reactivate({ ...coordinator, role: 'jhsc_member' }, SITE_A)).rejects.toThrow(
+    await expect(sites.reactivate({ ...coordinator, role: 'inspector' }, SITE_A)).rejects.toThrow(
       /coordinator/,
     );
 

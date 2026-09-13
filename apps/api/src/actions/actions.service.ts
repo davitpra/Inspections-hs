@@ -47,8 +47,8 @@ import { foreignEvidenceKeys } from './object-key';
  *
  *   - Que la transición esté en la máquina de estados   → guarda `HS004`.
  *   - Que el stream no se bifurque bajo concurrencia    → único `(action_id, position)`.
- *   - Que quien verifica no sea quien ejecutó, salvo
- *     el coordinador de H&S (ADR-019)                  → guarda `HS005`.
+     *   - Que quien verifica no sea quien ejecutó, salvo
+     *     el coordinador (ADR-019)                         → guarda `HS005`.
  *   - Que una acción tenga al menos un evento           → restricción diferida `HS007`.
  *   - Que rechazar una verificación lleve motivo        → CHECK de motivo.
  *   - Que la acción sea del sitio de su hallazgo        → FK compuesta.
@@ -79,7 +79,7 @@ export class ActionsService {
    * firmó el envío y en uno manual quien lo cargó. Es la misma clase de regla que
    * `requireActor` aplica sobre una transición: una RELACIÓN con este registro puntual, no
    * un rol ancho. Es una excepción declarada a la equivalencia administrativa: gerencia
-   * llega por esa relación, no por compartir permisos con coordinación. Un `jhsc_member`
+     * llega por esa relación, no por compartir permisos con coordinación. Un `inspector`
    * que no reportó este hallazgo sigue sin poder abrir nada.
    *
    * El hallazgo se resuelve ANTES de comprobar el permiso: uno fuera del alcance tiene que
@@ -95,9 +95,9 @@ export class ActionsService {
     return this.db.withSessionClient(session, async (client) => {
       const finding = await this.requireFinding(client, findingId);
 
-      if (session.role !== 'hs_coordinator' && session.userId !== finding.reportedBy) {
+      if (session.role !== 'coordinator' && session.userId !== finding.reportedBy) {
         throw actionForbidden(
-          'Only the HS coordinator or the person who raised the finding opens a corrective action',
+          'Only the coordinator or the person who raised the finding opens a corrective action',
         );
       }
 
@@ -141,14 +141,14 @@ export class ActionsService {
       if (!header) throw actionNotFound();
       if (header.findingId) await this.lockFinding(client, header.findingId);
 
-      if (session.role !== 'hs_coordinator') {
+      if (session.role !== 'coordinator') {
         const reportedBy = header.findingId
           ? await this.findingReporter(client, header.findingId)
           : null;
 
         if (session.userId !== reportedBy) {
           throw actionForbidden(
-            'Only the HS coordinator or the person who raised the finding edits the assignment',
+            'Only the coordinator or the person who raised the finding edits the assignment',
           );
         }
       }
@@ -236,11 +236,11 @@ export class ActionsService {
         throw invalidTransition('Refusing a verification requires a reason');
       }
 
-      // El coordinador de H&S está exento (ADR-019): es la única cuenta que declara trabajo
+      // El coordinador está exento (ADR-019): es la única cuenta que declara trabajo
       // hecho por una persona del roster sin usuario, y la regla le retenía en
       // `awaiting_verification` trabajo ya terminado. La excepción no se extiende a
       // `management`: una segunda cuenta administrativa puede verificar su trabajo.
-      if (transition.requires.includes('not_executor') && session.role !== 'hs_coordinator') {
+      if (transition.requires.includes('not_executor') && session.role !== 'coordinator') {
         const executor = await lastExecutor(client, actionId);
 
         // El motor lo comprueba otra vez con `HS005`, con la misma excepción y leyendo el rol
@@ -306,8 +306,8 @@ export class ActionsService {
     investigationId: string,
     payload: CreateActionRequest,
   ): Promise<Action> {
-    if (session.role !== 'hs_coordinator') {
-      throw actionForbidden('Only the HS coordinator opens a corrective action');
+    if (session.role !== 'coordinator') {
+      throw actionForbidden('Only the coordinator opens a corrective action');
     }
 
     return this.db.withSessionClient(session, async (client) => {

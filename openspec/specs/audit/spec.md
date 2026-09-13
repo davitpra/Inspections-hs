@@ -3,9 +3,7 @@
 Records every consequential event as an append-only entry linked into a per-site SHA-256 hash
 chain, so that tampering with the regulatory record is detectable rather than a matter of taking
 the operator's word for it.
-
 ## Requirements
-
 ### Requirement: Audit entries are append-only
 
 The system SHALL store audit entries in a table that is immutable under the rules of the
@@ -304,7 +302,6 @@ declared rather than only the last.
 - **WHEN** the account renames, deactivates or reactivates one site
 - **THEN** no corresponding lifecycle or unlink entry is written with the other site's `site_id`
 
-
 ### Requirement: An audit entry names a real account or nobody
 
 The system SHALL enforce that `audit_log.actor_user_id` references an existing `app_user` row.
@@ -341,15 +338,17 @@ them, and an entry SHALL NOT be attributable to a shared or generic account.
 
 ### Requirement: Roster changes are audited by the database, not by the caller
 
-The system SHALL record an audit entry for every creation, rename, transfer, deactivation and
-reactivation of a `person`, written by the database as part of the same transaction as the change
-itself. A committed roster change with no corresponding audit entry MUST be an impossible state,
-and producing the entry SHALL NOT depend on the endpoint or the importer remembering to write it.
+The system SHALL record an audit entry for every creation, rename, renumbering, transfer,
+deactivation and reactivation of a `person`, written by the database as part of the same
+transaction as the change itself. A committed roster change with no corresponding audit entry MUST
+be an impossible state, and producing the entry SHALL NOT depend on the endpoint or the importer
+remembering to write it.
 
 Each entry SHALL carry the `site_id` of the person, an `event_type` naming the operation, and a
 `payload` containing the person's identifier and `employee_number` together with the values that
 changed. A transfer SHALL be recorded in the chains of both the site left and the site joined,
-because each workplace's record must show who its people are.
+because each workplace's record must show who its people are. A single change that alters several
+of these facts SHALL write one entry per fact.
 
 #### Scenario: Creating a person writes an entry
 
@@ -363,6 +362,18 @@ because each workplace's record must show who its people are.
 - **WHEN** a `person` row's `last_name` is updated
 - **THEN** an `audit_log` entry exists with an `event_type` identifying a rename
 - **AND** its `payload` contains both the previous and the new name
+
+#### Scenario: Renumbering a person writes an entry carrying both numbers
+
+- **WHEN** a `person` row's `employee_number` is updated
+- **THEN** an `audit_log` entry exists with an `event_type` identifying a renumbering, distinct from
+  a rename
+- **AND** its `payload` contains both the previous and the new `employee_number`
+
+#### Scenario: Correcting a name and a number at once writes two entries
+
+- **WHEN** a single update changes a `person` row's `first_name` and its `employee_number`
+- **THEN** one rename entry and one renumbering entry exist for that update
 
 #### Scenario: A transfer is recorded in both sites
 
@@ -393,9 +404,15 @@ because each workplace's record must show who its people are.
 The system SHALL record an audit entry for the creation of an account, for a change of its `role`
 or its `email`, for its deactivation and reactivation, and for every grant and revocation of a
 site scope, written by the database in the same transaction as the change.
-The promotion of a `jhsc_member` to `hs_coordinator` and the demotion of an `hs_coordinator` to
-`jhsc_member` SHALL each be recorded as the role change it is, and SHALL be the only role changes
-the system produces.
+The promotion of an `inspector` to `coordinator` and the demotion of a `coordinator` to
+`inspector` SHALL each be recorded as the role change it is, and SHALL be the only role changes
+the system produces, apart from the single conversion of `hs_coordinator` to `coordinator` and of
+`jhsc_member` to `inspector` that renames the roles. That conversion SHALL be recorded in the same
+way, as a role change naming the retired identifier as the previous `role`.
+
+Entries written before the roles were renamed, whose payload names `hs_coordinator` or
+`jhsc_member`, SHALL remain in their chains unchanged and readable, and the chains SHALL continue to
+verify.
 
 Because an account is not itself a site-scoped record while every audit entry belongs to exactly
 one site, an account event SHALL be written once into the chain of each site in the account's
@@ -411,15 +428,30 @@ revoked. "Who was given access to this workplace, and when" is part of that work
 
 #### Scenario: A promotion is recorded with both roles
 
-- **WHEN** an account's `role` is changed from `jhsc_member` to `hs_coordinator`
+- **WHEN** an account's `role` is changed from `inspector` to `coordinator`
 - **THEN** an entry exists in the chain of every site in the account's scope
 - **AND** its `payload` contains the previous and the new `role`
 
 #### Scenario: A demotion is recorded with both roles
 
-- **WHEN** an account's `role` is changed from `hs_coordinator` to `jhsc_member`
+- **WHEN** an account's `role` is changed from `coordinator` to `inspector`
 - **THEN** an entry exists in the chain of every site in the account's scope
 - **AND** its `payload` contains the previous and the new `role`
+
+#### Scenario: Renaming the roles is recorded as a role change
+
+- **GIVEN** an account whose `role` is `jhsc_member`, scoped to `st-thomas`
+- **WHEN** the roles are renamed
+- **THEN** an entry exists in the chain of `st-thomas` whose `payload` carries `previous_role`
+  `jhsc_member` and `role` `inspector`
+
+#### Scenario: Entries naming the retired identifiers stay in the chain
+
+- **GIVEN** a site whose chain contains an account creation entry whose `role` is `hs_coordinator`,
+  written before the roles were renamed
+- **WHEN** that chain is read
+- **THEN** the entry is present and unchanged
+- **AND** the chain verifies
 
 #### Scenario: An email change is recorded with both values
 
@@ -469,7 +501,7 @@ addition to the per-person entries the import produces. The entry SHALL carry th
 
 #### Scenario: The summary entry names the acting account
 
-- **WHEN** an import is run by an `hs_coordinator` account
+- **WHEN** an import is run by a `coordinator` account
 - **THEN** every entry it produced carries that account's identifier as `actor_user_id`
 
 ### Requirement: Authentication events are recorded in the chain
@@ -499,7 +531,7 @@ record that it once occurred.
 
 #### Scenario: An invitation is recorded with who issued it
 
-- **WHEN** an `hs_coordinator` session issues an invitation for another account
+- **WHEN** a `coordinator` session issues an invitation for another account
 - **THEN** an `audit_log` entry exists whose `payload` names the invited `user_id` and whose
   `actor_user_id` is the coordinator's account
 
@@ -716,7 +748,7 @@ why it changed.
 
 #### Scenario: A rejected classification leaves no entry
 
-- **WHEN** a classification is rejected because the account is not the HS coordinator
+- **WHEN** a classification is rejected because the account is not the coordinator
 - **THEN** the site's chain is unchanged
 
 ### Requirement: The creation of a corrective action is recorded in the chain by the database
@@ -730,7 +762,7 @@ closure SHALL NOT append audit entries.
 
 #### Scenario: Creating an action appends one entry
 
-- **WHEN** the HS coordinator creates a corrective action
+- **WHEN** the coordinator creates a corrective action
 - **THEN** one new `audit_log` entry of type `action.created` exists for that site
 - **AND** its payload omits `assignee_person_id`, `description` and `due_at`
 
@@ -812,7 +844,7 @@ linked into the site's chain like any other.
 
 - **GIVEN** an action overdue by four days
 - **WHEN** the escalation job runs
-- **THEN** one `audit_log` entry of type `action.escalated` exists with `level` `hs_coordinator`
+- **THEN** one `audit_log` entry of type `action.escalated` exists with `level` `coordinator`
 - **AND** its `actor_user_id` is null
 
 #### Scenario: Repeated runs append nothing further
@@ -826,7 +858,7 @@ linked into the site's chain like any other.
 
 - **GIVEN** an action overdue by eight days that escalated to both levels
 - **WHEN** its escalation entries are read
-- **THEN** one carries `level` `hs_coordinator` and the other `level` `management`
+- **THEN** one carries `level` `coordinator` and the other `level` `management`
 - **AND** each names the `due_at` it passed and how many days late it was
 
 ### Requirement: A reported incident is recorded in the chain by the database
@@ -962,7 +994,7 @@ the `scheduled_inspection_id`, `site_id`, `period_start`, `period_end`, `templat
 
 #### Scenario: Making a future period visible appends one audit entry
 
-- **WHEN** an `hs_coordinator` advances `visible_early` from `false` to `true`
+- **WHEN** a `coordinator` advances `visible_early` from `false` to `true`
 - **THEN** exactly one `inspection.visibility_advanced` entry is appended for that
   `scheduled_inspection_id`
 - **AND** its actor is the requesting account

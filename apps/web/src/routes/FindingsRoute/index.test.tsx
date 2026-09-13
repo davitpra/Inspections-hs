@@ -90,7 +90,7 @@ function renderRoute(): void {
 }
 
 beforeEach(() => {
-  useAppSession.mockReturnValue({ account: { userId: USER, role: 'jhsc_member' }, ready: true });
+  useAppSession.mockReturnValue({ account: { userId: USER, role: 'inspector' }, ready: true });
   listSites.mockResolvedValue([{ id: SITE, name: 'Glencoe' }]);
 });
 
@@ -166,7 +166,7 @@ describe('FindingsRoute', () => {
     expect(within(table).queryByRole('columnheader', { name: 'Inspector' })).toBeNull();
   });
 
-  it.each(['hs_coordinator', 'management'] as const)(
+  it.each(['coordinator', 'management'] as const)(
     '%s puede revisar hallazgos de inspecciones de otros inspectores',
     async (role) => {
       useAppSession.mockReturnValue({ account: { userId: USER, role }, ready: true });
@@ -187,7 +187,7 @@ describe('FindingsRoute', () => {
       const table = await screen.findByRole('table');
       expect(within(table).getAllByRole('row')).toHaveLength(2);
       expect(screen.getAllByText('Other inspection')).toHaveLength(2);
-      expect(within(table).getByRole('columnheader', { name: 'Inspector' })).toBeTruthy();
+      expect(within(table).getByRole('columnheader', { name: 'Assigned to' })).toBeTruthy();
       expect(within(table).getByText('Jordan Lee')).toBeTruthy();
     },
   );
