@@ -1,7 +1,10 @@
 import { useId } from 'react';
 import type { ChoiceOption, TemplateDraftItem } from '@hs/contracts';
 
-import { YES_NO_NA_FAILS_ON_OPTIONS } from '../../presentation/templates';
+import {
+  YES_NO_FAILS_ON_OPTIONS,
+  YES_NO_NA_FAILS_ON_OPTIONS,
+} from '../../presentation/templates';
 import { ChoiceOptionsEditor } from './ChoiceOptionsEditor';
 
 /**
@@ -85,10 +88,7 @@ export function ResponseTypeConfig({
     case 'yes_no':
       return failsOn(
         item.fails_on,
-        [
-          { value: 'no', label: 'No' },
-          { value: 'yes', label: 'Yes' },
-        ],
+        YES_NO_FAILS_ON_OPTIONS,
         'The other answer is treated as compliant.',
       );
 

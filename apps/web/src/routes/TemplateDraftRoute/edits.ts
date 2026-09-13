@@ -350,46 +350,6 @@ export function changeResponseType(
   });
 }
 
-/** Escribe o quita la prescripción sin tocar la configuración de la pregunta. */
-export function setFinding(
-  document: TemplateDraftDocument,
-  sectionIndex: number,
-  itemIndex: number,
-  finding: NonNullable<TemplateDraftItem['finding']> | null,
-): TemplateDraftDocument {
-  return withItem(document, sectionIndex, itemIndex, (item) => {
-    const next = { ...item };
-
-    if (finding === null) {
-      delete next.finding;
-    } else {
-      next.finding = finding;
-    }
-
-    return next;
-  });
-}
-
-/**
- * Cambia un campo de configuración del tipo actual.
- *
- * Genérico a propósito: nueve tipos con dos o tres campos cada uno serían veinte funciones
- * casi idénticas, y la que faltara se descubriría en pantalla. El `field in item` deja el
- * ítem intacto ante un campo que su tipo no tiene, que es lo que evita que el documento
- * quede con basura de un tipo anterior.
- */
-export function setConfig(
-  document: TemplateDraftDocument,
-  sectionIndex: number,
-  itemIndex: number,
-  field: string,
-  value: number | string | readonly ChoiceOption[],
-): TemplateDraftDocument {
-  return withItem(document, sectionIndex, itemIndex, (item) =>
-    field in item ? ({ ...item, [field]: value } as TemplateDraftItem) : item,
-  );
-}
-
 /** Todas las `item_key` del documento, para evitar colisiones al generar una nueva. */
 export function allItemKeys(document: TemplateDraftDocument): string[] {
   return document.sections.flatMap((section) => section.items.map((item) => item.item_key));
@@ -414,69 +374,102 @@ export function freeKey(prefix: string, taken: readonly string[]): string {
   return `${prefix}-${suffix}`;
 }
 
+/**
+ * Reemplaza un ítem entero. Es la única escritura del sheet de la pregunta: la configuración
+ * del tipo y la acción correctiva se editan en un borrador local del ítem, y guardar lo
+ * escribe de una vez —dos escrituras seguidas sobre el mismo documento se pisarían.
+ */
+export function replaceItem(
+  document: TemplateDraftDocument,
+  sectionIndex: number,
+  itemIndex: number,
+  item: TemplateDraftItem,
+): TemplateDraftDocument {
+  return withItem(document, sectionIndex, itemIndex, () => item);
+}
+
+// ---------------------------------------------------------------------------
+// Operaciones sobre un ítem suelto: las usa el borrador local del sheet, que todavía no
+// escribió nada en el documento.
+
+/** Escribe o quita la prescripción sin tocar la configuración de la pregunta. */
+export function setItemFinding(
+  item: TemplateDraftItem,
+  finding: NonNullable<TemplateDraftItem['finding']> | null,
+): TemplateDraftItem {
+  const next = { ...item };
+
+  if (finding === null) {
+    delete next.finding;
+  } else {
+    next.finding = finding;
+  }
+
+  return next;
+}
+
+/**
+ * Cambia un campo de configuración del tipo actual.
+ *
+ * Genérico a propósito: nueve tipos con dos o tres campos cada uno serían veinte funciones
+ * casi idénticas, y la que faltara se descubriría en pantalla. El `field in item` deja el
+ * ítem intacto ante un campo que su tipo no tiene, que es lo que evita que el documento
+ * quede con basura de un tipo anterior.
+ */
+export function configureItem(
+  item: TemplateDraftItem,
+  field: string,
+  value: number | string | readonly ChoiceOption[],
+): TemplateDraftItem {
+  return field in item ? ({ ...item, [field]: value } as TemplateDraftItem) : item;
+}
+
 // ---------------------------------------------------------------------------
 // Opciones de los ítems de selección
 
-export function addOption(
-  document: TemplateDraftDocument,
-  sectionIndex: number,
-  itemIndex: number,
-): TemplateDraftDocument {
-  return withItem(document, sectionIndex, itemIndex, (item) => {
-    if (item.response_type !== 'single_choice' && item.response_type !== 'multi_choice') {
-      return item;
-    }
+export function addItemOption(item: TemplateDraftItem): TemplateDraftItem {
+  if (item.response_type !== 'single_choice' && item.response_type !== 'multi_choice') {
+    return item;
+  }
 
-    return {
-      ...item,
-      options: [
-        ...item.options,
-        {
-          value: freeKey(
-            'option',
-            item.options.map((option) => option.value),
-          ),
-          label: '',
-        },
-      ],
-    };
-  });
+  return {
+    ...item,
+    options: [
+      ...item.options,
+      {
+        value: freeKey(
+          'option',
+          item.options.map((option) => option.value),
+        ),
+        label: '',
+      },
+    ],
+  };
 }
 
-export function setOption(
-  document: TemplateDraftDocument,
-  sectionIndex: number,
-  itemIndex: number,
+export function changeItemOption(
+  item: TemplateDraftItem,
   optionIndex: number,
   change: Partial<ChoiceOption>,
-): TemplateDraftDocument {
-  return withItem(document, sectionIndex, itemIndex, (item) => {
-    if (item.response_type !== 'single_choice' && item.response_type !== 'multi_choice') {
-      return item;
-    }
+): TemplateDraftItem {
+  if (item.response_type !== 'single_choice' && item.response_type !== 'multi_choice') {
+    return item;
+  }
 
-    const options = [...item.options];
-    const option = options[optionIndex];
+  const options = [...item.options];
+  const option = options[optionIndex];
 
-    if (!option) return item;
+  if (!option) return item;
 
-    options[optionIndex] = { ...option, ...change };
+  options[optionIndex] = { ...option, ...change };
 
-    return { ...item, options };
-  });
+  return { ...item, options };
 }
 
-export function removeOption(
-  document: TemplateDraftDocument,
-  sectionIndex: number,
-  itemIndex: number,
-  optionIndex: number,
-): TemplateDraftDocument {
-  return withItem(document, sectionIndex, itemIndex, (item) => {
-    if (item.response_type !== 'single_choice' && item.response_type !== 'multi_choice') {
-      return item;
-    }
+export function removeItemOption(item: TemplateDraftItem, optionIndex: number): TemplateDraftItem {
+  if (item.response_type !== 'single_choice' && item.response_type !== 'multi_choice') {
+    return item;
+  }
 
-    return { ...item, options: item.options.filter((_, each) => each !== optionIndex) };
-  });
+  return { ...item, options: item.options.filter((_, each) => each !== optionIndex) };
 }

@@ -59,6 +59,12 @@ export const YES_NO_NA_FAILS_ON_LABELS: Record<YesNoNaFailsOn, string> = {
 export const YES_NO_NA_FAILS_ON_OPTIONS: readonly { value: YesNoNaFailsOn; label: string }[] =
   YES_NO_NA_FAILS_ON.map((value) => ({ value, label: YES_NO_NA_FAILS_ON_LABELS[value] }));
 
+/** Los dos modos de fallo de `yes_no`, en el selector de Answer settings y en el del sheet. */
+export const YES_NO_FAILS_ON_OPTIONS: readonly { value: 'yes' | 'no'; label: string }[] = [
+  { value: 'no', label: 'No' },
+  { value: 'yes', label: 'Yes' },
+];
+
 /**
  * Lo que dice un borrador sobre sí mismo en el listado.
  *

@@ -1,18 +1,10 @@
-import { useId, useState } from "react";
-import type {
-  ChoiceOption,
-  ResponseType,
-  TemplateDraftItem,
-} from "@hs/contracts";
+import { useId } from "react";
+import type { ResponseType, TemplateDraftItem } from "@hs/contracts";
 
 import { RowMenu } from "../../components/RowMenu";
 import { GearIcon, GripIcon } from "../../components/icons";
-import {
-  RESPONSE_TYPE_HINTS,
-  RESPONSE_TYPE_OPTIONS,
-} from "../../presentation/templates";
-import { ResponseTypeConfig } from "./ResponseTypeConfig";
-import { findingButtonLabel, hasConfiguration } from "./presentation";
+import { RESPONSE_TYPE_OPTIONS } from "../../presentation/templates";
+import { hasConfiguration } from "./presentation";
 import type { useSortable } from "./useSortable";
 
 /**
@@ -21,11 +13,12 @@ import type { useSortable } from "./useSortable";
  * LA PREGUNTA TIENE SU PROPIO RENGLÓN. Los controles secundarios van debajo para que escribir
  * una pregunta larga no compita con el tipo, Required y el menú de acciones.
  *
- * **LA CONFIGURACIÓN DEL TIPO NO DESAPARECE, SE PLIEGA.** El mockup no la muestra porque
- * todas sus preguntas son Yes/No, pero `scale`, `number`, `text`, `single_choice`,
- * `multi_choice` y `photo` tienen campos sin los cuales el documento no se publica. Se abre
- * sola al elegir un tipo que los necesita: descubrir que faltaba configurar algo recién en
- * la lista de pendientes sería mandar al autor a buscar dónde.
+ * **LA CONFIGURACIÓN DEL TIPO VIVE EN EL SHEET DE LA PREGUNTA, NO EN LA FILA.** El mockup
+ * no la muestra porque todas sus preguntas son Yes/No, pero `scale`, `number`, `text`,
+ * `single_choice`, `multi_choice` y `photo` tienen campos sin los cuales el documento no se
+ * publica. El engranaje abre el sheet, y el sheet se abre solo al elegir un tipo que los
+ * necesita: descubrir que faltaba configurar algo recién en la lista de pendientes sería
+ * mandar al autor a buscar dónde.
  *
  * La identidad técnica se genera al crearla, no se deriva del texto y no forma parte de la
  * interfaz.
@@ -38,12 +31,10 @@ export function ItemRow({
   onPrompt,
   onRequired,
   onResponseType,
-  onNumber,
-  onOptions,
+  onOpenSettings,
   onMove,
   onDuplicate,
   onRemove,
-  onAddFinding,
 }: {
   item: TemplateDraftItem;
   index: number;
@@ -52,22 +43,12 @@ export function ItemRow({
   onPrompt: (prompt: string) => void;
   onRequired: (required: boolean) => void;
   onResponseType: (responseType: ResponseType) => void;
-  onNumber: (field: string, value: number | string) => void;
-  onOptions: {
-    change: (optionIndex: number, change: Partial<ChoiceOption>) => void;
-    add: () => void;
-    remove: (optionIndex: number) => void;
-  };
+  onOpenSettings: () => void;
   onMove: (delta: number) => void;
   onDuplicate: () => void;
   onRemove: () => void;
-  // Opcional: la fila se dibuja igual donde todavía no hay a qué colgar la acción.
-  onAddFinding?: () => void;
 }): React.JSX.Element {
   const controlId = useId();
-  // Las opciones son configuración avanzada: mantenerlas cerradas hace legible la lista de
-  // preguntas. Al elegir un tipo configurable se abren una vez para no ocultar el trabajo nuevo.
-  const [open, setOpen] = useState(false);
   const label = item.prompt.trim() || `question ${index + 1}`;
 
   return (
@@ -131,10 +112,9 @@ export function ItemRow({
                 const next = event.target.value as ResponseType;
 
                 onResponseType(next);
-                // Se despliega sola cuando el tipo nuevo pide configuración. No se vuelve a
-                // plegar al pasar a uno que no la pide: `ResponseTypeConfig` ya no dibuja
-                // nada ahí, y cerrar el bloque movería la fila bajo el cursor.
-                if (hasConfiguration(next)) setOpen(true);
+                // La escritura del tipo y la apertura van en el mismo evento: el sheet monta
+                // ya con el ítem del tipo nuevo y su configuración por defecto.
+                if (hasConfiguration(next)) onOpenSettings();
               }}
             >
               {RESPONSE_TYPE_OPTIONS.map((option) => (
@@ -145,29 +125,20 @@ export function ItemRow({
             </select>
           </div>
 
-          {hasConfiguration(item.response_type) ? (
-            <button
-              type="button"
-              className="item-editor__settings-toggle"
-              aria-expanded={open}
-              aria-controls={`${controlId}-settings`}
-              title={open ? "Hide settings" : "Edit settings"}
-              aria-label={open ? "Hide settings" : "Edit settings"}
-              onClick={() => setOpen((wasOpen) => !wasOpen)}
-            >
-              <GearIcon size={18} />
-            </button>
-          ) : null}
-
-          {onAddFinding ? (
-            <button
-              type="button"
-              className="item-editor__corrective"
-              onClick={onAddFinding}
-            >
-              {findingButtonLabel(item.finding !== undefined)}
-            </button>
-          ) : null}
+          {/*
+            Siempre, también en los tipos sin configuración: el sheet es además donde se
+            escribe la acción correctiva, y `signature` también puede prescribir una.
+          */}
+          <button
+            type="button"
+            className="item-editor__settings-toggle"
+            aria-haspopup="dialog"
+            title="Edit settings"
+            aria-label="Edit settings"
+            onClick={onOpenSettings}
+          >
+            <GearIcon size={18} />
+          </button>
         </div>
 
         <RowMenu
@@ -184,33 +155,11 @@ export function ItemRow({
               onSelect: () => onMove(1),
             },
             { label: "Duplicate question", onSelect: onDuplicate },
-            {
-              label: hasConfiguration(item.response_type)
-                ? open
-                  ? "Hide answer settings"
-                  : "Show answer settings"
-                : "Show answer settings",
-              disabled: !hasConfiguration(item.response_type),
-              onSelect: () => setOpen((wasOpen) => !wasOpen),
-            },
+            { label: "Edit question settings", onSelect: onOpenSettings },
             { label: "Remove question", tone: "danger", onSelect: onRemove },
           ]}
         />
       </div>
-
-      {open && hasConfiguration(item.response_type) ? (
-        <div className="item-editor__settings" id={`${controlId}-settings`}>
-          <div className="item-editor__settings-head">
-            <p className="item-editor__settings-title">Answer settings</p>
-            <p className="note">{RESPONSE_TYPE_HINTS[item.response_type]}</p>
-          </div>
-          <ResponseTypeConfig
-            item={item}
-            onNumber={onNumber}
-            onOptions={onOptions}
-          />
-        </div>
-      ) : null}
     </li>
   );
 }

@@ -1,6 +1,5 @@
 import { useId, useState } from "react";
 import type {
-  ChoiceOption,
   Location,
   OrganizationLocationOption,
   ResponseType,
@@ -19,12 +18,12 @@ import {
   PlusIcon,
 } from "../../components/icons";
 import { ItemRow } from "./ItemRow";
-import { FindingSheet } from "./FindingSheet";
 import {
   locationCoverage,
   offerableLocations,
   sectionAppliesTo,
 } from "./presentation";
+import { QuestionSheet } from "./QuestionSheet";
 import { useSortable } from "./useSortable";
 
 /**
@@ -83,18 +82,8 @@ export function SectionCard({
     prompt: (itemIndex: number, prompt: string) => void;
     required: (itemIndex: number, required: boolean) => void;
     responseType: (itemIndex: number, responseType: ResponseType) => void;
-    number: (itemIndex: number, field: string, value: number | string) => void;
-    optionChange: (
-      itemIndex: number,
-      optionIndex: number,
-      change: Partial<ChoiceOption>,
-    ) => void;
-    optionAdd: (itemIndex: number) => void;
-    optionRemove: (itemIndex: number, optionIndex: number) => void;
-    finding: (
-      itemIndex: number,
-      finding: NonNullable<TemplateDraftItem["finding"]> | null,
-    ) => void;
+    /** Lo que guarda el sheet de la pregunta: el ítem entero, en una sola escritura. */
+    replace: (itemIndex: number, next: TemplateDraftItem) => void;
     move: (itemIndex: number, delta: number) => void;
     duplicate: (itemIndex: number) => void;
     remove: (itemIndex: number) => void;
@@ -102,7 +91,8 @@ export function SectionCard({
 }): React.JSX.Element {
   const controlId = useId();
   const [open, setOpen] = useState(true);
-  const [findingItem, setFindingItem] = useState<number | null>(null);
+  // Qué pregunta tiene el sheet abierto.
+  const [sheet, setSheet] = useState<number | null>(null);
   const items = useSortable(`${controlId}-items`, item.move);
 
   /**
@@ -311,20 +301,10 @@ export function SectionCard({
                 onResponseType={(responseType) =>
                   item.responseType(itemIndex, responseType)
                 }
-                onNumber={(field, value) =>
-                  item.number(itemIndex, field, value)
-                }
-                onOptions={{
-                  change: (optionIndex, change) =>
-                    item.optionChange(itemIndex, optionIndex, change),
-                  add: () => item.optionAdd(itemIndex),
-                  remove: (optionIndex) =>
-                    item.optionRemove(itemIndex, optionIndex),
-                }}
                 onMove={(delta) => item.move(itemIndex, delta)}
                 onDuplicate={() => item.duplicate(itemIndex)}
                 onRemove={() => item.remove(itemIndex)}
-                onAddFinding={() => setFindingItem(itemIndex)}
+                onOpenSettings={() => setSheet(itemIndex)}
               />
             ))}
           </ul>
@@ -337,13 +317,15 @@ export function SectionCard({
         </>
       ) : null}
 
-      {findingItem !== null && section.items[findingItem] ? (
-        <FindingSheet
-          item={section.items[findingItem]}
-          onClose={() => setFindingItem(null)}
-          onSave={(finding) => {
-            item.finding(findingItem, finding);
-            setFindingItem(null);
+      {sheet !== null && section.items[sheet] ? (
+        <QuestionSheet
+          // La clave remonta el borrador local si el sheet pasa a otra pregunta.
+          key={sheet}
+          item={section.items[sheet]}
+          onClose={() => setSheet(null)}
+          onSave={(next) => {
+            item.replace(sheet, next);
+            setSheet(null);
           }}
         />
       ) : null}

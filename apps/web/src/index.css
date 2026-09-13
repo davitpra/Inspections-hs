@@ -6587,26 +6587,6 @@ button.schedule-cell:focus-visible {
   color: var(--brand);
 }
 
-/* Abierto se pinta, porque el botón ya no puede decir «Hide»: sin esto el único indicio de
-   que el panel de abajo lo abrió ESTE control es la cercanía. */
-.item-editor__settings-toggle[aria-expanded="true"] {
-  background: var(--tint-bg);
-  border-color: var(--brand);
-}
-
-/* Acción secundaria de la fila: quieta —sin relleno ni borde macizo— porque compite con
-   el tipo de respuesta, que es lo que hay que decidir primero. El piso de 48px lo pone el
-   `button` base (ADR-010). */
-.item-editor__corrective {
-  min-height: 48px;
-  padding: 0 var(--space-3);
-  border-color: var(--line-control);
-  background: var(--paper);
-  color: var(--brand);
-  font-weight: var(--weight-strong);
-  white-space: nowrap;
-}
-
 .finding-sheet__question,
 .finding-sheet__field,
 .finding-sheet__threshold {
@@ -6671,39 +6651,33 @@ button.schedule-cell:focus-visible {
   }
 }
 
-/* La configuración queda separada de la pregunta y solo ocupa espacio cuando se solicita.
-   Su caja arranca en la columna del número —`--space-10`, el ancho de la manija más el
-   hueco— para que se lea colgada de ESTA pregunta y no del borde de la tarjeta. Es el
-   único paso de la escala que no se eligió por ritmo sino midiendo otra cosa; son 40px y
-   caen en diez pasos exactos, así que entra sin corrimiento. */
-.item-editor__settings {
-  margin: var(--space-4) 0 0 var(--space-10);
-  padding: var(--space-5);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
+/* Las dos partes del sheet de la pregunta —Answer settings y Corrective action—. Los
+   campos de `ResponseTypeConfig` usan `.filters`, que en el resto de la app es una fila;
+   acá van apilados y a lo ancho porque el panel es angosto. */
+.finding-sheet__settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
 }
 
-.item-editor__settings-head {
-  margin-bottom: var(--space-4);
-}
-
-.item-editor__settings-title {
+.finding-sheet__heading {
   margin: 0;
+  font-size: inherit;
   font-weight: var(--weight-strong);
 }
 
-.item-editor__settings .note {
-  margin: 0 0 var(--space-2);
+.finding-sheet__settings .note {
+  margin: 0;
 }
 
-.item-editor__settings .filters {
+.finding-sheet__settings .filters {
   flex-direction: column;
   align-items: stretch;
   gap: var(--space-1);
-  margin: 0 0 var(--space-3);
+  margin: 0;
 }
 
-.item-editor__settings .filters input {
+.finding-sheet__settings .filters input {
   width: 100%;
 }
 
@@ -6762,11 +6736,6 @@ button.schedule-cell:focus-visible {
   }
 
   .item-editor {
-    padding: var(--space-3);
-  }
-
-  .item-editor__settings {
-    margin-left: 0;
     padding: var(--space-3);
   }
 

@@ -1,24 +1,25 @@
-import { draftIssues, type TemplateDraftDocument } from '@hs/contracts';
+import { draftIssues, type TemplateDraftDocument, type TemplateDraftItem } from '@hs/contracts';
 import { describe, expect, it } from 'vitest';
 
 import {
   addItem,
-  addOption,
+  addItemOption,
   addSection,
   allItemKeys,
+  changeItemOption,
   changeResponseType,
+  configureItem,
   duplicateItem,
   duplicateSection,
   freeKey,
   moveItem,
   moveSection,
   removeItem,
-  removeOption,
+  removeItemOption,
   removeSection,
   renameSection,
-  setConfig,
-  setFinding,
-  setOption,
+  replaceItem,
+  setItemFinding,
   setPrompt,
   setRequired,
   setSectionLocation,
@@ -46,6 +47,18 @@ function document(): TemplateDraftDocument {
       },
     ],
   };
+}
+
+/** Escribe la prescripción de un ítem del documento, como lo hace guardar el sheet. */
+function setFinding(
+  draft: TemplateDraftDocument,
+  sectionIndex: number,
+  itemIndex: number,
+  finding: Parameters<typeof setItemFinding>[1],
+): TemplateDraftDocument {
+  const item = draft.sections[sectionIndex]!.items[itemIndex]!;
+
+  return replaceItem(draft, sectionIndex, itemIndex, setItemFinding(item, finding));
 }
 
 function locatedDocument(title: string, code: string): TemplateDraftDocument {
@@ -299,67 +312,57 @@ describe('changeResponseType', () => {
 });
 
 describe('las opciones de un ítem de selección', () => {
-  function withChoice(): TemplateDraftDocument {
-    return changeResponseType(document(), 0, 0, 'single_choice');
+  function withChoice(): TemplateDraftItem {
+    return changeResponseType(document(), 0, 0, 'single_choice').sections[0]!.items[0]!;
   }
 
   it('se agregan con un value libre y sin etiqueta', () => {
-    const added = addOption(withChoice(), 0, 0);
-    const item = added.sections[0]?.items[0];
+    const item = addItemOption(withChoice());
 
     expect(item).toMatchObject({ response_type: 'single_choice' });
     expect((item as { options: unknown[] }).options).toHaveLength(1);
   });
 
   it('dos opciones seguidas no comparten value', () => {
-    let draft = addOption(withChoice(), 0, 0);
-    draft = addOption(draft, 0, 0);
-
-    const options = (draft.sections[0]?.items[0] as { options: { value: string }[] }).options;
+    const item = addItemOption(addItemOption(withChoice()));
+    const options = (item as { options: { value: string }[] }).options;
 
     expect(new Set(options.map((option) => option.value)).size).toBe(2);
   });
 
   it('se editan por índice', () => {
-    let draft = addOption(withChoice(), 0, 0);
-    draft = setOption(draft, 0, 0, 0, { value: 'yes', label: 'Yes' });
-
-    const options = (draft.sections[0]?.items[0] as { options: { label: string }[] }).options;
+    const item = changeItemOption(addItemOption(withChoice()), 0, { value: 'yes', label: 'Yes' });
+    const options = (item as { options: { label: string }[] }).options;
 
     expect(options[0]).toEqual({ value: 'yes', label: 'Yes' });
   });
 
   it('se quitan por índice', () => {
-    let draft = addOption(withChoice(), 0, 0);
-    draft = addOption(draft, 0, 0);
-    draft = removeOption(draft, 0, 0, 0);
-
-    const options = (draft.sections[0]?.items[0] as { options: unknown[] }).options;
+    const item = removeItemOption(addItemOption(addItemOption(withChoice())), 0);
+    const options = (item as { options: unknown[] }).options;
 
     expect(options).toHaveLength(1);
   });
 
   it('sobre un ítem que no es de selección no hacen nada', () => {
-    const draft = document();
+    const item = document().sections[0]!.items[0]!;
 
-    expect(addOption(draft, 0, 0)).toEqual(draft);
-    expect(removeOption(draft, 0, 0, 0)).toEqual(draft);
+    expect(addItemOption(item)).toEqual(item);
+    expect(removeItemOption(item, 0)).toEqual(item);
   });
 });
 
-describe('setConfig', () => {
+describe('configureItem', () => {
   it('cambia un campo del tipo actual', () => {
-    const asScale = changeResponseType(document(), 0, 0, 'scale');
-    const changed = setConfig(asScale, 0, 0, 'max', 10);
+    const asScale = changeResponseType(document(), 0, 0, 'scale').sections[0]!.items[0]!;
 
-    expect(changed.sections[0]?.items[0]).toMatchObject({ max: 10 });
+    expect(configureItem(asScale, 'max', 10)).toMatchObject({ max: 10 });
   });
 
   it('ignora un campo que el tipo no tiene, en vez de agregárselo', () => {
-    const draft = document();
-    const unchanged = setConfig(draft, 0, 0, 'max_length', 500);
+    const item = document().sections[0]!.items[0]!;
 
-    expect(unchanged.sections[0]?.items[0]).not.toHaveProperty('max_length');
+    expect(configureItem(item, 'max_length', 500)).not.toHaveProperty('max_length');
   });
 });
 
@@ -439,15 +442,25 @@ describe('los campos que no dependen del tipo', () => {
     });
   });
 
-  it('setFinding escribe y elimina el bloque sin mutar el documento', () => {
-    const original = document();
+  it('setItemFinding escribe y elimina el bloque sin mutar el ítem', () => {
+    const original = document().sections[0]!.items[0]!;
     const finding = { corrective_action: 'Refit the guard.' };
-    const withFinding = setFinding(original, 0, 0, finding);
-    const withoutFinding = setFinding(withFinding, 0, 0, null);
+    const withFinding = setItemFinding(original, finding);
+    const withoutFinding = setItemFinding(withFinding, null);
 
-    expect(withFinding.sections[0]?.items[0]).toHaveProperty('finding', finding);
-    expect(withoutFinding.sections[0]?.items[0]).not.toHaveProperty('finding');
-    expect(original.sections[0]?.items[0]).not.toHaveProperty('finding');
+    expect(withFinding).toHaveProperty('finding', finding);
+    expect(withoutFinding).not.toHaveProperty('finding');
+    expect(original).not.toHaveProperty('finding');
+  });
+
+  it('replaceItem escribe el ítem entero sin mutar el documento', () => {
+    const original = document();
+    const next = { ...original.sections[0]!.items[1]!, prompt: 'Changed' };
+    const replaced = replaceItem(original, 0, 1, next);
+
+    expect(replaced.sections[0]?.items[1]).toBe(next);
+    expect(replaced.sections[0]?.items[0]).toBe(original.sections[0]?.items[0]);
+    expect(original.sections[0]?.items[1]?.prompt).toBe('B');
   });
 });
 

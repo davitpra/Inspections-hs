@@ -64,7 +64,7 @@ export function hasUnsavedChanges(
  *
  * La lista sale de las ramas de `ResponseTypeConfig`, y está escrita como una lista
  * explícita en vez de renderizando y mirando si salió vacío: la fila necesita saberlo
- * ANTES de dibujar, para decidir si abre el bloque plegado.
+ * ANTES de dibujar, para decidir si abre el sheet de la pregunta al elegir el tipo.
  *
  * Si algún día un tipo gana configuración, este arreglo es lo que hay que tocar. Un `switch`
  * exhaustivo sobre `ResponseType` haría que el compilador lo recordara, pero repetiría las
@@ -119,8 +119,34 @@ export function defaultFinding(
   };
 }
 
-export function findingButtonLabel(hasFinding: boolean): string {
-  return hasFinding ? "Edit action" : "Add action";
+/**
+ * Cómo falla una pregunta, que es lo que el sheet de la prescripción muestra según el tipo.
+ *
+ * - `answer` — `yes_no` y `yes_no_na`: falla una respuesta elegida (`fails_on`), y son los
+ *   únicos tipos que hoy derivan un hallazgo (`negativeAnswers` en `@hs/forms`).
+ * - `threshold` — `scale` y `number`: el umbral `fails_when`, que se guarda pero todavía no
+ *   deriva nada.
+ * - `none` — el resto no tiene semántica de cumplimiento, y la acción nunca se dispara sola.
+ *
+ * `switch` exhaustivo: un tipo nuevo no compila hasta que alguien decida cómo falla.
+ */
+export type FailureKind = "answer" | "threshold" | "none";
+
+export function failureKind(responseType: ResponseType): FailureKind {
+  switch (responseType) {
+    case "yes_no":
+    case "yes_no_na":
+      return "answer";
+    case "scale":
+    case "number":
+      return "threshold";
+    case "text":
+    case "single_choice":
+    case "multi_choice":
+    case "photo":
+    case "signature":
+      return "none";
+  }
 }
 
 /**

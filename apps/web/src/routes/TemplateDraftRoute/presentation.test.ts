@@ -10,7 +10,7 @@ import {
   defaultFinding,
   canPublish,
   FAILURE_OPERATOR_LABELS,
-  findingButtonLabel,
+  failureKind,
   hasUnsavedChanges,
   locationCoverage,
   offerableLocations,
@@ -66,8 +66,18 @@ describe('prescripciones', () => {
   it('agrega umbral solo a los tipos medidos', () => {
     expect(defaultFinding('yes_no')).not.toHaveProperty('fails_when');
     expect(defaultFinding('number')).toHaveProperty('fails_when');
-    expect(findingButtonLabel(false)).toBe('Add action');
-    expect(findingButtonLabel(true)).toBe('Edit action');
+  });
+
+  it('clasifica cómo falla cada tipo de respuesta', () => {
+    expect(failureKind('yes_no')).toBe('answer');
+    expect(failureKind('yes_no_na')).toBe('answer');
+    expect(failureKind('scale')).toBe('threshold');
+    expect(failureKind('number')).toBe('threshold');
+    expect(failureKind('text')).toBe('none');
+    expect(failureKind('single_choice')).toBe('none');
+    expect(failureKind('multi_choice')).toBe('none');
+    expect(failureKind('photo')).toBe('none');
+    expect(failureKind('signature')).toBe('none');
   });
 });
 

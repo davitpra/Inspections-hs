@@ -1,5 +1,4 @@
 import type {
-  ChoiceOption,
   Location,
   OrganizationLocation,
   ResponseType,
@@ -10,7 +9,6 @@ import type {
 import { PlusIcon } from "../../components/icons";
 import {
   addItem,
-  addOption,
   addSection,
   allItemKeys,
   changeResponseType,
@@ -19,12 +17,9 @@ import {
   moveItem,
   moveSection,
   removeItem,
-  removeOption,
   removeSection,
   renameSection,
-  setConfig,
-  setFinding,
-  setOption,
+  replaceItem,
   setPrompt,
   setRequired,
   setSectionLocation,
@@ -179,15 +174,8 @@ function itemHandlers(
       write(setRequired(document, sectionIndex, itemIndex, required)),
     responseType: (itemIndex, responseType: ResponseType) =>
       write(changeResponseType(document, sectionIndex, itemIndex, responseType)),
-    number: (itemIndex, field, value) =>
-      write(setConfig(document, sectionIndex, itemIndex, field, value)),
-    finding: (itemIndex, finding) =>
-      write(setFinding(document, sectionIndex, itemIndex, finding)),
-    optionChange: (itemIndex, optionIndex, change: Partial<ChoiceOption>) =>
-      write(setOption(document, sectionIndex, itemIndex, optionIndex, change)),
-    optionAdd: (itemIndex) => write(addOption(document, sectionIndex, itemIndex)),
-    optionRemove: (itemIndex, optionIndex) =>
-      write(removeOption(document, sectionIndex, itemIndex, optionIndex)),
+    replace: (itemIndex, next) =>
+      write(replaceItem(document, sectionIndex, itemIndex, next)),
     move: (itemIndex, delta) =>
       write(moveItem(document, sectionIndex, itemIndex, delta)),
     duplicate: (itemIndex) =>

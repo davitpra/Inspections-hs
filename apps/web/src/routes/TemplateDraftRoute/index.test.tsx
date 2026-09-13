@@ -146,6 +146,12 @@ async function openMenu(name: string): Promise<HTMLElement> {
   return screen.getByRole('menu');
 }
 
+/** Cierra el sheet abierto como lo hace Escape y espera a que termine la transición. */
+async function closeSheet(): Promise<void> {
+  fireEvent(screen.getByRole('dialog'), new Event('cancel', { bubbles: false, cancelable: true }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+}
+
 /** El cuerpo del último `saveTemplateDraft`. */
 function lastSave(): {
   name: string;
@@ -513,7 +519,7 @@ describe('duplicar', () => {
 });
 
 describe('la configuración del tipo de respuesta', () => {
-  it('mantiene cerrada la configuración de opciones al cargar un ítem', async () => {
+  it('la configuración no se ve en la fila y el engranaje la abre en el sheet', async () => {
     getTemplateDraft.mockResolvedValue(
       draft({
         document: {
@@ -544,13 +550,13 @@ describe('la configuración del tipo de respuesta', () => {
     await ready();
 
     expect(screen.queryByText('Answer settings')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Edit settings' })).toBeTruthy();
+    expect(screen.queryByRole('dialog')).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }));
 
-    expect(screen.getByText('Answer settings')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Hide answer settings' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Hide settings' })).toBeTruthy();
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText('Answer settings')).toBeTruthy();
+    expect((within(dialog).getAllByLabelText('Label')[0] as HTMLInputElement).value).toBe('Fixed');
     expect(screen.getByLabelText('Question 1')).toBeTruthy();
   });
 
@@ -558,44 +564,56 @@ describe('la configuración del tipo de respuesta', () => {
     renderRoute();
     await ready();
 
-    const type = screen.getByLabelText('Answer type');
+    fireEvent.change(screen.getByLabelText('Answer type'), { target: { value: 'text' } });
+    expect(within(screen.getByRole('dialog')).getByLabelText('Maximum length')).toBeTruthy();
 
-    fireEvent.change(type, { target: { value: 'text' } });
-    expect(screen.getByLabelText('Maximum length')).toBeTruthy();
+    await closeSheet();
 
-    fireEvent.change(type, { target: { value: 'single_choice' } });
-    expect(screen.queryByLabelText('Maximum length')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Add option' })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Answer type'), {
+      target: { value: 'single_choice' },
+    });
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).queryByLabelText('Maximum length')).toBeNull();
+    expect(within(dialog).getByRole('button', { name: 'Add option' })).toBeTruthy();
   });
 
   /**
-   * El renglón compacto del mockup esconde la configuración, así que tiene que abrirse sola
-   * al elegir un tipo que la necesita: descubrirlo en la lista de pendientes mandaría al
-   * autor a buscar dónde se configura.
+   * El renglón compacto del mockup esconde la configuración, así que el sheet tiene que
+   * abrirse solo al elegir un tipo que la necesita: descubrirlo en la lista de pendientes
+   * mandaría al autor a buscar dónde se configura.
    */
-  it('se despliega sola al elegir un tipo que la necesita', async () => {
+  it('abre el sheet solo al elegir un tipo que la necesita', async () => {
     renderRoute();
     await ready();
 
-    expect(screen.queryByLabelText('Decimal places')).toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
 
     fireEvent.change(screen.getByLabelText('Answer type'), { target: { value: 'number' } });
 
-    expect(screen.getByLabelText('Decimal places')).toBeTruthy();
+    expect(within(screen.getByRole('dialog')).getByLabelText('Decimal places')).toBeTruthy();
   });
 
-  it('un tipo sin configuración no muestra ningún campo de más', async () => {
+  it('un tipo sin configuración no abre el sheet ni muestra ningún campo de más', async () => {
     renderRoute();
     await ready();
 
-    const type = screen.getByLabelText('Answer type');
+    fireEvent.change(screen.getByLabelText('Answer type'), { target: { value: 'signature' } });
 
-    fireEvent.change(type, { target: { value: 'number' } });
-    expect(screen.getByLabelText('Decimal places')).toBeTruthy();
-
-    fireEvent.change(type, { target: { value: 'signature' } });
+    expect(screen.queryByRole('dialog')).toBeNull();
     expect(screen.queryByLabelText('Decimal places')).toBeNull();
     expect(screen.queryByLabelText('Minimum')).toBeNull();
+  });
+
+  it('en un tipo sin configuración el engranaje abre el sheet solo con la acción', async () => {
+    renderRoute();
+    await ready();
+
+    fireEvent.change(screen.getByLabelText('Answer type'), { target: { value: 'signature' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }));
+    const dialog = screen.getByRole('dialog');
+
+    expect(within(dialog).queryByText('Answer settings')).toBeNull();
+    expect(within(dialog).getByRole('button', { name: 'Add corrective action' })).toBeTruthy();
   });
 
   it('las opciones se escriben con etiqueta y valor por separado', async () => {
@@ -605,16 +623,36 @@ describe('la configuración del tipo de respuesta', () => {
     fireEvent.change(screen.getByLabelText('Answer type'), {
       target: { value: 'single_choice' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Add option' }));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add option' }));
 
-    fireEvent.change(screen.getByLabelText('Label'), { target: { value: 'Fitted' } });
-    fireEvent.change(screen.getByLabelText('Stored value'), { target: { value: 'fitted' } });
+    fireEvent.change(within(dialog).getByLabelText('Label'), { target: { value: 'Fitted' } });
+    fireEvent.change(within(dialog).getByLabelText('Stored value'), {
+      target: { value: 'fitted' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    expect(screen.queryByRole('dialog')).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
 
     await waitFor(() => expect(saveTemplateDraft).toHaveBeenCalled());
 
     expect(JSON.stringify(lastSave().document)).toContain('"value":"fitted"');
+  });
+
+  it('cerrar el sheet descarta lo que se tocó adentro', async () => {
+    renderRoute();
+    await ready();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }));
+    fireEvent.change(within(screen.getByRole('dialog')).getByLabelText('Fails when answered'), {
+      target: { value: 'yes' },
+    });
+
+    await closeSheet();
+
+    expect(screen.queryByRole('button', { name: 'Save draft' })).toBeNull();
   });
 });
 
@@ -623,20 +661,20 @@ describe('la prescripción de un hallazgo', () => {
     renderRoute();
     await ready();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Add action' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }));
 
     const dialog = screen.getByRole('dialog');
     expect(dialog).toBeTruthy();
     expect(within(dialog).getByText('Is the guard fitted?')).toBeTruthy();
     expect(within(dialog).getByText('Yes / No')).toBeTruthy();
 
-    fireEvent.change(screen.getByLabelText('Corrective action'), {
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add corrective action' }));
+    fireEvent.change(within(dialog).getByLabelText('Corrective action'), {
       target: { value: 'Refit the machine guard before use.' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Save finding' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
 
     expect(screen.queryByRole('dialog')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Edit action' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Save draft' })).toBeTruthy();
   });
 
@@ -644,13 +682,35 @@ describe('la prescripción de un hallazgo', () => {
     renderRoute();
     await ready();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Add action' }));
-    const dialog = screen.getByRole('dialog');
-    fireEvent(dialog, new Event('cancel', { bubbles: false, cancelable: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }));
+    fireEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'Add corrective action' }),
+    );
+    await closeSheet();
 
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(screen.getByRole('button', { name: 'Add action' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Save draft' })).toBeNull();
+  });
+
+  it('se puede guardar la configuración sin agregar una acción', async () => {
+    renderRoute();
+    await ready();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }));
+    const dialog = screen.getByRole('dialog');
+
+    expect(within(dialog).queryByLabelText('Corrective action')).toBeNull();
+    expect(within(dialog).getByRole('button', { name: 'Add corrective action' })).toBeTruthy();
+
+    fireEvent.change(within(dialog).getByLabelText('Fails when answered'), {
+      target: { value: 'yes' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+    await waitFor(() => expect(saveTemplateDraft).toHaveBeenCalled());
+
+    const saved = JSON.stringify(lastSave().document);
+    expect(saved).toContain('"fails_on":"yes"');
+    expect(saved).not.toContain('"finding"');
   });
 
   it('muestra el umbral en number y no en yes_no', async () => {
@@ -659,11 +719,49 @@ describe('la prescripción de un hallazgo', () => {
 
     expect(screen.queryByLabelText('Operator')).toBeNull();
     fireEvent.change(screen.getByLabelText('Answer type'), { target: { value: 'number' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Add action' }));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add corrective action' }));
 
-    expect(screen.getByLabelText('Operator')).toBeTruthy();
-    expect(screen.getByLabelText('Threshold value')).toBeTruthy();
-    expect(screen.getByText(/does not create a finding yet/)).toBeTruthy();
+    expect(within(dialog).getByLabelText('Operator')).toBeTruthy();
+    expect(within(dialog).getByLabelText('Threshold value')).toBeTruthy();
+    expect(within(dialog).getByText(/does not create a finding yet/)).toBeTruthy();
+  });
+
+  it('en yes_no muestra cuándo falla y guarda el cambio junto con la acción', async () => {
+    renderRoute();
+    await ready();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }));
+    const dialog = screen.getByRole('dialog');
+    const failsOn = within(dialog).getByLabelText('Fails when answered') as HTMLSelectElement;
+
+    expect(failsOn.value).toBe('no');
+
+    fireEvent.change(failsOn, { target: { value: 'yes' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add corrective action' }));
+    fireEvent.change(within(dialog).getByLabelText('Corrective action'), {
+      target: { value: 'Refit the machine guard before use.' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+
+    await waitFor(() => expect(saveTemplateDraft).toHaveBeenCalled());
+
+    const saved = JSON.stringify(lastSave().document);
+    expect(saved).toContain('"fails_on":"yes"');
+    expect(saved).toContain('"corrective_action":"Refit the machine guard before use."');
+  });
+
+  it('en un tipo sin semántica de falla avisa que la acción no se dispara sola', async () => {
+    renderRoute();
+    await ready();
+
+    fireEvent.change(screen.getByLabelText('Answer type'), { target: { value: 'text' } });
+    const dialog = screen.getByRole('dialog');
+
+    expect(within(dialog).getByText(/never creates a finding on its own/)).toBeTruthy();
+    expect(within(dialog).queryByLabelText('Fails when answered')).toBeNull();
+    expect(within(dialog).queryByLabelText('Operator')).toBeNull();
   });
 });
 
