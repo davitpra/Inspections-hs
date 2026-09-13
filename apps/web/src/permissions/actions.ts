@@ -1,4 +1,11 @@
-import { ASSIGNEE, type Action, type ActionTransition, type Finding, type Session } from '@hs/contracts';
+import {
+  ASSIGNEE,
+  FINDING_REPORTER,
+  type Action,
+  type ActionTransition,
+  type Finding,
+  type Session,
+} from '@hs/contracts';
 
 /**
  * Quién puede abrir una acción sobre ESTE hallazgo (ADR-017).
@@ -44,7 +51,8 @@ export function canEditAssignment(
  * Si esta cuenta puede intentar esta transición, según la MISMA tabla que el servidor.
  *
  * `assignee` no es un rol: es la cuenta de la persona responsable de ESTA acción, y por
- * eso se resuelve contra `session.personId` y no contra `session.role`.
+ * eso se resuelve contra `session.personId` y no contra `session.role`. `finding_reporter`
+ * es la cuenta de `finding.reported_by` y solo aplica a acciones de un hallazgo (ADR-024).
  * Solo pide esa relación: el listado trae `ActionSummary`, sin el stream de `events`, y
  * alcanza para tomar esta decisión.
  *
@@ -58,10 +66,15 @@ export function canAttempt(
   transition: ActionTransition,
   action: Pick<Action, 'assignee_person_id'>,
   session: Session | null,
+  finding: Pick<Finding, 'reported_by'> | null,
 ): boolean {
   if (session === null) return false;
 
   if (transition.roles.includes(session.role)) return true;
 
-  return transition.roles.includes(ASSIGNEE) && session.personId === action.assignee_person_id;
+  if (transition.roles.includes(ASSIGNEE) && session.personId === action.assignee_person_id) {
+    return true;
+  }
+
+  return transition.roles.includes(FINDING_REPORTER) && finding?.reported_by === session.userId;
 }

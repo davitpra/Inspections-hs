@@ -474,7 +474,7 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
 
     const next = screen.getByRole('region', { name: 'Next step' });
     expect(within(next).getByRole('form', { name: 'Create corrective action' })).toBeTruthy();
-    expect(within(next).getByText(/Assign a responsible person/)).toBeTruthy();
+    expect(within(next).getByText('Responsible person')).toBeTruthy();
   });
 
   /** ADR-017: quien reportó el hallazgo lo abre, aunque no sea el coordinador. */
@@ -514,6 +514,36 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
     expect(within(next).getByRole('button', { name: 'Start work' })).toBeTruthy();
   });
 
+  it('el reportante inicia el trabajo asignado a otra persona y la ficha pasa a in_progress', async () => {
+    let findingReads = 0;
+    getSubmittedInspection.mockImplementation(() => {
+      findingReads += 1;
+      return Promise.resolve(
+        report({ findings: [finding({ state: findingReads === 1 ? 'assigned' : 'in_progress' })] }),
+      );
+    });
+    listActions.mockImplementation(() =>
+      Promise.resolve([action({ state: findingReads < 2 ? 'open' : 'in_progress' })]),
+    );
+    useAppSession.mockReturnValue({
+      account: { ...session('jhsc_member'), personId: '77777777-7777-4777-8777-777777777777' },
+    });
+
+    renderRoute();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Start work' }));
+
+    await waitFor(() =>
+      expect(transitionAction).toHaveBeenCalledWith(action().id, {
+        to: 'in_progress',
+        note: undefined,
+        reason: undefined,
+        evidence: [],
+      }),
+    );
+    await waitFor(() => expectCurrentStage('In progress'));
+  });
+
   it('ofrece la verificación a management', async () => {
     getSubmittedInspection.mockResolvedValue(
       report({ findings: [finding({ state: 'verification' })] }),
@@ -549,7 +579,7 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
     renderRoute();
 
     const next = await screen.findByRole('region', { name: 'Next step' });
-    expect(within(next).getByText('Ada Reid')).toBeTruthy();
+    expect(within(next).getByText(/Ada Reid/)).toBeTruthy();
     expect(within(next).queryByRole('button')).toBeNull();
   });
 });

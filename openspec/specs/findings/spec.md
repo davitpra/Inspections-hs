@@ -736,10 +736,17 @@ and SHALL NOT report that nothing was recorded there.
 - **WHEN** the reader opens the findings-only screen
 - **THEN** the one primary next step names the move from `in_progress` to `awaiting_verification`
 
+#### Scenario: The reporter is offered the step of work assigned to someone else
+
+- **GIVEN** a finding has `state` `assigned`, its `reported_by` names the reader, and its least
+  advanced action is `open` and assigned to another person
+- **WHEN** the reader opens the findings-only screen
+- **THEN** the one primary next step names the move from `open` to `in_progress`
+
 #### Scenario: A reader who cannot act is told who owes the step
 
 - **GIVEN** a finding has `state` `in_progress` and its blocking action belongs to another person
-- **WHEN** a `jhsc_member` reads the findings-only screen
+- **WHEN** a `jhsc_member` who did not raise the finding reads the findings-only screen
 - **THEN** no next step control is offered
 - **AND** the blocking action's `assignee_name` is named as who the finding is waiting on
 
@@ -817,6 +824,15 @@ action and every cached Finding reading whose persisted state may have changed.
 - **WHEN** the reader opens the findings-only screen
 - **THEN** the next step presents no note field
 - **AND** the move from `open` to `in_progress` is submitted by its control alone
+
+#### Scenario: The reporter advances work assigned to someone else without leaving the finding
+
+- **GIVEN** a finding has `state` `assigned`, its `reported_by` names the reader, and an action in
+  `open` assigned to another person
+- **WHEN** the reader submits the next step
+- **THEN** the action moves to `in_progress`
+- **AND** the action is still assigned to the same person
+- **AND** the findings-only reading remains on screen with `finding.state` `in_progress`
 
 #### Scenario: A reader who may write nothing is offered no next step
 

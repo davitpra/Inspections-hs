@@ -1366,6 +1366,25 @@ describe('el segundo padre de la acción correctiva', () => {
     ).resolves.toMatchObject({ state: 'closed' });
   });
 
+  it('el reportante del incidente no puede ejecutar una acción de investigación', async () => {
+    const incidentId = await investigated();
+    const rows = await inSession<{ id: string }>(
+      db.app,
+      { siteIds: [SITE_A], userId: coordinator.accountId, role: 'hs_coordinator' },
+      'SELECT id FROM investigation WHERE incident_id = $1',
+      [incidentId],
+    );
+    const action = await actions.createForInvestigation(asCoordinator(), one(rows).id, {
+      assignee_person_id: witness,
+      description: 'Replace the bypassed interlock on the changeover guard',
+      due_at: INVESTIGATION_DUE_AT,
+    });
+
+    await expect(
+      actions.transition(asSupervisor(), action.id, { to: 'in_progress', evidence: [] }),
+    ).rejects.toMatchObject({ response: { code: 'forbidden' } });
+  });
+
   it('la asignación de una acción de investigación solo la edita el coordinador (ADR-021)', async () => {
     const incidentId = await investigated();
     const actionId = await openActionOn(incidentId);

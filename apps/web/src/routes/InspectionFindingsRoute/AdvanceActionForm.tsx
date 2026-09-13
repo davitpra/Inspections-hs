@@ -3,6 +3,7 @@ import {
   type Action,
   type ActionState,
   type EvidenceInput,
+  type Finding,
   type Session,
 } from '@hs/contracts';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -41,10 +42,12 @@ import { stepForm, type StepFields } from './presentation';
 export function AdvanceActionForm({
   action,
   session,
+  finding,
   onDone,
 }: {
   action: Pick<Action, 'id' | 'state' | 'assignee_person_id'>;
   session: Session | null;
+  finding: Pick<Finding, 'reported_by'>;
   onDone?: () => void;
 }): React.JSX.Element {
   const queryClient = useQueryClient();
@@ -56,7 +59,7 @@ export function AdvanceActionForm({
   const [opened, setOpened] = useState<ActionState | null>(null);
 
   const available = transitionsFrom(action.state).filter((transition) =>
-    canAttempt(transition, action, session),
+    canAttempt(transition, action, session, finding),
   );
   const form = stepForm(action.state, available);
 

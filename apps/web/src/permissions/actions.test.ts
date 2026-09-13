@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ASSIGNEE,
+  FINDING_REPORTER,
   ROLES,
   transitionsFrom,
   type Action,
@@ -92,7 +93,7 @@ describe('la edición de la asignación (ADR-021)', () => {
 /** Lo que la pantalla ofrece, derivado de la misma tabla que el servidor aplica. */
 function offered(state: ActionState, actor: Session | null): string[] {
   return transitionsFrom(state)
-    .filter((transition) => canAttempt(transition, action(state), actor))
+    .filter((transition) => canAttempt(transition, action(state), actor, finding()))
     .map((transition) => transition.to);
 }
 
@@ -102,6 +103,13 @@ describe('los botones del detalle', () => {
 
     expect(offered('open', assignee)).toEqual(['in_progress']);
     expect(offered('in_progress', assignee)).toEqual(['awaiting_verification']);
+  });
+
+  it('quien reportó puede empezar y declarar el trabajo hecho aunque no sea responsable', () => {
+    const reporter = session('jhsc_member', OTHER_PERSON, REPORTER_ACCOUNT);
+
+    expect(offered('open', reporter)).toEqual(['in_progress']);
+    expect(offered('in_progress', reporter)).toEqual(['awaiting_verification']);
   });
 
   it('management que no es responsable no puede declararla hecha', () => {
@@ -141,6 +149,25 @@ describe('los botones del detalle', () => {
     expect(offered('open', null)).toEqual([]);
   });
 
+  it('el reportante no recibe las transiciones de verificación', () => {
+    const reporter = session('jhsc_member', OTHER_PERSON, REPORTER_ACCOUNT);
+
+    expect(
+      transitionsFrom('awaiting_verification').filter((transition) =>
+        canAttempt(transition, action('awaiting_verification'), reporter, finding()),
+      ),
+    ).toEqual([]);
+  });
+
+  it('un reportante sin hallazgo y una cuenta sin sesión no pueden intentar', () => {
+    const reporter = session('jhsc_member', OTHER_PERSON, REPORTER_ACCOUNT);
+    const execution = transitionsFrom('open')[0];
+
+    expect(execution).toBeDefined();
+    expect(canAttempt(execution!, action('open'), reporter, null)).toBe(false);
+    expect(canAttempt(execution!, action('open'), null, finding())).toBe(false);
+  });
+
   /**
    * La regla del verificador NO vive acá y este test lo fija: la pantalla ofrece el
    * botón y el servidor responde `verifier_is_executor`. Media regla copiada en el
@@ -156,5 +183,11 @@ describe('los botones del detalle', () => {
     const verifying = transitionsFrom('awaiting_verification');
 
     expect(verifying.every((transition) => !transition.roles.includes(ASSIGNEE))).toBe(true);
+  });
+
+  it('el reportante relativo no aparece como rol de verificación', () => {
+    const verifying = transitionsFrom('awaiting_verification');
+
+    expect(verifying.every((transition) => !transition.roles.includes(FINDING_REPORTER))).toBe(true);
   });
 });

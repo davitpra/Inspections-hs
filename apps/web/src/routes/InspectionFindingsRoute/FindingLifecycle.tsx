@@ -346,6 +346,7 @@ export function FindingLifecycle({
               step={step}
               session={session}
               findingId={finding.id}
+              finding={finding}
               create={commitmentForm}
               onDraftChange={setAssignmentEditOpen}
             />

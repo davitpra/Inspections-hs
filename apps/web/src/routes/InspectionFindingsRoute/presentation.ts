@@ -294,6 +294,8 @@ export function findingDeadline(
 export type FindingNextStep = {
   label: string;
   control: { kind: 'create' } | { kind: 'progress'; action: ActionSummary } | null;
+  /** La persona nombrada cuando el lector no puede intentar el paso. */
+  waitingOn?: string | null;
   /**
    * La acción cuya asignación todavía se puede corregir (ADR-021).
    *
@@ -330,7 +332,7 @@ export function nextStep(
   if (!action) return null;
 
   const transitions = transitionsFrom(action.state);
-  const allowed = transitions.find((transition) => canAttempt(transition, action, session));
+  const allowed = transitions.find((transition) => canAttempt(transition, action, session, finding));
   const transition = allowed ?? transitions[0];
 
   if (!transition) return null;
@@ -338,6 +340,7 @@ export function nextStep(
   return {
     label: transitionLabel(action.state, transition.to),
     control: allowed ? { kind: 'progress', action } : null,
+    ...(allowed ? {} : { waitingOn: action.assignee_name }),
     editableAssignment:
       isAssignmentEditable(action.state) && canEditAssignment(session, finding) ? action : null,
   };

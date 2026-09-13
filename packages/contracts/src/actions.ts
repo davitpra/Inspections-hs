@@ -60,14 +60,16 @@ export type ActionState = z.infer<typeof actionStateSchema>;
  *
  * `assignee` **no es un rol de `ROLES`**: es una posición relativa a la acción
  * —«la cuenta de la persona responsable de ESTA acción»— y se resuelve en el
- * servicio contra `app_user.person_id`, no contra `app_user.role`. Está en la
- * misma lista porque las cinco filas de `TRANSITIONS` son la respuesta completa a
- * "quién puede hacer qué", y partirla en dos tablas haría que se pueda leer una
- * sin la otra.
+ * servicio contra `app_user.person_id`, no contra `app_user.role`. `finding_reporter`
+ * también es una posición relativa: la cuenta de `finding.reported_by` del hallazgo
+ * padre, y nunca satisface una acción de investigación. Están en la misma lista
+ * porque las cinco filas de `TRANSITIONS` son la respuesta completa a "quién puede
+ * hacer qué", y partirla en dos tablas haría que se pueda leer una sin la otra.
  */
 export const ASSIGNEE = 'assignee' as const;
+export const FINDING_REPORTER = 'finding_reporter' as const;
 
-export type TransitionActor = Role | typeof ASSIGNEE;
+export type TransitionActor = Role | typeof ASSIGNEE | typeof FINDING_REPORTER;
 
 /**
  * Lo que una transición exige además del estado de origen.
@@ -112,6 +114,8 @@ export interface ActionTransition {
  *
  * **La misma tabla está escrita como guarda en la migración 0011** y un test de
  * integración evalúa los 20 pares ordenados por los dos caminos y los compara.
+ * Las cinco filas son la respuesta completa a quién puede hacer qué: no se agrega
+ * un permiso de ejecución fuera de esta tabla.
  *
  * **La creación escribe solamente la primera fila**. `open → in_progress` sigue siendo
  * la declaración explícita de que el trabajo empezó; no congela la asignación, que puede
@@ -119,11 +123,16 @@ export interface ActionTransition {
  */
 export const TRANSITIONS: readonly ActionTransition[] = [
   { from: null, to: 'open', roles: ['hs_coordinator'], requires: [] },
-  { from: 'open', to: 'in_progress', roles: [ASSIGNEE, 'hs_coordinator'], requires: [] },
+  {
+    from: 'open',
+    to: 'in_progress',
+    roles: [ASSIGNEE, FINDING_REPORTER, 'hs_coordinator'],
+    requires: [],
+  },
   {
     from: 'in_progress',
     to: 'awaiting_verification',
-    roles: [ASSIGNEE, 'hs_coordinator'],
+    roles: [ASSIGNEE, FINDING_REPORTER, 'hs_coordinator'],
     requires: [],
   },
   {

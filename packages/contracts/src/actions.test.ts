@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ACTION_STATES,
   ASSIGNEE,
+  FINDING_REPORTER,
   ESCALATION_DAYS,
   TRANSITIONS,
   VERIFIER_ROLES,
@@ -96,6 +97,18 @@ describe('la máquina de estados', () => {
       'awaiting_verification',
     ]);
     expect(VERIFIER_ROLES).not.toContain(ASSIGNEE);
+  });
+
+  it('el reportante solo puede ejecutar, nunca verificar', () => {
+    const reporterCan = TRANSITIONS.filter((transition) =>
+      transition.roles.includes(FINDING_REPORTER),
+    );
+
+    expect(reporterCan.map((transition) => transition.to)).toEqual([
+      'in_progress',
+      'awaiting_verification',
+    ]);
+    expect(VERIFIER_ROLES).not.toContain(FINDING_REPORTER);
   });
 
   it('los verificadores son el coordinador y gerencia', () => {

@@ -93,6 +93,8 @@ const asCoordinator = () => sessionFor(coordinator.accountId, 'hs_coordinator', 
 const asSupervisor = () => sessionFor(supervisor.accountId, 'management', [SITE_A]);
 const asOtherSupervisor = () => sessionFor(otherSupervisor.accountId, 'management', [SITE_A]);
 const asManager = () => sessionFor(manager.accountId, 'management', [SITE_A]);
+const asInspector = () => sessionFor(inspector.accountId, 'jhsc_member', [SITE_A]);
+const asOtherJhsc = () => sessionFor(jhsc.accountId, 'jhsc_member', [SITE_A]);
 
 let periodCursor = 0;
 
@@ -711,6 +713,74 @@ describe('el recorrido completo de R3', () => {
       kind: 'manual_finding',
       finding_id: expect.any(String),
     });
+  });
+});
+
+describe('quien reportó el hallazgo también ejecuta la acción (ADR-024)', () => {
+  it('el reportante JHSC inicia y declara hecho el trabajo de otra persona', async () => {
+    const { findingId, reporterAccountId } = await derivedFinding();
+    const created = await actions.create(asCoordinator(), findingId, {
+      assignee_person_id: supervisor.personId,
+      description: 'Install a fixed guard on the infeed of line 3',
+      due_at: DUE_AT,
+    });
+
+    const started = await actions.transition(asInspector(), created.id, {
+      to: 'in_progress',
+      evidence: [],
+    });
+    const done = await actions.transition(asInspector(), created.id, {
+      to: 'awaiting_verification',
+      evidence: [],
+    });
+
+    expect(started.assignee_person_id).toBe(supervisor.personId);
+    expect(done.assignee_person_id).toBe(supervisor.personId);
+    expect(done.events.at(-1)?.actor_user_id).toBe(reporterAccountId);
+  });
+
+  it('otro JHSC y management que no reportó reciben forbidden', async () => {
+    const { findingId } = await derivedFinding();
+    const created = await actions.create(asCoordinator(), findingId, {
+      assignee_person_id: supervisor.personId,
+      description: 'Install a fixed guard on the infeed of line 3',
+      due_at: DUE_AT,
+    });
+
+    for (const session of [asOtherJhsc(), asManager()]) {
+      await expect(
+        actions.transition(session, created.id, { to: 'in_progress', evidence: [] }),
+      ).rejects.toMatchObject({ response: { code: 'forbidden' } });
+    }
+  });
+
+  it('un reportante management no puede verificar lo que él mismo declaró hecho', async () => {
+    const draftFindingId = randomUUID();
+    const finding = await findings.report(asManager(), {
+      site_id: SITE_A,
+      draft_finding_id: draftFindingId,
+      details: {
+        description: 'Damaged dock barrier found outside the inspection route',
+        location_id: locationA,
+        photo_object_keys: [`${SITE_A}/manual/${draftFindingId}/${randomUUID()}`],
+      },
+      occurred_at: '2026-08-04T10:00:00-04:00',
+    });
+    const created = await actions.create(asCoordinator(), finding.id, {
+      assignee_person_id: supervisor.personId,
+      description: 'Replace the damaged barrier at the loading dock',
+      due_at: DUE_AT,
+    });
+
+    await actions.transition(asManager(), created.id, { to: 'in_progress', evidence: [] });
+    await actions.transition(asManager(), created.id, {
+      to: 'awaiting_verification',
+      evidence: [],
+    });
+
+    await expect(
+      actions.transition(asManager(), created.id, { to: 'closed', evidence: [] }),
+    ).rejects.toMatchObject({ response: { code: 'verifier_is_executor' } });
   });
 });
 

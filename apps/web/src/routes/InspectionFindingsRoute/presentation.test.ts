@@ -44,6 +44,8 @@ function session(
   };
 }
 
+const REPORTER = '99999999-9999-4999-8999-999999999999';
+
 function action(overrides: Partial<ActionSummary> = {}): ActionSummary {
   return {
     id: '55555555-5555-4555-8555-555555555555',
@@ -343,6 +345,28 @@ describe('el próximo paso del hallazgo', () => {
     });
   });
 
+  it('ofrece Start work al reportante aunque la acción esté asignada a otra persona', () => {
+    const reportedFinding = itemFinding(GUARDS, { reported_by: REPORTER });
+    const reporter = session('jhsc_member', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', REPORTER);
+
+    expect(nextStep([action()], 'assigned', reporter, reportedFinding)).toMatchObject({
+      label: 'Start work',
+      control: { kind: 'progress', action: action() },
+    });
+  });
+
+  it('ofrece Mark work done al reportante en una acción en curso', () => {
+    const reportedFinding = itemFinding(GUARDS, { reported_by: REPORTER });
+    const reporter = session('jhsc_member', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', REPORTER);
+
+    expect(
+      nextStep([action({ state: 'in_progress' })], 'in_progress', reporter, reportedFinding),
+    ).toMatchObject({
+      label: 'Declare the work done',
+      control: { kind: 'progress', action: action({ state: 'in_progress' }) },
+    });
+  });
+
   it('ofrece la verificación al rol verificador', () => {
     expect(
       nextStep(
@@ -363,7 +387,7 @@ describe('el próximo paso del hallazgo', () => {
         [action({ state: 'in_progress' })],
         'in_progress',
         session('jhsc_member', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'),
-        itemFinding(GUARDS),
+        itemFinding(GUARDS, { reported_by: REPORTER }),
       ),
     ).toMatchObject({
       label: 'Declare the work done',
@@ -437,7 +461,7 @@ describe('los campos y las salidas del paso, etapa por etapa', () => {
     const current = action({ state });
 
     return transitionsFrom(state).filter((transition) =>
-      canAttempt(transition, current, account),
+      canAttempt(transition, current, account, itemFinding(GUARDS)),
     );
   }
 

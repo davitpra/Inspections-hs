@@ -56,6 +56,7 @@ bloquea el recorrido crítico.
 | [021](021-asignacion-congelada-al-declarar-el-trabajo.md) | La asignación se congela al declarar el trabajo hecho | Aceptada |
 | [022](022-reduccion-de-roles.md) | Tres roles y dos autoridades administrativas | Aceptada |
 | [023](023-membresia-jhsc-por-rol.md) | Membresía del JHSC derivada del rol | Aceptada |
+| [024](024-reportante-ejecuta-la-accion.md) | Quien reportó el hallazgo también ejecuta la acción | Aceptada |
 
 Los ADR 001–008 conservan la numeración original citada en el encabezado de
 `docs/requisitos-v1.2.md`. Los 009–011 eran las "decisiones de contexto resueltas" S1, S2 y S3:

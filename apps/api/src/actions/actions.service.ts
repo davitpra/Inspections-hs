@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import {
   ASSIGNEE,
+  FINDING_REPORTER,
   isAssignmentEditable,
   transitionFor,
   type Action,
@@ -187,7 +188,8 @@ export class ActionsService {
    *
    * El orden de las comprobaciones es el que produce el mejor error: primero que la
    * acción exista dentro del alcance, después que la transición exista en la máquina,
-   * después quién puede hacerla, y al final los datos que esa transición exige.
+   * después quién puede hacerla, y al final los datos que esa transición exige. La relación
+   * del reportante del hallazgo como ejecutor está fijada por ADR-024.
    */
   async transition(
     session: SessionScope,
@@ -222,7 +224,13 @@ export class ActionsService {
         );
       }
 
-      await this.requireActor(client, session, header.assigneePersonId, transition.roles);
+      await this.requireActor(
+        client,
+        session,
+        header.assigneePersonId,
+        header.findingId,
+        transition.roles,
+      );
 
       if (transition.requires.includes('reason') && payload.reason === undefined) {
         throw invalidTransition('Refusing a verification requires a reason');
@@ -477,12 +485,15 @@ export class ActionsService {
    * `assignee` no es un rol: es la cuenta de la persona responsable de ESTA acción, y
    * por eso se resuelve contra `app_user.person_id` y no contra `app_user.role`. Una
    * persona sin cuenta no puede actuar por sí misma — el coordinador lo hace en su
-   * nombre, y el evento nombra al coordinador (design D12).
+   * nombre, y el evento nombra al coordinador (design D12). `finding_reporter` es la
+   * cuenta de `finding.reported_by` y solo existe para acciones cuyo padre es un
+   * hallazgo (ADR-024).
    */
   private async requireActor(
     client: PoolClient,
     session: SessionScope,
     assigneePersonId: string,
+    findingId: string | null,
     roles: readonly string[],
   ): Promise<void> {
     if (roles.includes(session.role)) return;
@@ -494,6 +505,10 @@ export class ActionsService {
       );
 
       if (rows[0]?.person_id === assigneePersonId) return;
+    }
+
+    if (roles.includes(FINDING_REPORTER) && findingId) {
+      if ((await this.findingReporter(client, findingId)) === session.userId) return;
     }
 
     throw actionForbidden('Your role cannot perform this transition on this action');
