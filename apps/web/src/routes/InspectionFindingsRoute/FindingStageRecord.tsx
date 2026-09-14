@@ -41,7 +41,7 @@ export function FindingStageRecord({
       {/* La misma voz que la etapa alcanzada sin eventos: es la misma ausencia. */}
       {pending ? (
         <p className="finding__stage-record-eyebrow">
-          No corrective action has been created yet. Assign someone and describe
+          No follow-up has been created yet. Assign someone and describe
           the work they need to complete.
         </p>
       ) : stage === "raised" ? (
@@ -106,7 +106,7 @@ function ActionStageRecord({
 
   return (
     <>
-      <ActionIdentity action={action} title="Corrective action" />
+      <ActionIdentity action={action} title="Follow-up" />
       <StageEvents actionId={action.id} stage={stage} />
     </>
   );

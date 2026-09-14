@@ -311,8 +311,8 @@ export type FindingNextStep = {
  * El único acto principal que sigue, consultado en la misma tabla que aplica el servidor.
  * `null` significa que todas las acciones están cerradas y no existe reapertura.
  *
- * La rama `raised` necesita el hallazgo, y no solo la sesión: desde ADR-017 quien lo
- * puede abrir no es solo el coordinador, también la cuenta que reportó ESE hallazgo.
+ * La rama `raised` necesita el hallazgo, y no solo la sesión: desde ADR-017 y ADR-025 quien lo
+ * puede abrir es una cuenta administrativa o la cuenta que reportó ESE hallazgo.
  */
 export function nextStep(
   actions: readonly ActionSummary[],
@@ -322,7 +322,7 @@ export function nextStep(
 ): FindingNextStep | null {
   if (state === 'raised') {
     return {
-      label: 'Create corrective action',
+      label: 'Create follow-up',
       control: canCreateAction(session, finding) ? { kind: 'create' } : null,
       editableAssignment: null,
     };

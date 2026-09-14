@@ -49,14 +49,15 @@ bloquea el recorrido crítico.
 | [014](014-retirada-clasificacion-riesgo.md)  | Retirada preproducción de la clasificación de riesgo | Aceptada |
 | [015](015-retirada-recurrencia-hallazgos.md) | Retirada preproducción de la recurrencia de hallazgos | Aceptada |
 | [016](016-evidencia-de-cierre-opcional.md) | Evidencia de cierre opcional                    | Aceptada |
-| [017](017-quien-abre-la-accion-correctiva.md) | Quien reportó el hallazgo también abre la acción correctiva | Aceptada |
+| [017](017-quien-abre-la-accion-correctiva.md) | Quien reportó el hallazgo también abre la acción correctiva | Superada parcialmente por ADR-025 |
 | [018](018-enmiendas-de-asignacion.md) | La asignación se enmienda antes de iniciar el trabajo | Superada |
-| [019](019-el-coordinador-verifica-lo-que-ejecuto.md) | El coordinador de H&S verifica lo que él mismo declaró hecho | Aceptada |
+| [019](019-el-coordinador-verifica-lo-que-ejecuto.md) | El coordinador de H&S verifica lo que él mismo declaró hecho | Superada parcialmente por ADR-025 |
 | [020](020-asignacion-editable-hasta-el-cierre.md) | La asignación es editable hasta el cierre | Superada |
 | [021](021-asignacion-congelada-al-declarar-el-trabajo.md) | La asignación se congela al declarar el trabajo hecho | Aceptada |
 | [022](022-reduccion-de-roles.md) | Tres roles y dos autoridades administrativas | Aceptada |
 | [023](023-membresia-jhsc-por-rol.md) | Membresía del JHSC derivada del rol | Aceptada |
 | [024](024-reportante-ejecuta-la-accion.md) | Quien reportó el hallazgo también ejecuta la acción | Aceptada |
+| [025](025-management-y-las-acciones-correctivas.md) | Management comparte las facultades administrativas sobre acciones correctivas | Aceptada |
 
 Los ADR 001–008 conservan la numeración original citada en el encabezado de
 `docs/requisitos-v1.2.md`. Los 009–011 eran las "decisiones de contexto resueltas" S1, S2 y S3:

@@ -454,15 +454,15 @@ true exists, because an investigation with no root cause is an empty folder with
 
 ### Requirement: The corrective actions of an investigation use the same engine as those of a finding
 
-The system SHALL let the coordinator create corrective actions whose parent is an
+The system SHALL let a `coordinator` or `management` account create corrective actions whose parent is an
 `investigation`, through the same routes, the same state machine, the same evidence rules, the
 same verifier rule and the same overdue escalation as the actions of a finding. An action SHALL
 belong to exactly one parent — a finding or an investigation — and never to both or to neither.
 
 #### Scenario: An action is created for an investigation
 
-- **WHEN** the coordinator creates a corrective action naming an `investigation_id`, an assignee
-  and a deadline input
+- **WHEN** a `coordinator` or `management` account creates a corrective action naming an
+  `investigation_id`, an assignee and a deadline input
 - **THEN** a `corrective_action` row is created carrying that `investigation_id` and a null
   `finding_id`
 
@@ -472,7 +472,13 @@ belong to exactly one parent — a finding or an investigation — and never to 
 - **WHEN** the assignee moves it to `in_progress`, attaches after evidence and declares the work
   done, and a different account verifies it
 - **THEN** the same events are written as for an action of a finding
-- **AND** the executor is refused when they attempt to verify their own work
+- **AND** an `inspector` executor cannot verify their own work, while a `coordinator` or
+  `management` executor can (ADR-019, ADR-025)
+
+#### Scenario: An inspector cannot open an action for an investigation
+
+- **WHEN** an `inspector` account creates a corrective action naming an `investigation_id`
+- **THEN** the request is rejected with the code `forbidden`
 
 #### Scenario: An overdue action of an investigation escalates
 
@@ -754,3 +760,4 @@ NOT become the lateral leak of what the visibility rule just closed.
 - **GIVEN** a notification of a reported incident
 - **WHEN** an account that may not see the incident follows it
 - **THEN** the incident is not returned
+

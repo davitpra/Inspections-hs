@@ -2,10 +2,10 @@
 
 |                             |                                                                        |
 | --------------------------- | ---------------------------------------------------------------------- |
-| **Estado**                  | Aceptada                                                               |
+| **Estado**                  | Superada                                                               |
 | **Fecha**                   | 2026-08-30                                                             |
 | **Supersede**               | —                                                                      |
-| **Superada por**            | —                                                                      |
+| **Superada por**            | ADR-025 (parcial: la excepción se extiende a management)              |
 | **Referencias**             | `docs/Requisitos_V1.2.md` §3 R3, §4 roles, §7 etapa 5; ADR-002, ADR-004, ADR-016, ADR-017 |
 | **Changes que la consumen** | `coordinator-verifies-own-work`                                        |
 

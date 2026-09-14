@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import {
   ASSIGNEE,
   FINDING_REPORTER,
+  isAdministrator,
   isAssignmentEditable,
   transitionFor,
   type Action,
@@ -47,8 +48,8 @@ import { foreignEvidenceKeys } from './object-key';
  *
  *   - Que la transición esté en la máquina de estados   → guarda `HS004`.
  *   - Que el stream no se bifurque bajo concurrencia    → único `(action_id, position)`.
-     *   - Que quien verifica no sea quien ejecutó, salvo
-     *     el coordinador (ADR-019)                         → guarda `HS005`.
+  *   - Que quien verifica no sea quien ejecutó, salvo
+  *     una cuenta administrativa (ADR-019, ADR-025)        → guarda `HS005`.
  *   - Que una acción tenga al menos un evento           → restricción diferida `HS007`.
  *   - Que rechazar una verificación lleve motivo        → CHECK de motivo.
  *   - Que la acción sea del sitio de su hallazgo        → FK compuesta.
@@ -74,12 +75,12 @@ export class ActionsService {
    * la restricción diferida de 0011 hace que una acción sin evento no llegue a existir,
    * porque su estado se deriva del stream y una acción sin stream no tendría ninguno.
    *
-   * **Quién puede abrirla no es solo el coordinador (ADR-017).** También puede la cuenta
+   * **Quién puede abrirla no es solo una cuenta administrativa (ADR-017, ADR-025).** También puede la cuenta
    * que reportó el hallazgo —`finding.reported_by`—, que en un hallazgo derivado es quien
    * firmó el envío y en uno manual quien lo cargó. Es la misma clase de regla que
    * `requireActor` aplica sobre una transición: una RELACIÓN con este registro puntual, no
-   * un rol ancho. Es una excepción declarada a la equivalencia administrativa: gerencia
-     * llega por esa relación, no por compartir permisos con coordinación. Un `inspector`
+   * un rol ancho. Es una excepción declarada a la equivalencia administrativa: la cuenta reportante
+   * llega por esa relación, no por compartir permisos administrativos. Un `inspector`
    * que no reportó este hallazgo sigue sin poder abrir nada.
    *
    * El hallazgo se resuelve ANTES de comprobar el permiso: uno fuera del alcance tiene que
@@ -95,9 +96,9 @@ export class ActionsService {
     return this.db.withSessionClient(session, async (client) => {
       const finding = await this.requireFinding(client, findingId);
 
-      if (session.role !== 'coordinator' && session.userId !== finding.reportedBy) {
+      if (!isAdministrator(session.role) && session.userId !== finding.reportedBy) {
         throw actionForbidden(
-          'Only the coordinator or the person who raised the finding opens a corrective action',
+          'Only an administrator or the person who raised the finding opens a follow-up',
         );
       }
 
@@ -114,9 +115,9 @@ export class ActionsService {
   /**
    * Corrige la única asignación vigente mientras el trabajo no se declaró hecho (ADR-021).
    *
-   * **Quién puede enmendar es quién podía abrir la acción (ADR-017):** el coordinador
-   * para cualquiera, más la cuenta que reportó el hallazgo cuando el padre es un
-   * hallazgo. Una acción de investigación es solo del coordinador.
+   * **Quién puede enmendar es quién podía abrir la acción (ADR-017, ADR-025):** una cuenta
+   * administrativa para cualquiera, más la cuenta que reportó el hallazgo cuando el padre es un
+   * hallazgo. Una acción de investigación es solo de una cuenta administrativa.
    *
    * **La frontera es `isAssignmentEditable`, no un estado escrito acá.** La misma lista
    * decide qué ofrece la interfaz; corregir en verificación existe, pero por el rechazo
@@ -141,14 +142,14 @@ export class ActionsService {
       if (!header) throw actionNotFound();
       if (header.findingId) await this.lockFinding(client, header.findingId);
 
-      if (session.role !== 'coordinator') {
+      if (!isAdministrator(session.role)) {
         const reportedBy = header.findingId
           ? await this.findingReporter(client, header.findingId)
           : null;
 
         if (session.userId !== reportedBy) {
           throw actionForbidden(
-            'Only the coordinator or the person who raised the finding edits the assignment',
+            'Only an administrator or the person who raised the finding edits the assignment',
           );
         }
       }
@@ -236,11 +237,9 @@ export class ActionsService {
         throw invalidTransition('Refusing a verification requires a reason');
       }
 
-      // El coordinador está exento (ADR-019): es la única cuenta que declara trabajo
-      // hecho por una persona del roster sin usuario, y la regla le retenía en
-      // `awaiting_verification` trabajo ya terminado. La excepción no se extiende a
-      // `management`: una segunda cuenta administrativa puede verificar su trabajo.
-      if (transition.requires.includes('not_executor') && session.role !== 'coordinator') {
+      // Las cuentas administrativas están exentas (ADR-019, ADR-025): pueden declarar
+      // trabajo por una persona del roster sin usuario y verificar luego ese evento.
+      if (transition.requires.includes('not_executor') && !isAdministrator(session.role)) {
         const executor = await lastExecutor(client, actionId);
 
         // El motor lo comprueba otra vez con `HS005`, con la misma excepción y leyendo el rol
@@ -294,20 +293,18 @@ export class ActionsService {
    * que hace que "el incidente usa el mismo motor que la acción correctiva" (§4) sea
    * cierto en el código y no solo en el documento.
    *
-   * **Esta sigue siendo solo del coordinador: es una excepción declarada a la equivalencia
-   * administrativa, y ADR-017 no la toca.** El permiso que se
+   * **Esta es de cualquier cuenta administrativa (ADR-025).** El permiso que se
    * abrió en `create` es la relación "yo reporté este hallazgo"; una investigación no
-   * tiene ese reportante —la reporta una cuenta administrativa y la investiga el
-   * coordinador—, así
-   * que no hay cuenta a la que extenderle el permiso.
+   * tiene ese reportante —la reporta una cuenta administrativa—, así que no hay cuenta
+   * reportante a la que extenderle el permiso.
    */
   async createForInvestigation(
     session: SessionScope,
     investigationId: string,
     payload: CreateActionRequest,
   ): Promise<Action> {
-    if (session.role !== 'coordinator') {
-      throw actionForbidden('Only the coordinator opens a corrective action');
+    if (!isAdministrator(session.role)) {
+      throw actionForbidden('Only an administrator opens a corrective action');
     }
 
     return this.db.withSessionClient(session, async (client) => {
@@ -484,8 +481,8 @@ export class ActionsService {
    *
    * `assignee` no es un rol: es la cuenta de la persona responsable de ESTA acción, y
    * por eso se resuelve contra `app_user.person_id` y no contra `app_user.role`. Una
-   * persona sin cuenta no puede actuar por sí misma — el coordinador lo hace en su
-   * nombre, y el evento nombra al coordinador (design D12). `finding_reporter` es la
+   * persona sin cuenta no puede actuar por sí misma — una cuenta administrativa lo hace en su
+   * nombre, y el evento nombra a esa cuenta (design D12). `finding_reporter` es la
    * cuenta de `finding.reported_by` y solo existe para acciones cuyo padre es un
    * hallazgo (ADR-024).
    */

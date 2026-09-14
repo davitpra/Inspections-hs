@@ -344,6 +344,13 @@
       "when": 1754524800049,
       "tag": "0049_correct_employee_number",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1754524800050,
+      "tag": "0050_administrator_verifier_exception",
+      "breakpoints": true
     }
   ]
 }

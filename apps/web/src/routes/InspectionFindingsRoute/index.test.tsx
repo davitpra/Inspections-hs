@@ -260,9 +260,9 @@ beforeEach(() => {
  * ciclo que leer, y la pulsación es la que decide componerlo.
  */
 async function creationForm(): Promise<HTMLElement> {
-  fireEvent.click(await screen.findByRole('button', { name: 'Create a corrective action' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Create a follow-up' }));
 
-  return await screen.findByRole('form', { name: 'Create corrective action' });
+  return await screen.findByRole('form', { name: 'Create follow-up' });
 }
 
 async function completeForm(form: HTMLElement, assignee = PERSON): Promise<void> {
@@ -270,7 +270,7 @@ async function completeForm(form: HTMLElement, assignee = PERSON): Promise<void>
   fireEvent.change(within(form).getByLabelText('Responsible person'), {
     target: { value: assignee },
   });
-  fireEvent.change(within(form).getByLabelText('Describe the corrective action'), {
+  fireEvent.change(within(form).getByLabelText('Describe the follow-up'), {
     target: { value: 'Install a fixed guard before restarting the line' },
   });
   fireEvent.change(within(form).getByLabelText('Deadline'), {
@@ -403,14 +403,14 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
     await creationForm();
 
     const next = screen.getByRole('region', { name: 'Next step' });
-    expect(within(next).getByRole('form', { name: 'Create corrective action' })).toBeTruthy();
+    expect(within(next).getByRole('form', { name: 'Create follow-up' })).toBeTruthy();
 
     const assigned = screen.getByRole('tab', { name: 'Assigned' });
     expect(assigned.getAttribute('aria-selected')).toBe('true');
     expectCurrentStage('Raised');
 
     const record = screen.getByRole('region', { name: 'Assigned record' });
-    expect(within(record).getByText(/No corrective action has been created yet/)).toBeTruthy();
+    expect(within(record).getByText(/No follow-up has been created yet/)).toBeTruthy();
     expect(within(record).queryByText(/needs a connection/)).toBeNull();
   });
 
@@ -424,10 +424,10 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Raised' }));
     const record = screen.getByRole('region', { name: 'Raised record' });
     expect(within(record).getByText('Finding recorded date')).toBeTruthy();
-    expect(screen.queryByRole('form', { name: 'Create corrective action' })).toBeNull();
+    expect(screen.queryByRole('form', { name: 'Create follow-up' })).toBeNull();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Assigned' }));
-    const again = screen.getByRole('form', { name: 'Create corrective action' });
+    const again = screen.getByRole('form', { name: 'Create follow-up' });
     expect((within(again).getByLabelText('Responsible person') as HTMLSelectElement).value).toBe(
       PERSON,
     );
@@ -473,7 +473,7 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
     await creationForm();
 
     const next = screen.getByRole('region', { name: 'Next step' });
-    expect(within(next).getByRole('form', { name: 'Create corrective action' })).toBeTruthy();
+    expect(within(next).getByRole('form', { name: 'Create follow-up' })).toBeTruthy();
     expect(within(next).getByText('Responsible person')).toBeTruthy();
   });
 
@@ -485,7 +485,20 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
     await creationForm();
 
     const next = screen.getByRole('region', { name: 'Next step' });
-    expect(within(next).getByRole('form', { name: 'Create corrective action' })).toBeTruthy();
+    expect(within(next).getByRole('form', { name: 'Create follow-up' })).toBeTruthy();
+  });
+
+  it('management ve y abre la composición aunque no haya reportado el hallazgo', async () => {
+    getSubmittedInspection.mockResolvedValue(
+      report({ findings: [finding({ reported_by: '77777777-7777-4777-8777-777777777777' })] }),
+    );
+    useAppSession.mockReturnValue({ account: session('management') });
+
+    renderRoute();
+    await creationForm();
+
+    const next = screen.getByRole('region', { name: 'Next step' });
+    expect(within(next).getByRole('form', { name: 'Create follow-up' })).toBeTruthy();
   });
 
   it('no ofrece la creación a un inspector que no reportó el hallazgo', async () => {
@@ -498,7 +511,7 @@ describe('InspectionFindingsRoute — ciclo del hallazgo', () => {
 
     // El nombre del paso sigue escrito en la copia; lo que no está es con qué ejecutarlo.
     const next = await screen.findByRole('region', { name: 'Next step' });
-    expect(within(next).queryByRole('form', { name: 'Create corrective action' })).toBeNull();
+    expect(within(next).queryByRole('form', { name: 'Create follow-up' })).toBeNull();
   });
 
   it('ofrece al responsable empezar el trabajo', async () => {
@@ -603,10 +616,10 @@ describe('InspectionFindingsRoute — la ficha abierta', () => {
     expect(screen.getByText('1 photo')).toBeTruthy();
 
     // El ciclo, en cambio, está en blanco: no hay tira ni formulario, hay un control.
-    const toggle = screen.getByRole('button', { name: 'Create a corrective action' });
+    const toggle = screen.getByRole('button', { name: 'Create a follow-up' });
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     expect(screen.queryByRole('region', { name: 'Finding lifecycle' })).toBeNull();
-    expect(screen.queryByRole('form', { name: 'Create corrective action' })).toBeNull();
+    expect(screen.queryByRole('form', { name: 'Create follow-up' })).toBeNull();
     expect(screen.queryByRole('tab', { name: 'Raised' })).toBeNull();
   });
 
@@ -618,12 +631,12 @@ describe('InspectionFindingsRoute — la ficha abierta', () => {
 
     expect(screen.getByRole('region', { name: 'Finding lifecycle' })).toBeTruthy();
     expect(within(screen.getByRole('region', { name: 'Next step' })).getByRole('form', {
-      name: 'Create corrective action',
+      name: 'Create follow-up',
     })).toBe(form);
     expect(screen.getByRole('tab', { name: 'Assigned' }).getAttribute('aria-selected')).toBe(
       'true',
     );
-    expect(screen.queryByRole('button', { name: 'Create a corrective action' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Create a follow-up' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Go back' })).toBeTruthy();
   });
 
@@ -635,10 +648,10 @@ describe('InspectionFindingsRoute — la ficha abierta', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Go back' }));
     expect(screen.queryByRole('button', { name: 'Go back' })).toBeNull();
-    expect(screen.queryByRole('form', { name: 'Create corrective action' })).toBeNull();
+    expect(screen.queryByRole('form', { name: 'Create follow-up' })).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Create a corrective action' }));
-    const reopened = screen.getByRole('form', { name: 'Create corrective action' });
+    fireEvent.click(screen.getByRole('button', { name: 'Create a follow-up' }));
+    const reopened = screen.getByRole('form', { name: 'Create follow-up' });
     expect((within(reopened).getByLabelText('Responsible person') as HTMLSelectElement).value).toBe(
       PERSON,
     );
@@ -651,7 +664,7 @@ describe('InspectionFindingsRoute — la ficha abierta', () => {
   it('pide el roster recién cuando alguien despliega la composición', async () => {
     renderRoute();
 
-    await screen.findByRole('button', { name: 'Create a corrective action' });
+    await screen.findByRole('button', { name: 'Create a follow-up' });
     expect(listFindingRoster).not.toHaveBeenCalled();
 
     await creationForm();
@@ -684,9 +697,9 @@ describe('InspectionFindingsRoute — la ficha abierta', () => {
 
     expect(await screen.findByRole('region', { name: 'Finding lifecycle' })).toBeTruthy();
     expect(
-      screen.queryByRole('button', { name: 'Create a corrective action' }),
+      screen.queryByRole('button', { name: 'Create a follow-up' }),
     ).toBeNull();
-    expect(screen.queryByRole('form', { name: 'Create corrective action' })).toBeNull();
+    expect(screen.queryByRole('form', { name: 'Create follow-up' })).toBeNull();
     // Y sin composición no hay excepción: la etapa que escribiría no se ofrece.
     expect(screen.getByRole('tab', { name: 'Raised' }).getAttribute('aria-selected')).toBe('true');
     expect(screen.queryByRole('tab', { name: 'Assigned' })).toBeNull();
@@ -698,7 +711,7 @@ describe('InspectionFindingsRoute — la ficha abierta', () => {
     renderRoute();
 
     expect(await screen.findByRole('region', { name: 'Finding lifecycle' })).toBeTruthy();
-    expect(screen.queryByRole('form', { name: 'Create corrective action' })).toBeNull();
+    expect(screen.queryByRole('form', { name: 'Create follow-up' })).toBeNull();
   });
 
   it('el hallazgo ya asignado se lee en el paso que sigue', async () => {
@@ -722,7 +735,7 @@ describe('InspectionFindingsRoute — la ficha abierta', () => {
  */
 describe('InspectionFindingsRoute — el compromiso', () => {
   /**
-   * CERO NO SE AFIRMA SIN HABER LEÍDO. Con la lista de acciones caída, "no corrective action
+   * CERO NO SE AFIRMA SIN HABER LEÍDO. Con la lista de acciones caída, "no follow-up
    * yet" tendría la misma cara que la verdad y el coordinador abriría un duplicado.
    */
   it('no declara un hallazgo sin acciones cuando no pudo leerlas', async () => {
@@ -732,7 +745,7 @@ describe('InspectionFindingsRoute — el compromiso', () => {
     renderRoute();
 
     expect(
-      await screen.findByText('Existing corrective actions need a connection.'),
+      await screen.findByText('Existing follow-ups need a connection.'),
     ).toBeTruthy();
     expect(screen.getByRole('region', { name: 'Finding lifecycle' })).toBeTruthy();
     expectCurrentStage('Raised');
@@ -778,7 +791,7 @@ describe('InspectionFindingsRoute — el compromiso', () => {
     submit(form);
 
     await waitFor(() =>
-      expect(screen.queryByRole('form', { name: 'Create corrective action' })).toBeNull(),
+      expect(screen.queryByRole('form', { name: 'Create follow-up' })).toBeNull(),
     );
     /*
       LA LECTURA SIGUE AL HALLAZGO: escrito el compromiso, el hallazgo queda en `assigned`, y
@@ -849,7 +862,7 @@ describe('InspectionFindingsRoute — el compromiso', () => {
       (within(form).getByLabelText('Responsible person') as HTMLSelectElement).value,
     ).toBe(PERSON);
     expect(
-      (within(form).getByLabelText('Describe the corrective action') as HTMLTextAreaElement)
+      (within(form).getByLabelText('Describe the follow-up') as HTMLTextAreaElement)
         .value,
     ).toBe(
       'Install a fixed guard before restarting the line',
@@ -870,7 +883,7 @@ describe('InspectionFindingsRoute — el compromiso', () => {
       await within(form).findByText('The active people for this site need a connection.'),
     ).toBeTruthy();
     expect(
-      (within(form).getByRole('button', { name: 'Create action' }) as HTMLButtonElement).disabled,
+      (within(form).getByRole('button', { name: 'Create follow-up' }) as HTMLButtonElement).disabled,
     ).toBe(true);
     expect(screen.getByText('Guard missing on the infeed of packaging line 3')).toBeTruthy();
   });
@@ -1068,13 +1081,13 @@ describe('InspectionFindingsRoute — Edit assignment (ADR-021)', () => {
 
     // Precargado con el compromiso vigente.
     expect(
-      (within(form).getByLabelText('Describe the corrective action') as HTMLTextAreaElement)
+      (within(form).getByLabelText('Describe the follow-up') as HTMLTextAreaElement)
         .value,
     ).toBe(
       'Refit the guard on packaging line 3',
     );
 
-    fireEvent.change(within(form).getByLabelText('Describe the corrective action'), {
+    fireEvent.change(within(form).getByLabelText('Describe the follow-up'), {
       target: { value: 'Install an interlocked guard and update the lockout procedure' },
     });
     fireEvent.change(within(form).getByLabelText('Deadline'), {
@@ -1105,21 +1118,21 @@ describe('InspectionFindingsRoute — Edit assignment (ADR-021)', () => {
     const form = within(next).getByRole('form', { name: 'Edit assignment' });
     await within(form).findByRole('option', { name: /\([0-9]+\)$/ });
 
-    fireEvent.change(within(form).getByLabelText('Describe the corrective action'), {
+    fireEvent.change(within(form).getByLabelText('Describe the follow-up'), {
       target: { value: 'A corrected description that the server will reject here' },
     });
     fireEvent.submit(form);
 
     expect((await within(form).findByRole('alert')).textContent).toContain('cannot be edited');
     expect(
-      (within(form).getByLabelText('Describe the corrective action') as HTMLTextAreaElement)
+      (within(form).getByLabelText('Describe the follow-up') as HTMLTextAreaElement)
         .value,
     ).toBe(
       'A corrected description that the server will reject here',
     );
   });
 
-  it('no ofrece Edit assignment a quien no reportó el hallazgo ni es coordinador', async () => {
+  it('ofrece Edit assignment a management aunque no haya reportado el hallazgo', async () => {
     useAppSession.mockReturnValue({ account: session('management') });
     getSubmittedInspection.mockResolvedValue(
       report({
@@ -1132,7 +1145,7 @@ describe('InspectionFindingsRoute — Edit assignment (ADR-021)', () => {
     renderRoute();
 
     await screen.findByRole('region', { name: 'Next step' });
-    expect(screen.queryByRole('button', { name: 'Edit assignment' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Edit assignment' })).toBeTruthy();
   });
 
   it('mantiene Edit assignment mientras el trabajo está en curso', async () => {
@@ -1458,7 +1471,7 @@ describe('InspectionFindingsRoute — navegación entre etapas', () => {
     fireEvent.click(await screen.findByRole('tab', { name: 'In progress' }));
 
     const record = await screen.findByRole('region', { name: 'In progress record' });
-    expect(within(record).getByText('Corrective action')).toBeTruthy();
+    expect(within(record).getByText('Follow-up')).toBeTruthy();
     expect(within(record).getByText('Refit the guard on packaging line 3')).toBeTruthy();
     expect(within(record).getByText('Ada Reid')).toBeTruthy();
     expect(within(record).getByText('2027-08-30')).toBeTruthy();
@@ -1571,7 +1584,7 @@ describe('InspectionFindingsRoute — navegación entre etapas', () => {
 
     const record = await screen.findByRole('region', { name: 'Closed record' });
     await within(record).findByText('Verified on the floor.');
-    expect(within(record).getByText('Corrective action')).toBeTruthy();
+    expect(within(record).getByText('Follow-up')).toBeTruthy();
     expect(within(record).queryByLabelText('Accepted evidence photographs')).toBeNull();
     expect(within(record).queryByRole('img')).toBeNull();
     expect(getEvidenceDownload).not.toHaveBeenCalled();
@@ -1601,7 +1614,7 @@ describe('InspectionFindingsRoute — navegación entre etapas', () => {
     renderRoute();
 
     const record = await screen.findByRole('region', { name: 'Closed record' });
-    expect(within(record).getByText('Corrective action')).toBeTruthy();
+    expect(within(record).getByText('Follow-up')).toBeTruthy();
     expect(within(record).queryByText('Nothing was recorded here yet.')).toBeNull();
   });
 

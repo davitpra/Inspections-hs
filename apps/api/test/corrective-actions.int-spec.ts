@@ -1,7 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { InspectionSubmission, TemplateDocument } from '@hs/contracts';
-import { ACTION_STATES, TRANSITIONS, transitionFor, type ActionState } from '@hs/contracts';
+import {
+  ACTION_STATES,
+  ROLES,
+  TRANSITIONS,
+  isAdministrator,
+  transitionFor,
+  type ActionState,
+} from '@hs/contracts';
 
 import { ActionsService } from '../src/actions/actions.service';
 import { EscalationService } from '../src/actions/escalation.service';
@@ -739,7 +746,7 @@ describe('quien reportó el hallazgo también ejecuta la acción (ADR-024)', () 
     expect(done.events.at(-1)?.actor_user_id).toBe(reporterAccountId);
   });
 
-  it('otro JHSC y management que no reportó reciben forbidden', async () => {
+  it('otro JHSC no reportante recibe forbidden, pero management puede avanzar', async () => {
     const { findingId } = await derivedFinding();
     const created = await actions.create(asCoordinator(), findingId, {
       assignee_person_id: supervisor.personId,
@@ -747,14 +754,19 @@ describe('quien reportó el hallazgo también ejecuta la acción (ADR-024)', () 
       due_at: DUE_AT,
     });
 
-    for (const session of [asOtherJhsc(), asManager()]) {
-      await expect(
-        actions.transition(session, created.id, { to: 'in_progress', evidence: [] }),
-      ).rejects.toMatchObject({ response: { code: 'forbidden' } });
-    }
+    await expect(
+      actions.transition(asOtherJhsc(), created.id, { to: 'in_progress', evidence: [] }),
+    ).rejects.toMatchObject({ response: { code: 'forbidden' } });
+
+    const started = await actions.transition(asManager(), created.id, {
+      to: 'in_progress',
+      evidence: [],
+    });
+
+    expect(started.state).toBe('in_progress');
   });
 
-  it('un reportante management no puede verificar lo que él mismo declaró hecho', async () => {
+  it('management puede verificar lo que él mismo declaró hecho', async () => {
     const draftFindingId = randomUUID();
     const finding = await findings.report(asManager(), {
       site_id: SITE_A,
@@ -778,9 +790,9 @@ describe('quien reportó el hallazgo también ejecuta la acción (ADR-024)', () 
       evidence: [],
     });
 
-    await expect(
-      actions.transition(asManager(), created.id, { to: 'closed', evidence: [] }),
-    ).rejects.toMatchObject({ response: { code: 'verifier_is_executor' } });
+    const closed = await actions.transition(asManager(), created.id, { to: 'closed', evidence: [] });
+
+    expect(closed.state).toBe('closed');
   });
 });
 
@@ -924,7 +936,7 @@ describe('la máquina de estados', () => {
 });
 
 describe('el verificador', () => {
-  it('quien declaró el trabajo hecho no puede cerrar', async () => {
+  it('management puede cerrar el trabajo que declaró hecho', async () => {
     const actionId = await openAction();
 
     await actions.transition(asSupervisor(), actionId, { to: 'in_progress', evidence: [] });
@@ -933,31 +945,33 @@ describe('el verificador', () => {
       evidence: [{ kind: 'after', object_key: evidenceKey(actionId) }],
     });
 
-    await expect(
-      actions.transition(asSupervisor(), actionId, { to: 'closed', evidence: [] }),
-    ).rejects.toMatchObject({ response: { code: 'verifier_is_executor' } });
+    await actions.transition(asSupervisor(), actionId, { to: 'closed', evidence: [] });
 
-    expect(await stateOf(actionId)).toBe('awaiting_verification');
+    expect(await stateOf(actionId)).toBe('closed');
   });
 
-  it('tampoco puede rechazar su propio trabajo', async () => {
+  it('management puede rechazar el trabajo que declaró hecho', async () => {
     const actionId = await openAction();
 
     await awaitingVerification(actionId);
 
-    await expect(
-      actions.transition(asSupervisor(), actionId, {
-        to: 'in_progress',
-        reason: 'the guard is on line 2, not line 3',
-        evidence: [],
-      }),
-    ).rejects.toMatchObject({ response: { code: 'verifier_is_executor' } });
+    const refused = await actions.transition(asSupervisor(), actionId, {
+      to: 'in_progress',
+      reason: 'the guard is on line 2, not line 3',
+      evidence: [],
+    });
+
+    expect(refused.state).toBe('in_progress');
   });
 
-  it('un INSERT directo del ejecutor falla con HS005', async () => {
+  it('un INSERT directo de un inspector ejecutor falla con HS005', async () => {
     const actionId = await openAction();
 
-    await awaitingVerification(actionId);
+    await actions.transition(asInspector(), actionId, { to: 'in_progress', evidence: [] });
+    await actions.transition(asInspector(), actionId, {
+      to: 'awaiting_verification',
+      evidence: [],
+    });
 
     await expect(
       inScope(
@@ -966,7 +980,7 @@ describe('el verificador', () => {
         `INSERT INTO corrective_action_event
            (action_id, site_id, position, from_state, to_state, actor_user_id, occurred_at)
          VALUES ($1, $2, 3, 'awaiting_verification', 'closed', $3, now())`,
-        [actionId, SITE_A, supervisor.accountId],
+        [actionId, SITE_A, inspector.accountId],
       ),
     ).rejects.toSatisfy((error: unknown) => sqlstate(error) === 'HS005');
   });
@@ -1036,12 +1050,11 @@ describe('el verificador', () => {
   });
 
   /**
-   * Gerencia solo puede declarar trabajo hecho cuando es la responsable de la acción —
-   * `in_progress → awaiting_verification` es del `assignee` o del coordinador—, así que el caso se monta
-   * asignándosela. La regla la alcanza igual que al supervisor: ADR-019 exime al
-   * coordinador y a nadie más.
+   * Gerencia puede declarar trabajo hecho cuando es la responsable de la acción —
+   * `in_progress → awaiting_verification` es del `assignee` o de una cuenta administrativa—, así
+   * que el caso se monta asignándosela. ADR-019 y ADR-025 eximen a las cuentas administrativas.
    */
-  it('gerencia tampoco puede verificar lo que declaró hecho', async () => {
+  it('gerencia puede verificar lo que declaró hecho', async () => {
     const actionId = await openAction({ assignee: manager.personId });
 
     await actions.transition(asManager(), actionId, { to: 'in_progress', evidence: [] });
@@ -1050,9 +1063,9 @@ describe('el verificador', () => {
       evidence: [{ kind: 'after', object_key: evidenceKey(actionId) }],
     });
 
-    await expect(
-      actions.transition(asManager(), actionId, { to: 'closed', evidence: [] }),
-    ).rejects.toMatchObject({ response: { code: 'verifier_is_executor' } });
+    const closed = await actions.transition(asManager(), actionId, { to: 'closed', evidence: [] });
+
+    expect(closed.state).toBe('closed');
   });
 
   /**
@@ -1128,6 +1141,110 @@ describe('el verificador', () => {
     );
 
     expect(await stateOf(actionId)).toBe('closed');
+  });
+
+  it('un INSERT directo de management ejecutor commitea', async () => {
+    const actionId = await openAction({ assignee: manager.personId });
+
+    await actions.transition(asManager(), actionId, { to: 'in_progress', evidence: [] });
+    await actions.transition(asManager(), actionId, {
+      to: 'awaiting_verification',
+      evidence: [],
+    });
+
+    await inScope(
+      db.app,
+      [SITE_A],
+      `INSERT INTO corrective_action_event
+         (action_id, site_id, position, from_state, to_state, actor_user_id, occurred_at)
+       VALUES ($1, $2, 3, 'awaiting_verification', 'closed', $3, now())`,
+      [actionId, SITE_A, manager.accountId],
+    );
+
+    expect(await stateOf(actionId)).toBe('closed');
+  });
+
+  it('la guarda directa coincide con isAdministrator para cada rol', async () => {
+    for (const role of ROLES) {
+      const account =
+        role === 'coordinator'
+          ? coordinator
+          : role === 'management'
+            ? manager
+            : inspector;
+      const actionId = await openAction({
+        assignee: role === 'management' ? manager.personId : rosterPerson,
+      });
+
+      if (role === 'coordinator') {
+        await actions.transition(asCoordinator(), actionId, { to: 'in_progress', evidence: [] });
+        await actions.transition(asCoordinator(), actionId, {
+          to: 'awaiting_verification',
+          evidence: [],
+        });
+      } else if (role === 'management') {
+        await actions.transition(asManager(), actionId, { to: 'in_progress', evidence: [] });
+        await actions.transition(asManager(), actionId, {
+          to: 'awaiting_verification',
+          evidence: [],
+        });
+      } else {
+        await actions.transition(asInspector(), actionId, { to: 'in_progress', evidence: [] });
+        await actions.transition(asInspector(), actionId, {
+          to: 'awaiting_verification',
+          evidence: [],
+        });
+      }
+
+      const accepted = await inScope(
+        db.app,
+        [SITE_A],
+        `INSERT INTO corrective_action_event
+           (action_id, site_id, position, from_state, to_state, actor_user_id, occurred_at)
+         VALUES ($1, $2, 3, 'awaiting_verification', 'closed', $3, now())`,
+        [actionId, SITE_A, account.accountId],
+      )
+        .then(() => true)
+        .catch((error: unknown) => {
+          if (sqlstate(error) === 'HS005') return false;
+          throw error;
+        });
+
+      expect(accepted).toBe(isAdministrator(role));
+    }
+  });
+
+  it('una cuenta degradada a inspector pierde la excepción del motor', async () => {
+    const actionId = await openAction({ assignee: rosterPerson });
+
+    await actions.transition(asCoordinator(), actionId, { to: 'in_progress', evidence: [] });
+    await actions.transition(asCoordinator(), actionId, {
+      to: 'awaiting_verification',
+      evidence: [],
+    });
+
+    await inScope(db.migrator, [SITE_A, SITE_B], 'UPDATE app_user SET role = $1 WHERE id = $2', [
+      'inspector',
+      coordinator.accountId,
+    ]);
+
+    try {
+      await expect(
+        inScope(
+          db.app,
+          [SITE_A],
+          `INSERT INTO corrective_action_event
+             (action_id, site_id, position, from_state, to_state, actor_user_id, occurred_at)
+           VALUES ($1, $2, 3, 'awaiting_verification', 'closed', $3, now())`,
+          [actionId, SITE_A, coordinator.accountId],
+        ),
+      ).rejects.toSatisfy((error: unknown) => sqlstate(error) === 'HS005');
+    } finally {
+      await inScope(db.migrator, [SITE_A, SITE_B], 'UPDATE app_user SET role = $1 WHERE id = $2', [
+        'coordinator',
+        coordinator.accountId,
+      ]);
+    }
   });
 });
 
@@ -1372,16 +1489,16 @@ describe('la creación', () => {
 });
 
 describe('los permisos', () => {
-  it('un supervisor no puede abrir una acción', async () => {
+  it('management abre una acción aunque no haya reportado el hallazgo', async () => {
     const { findingId } = await derivedFinding();
 
-    await expect(
-      actions.create(asSupervisor(), findingId, {
-        assignee_person_id: supervisor.personId,
-        description: 'Install a fixed guard on the infeed of line 3',
-        due_at: DUE_AT,
-      }),
-    ).rejects.toMatchObject({ response: { code: 'forbidden' } });
+    const action = await actions.create(asSupervisor(), findingId, {
+      assignee_person_id: supervisor.personId,
+      description: 'Install a fixed guard on the infeed of line 3',
+      due_at: DUE_AT,
+    });
+
+    expect(action.created_by).toBe(supervisor.accountId);
   });
 
   it('quien reportó el hallazgo lo abre, aunque no sea el coordinador (ADR-017)', async () => {
@@ -1446,11 +1563,11 @@ describe('los permisos', () => {
     ).rejects.toMatchObject({ response: { code: 'action_not_found' } });
   });
 
-  it('un supervisor que no es el responsable no puede avanzarla', async () => {
+  it('un inspector que no es el responsable no puede avanzarla', async () => {
     const actionId = await openAction({ assignee: rosterPerson });
 
     await expect(
-      actions.transition(asSupervisor(), actionId, {
+      actions.transition(asOtherJhsc(), actionId, {
         to: 'in_progress',
         evidence: [],
       }),
@@ -1468,6 +1585,19 @@ describe('los permisos', () => {
 
     expect(action.state).toBe('awaiting_verification');
     expect(action.events[2]?.actor_user_id).toBe(coordinator.accountId);
+  });
+
+  it('management avanza en nombre de una persona sin cuenta', async () => {
+    const actionId = await openAction({ assignee: rosterPerson });
+
+    await actions.transition(asManager(), actionId, { to: 'in_progress', evidence: [] });
+    const action = await actions.transition(asManager(), actionId, {
+      to: 'awaiting_verification',
+      evidence: [],
+    });
+
+    expect(action.state).toBe('awaiting_verification');
+    expect(action.events[2]?.actor_user_id).toBe(manager.accountId);
   });
 
   it('un miembro del JHSC no escribe nada', async () => {
@@ -1995,11 +2125,25 @@ describe('la edición de la asignación vigente (ADR-021)', () => {
     expect(amended.events).toHaveLength(1);
   });
 
-  it('un supervisor que no reportó el hallazgo no puede editar', async () => {
+  it('management reemplaza una asignación de un hallazgo que no reportó', async () => {
+    const { actionId } = await amendable();
+
+    const amended = await actions.replaceAssignment(asSupervisor(), actionId, {
+      assignee_person_id: rosterPerson,
+      description: 'Install a fixed guard on the infeed of line 3 now',
+      due_at: LATER_DUE_AT,
+    });
+
+    expect(amended.assignee_person_id).toBe(rosterPerson);
+    expect(amended.description).toBe('Install a fixed guard on the infeed of line 3 now');
+    expect(await eventRows(actionId)).toHaveLength(1);
+  });
+
+  it('un inspector que no reportó el hallazgo no puede editar', async () => {
     const { actionId } = await amendable();
 
     await expect(
-      actions.replaceAssignment(asSupervisor(), actionId, {
+      actions.replaceAssignment(asOtherJhsc(), actionId, {
         assignee_person_id: rosterPerson,
         description: 'Install a fixed guard on the infeed of line 3 now',
         due_at: LATER_DUE_AT,

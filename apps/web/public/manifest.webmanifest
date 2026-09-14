@@ -1,6 +1,6 @@
 {
-  "name": "HS Platform — Inspections",
-  "short_name": "Inspections",
+  "name": "Walkthrough",
+  "short_name": "Walkthrough",
   "description": "Health and safety inspections, capturable with no network.",
   "id": "/",
   "start_url": "/",

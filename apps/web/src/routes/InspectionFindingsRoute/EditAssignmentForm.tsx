@@ -115,7 +115,7 @@ export function EditAssignmentForm({
       ) : null}
 
       <label className="finding__step-field">
-        <span>Describe the corrective action</span>
+        <span>Describe the follow-up</span>
         <textarea
           value={description}
           minLength={ACTION_DESCRIPTION_MIN}

@@ -30,7 +30,7 @@ export function Sidebar({
         <span className="sidebar__brand-mark">
           <CrossIcon size={16} />
         </span>
-        <span>Health &amp; Safety</span>
+        <span>Walkthrough</span>
       </div>
 
       <div className="sidebar__links">

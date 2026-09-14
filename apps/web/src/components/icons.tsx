@@ -412,7 +412,7 @@ export function GripIcon({ size = 16 }: { size?: number }): React.JSX.Element {
 /**
  * La cruz de la marca: la misma forma del favicon y del icono instalado
  * (`public/icon-192.png`), para que la aplicación se llame igual en la pestaña, en el
- * escritorio del teléfono y arriba de «Health & Safety».
+ * escritorio del teléfono y arriba de «Walkthrough».
  *
  * Es la única de este archivo que se dibuja rellena y no trazada: el resto son íconos de
  * línea que acompañan un texto, y esta es una marca — a 16px un trazo de 1.8 la deja

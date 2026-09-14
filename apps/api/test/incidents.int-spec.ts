@@ -1345,7 +1345,34 @@ describe('el segundo padre de la acción correctiva', () => {
 
   });
 
-  it('la acción de una investigación recorre el mismo ciclo, con el mismo verificador distinto', async () => {
+  it('management también crea acciones de investigación y un inspector no puede hacerlo', async () => {
+    const incidentId = await investigated();
+    const rows = await inSession<{ id: string }>(
+      db.app,
+      { siteIds: [SITE_A], userId: coordinator.accountId, role: 'coordinator' },
+      'SELECT id FROM investigation WHERE incident_id = $1',
+      [incidentId],
+    );
+    const investigationId = one(rows).id;
+
+    const action = await actions.createForInvestigation(asSupervisor(), investigationId, {
+      assignee_person_id: supervisor.personId,
+      description: 'Replace the bypassed interlock on the changeover guard',
+      due_at: INVESTIGATION_DUE_AT,
+    });
+
+    expect(action.investigation_id).toBe(investigationId);
+
+    await expect(
+      actions.createForInvestigation(asJhsc(), investigationId, {
+        assignee_person_id: supervisor.personId,
+        description: 'Replace the bypassed interlock on the changeover guard',
+        due_at: INVESTIGATION_DUE_AT,
+      }),
+    ).rejects.toMatchObject({ response: { code: 'forbidden' } });
+  });
+
+  it('la acción de una investigación recorre el mismo ciclo y management puede verificarse', async () => {
     const incidentId = await investigated();
     const actionId = await openActionOn(incidentId);
 
@@ -1358,13 +1385,8 @@ describe('el segundo padre de la acción correctiva', () => {
       evidence: [{ kind: 'after', object_key: evidenceKey(actionId) }],
     });
 
-    // El ejecutor no puede verificar su propio trabajo, igual que en una de hallazgo.
     await expect(
       actions.transition(asSupervisor(), actionId, { to: 'closed', evidence: [] }),
-    ).rejects.toMatchObject({ response: { code: 'verifier_is_executor' } });
-
-    await expect(
-      actions.transition(asCoordinator(), actionId, { to: 'closed', evidence: [] }),
     ).resolves.toMatchObject({ state: 'closed' });
   });
 
@@ -1383,24 +1405,15 @@ describe('el segundo padre de la acción correctiva', () => {
     });
 
     await expect(
-      actions.transition(asSupervisor(), action.id, { to: 'in_progress', evidence: [] }),
+      actions.transition(asJhsc(), action.id, { to: 'in_progress', evidence: [] }),
     ).rejects.toMatchObject({ response: { code: 'forbidden' } });
   });
 
-  it('la asignación de una acción de investigación solo la edita el coordinador (ADR-021)', async () => {
+  it('una cuenta administrativa puede editar la asignación de una investigación (ADR-021, ADR-025)', async () => {
     const incidentId = await investigated();
     const actionId = await openActionOn(incidentId);
 
-    // Una investigación no tiene reportante al que extenderle el permiso: es del coordinador.
-    await expect(
-      actions.replaceAssignment(asSupervisor(), actionId, {
-        assignee_person_id: witness,
-        description: 'Reassign the interlock work while the action is still open',
-        due_at: INVESTIGATION_DUE_AT,
-      }),
-    ).rejects.toMatchObject({ response: { code: 'forbidden' } });
-
-    const amended = await actions.replaceAssignment(asCoordinator(), actionId, {
+    const amended = await actions.replaceAssignment(asSupervisor(), actionId, {
       assignee_person_id: witness,
       description: 'Reassign the interlock work while the action is still open',
       due_at: INVESTIGATION_DUE_AT,

@@ -157,5 +157,5 @@ export function sectionTitle(pathname: string): string {
   const segments = pathname.split('/').filter(Boolean);
   const found = TITLES.find(([pattern]) => matches(pattern, segments));
 
-  return found ? found[1] : 'Health & Safety';
+  return found ? found[1] : 'Walkthrough';
 }

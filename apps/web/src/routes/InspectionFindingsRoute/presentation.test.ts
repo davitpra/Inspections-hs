@@ -312,7 +312,7 @@ describe('la presentación del estado propio del hallazgo', () => {
 describe('el próximo paso del hallazgo', () => {
   it('ofrece la asignación al coordinador cuando todavía no hay acciones', () => {
     expect(nextStep([], 'raised', session('coordinator'), itemFinding(GUARDS))).toEqual({
-      label: 'Create corrective action',
+      label: 'Create follow-up',
       control: { kind: 'create' },
       editableAssignment: null,
     });
@@ -326,6 +326,16 @@ describe('el próximo paso del hallazgo', () => {
     expect(
       nextStep([], 'raised', session('inspector', undefined, reporterId), reportedFinding)?.control,
     ).toEqual({ kind: 'create' });
+  });
+
+  it('ofrece la asignación a management aunque no haya reportado el hallazgo', () => {
+    const reportedFinding = itemFinding(GUARDS, {
+      reported_by: '99999999-9999-4999-8999-999999999999',
+    });
+
+    expect(nextStep([], 'raised', session('management'), reportedFinding)?.control).toEqual({
+      kind: 'create',
+    });
   });
 
   it('no ofrece la asignación a un inspector que no reportó el hallazgo', () => {
@@ -350,6 +360,15 @@ describe('el próximo paso del hallazgo', () => {
     const reporter = session('inspector', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', REPORTER);
 
     expect(nextStep([action()], 'assigned', reporter, reportedFinding)).toMatchObject({
+      label: 'Start work',
+      control: { kind: 'progress', action: action() },
+    });
+  });
+
+  it('ofrece Start work a management aunque la acción esté asignada a otra persona', () => {
+    expect(
+      nextStep([action()], 'assigned', session('management'), itemFinding(GUARDS)),
+    ).toMatchObject({
       label: 'Start work',
       control: { kind: 'progress', action: action() },
     });
@@ -414,14 +433,14 @@ describe('el próximo paso del hallazgo', () => {
     expect(step?.editableAssignment).toEqual(action());
   });
 
-  it('no ofrece Edit assignment a quien no puede abrir la acción', () => {
+  it('ofrece Edit assignment a management aunque no haya reportado el hallazgo', () => {
     const reportedByOther = itemFinding(GUARDS, {
       reported_by: '99999999-9999-4999-8999-999999999999',
     });
 
     expect(
       nextStep([action()], 'assigned', session('management'), reportedByOther)?.editableAssignment,
-    ).toBeNull();
+    ).toEqual(action());
   });
 
   it('mantiene Edit assignment mientras el trabajo está en curso', () => {

@@ -287,7 +287,8 @@ present this identically.
 
 The system SHALL offer, on the findings-only reading of a submitted inspection, a control to
 create a corrective action for each recorded finding, to an authenticated `coordinator`
-account or to the account named by that finding's `reported_by`, and to no other account. The
+or `management` account or to the account named by that finding's `reported_by`, and to no other
+account (ADR-017, ADR-025). The
 assignee choices SHALL contain only active people of that finding's site. The system SHALL
 associate every existing corrective action with its own recorded finding and SHALL use those
 actions to present that finding's persisted lifecycle, next step, nearest blocking deadline and
@@ -300,6 +301,13 @@ presentation rule SHALL NOT replace server authorization.
 
 - **GIVEN** a submitted inspection recorded a finding
 - **WHEN** a `coordinator` reads the findings-only screen
+- **THEN** a control to create a corrective action is shown for that finding
+
+#### Scenario: A manager is offered the creation control on a finding they did not raise (ADR-025)
+
+- **GIVEN** a submitted inspection recorded a finding whose `reported_by` names an `inspector`
+  account
+- **WHEN** a `management` account scoped to that finding's site reads the findings-only screen
 - **THEN** a control to create a corrective action is shown for that finding
 
 #### Scenario: The finding's reporter is offered the creation control (ADR-017)
@@ -563,8 +571,8 @@ Assigned, In progress, Verification and Closed. The system SHALL identify the st
 SHALL NOT rely on colour alone. The system SHALL use corrective actions only to identify the
 blocking commitment, its nearest deadline and the permitted next transition; it SHALL NOT
 recalculate the finding state from those actions. For a raised finding, the system SHALL offer
-creation of a corrective action to an authenticated `coordinator` or to the account named by
-`reported_by`, and to no other account (ADR-017). The system SHALL accept that composition within
+creation of a corrective action to an authenticated `coordinator` or `management` account or to the
+account named by `reported_by`, and to no other account (ADR-017, ADR-025). The system SHALL accept that composition within
 the finding's next step itself, without leaving the findings-only reading or opening a separate
 view, and SHALL NOT present the control that begins the composition alongside the composition it
 began. For a later non-closed state, the system SHALL offer at most one primary transition
@@ -729,6 +737,19 @@ and SHALL NOT report that nothing was recorded there.
 - **WHEN** that reader opens the findings-only screen
 - **THEN** the one primary next step is to create a corrective action
 
+#### Scenario: A manager can assign a raised finding they did not raise
+
+- **GIVEN** a finding has `state` `raised` and its `reported_by` names an `inspector` account
+- **WHEN** a `management` account scoped to its site opens the findings-only screen
+- **THEN** the one primary next step is to create a corrective action
+
+#### Scenario: A manager is offered the step on behalf of the assignee
+
+- **GIVEN** a finding has `state` `assigned` and its least advanced action is `open` and assigned
+  to a person who is not the reader's person
+- **WHEN** a `management` account scoped to its site opens the findings-only screen
+- **THEN** the one primary next step names the move from `open` to `in_progress`
+
 #### Scenario: The assignee is offered the blocking action's next step
 
 - **GIVEN** a finding has `state` `in_progress` and its least advanced action is `in_progress` and
@@ -864,8 +885,8 @@ action and every cached Finding reading whose persisted state may have changed.
 
 #### Scenario: A refused transition is not reported as done
 
-- **GIVEN** a verifier is the same person who declared the work done
-- **WHEN** that verifier submits approval from the findings-only screen
+- **GIVEN** a reader is offered approval of an action in `awaiting_verification`
+- **WHEN** that reader submits approval from the findings-only screen and the server refuses it
 - **THEN** the server's refusal is shown against the action
 - **AND** neither the action stream nor the finding state stream advances
 
@@ -879,8 +900,8 @@ action and every cached Finding reading whose persisted state may have changed.
 ### Requirement: An active finding exposes its current assignment for correction
 
 The system SHALL present `Edit assignment` in the current next step of an `assigned` or
-`in_progress` finding to an authenticated `coordinator` or the account named by `reported_by`, and
-to no other account. It SHALL decide that offer on the derived state of the corrective action that
+`in_progress` finding to an authenticated `coordinator` or `management` account or the account named
+by `reported_by`, and to no other account (ADR-021, ADR-025). It SHALL decide that offer on the derived state of the corrective action that
 holds the finding in its stage, using the same editable-state rule the server applies. The inline form
 SHALL contain the current `assignee_person_id`, `description` and `due_at`. A successful submission
 SHALL preserve the finding state, refresh affected readings and present only the replacement values.
@@ -892,6 +913,12 @@ offer no assignment editing.
 - **GIVEN** a finding is `in_progress` and the reader may edit its action
 - **WHEN** the reader chooses `Edit assignment`
 - **THEN** the current responsible person, work and due date are available inline
+
+#### Scenario: A manager edits an assignment on a finding they did not raise
+
+- **GIVEN** an `assigned` finding whose `reported_by` names an `inspector` account
+- **WHEN** a `management` account scoped to its site reads the current next step
+- **THEN** `Edit assignment` is offered
 
 #### Scenario: Verification presents its decision without an assignment editor
 
@@ -914,7 +941,7 @@ offer no assignment editing.
 
 #### Scenario: An unauthorized reader cannot edit an assignment
 
-- **GIVEN** an `assigned` or `in_progress` finding whose reader is neither a `coordinator` nor
+- **GIVEN** an `assigned` or `in_progress` finding whose reader is an `inspector` that is not
   its `reported_by`
 - **WHEN** the current next step is presented
 - **THEN** no `Edit assignment` control is offered
@@ -992,3 +1019,4 @@ type. They SHALL derive findings from the reader's existing site-scoped finding 
 - **WHEN** the account views findings
 - **THEN** the two inspections are listed in the order `2027-07`, `2027-05`
 - **AND** each inspection offers its findings-only reading addressed by scheduled inspection id
+

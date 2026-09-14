@@ -197,7 +197,7 @@ export function InspectionFindingsRoute(): React.JSX.Element {
 
       {sections.length > 0 && actions.isError ? (
         <p className="notice notice--warn">
-          Existing corrective actions need a connection.
+          Existing follow-ups need a connection.
         </p>
       ) : null}
 

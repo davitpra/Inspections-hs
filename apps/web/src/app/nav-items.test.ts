@@ -67,6 +67,6 @@ describe('sectionTitle', () => {
   });
 
   it('nunca devuelve vacío: una URL desconocida cae al nombre de la aplicación', () => {
-    expect(sectionTitle('/no-existe')).toBe('Health & Safety');
+    expect(sectionTitle('/no-existe')).toBe('Walkthrough');
   });
 });

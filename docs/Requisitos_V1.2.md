@@ -170,7 +170,8 @@ envía y **queda congelada**. El momento del envío es el punto de no retorno.
 
 Una respuesta negativa en el checklist genera un hallazgo con foto y descripción obligatorias.
 De ahí sale una acción correctiva con **una persona nombrada** como responsable y una fecha límite
-declarada por el coordinador de HS **o por quien reportó el hallazgo** (ADR-017). El responsable
+declarada por el coordinador de HS, por management **o por quien reportó el hallazgo**
+(ADR-017, ADR-025). El responsable
 ejecuta la acción, o la cuenta que reportó el hallazgo puede iniciar y declarar hecho el trabajo
 sin cambiar a la persona responsable (ADR-024).
 
@@ -178,8 +179,8 @@ sin cambiar a la persona responsable (ADR-024).
 
 El responsable ejecuta la acción; el sistema pide y conserva evidencia antes/después, pero no
 la exige para pasar a _esperando verificación_ (ADR-016). **Una persona distinta del ejecutor**
-la verifica y la cierra, salvo el coordinador de H&S, que es el único rol exento porque es la
-única cuenta que declara trabajo hecho por una persona del roster sin usuario (ADR-019). Si
+la verifica y la cierra, salvo las cuentas administrativas `coordinator` y `management`, que están
+exentas cuando declaran trabajo hecho por una persona del roster sin usuario (ADR-019, ADR-025). Si
 vence sin
 cerrarse: +3 días escala al coordinador, +7 días a gerencia. Cada transición es un evento
 append-only, no un campo que se sobrescribe.

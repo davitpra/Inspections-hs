@@ -179,7 +179,7 @@ export function FindingLifecycle({
   const commitmentForm = creating ? (
     <form
       className="finding__create-form"
-      aria-label="Create corrective action"
+      aria-label="Create follow-up"
       onSubmit={(event) => {
         event.preventDefault();
         submit();
@@ -218,7 +218,7 @@ export function FindingLifecycle({
       ) : null}
 
       <label className="finding__step-field">
-        <span>Describe the corrective action</span>
+        <span>Describe the follow-up</span>
         <textarea
           value={description}
           minLength={ACTION_DESCRIPTION_MIN}
@@ -251,7 +251,7 @@ export function FindingLifecycle({
       {creation.isError ? (
         <p role="alert" className="notice notice--warn">
           {creation.error.message ||
-            "The corrective action could not be created."}
+            "The follow-up could not be created."}
         </p>
       ) : null}
 
@@ -261,7 +261,7 @@ export function FindingLifecycle({
           type="submit"
           disabled={!roster.isSuccess || creation.isPending}
         >
-          {creation.isPending ? "Creating…" : "Create action"}
+          {creation.isPending ? "Creating…" : "Create follow-up"}
         </button>
       </div>
     </form>
@@ -297,7 +297,7 @@ export function FindingLifecycle({
                 setOpened(true);
               }}
             >
-              Create a corrective action
+              Create a follow-up
             </button>
           )}
         </div>

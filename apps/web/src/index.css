@@ -1155,6 +1155,113 @@ select:disabled {
 }
 
 /*
+ * Corregir una persona es la misma familia que invitarla: identidad arriba, una frase de
+ * contexto, los datos y las acciones al final. Nombre y apellido comparten renglón porque
+ * se leen como un solo dato; en un teléfono se apilan para no partir cada input a la mitad.
+ */
+.edit-person-dialog {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.edit-person-dialog__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.edit-person-dialog__icon {
+  display: grid;
+  flex: none;
+  width: var(--space-12);
+  height: var(--space-12);
+  place-items: center;
+  border-radius: var(--radius-pill);
+  background: var(--tint-bg);
+  color: var(--brand);
+}
+
+.edit-person-dialog__eyebrow {
+  margin: 0 0 var(--space-0-5);
+  color: var(--brand);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.edit-person-dialog__head h2 {
+  margin: 0;
+  font-size: var(--text-lg);
+  overflow-wrap: anywhere;
+}
+
+.edit-person-dialog__intro {
+  margin: 0;
+  color: var(--muted);
+}
+
+.edit-person-dialog__form {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.edit-person-dialog__names {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.edit-person-dialog__field {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.edit-person-dialog__field label {
+  font-weight: var(--weight-strong);
+}
+
+.edit-person-dialog__field input:disabled {
+  color: var(--muted);
+}
+
+/*
+ * El email no es un dato de la persona sino de su invitación: una línea lo separa de los
+ * campos del roster para que corregirlo no se lea como parte de la misma ficha.
+ */
+.edit-person-dialog__field--account {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--line);
+}
+
+.edit-person-dialog__hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.edit-person-dialog__actions {
+  display: flex;
+  flex-wrap: wrap-reverse;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+}
+
+.edit-person-dialog__actions button {
+  flex: 1 1 10rem;
+}
+
+.edit-person-dialog .notice {
+  margin: 0;
+}
+
+@media (max-width: 30rem) {
+  .edit-person-dialog__names {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/*
  * Quitar acceso conserva la estructura de la invitación, pero cambia la señal de marca
  * por peligro. El recuadro separa la consecuencia inmediata de lo que deliberadamente
  * no cambia: la persona sigue perteneciendo al roster del sitio.

@@ -1,6 +1,7 @@
 import {
   ASSIGNEE,
   FINDING_REPORTER,
+  isAdministrator,
   type Action,
   type ActionTransition,
   type Finding,
@@ -8,9 +9,9 @@ import {
 } from '@hs/contracts';
 
 /**
- * Quién puede abrir una acción sobre ESTE hallazgo (ADR-017).
+ * Quién puede abrir una acción sobre ESTE hallazgo (ADR-017, ADR-025).
  *
- * No es solo el coordinador: también la cuenta que reportó el hallazgo —`reported_by`—,
+ * Pueden hacerlo las cuentas administrativas y también la cuenta que reportó el hallazgo —`reported_by`—,
  * que en uno derivado es quien firmó el envío y en uno manual quien lo cargó. Es la misma
  * clase de regla que `canAttempt` aplica sobre una transición: una RELACIÓN con este
  * registro puntual, resuelta contra `session.userId` porque `reported_by` es una CUENTA
@@ -25,13 +26,13 @@ export function canCreateAction(
 ): boolean {
   if (account === null) return false;
 
-  return account.role === 'coordinator' || account.userId === finding.reported_by;
+  return isAdministrator(account.role) || account.userId === finding.reported_by;
 }
 
 /**
- * Quién puede corregir la asignación de una acción de ESTE hallazgo (ADR-021).
+ * Quién puede corregir la asignación de una acción de ESTE hallazgo (ADR-021, ADR-025).
  *
- * Se autoriza igual que abrir la acción (ADR-017): coordinador, más la cuenta que
+ * Se autoriza igual que abrir la acción (ADR-017, ADR-025): una cuenta administrativa, más la cuenta que
  * reportó el hallazgo. Corregir un error de responsable, trabajo o fecha es de la misma
  * clase de decisión que la asignación original, no una nueva. La interfaz ofrece el
  * control; el servidor vuelve a autorizarlo en `ActionsService.replaceAssignment`.
@@ -56,8 +57,8 @@ export function canEditAssignment(
  * Solo pide esa relación: el listado trae `ActionSummary`, sin el stream de `events`, y
  * alcanza para tomar esta decisión.
  *
- * Lo que esto **no** decide es la regla del verificador —quien ejecutó no cierra, salvo el
- * coordinador (ADR-019)—, porque necesita saber quién declaró el trabajo hecho y eso
+ * Lo que esto **no** decide es la regla del verificador —quien ejecutó no cierra, salvo las
+ * cuentas administrativas (ADR-019, ADR-025)—, porque necesita saber quién declaró el trabajo hecho y eso
  * depende del stream, no del rol. El botón se ofrece y el servidor responde
  * `verifier_is_executor` a quien todavía la tiene prohibida, que es un error que se lee.
  * Media regla copiada acá sería una que puede separarse de la otra mitad.

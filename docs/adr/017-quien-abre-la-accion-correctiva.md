@@ -2,10 +2,10 @@
 
 |                             |                                                                 |
 | --------------------------- | --------------------------------------------------------------- |
-| **Estado**                  | Aceptada                                                        |
+| **Estado**                  | Superada                                                        |
 | **Fecha**                   | 2026-08-29                                                      |
 | **Supersede**               | —                                                               |
-| **Superada por**            | —                                                               |
+| **Superada por**            | ADR-025 (parcial: actores administrativos para creación y corrección) |
 | **Referencias**             | `docs/Requisitos_V1.2.md` §3 R2, §4; ADR-004, ADR-008, ADR-016  |
 | **Changes que la consumen** | `quien-abre-la-accion`                                          |
 

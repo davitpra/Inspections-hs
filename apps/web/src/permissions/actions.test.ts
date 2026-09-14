@@ -50,9 +50,9 @@ function finding(reportedBy = REPORTER_ACCOUNT): Pick<Finding, 'reported_by'> {
 }
 
 describe('la creación de acciones (ADR-017)', () => {
-  it('se ofrece al coordinador aunque no haya reportado el hallazgo', () => {
+  it('se ofrece a las cuentas administrativas aunque no hayan reportado el hallazgo', () => {
     for (const role of ROLES) {
-      expect(canCreateAction(session(role), finding())).toBe(role === 'coordinator');
+      expect(canCreateAction(session(role), finding())).toBe(role !== 'inspector');
     }
   });
 
@@ -76,9 +76,9 @@ describe('la creación de acciones (ADR-017)', () => {
 });
 
 describe('la edición de la asignación (ADR-021)', () => {
-  it('se autoriza igual que abrir la acción: coordinador o quien reportó', () => {
+  it('se autoriza igual que abrir la acción: administración o quien reportó', () => {
     for (const role of ROLES) {
-      expect(canEditAssignment(session(role), finding())).toBe(role === 'coordinator');
+      expect(canEditAssignment(session(role), finding())).toBe(role !== 'inspector');
       expect(
         canEditAssignment(session(role, PERSON, REPORTER_ACCOUNT), finding(REPORTER_ACCOUNT)),
       ).toBe(true);
@@ -112,11 +112,11 @@ describe('los botones del detalle', () => {
     expect(offered('in_progress', reporter)).toEqual(['awaiting_verification']);
   });
 
-  it('management que no es responsable no puede declararla hecha', () => {
-    // `management` no está entre los roles de `open → in_progress`: ahí solo están el
-    // responsable y el coordinador. Que la cuenta sea administrativa no la vuelve dueña de la
-    // acción de otro.
-    expect(offered('open', session('management', OTHER_PERSON))).toEqual([]);
+  it('management puede avanzar en nombre de otra persona', () => {
+    expect(offered('open', session('management', OTHER_PERSON))).toEqual(['in_progress']);
+    expect(offered('in_progress', session('management', OTHER_PERSON))).toEqual([
+      'awaiting_verification',
+    ]);
   });
 
   it('el coordinador puede avanzar en nombre de otro', () => {
@@ -126,10 +126,10 @@ describe('los botones del detalle', () => {
     expect(offered('in_progress', coordinator)).toEqual(['awaiting_verification']);
   });
 
-  it('gerencia verifica y no ejecuta', () => {
+  it('gerencia ejecuta y verifica', () => {
     const management = session('management', OTHER_PERSON);
 
-    expect(offered('open', management)).toEqual([]);
+    expect(offered('open', management)).toEqual(['in_progress']);
     expect(offered('awaiting_verification', management).sort()).toEqual(['closed', 'in_progress']);
   });
 

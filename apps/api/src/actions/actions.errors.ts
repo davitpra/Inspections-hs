@@ -71,11 +71,11 @@ export const invalidActionState = (): ActionException =>
 export const invalidEvidence = (message: string): ActionException =>
   new ActionException('invalid_evidence', message, HttpStatus.BAD_REQUEST);
 
-/** §3 R3: quien ejecutó no verifica — salvo el coordinador de H&S (ADR-019). */
+/** §3 R3: quien ejecutó no verifica — salvo una cuenta administrativa (ADR-019, ADR-025). */
 export const verifierIsExecutor = (): ActionException =>
   new ActionException(
     'verifier_is_executor',
-    'A corrective action is verified by someone other than whoever did the work, unless they are the coordinator',
+    'A corrective action is verified by someone other than whoever did the work, unless they are an administrator',
     HttpStatus.FORBIDDEN,
   );
 

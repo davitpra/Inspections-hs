@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 
 import { correctAccountEmail, updatePerson } from '../../api/roster';
 import { queryKeys } from '../../api/query-keys';
+import { PersonIcon } from '../../components/icons';
 import {
   editPersonButtonText,
   personCorrection,
@@ -37,6 +38,7 @@ export function EditPersonDialog({
   const lastNameId = useId();
   const employeeNumberId = useId();
   const emailId = useId();
+  const emailHintId = useId();
 
   const [current, setCurrent] = useState<EditPersonValues>({
     firstName,
@@ -91,63 +93,93 @@ export function EditPersonDialog({
   return (
     <dialog
       ref={dialogRef}
-      className="modal"
+      className="modal edit-person-dialog"
       aria-labelledby={titleId}
       onCancel={(event) => {
         if (state === 'pending') event.preventDefault();
       }}
       onClose={onClose}
     >
-      <h2 id={titleId}>Edit {label}</h2>
-      <p className="modal__text">Correct this person&apos;s roster details.</p>
+      <div className="edit-person-dialog__head">
+        <span className="edit-person-dialog__icon" aria-hidden="true">
+          <PersonIcon size={24} />
+        </span>
+        <div>
+          <p className="edit-person-dialog__eyebrow">Roster</p>
+          <h2 id={titleId}>Edit {label}</h2>
+        </div>
+      </div>
+
+      <p className="edit-person-dialog__intro">Correct this person&apos;s roster details.</p>
 
       <form
+        className="edit-person-dialog__form"
         onSubmit={(event) => {
           event.preventDefault();
           if (canSubmit && state !== 'pending') save.mutate();
         }}
       >
-        <label htmlFor={firstNameId}>First name</label>
-        <input
-          id={firstNameId}
-          type="text"
-          value={current.firstName}
-          disabled={state === 'pending'}
-          onChange={(event) => setCurrent((value) => ({ ...value, firstName: event.target.value }))}
-        />
+        <div className="edit-person-dialog__names">
+          <div className="edit-person-dialog__field">
+            <label htmlFor={firstNameId}>First name</label>
+            <input
+              id={firstNameId}
+              type="text"
+              autoComplete="off"
+              value={current.firstName}
+              disabled={state === 'pending'}
+              onChange={(event) =>
+                setCurrent((value) => ({ ...value, firstName: event.target.value }))
+              }
+            />
+          </div>
 
-        <label htmlFor={lastNameId}>Last name</label>
-        <input
-          id={lastNameId}
-          type="text"
-          value={current.lastName}
-          disabled={state === 'pending'}
-          onChange={(event) => setCurrent((value) => ({ ...value, lastName: event.target.value }))}
-        />
+          <div className="edit-person-dialog__field">
+            <label htmlFor={lastNameId}>Last name</label>
+            <input
+              id={lastNameId}
+              type="text"
+              autoComplete="off"
+              value={current.lastName}
+              disabled={state === 'pending'}
+              onChange={(event) =>
+                setCurrent((value) => ({ ...value, lastName: event.target.value }))
+              }
+            />
+          </div>
+        </div>
 
-        <label htmlFor={employeeNumberId}>Employee number</label>
-        <input
-          id={employeeNumberId}
-          type="text"
-          value={current.employeeNumber}
-          disabled={state === 'pending'}
-          onChange={(event) =>
-            setCurrent((value) => ({ ...value, employeeNumber: event.target.value }))
-          }
-        />
+        <div className="edit-person-dialog__field">
+          <label htmlFor={employeeNumberId}>Employee number</label>
+          <input
+            id={employeeNumberId}
+            type="text"
+            inputMode="numeric"
+            autoComplete="off"
+            value={current.employeeNumber}
+            disabled={state === 'pending'}
+            onChange={(event) =>
+              setCurrent((value) => ({ ...value, employeeNumber: event.target.value }))
+            }
+          />
+        </div>
 
         {account ? (
-          <>
+          <div className="edit-person-dialog__field edit-person-dialog__field--account">
             <label htmlFor={emailId}>Email</label>
             <input
               id={emailId}
               type="email"
               autoComplete="email"
+              aria-describedby={emailHintId}
               value={current.email}
               disabled={state === 'pending'}
               onChange={(event) => setCurrent((value) => ({ ...value, email: event.target.value }))}
             />
-          </>
+            <p id={emailHintId} className="edit-person-dialog__hint">
+              Corrects the pending invitation. No new link is issued.
+            </p>
+          </div>
         ) : null}
 
         {state === 'error' ? (
@@ -156,12 +188,16 @@ export function EditPersonDialog({
           </p>
         ) : null}
 
-        <div className="modal__actions">
-          <button type="submit" disabled={!canSubmit || state === 'pending'}>
-            {editPersonButtonText(state)}
-          </button>
+        <div className="edit-person-dialog__actions">
           <button type="button" onClick={close} disabled={state === 'pending'}>
             Cancel
+          </button>
+          <button
+            type="submit"
+            className="button--primary"
+            disabled={!canSubmit || state === 'pending'}
+          >
+            {editPersonButtonText(state)}
           </button>
         </div>
       </form>

@@ -69,7 +69,7 @@ export function SignInRoute(): React.JSX.Element {
           <span className="auth__brand-mark">
             <CrossIcon size={18} />
           </span>
-          <span>Health &amp; Safety</span>
+          <span>Walkthrough</span>
         </div>
 
         <div className="auth__card">

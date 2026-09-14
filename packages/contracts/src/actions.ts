@@ -75,11 +75,10 @@ export type TransitionActor = Role | typeof ASSIGNEE | typeof FINDING_REPORTER;
  * Lo que una transición exige además del estado de origen.
  *
  * - `not_executor`: el actor no puede ser quien declaró el trabajo hecho. R3,
- *   "una persona distinta del ejecutor" — **salvo el `coordinator`, que está
- *   exento** (ADR-019): es la única cuenta que declara trabajo hecho por una
- *   persona del roster sin usuario, y aplicarle la regla dejaba trabajo
- *   terminado retenido en `awaiting_verification`. Sigue entera para
- *   `management`.
+ *   "una persona distinta del ejecutor" — **salvo `coordinator` y `management`,
+ *   que están exentos** (ADR-019, ADR-025): son las cuentas administrativas que
+ *   pueden declarar trabajo hecho por una persona del roster sin usuario. Sigue
+ *   entera para `inspector`.
  * - `reason`: hay que decir por qué. Solo al rechazar una verificación.
  *
  * QUIÉN SUFRE `not_executor` NO SE LEE DE ACÁ, igual que `ASSIGNEE` no dice
@@ -119,20 +118,21 @@ export interface ActionTransition {
  *
  * **La creación escribe solamente la primera fila**. `open → in_progress` sigue siendo
  * la declaración explícita de que el trabajo empezó; no congela la asignación, que puede
- * corregirse mientras el trabajo no se haya declarado hecho (ADR-021).
+ * corregirse mientras el trabajo no se haya declarado hecho (ADR-021). Las cuentas
+ * administrativas que la tabla reconoce siguen la equivalencia de ADR-025.
  */
 export const TRANSITIONS: readonly ActionTransition[] = [
-  { from: null, to: 'open', roles: ['coordinator'], requires: [] },
+  { from: null, to: 'open', roles: ['coordinator', 'management'], requires: [] },
   {
     from: 'open',
     to: 'in_progress',
-    roles: [ASSIGNEE, FINDING_REPORTER, 'coordinator'],
+    roles: [ASSIGNEE, FINDING_REPORTER, 'coordinator', 'management'],
     requires: [],
   },
   {
     from: 'in_progress',
     to: 'awaiting_verification',
-    roles: [ASSIGNEE, FINDING_REPORTER, 'coordinator'],
+    roles: [ASSIGNEE, FINDING_REPORTER, 'coordinator', 'management'],
     requires: [],
   },
   {

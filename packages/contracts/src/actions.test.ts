@@ -67,7 +67,12 @@ describe('la máquina de estados', () => {
   it('solo la creación sale de `null`, y solo lleva a `open`', () => {
     expect(transitionsFrom(null)).toHaveLength(1);
     expect(transitionsFrom(null)[0]?.to).toBe('open');
-    expect(transitionsFrom(null)[0]?.roles).toEqual(['coordinator']);
+    expect(transitionsFrom(null)[0]?.roles).toEqual(['coordinator', 'management']);
+  });
+
+  it('gerencia puede ejecutar las dos transiciones de trabajo', () => {
+    expect(transitionsFrom('open')[0]?.roles).toContain('management');
+    expect(transitionsFrom('in_progress')[0]?.roles).toContain('management');
   });
 
   it('toda transición que exige `not_executor` sale de `awaiting_verification`', () => {
