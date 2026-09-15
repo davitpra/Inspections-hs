@@ -374,6 +374,9 @@ export type InvestigationMethod = z.infer<typeof investigationMethodSchema>;
 const SHORT_TEXT_MIN = 3;
 const SHORT_TEXT_MAX = 500;
 
+/** El máximo de personas que se pueden registrar como testigos de un incidente. */
+export const INCIDENT_WITNESS_MAX = 20;
+
 /**
  * El mínimo de los campos narrativos no es cosmético, por lo mismo que en
  * `findings.ts`: "ok" en un registro inmutable que puede terminar en un expediente
@@ -410,7 +413,7 @@ export const reportIncidentRequestSchema = z.strictObject({
   on_site_treatment: onSiteTreatmentSchema,
   immediate_action: shortText,
   narrative_language: narrativeLanguageSchema,
-  witness_person_ids: z.array(z.uuid()).max(20).default([]),
+  witness_person_ids: z.array(z.uuid()).max(INCIDENT_WITNESS_MAX).default([]),
 });
 
 export type ReportIncidentRequest = z.infer<typeof reportIncidentRequestSchema>;
@@ -475,6 +478,15 @@ export type RecordCauseRequest = z.infer<typeof recordCauseRequestSchema>;
 export const incidentWitnessSchema = personOptionSchema;
 
 export type IncidentWitness = z.infer<typeof incidentWitnessSchema>;
+
+/**
+ * Las opciones del roster que puede ofrecer el reporte de incidente (§4): exactamente los
+ * cuatro campos de `PersonOption`, porque "The subject and the witnesses are chosen without
+ * seeing a profile".
+ */
+export const incidentRosterSchema = z.array(personOptionSchema);
+
+export type IncidentRoster = z.infer<typeof incidentRosterSchema>;
 
 /**
  * Un evento del stream.

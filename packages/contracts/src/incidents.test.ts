@@ -8,12 +8,14 @@ import {
   INCIDENT_FORM_VERSIONS,
   INCIDENT_STATES,
   INCIDENT_TRANSITIONS,
+  INCIDENT_WITNESS_MAX,
   INVESTIGATION_REQUIRED_CLASSIFICATIONS,
   ON_SITE_TREATMENTS,
   type IncidentClassification,
   type IncidentState,
   fieldsOfVersion,
   incidentClassificationSchema,
+  incidentRosterSchema,
   incidentTransitionFor,
   incidentTransitionsAvailable,
   incidentTransitionsFrom,
@@ -263,6 +265,35 @@ describe('el request de reporte', () => {
     expect(reportIncidentRequestSchema.safeParse({ ...VALID, what_happened: 'ok' }).success).toBe(
       false,
     );
+  });
+
+  it(`rechaza más de ${INCIDENT_WITNESS_MAX} testigos`, () => {
+    expect(
+      reportIncidentRequestSchema.safeParse({
+        ...VALID,
+        witness_person_ids: Array.from({ length: INCIDENT_WITNESS_MAX + 1 }, () =>
+          VALID.subject_person_id,
+        ),
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe('el roster reducido del reporte', () => {
+  const option = {
+    id: '11111111-1111-4111-8111-111111111111',
+    employee_number: 'DEMO-1001',
+    first_name: 'Alex',
+    last_name: 'Boivin',
+  };
+
+  it('acepta exactamente los cuatro campos de PersonOption', () => {
+    expect(incidentRosterSchema.parse([option])).toEqual([option]);
+  });
+
+  it('rechaza atributos de perfil o de planta', () => {
+    expect(incidentRosterSchema.safeParse([{ ...option, site_id: '22222222-2222-4222-8222-222222222222' }]).success).toBe(false);
+    expect(incidentRosterSchema.safeParse([{ ...option, deactivated_at: null }]).success).toBe(false);
   });
 });
 

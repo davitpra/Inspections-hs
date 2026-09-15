@@ -3,10 +3,12 @@ import {
   CURRENT_INCIDENT_FORM_VERSION,
   form7MappingOf,
   incidentTransitionFor,
+  incidentRosterSchema,
   isAdministrator,
   requiresInvestigation,
   type Form7Mapping,
   type Incident,
+  type IncidentRoster,
   type IncidentState,
   type IncidentTransitionRequest,
   type RecordCauseRequest,
@@ -309,6 +311,32 @@ export class IncidentsService {
     const now = new Date();
 
     return this.db.withSessionClient(session, (client) => listIncidents(client, now));
+  }
+
+  /**
+   * Las opciones activas para elegir sujeto o testigo, sin devolver el perfil de la persona.
+   *
+   * El rol se toma de la fila de reporte de la máquina de incidentes. El `WHERE site_id`
+   * selecciona la planta pedida; la RLS de `person` decide si la sesión puede verla y hace
+   * que una planta fuera del alcance responda con una lista vacía.
+   */
+  async roster(session: SessionScope, siteId: string): Promise<IncidentRoster> {
+    if (!hasRole(incidentTransitionFor(null, 'reported')?.roles, session.role)) {
+      throw incidentForbidden('Your role cannot list the incident roster');
+    }
+
+    return this.db.withSessionClient(session, async (client) => {
+      const { rows } = await client.query<IncidentRoster[number]>(
+        `SELECT id, employee_number, first_name, last_name
+           FROM person
+          WHERE site_id = $1
+            AND deactivated_at IS NULL
+          ORDER BY last_name, first_name`,
+        [siteId],
+      );
+
+      return incidentRosterSchema.parse(rows);
+    });
   }
 
   async get(session: SessionScope, incidentId: string): Promise<Incident> {

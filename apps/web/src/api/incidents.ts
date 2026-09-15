@@ -1,8 +1,10 @@
 import {
   incidentListSchema,
+  incidentRosterSchema,
   incidentSchema,
   type Form7Mapping,
   type Incident,
+  type IncidentRoster,
   type IncidentTransitionRequest,
   type RecordCauseRequest,
   type ReportIncidentRequest,
@@ -32,6 +34,13 @@ import { get, post } from './request';
 
 export async function listIncidents(): Promise<Incident[]> {
   return get('/incidents', (value) => incidentListSchema.parse(value));
+}
+
+/** Las opciones activas del roster de una planta, sin datos de perfil. */
+export async function listIncidentRoster(siteId: string): Promise<IncidentRoster> {
+  return get(`/incident-roster?site_id=${encodeURIComponent(siteId)}`, (value) =>
+    incidentRosterSchema.parse(value),
+  );
 }
 
 export async function getIncident(id: string): Promise<Incident> {

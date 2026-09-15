@@ -308,11 +308,6 @@ Crear una cuenta de `inspector` y aceptar la invitación, en cambio, ya no está
 el botón de `/roster` (o `pnpm auth:create-account` para management) y
 `/accept-invitation` — ver "Dar de alta a alguien".
 
-**Elegir a una persona en el reporte de incidente.** El `PersonPicker` de
-`/incidents/report` sigue siendo un campo de id: falta una ruta que liste `PersonOption`
-—cuatro columnas, solo activas— para esa pantalla. **No sirve `GET /people`**, que es del
-coordinador y devuelve el perfil completo; colgar el selector de ahí rompería §4 R4.
-
 **Renombrar, transferir y reactivar a alguien del roster.** `/roster` ya no es de solo
 lectura: da de alta a **una** persona (`POST /people`, tres campos y nada de email — dar
 acceso es otro acto), da de baja (`PATCH /people/:personId`) e importa el CSV desde la

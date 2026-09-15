@@ -1,11 +1,13 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common';
 import {
   incidentTransitionRequestSchema,
+  type IncidentRoster,
   recordCauseRequestSchema,
   reportIncidentRequestSchema,
   type Form7Mapping,
   type Incident,
 } from '@hs/contracts';
+import { z } from 'zod';
 
 import { CurrentSession } from '../auth/session.decorator';
 import type { SessionContext } from '../auth/session.service';
@@ -38,6 +40,18 @@ import { IncidentsService } from './incidents.service';
 @Controller()
 export class IncidentsController {
   constructor(private readonly incidents: IncidentsService) {}
+
+  /**
+   * El path no cuelga de `incidents/` porque `incidents/:id` ya ocupa ese prefijo y el
+   * roster es una lista de opciones por planta, no un recurso incidente individual.
+   */
+  @Get('incident-roster')
+  async roster(
+    @CurrentSession() session: SessionContext,
+    @Query('site_id') siteId: unknown,
+  ): Promise<IncidentRoster> {
+    return this.incidents.roster(session, z.uuid().parse(siteId));
+  }
 
   @Get('incidents')
   async list(@CurrentSession() session: SessionContext): Promise<Incident[]> {

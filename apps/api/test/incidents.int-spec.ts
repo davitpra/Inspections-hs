@@ -285,6 +285,90 @@ describe('el recorrido completo de R4', () => {
 
 // ---------------------------------------------------------------------------
 
+describe('GET /incident-roster', () => {
+  it('devuelve solo los cuatro campos del selector', async () => {
+    const roster = await incidents.roster(asSupervisor(), SITE_A);
+
+    expect(roster.length).toBeGreaterThan(0);
+    expect(Object.keys(roster[0] ?? {}).sort()).toEqual([
+      'employee_number',
+      'first_name',
+      'id',
+      'last_name',
+    ]);
+  });
+
+  it('no ofrece una persona dada de baja', async () => {
+    const retired = await createPerson(db.app, SITE_A);
+
+    await inScope(db.migrator, [SITE_A], 'UPDATE person SET deactivated_at = now() WHERE id = $1', [
+      retired,
+    ]);
+
+    expect((await incidents.roster(asSupervisor(), SITE_A)).map((person) => person.id)).not.toContain(
+      retired,
+    );
+  });
+
+  it('ordena por apellido y nombre', async () => {
+    const adam = await createPerson(db.app, SITE_A, {
+      employeeNumber: 'ORDER-ADAM',
+      firstName: 'Adam',
+      lastName: 'Boivin',
+    });
+    const alex = await createPerson(db.app, SITE_A, {
+      employeeNumber: 'ORDER-ALEX',
+      firstName: 'Alex',
+      lastName: 'Boivin',
+    });
+    const chen = await createPerson(db.app, SITE_A, {
+      employeeNumber: 'ORDER-CHEN',
+      firstName: 'Chen',
+      lastName: 'Wu',
+    });
+
+    const ids = await incidents.roster(asSupervisor(), SITE_A).then((roster) =>
+      roster.map((person) => person.id),
+    );
+
+    expect(ids.indexOf(adam)).toBeLessThan(ids.indexOf(alex));
+    expect(ids.indexOf(alex)).toBeLessThan(ids.indexOf(chen));
+  });
+
+  it('respeta la planta pedida y la RLS del alcance', async () => {
+    const atA = await incidents.roster(asCoordinator(), SITE_A);
+    const atB = await incidents.roster(asCoordinator(), SITE_B);
+
+    expect(atA.map((person) => person.id)).toContain(subject);
+    expect(atA.map((person) => person.id)).not.toContain(subjectB);
+    expect(atB.map((person) => person.id)).toContain(subjectB);
+    expect(await incidents.roster(asSupervisor(), SITE_B)).toEqual([]);
+  });
+
+  it('rechaza al inspector', async () => {
+    await expect(incidents.roster(asJhsc(), SITE_A)).rejects.toMatchObject({
+      response: { code: 'forbidden' },
+    });
+  });
+
+  it('ofrece personas que el reporte acepta', async () => {
+    const roster = await incidents.roster(asSupervisor(), SITE_A);
+    const selected = roster.filter((person) => person.id !== supervisor.personId).slice(0, 2);
+
+    expect(selected).toHaveLength(2);
+
+    const incident = await incidents.report(
+      asSupervisor(),
+      payload({ subject_person_id: selected[0]!.id, witness_person_ids: [selected[1]!.id] }),
+    );
+
+    expect(incident.subject_person_id).toBe(selected[0]!.id);
+    expect(incident.witnesses.map((person) => person.id)).toEqual([selected[1]!.id]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
 describe('las listas cerradas, escritas dos veces', () => {
   async function checkValues(table: string, column: string): Promise<string[]> {
     const rows = await inScope<{ definition: string }>(

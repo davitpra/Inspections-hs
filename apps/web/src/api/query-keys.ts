@@ -128,6 +128,7 @@ export const queryKeys = {
   incidents: () => key('incidents'),
   incident: (id?: string) => key('incident', id),
   form7: (incidentId?: string) => key('form7', incidentId),
+  incidentRoster: (siteId?: string) => key('incident-roster', siteId),
 
   // Roster.
   roster: (siteId?: string) => key('roster', siteId),
