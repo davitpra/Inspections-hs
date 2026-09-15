@@ -32,7 +32,6 @@ export function LocationRow({
     <tr>
       <th scope="row" className="mapping__cell--name">
         <span className="mapping__name">{shared.name}</span>
-        <span className="mapping__code">{shared.code}</span>
       </th>
 
       {sites.map((site) => (

@@ -214,10 +214,11 @@ describe('la tabla cruza las plantas', () => {
     expect(screen.getByText('Dock west')).toBeTruthy();
   });
 
-  it('la fila lleva el código de la compartida, que es lo que guarda una plantilla', async () => {
+  it('la fila no expone el código de la compartida', async () => {
     renderRoute();
 
-    expect(await screen.findByText('cold-storage')).toBeTruthy();
+    expect(await screen.findByText('Cold storage')).toBeTruthy();
+    expect(screen.queryByText('cold-storage')).toBeNull();
   });
 });
 
@@ -495,6 +496,21 @@ describe('dar de alta', () => {
     );
     expect(reloadSession).toHaveBeenCalled();
     expect((await screen.findAllByText('North plant')).length).toBeGreaterThan(0);
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Add a site' })).toBeNull());
+  });
+
+  it('cierra los paneles de alta desde su propia cruz', async () => {
+    renderRoute();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Add site' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add location' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close add a site' }));
+    expect(screen.queryByRole('heading', { name: 'Add a site' })).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Add a location' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close add a location' }));
+    expect(screen.queryByRole('heading', { name: 'Add a location' })).toBeNull();
   });
 
   it('mantiene independientes los toggles de site y ubicaciones', async () => {
@@ -600,6 +616,9 @@ describe('dar de alta', () => {
       }),
     );
     expect(createLocation).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(screen.queryByRole('heading', { name: 'Add a location' })).toBeNull(),
+    );
   });
 
   /**

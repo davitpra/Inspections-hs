@@ -3,6 +3,7 @@ import { useId, useState } from 'react';
 
 import { createSite } from '../../api/catalog';
 import { queryKeys } from '../../api/query-keys';
+import { CloseIcon } from '../../components/icons';
 import { useAppSession } from '../../app/session-context';
 import { canCreate, suggestCode } from './presentation';
 
@@ -22,7 +23,7 @@ import { canCreate, suggestCode } from './presentation';
  * ningún code deja el botón deshabilitado (`canCreate`), que es lo mismo que hace el
  * `CHECK` de la migración 0004 pero antes de viajar.
  */
-export function NewSiteForm(): React.JSX.Element {
+export function NewSiteForm({ onClose }: { onClose: () => void }): React.JSX.Element {
   const queryClient = useQueryClient();
   const { reload } = useAppSession();
   const controlId = useId();
@@ -34,11 +35,11 @@ export function NewSiteForm(): React.JSX.Element {
   const create = useMutation({
     mutationFn: () => createSite({ code, name: name.trim() }),
     onSuccess: async () => {
-      setName('');
-      setError(null);
-
       await queryClient.invalidateQueries({ queryKey: queryKeys.sites() });
       await reload();
+
+      // El alta terminó: la columna nueva ya está en la tabla y el panel no tiene más que hacer.
+      onClose();
     },
     onError: (caught: Error) => setError(caught.message),
   });
@@ -47,6 +48,14 @@ export function NewSiteForm(): React.JSX.Element {
     <div className="card">
       <div className="card__head">
         <h3>Add a site</h3>
+        <button
+          type="button"
+          className="card__close"
+          aria-label="Close add a site"
+          onClick={onClose}
+        >
+          <CloseIcon size={20} />
+        </button>
       </div>
 
       <p className="note">

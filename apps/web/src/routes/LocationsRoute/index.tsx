@@ -155,9 +155,11 @@ function LocationCatalog({
         </div>
       </header>
 
-      {addingSite ? <NewSiteForm /> : null}
+      {addingSite ? (
+        <NewSiteForm onClose={() => setAddingSite(false)} />
+      ) : null}
 
-      {adding ? <NewLocationForm /> : null}
+      {adding ? <NewLocationForm onClose={() => setAdding(false)} /> : null}
 
       {shared.isError || locations.isError ? (
         <p className="status-card status-card--error">

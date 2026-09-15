@@ -3,6 +3,7 @@ import { useId, useState } from 'react';
 
 import { createOrganizationLocation } from '../../api/catalog';
 import { queryKeys } from '../../api/query-keys';
+import { CloseIcon } from '../../components/icons';
 import { canCreate, suggestCode } from './presentation';
 
 /**
@@ -32,7 +33,7 @@ import { canCreate, suggestCode } from './presentation';
  * choque de códigos siga teniendo corrección; el código es legible justamente porque se
  * escribe en seeds y se lee en reportes (cabecera de `contracts/catalog.ts`).
  */
-export function NewLocationForm(): React.JSX.Element {
+export function NewLocationForm({ onClose }: { onClose: () => void }): React.JSX.Element {
   const queryClient = useQueryClient();
   const controlId = useId();
 
@@ -51,10 +52,8 @@ export function NewLocationForm(): React.JSX.Element {
   const create = useMutation({
     mutationFn: () => createOrganizationLocation({ code, name: name.trim() }),
     onSuccess: () => {
-      setName('');
-      setCode('');
-      setCodeTouched(false);
-      setError(null);
+      // El alta terminó y el panel se cierra: la fila nueva es lo que queda a la vista.
+      onClose();
 
       // Una fila nueva en la tabla, con todas sus celdas vacías. Ninguna física se crea acá,
       // así que el listado de `location` no cambió.
@@ -72,6 +71,14 @@ export function NewLocationForm(): React.JSX.Element {
     <div className="card">
       <div className="card__head">
         <h3>Add a location</h3>
+        <button
+          type="button"
+          className="card__close"
+          aria-label="Close add a location"
+          onClick={onClose}
+        >
+          <CloseIcon size={20} />
+        </button>
       </div>
 
       <p className="note">

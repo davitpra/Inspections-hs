@@ -3365,6 +3365,25 @@ select:disabled {
   margin: 0;
 }
 
+/* La salida de una tarjeta que se abre desde un botón (las altas de `LocationsRoute`): la
+   misma cruz que cierra un `Sheet`, contra el borde del encabezado. */
+.card__close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--brand);
+}
+
+.card__close:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+  border-radius: var(--radius);
+}
+
 /* El pie de una tarjeta que lista: la salida hacia la lista completa, centrada y separada
    del contenido por la misma divisoria que separa sus filas. */
 .card__footer {
