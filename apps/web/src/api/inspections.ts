@@ -130,6 +130,16 @@ export async function assignInspector(
   );
 }
 
+/** Cancelar exige motivo y no se deshace: un período no se des-cancela, se reprograma. */
+export async function cancelScheduledInspection(
+  id: string,
+  reason: string,
+): Promise<ScheduledInspection> {
+  return send('POST', `/scheduled-inspections/${id}/cancel`, { reason }, (value) =>
+    scheduledInspectionSchema.parse(value),
+  );
+}
+
 /** Adelanta de forma irreversible la visibilidad de un período futuro asignado. */
 export async function makeScheduledInspectionVisible(id: string): Promise<ScheduledInspection> {
   return send(

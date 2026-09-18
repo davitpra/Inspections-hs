@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { InspectionSchedule, ScheduledInspection } from '@hs/contracts';
 
-import { canMakeVisible, requirementYear, rowNote, rowVisibility } from './presentation';
+import {
+  canCancel,
+  canMakeVisible,
+  canReschedule,
+  requirementYear,
+  rowNote,
+  rowVisibility,
+} from './presentation';
 import type { YearEntry } from '../../presentation/scheduling';
 
 const SITE = '11111111-1111-4111-8111-111111111111';
@@ -149,5 +156,34 @@ describe('la acción de adelantar visibilidad', () => {
     expect(canMakeVisible(opened({ ...period('2026-12-01', true), inspector_id }), '2026-08-25', true)).toBe(false);
     expect(canMakeVisible(opened({ ...period('2026-12-01'), inspector_id, status: 'completed' }), '2026-08-25', true)).toBe(false);
     expect(canMakeVisible(opened({ ...period('2026-12-01'), inspector_id, cancelled_at: '2026-08-10T00:00:00.000Z' }), '2026-08-25', true)).toBe(false);
+  });
+});
+
+describe('las acciones de cancelar y reprogramar', () => {
+  it('permite cancelar períodos abiertos o vencidos, pero no completados ni cancelados', () => {
+    expect(canCancel(opened(period('2026-01-01')), true)).toBe(true);
+    expect(canCancel(opened({ ...period('2026-02-01'), status: 'missed' }), true)).toBe(true);
+    expect(canCancel(opened({ ...period('2026-03-01'), status: 'completed' }), true)).toBe(false);
+    expect(canCancel(opened({ ...period('2026-04-01'), cancelled_at: '2026-04-02T00:00:00.000Z' }), true)).toBe(false);
+  });
+
+  it('permite reprogramar solo un período cancelado', () => {
+    const unopened = requirementYear(rule(), [], '2026')[0]!;
+
+    expect(canReschedule(opened({ ...period('2026-01-01'), cancelled_at: '2026-01-02T00:00:00.000Z' }), true)).toBe(true);
+    expect(canReschedule(opened({ ...period('2026-02-01'), status: 'missed', cancelled_at: '2026-02-02T00:00:00.000Z' }), true)).toBe(true);
+    expect(canReschedule(opened(period('2026-02-01')), true)).toBe(false);
+    expect(canReschedule(opened({ ...period('2026-03-01'), status: 'completed' }), true)).toBe(false);
+    expect(canReschedule(unopened, true)).toBe(false);
+  });
+
+  it('no ofrece ninguna acción sin administración de programación', () => {
+    const unopened = requirementYear(rule(), [], '2026')[0]!;
+    const cancelled = opened({ ...period('2026-01-01'), cancelled_at: '2026-01-02T00:00:00.000Z' });
+
+    expect(canCancel(opened(period('2026-01-01')), false)).toBe(false);
+    expect(canCancel(unopened, false)).toBe(false);
+    expect(canReschedule(cancelled, false)).toBe(false);
+    expect(canReschedule(unopened, false)).toBe(false);
   });
 });

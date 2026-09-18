@@ -21,6 +21,7 @@ const listSchedules = vi.hoisted(() => vi.fn());
 const listScheduled = vi.hoisted(() => vi.fn());
 const createScheduledInspection = vi.hoisted(() => vi.fn());
 const assignInspector = vi.hoisted(() => vi.fn());
+const cancelScheduledInspection = vi.hoisted(() => vi.fn());
 const makeScheduledInspectionVisible = vi.hoisted(() => vi.fn());
 const useAppSession = vi.hoisted(() => vi.fn());
 const useParams = vi.hoisted(() => vi.fn());
@@ -33,6 +34,7 @@ vi.mock('../../api/inspections', () => ({
   listScheduled,
   createScheduledInspection,
   assignInspector,
+  cancelScheduledInspection,
   makeScheduledInspectionVisible,
 }));
 vi.mock('../../app/session-context', () => ({ useAppSession }));
@@ -106,6 +108,7 @@ beforeEach(() => {
   listScheduled.mockReset().mockResolvedValue([]);
   createScheduledInspection.mockReset().mockResolvedValue(inspection());
   assignInspector.mockReset().mockResolvedValue(inspection({ inspector_id: CANDIDATE, inspector_name: 'Dana Okafor' }));
+  cancelScheduledInspection.mockReset().mockResolvedValue(inspection({ status: 'cancelled', cancelled_at: '2026-02-05T00:00:00.000Z', cancellation_reason: 'Plant shutdown' }));
   makeScheduledInspectionVisible.mockReset().mockResolvedValue(inspection({ visible_early: true }));
 });
 
@@ -147,6 +150,20 @@ describe('plan anual enfocado', () => {
 });
 
 describe('operaciones por fila', () => {
+  it('ofrece cancelar un período abierto, pero no uno completado', async () => {
+    listScheduled.mockResolvedValue([
+      inspection(),
+      inspection({ id: '99999999-9999-4999-8999-999999999999', period_start: '2026-05-01', period_end: '2026-07-31', status: 'completed', inspection_id: USER }),
+    ]);
+    renderRoute();
+
+    const rows = await screen.findAllByRole('row');
+    fireEvent.click(within(rows[1]!).getByRole('button', { name: 'More actions for Feb–Apr' }));
+    expect(screen.getByRole('menuitem', { name: 'Cancel period' })).toBeTruthy();
+    fireEvent.click(within(rows[1]!).getByRole('button', { name: 'More actions for Feb–Apr' }));
+    expect(within(rows[2]!).queryByRole('button', { name: 'More actions for May–Jul' })).toBeNull();
+  });
+
   it('abre sin selector y nombra la versión congelada', async () => {
     renderRoute();
 
@@ -219,6 +236,67 @@ describe('operaciones por fila', () => {
     expect(screen.getAllByText('Not visible').length).toBeGreaterThan(0);
   });
 
+  it('no cancela con motivo vacío y envía un único POST con motivo', async () => {
+    const opened = inspection();
+    const cancelled = inspection({ status: 'cancelled', cancelled_at: '2026-02-05T00:00:00.000Z', cancellation_reason: 'Plant shutdown' });
+    listScheduled.mockResolvedValueOnce([opened]).mockResolvedValueOnce([cancelled]);
+    cancelScheduledInspection.mockResolvedValue(cancelled);
+    renderRoute();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'More actions for Feb–Apr' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Cancel period' }));
+    const dialog = screen.getByRole('dialog', { name: 'Cancel Feb–Apr' });
+    const confirm = within(dialog).getByRole('button', { name: 'Confirm cancellation' });
+    expect((confirm as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(within(dialog).getByLabelText('Cancel with a reason'), { target: { value: '  ' } });
+    expect((confirm as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(within(dialog).getByLabelText('Cancel with a reason'), { target: { value: 'Plant shutdown' } });
+    fireEvent.click(confirm);
+
+    await waitFor(() => expect(cancelScheduledInspection).toHaveBeenCalledTimes(1));
+    expect(cancelScheduledInspection).toHaveBeenCalledWith(INSPECTION, 'Plant shutdown');
+    expect(await screen.findByText('Cancelled: Plant shutdown')).toBeTruthy();
+  });
+
+  it('muestra el error al cancelar y conserva el estado abierto', async () => {
+    listScheduled.mockResolvedValue([inspection()]);
+    cancelScheduledInspection.mockRejectedValue(new Error('Period can no longer be cancelled'));
+    renderRoute();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'More actions for Feb–Apr' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Cancel period' }));
+    const dialog = screen.getByRole('dialog', { name: 'Cancel Feb–Apr' });
+    fireEvent.change(within(dialog).getByLabelText('Cancel with a reason'), { target: { value: 'Plant shutdown' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm cancellation' }));
+
+    expect((await within(dialog).findByRole('alert')).textContent).toContain('Period can no longer be cancelled');
+    expect(screen.getByText('Open')).toBeTruthy();
+  });
+
+  it('ofrece reprogramar una fila cancelada y crea la nueva inspección con la versión actual', async () => {
+    const cancelled = inspection({ status: 'missed', cancelled_at: '2026-02-05T00:00:00.000Z', cancellation_reason: 'Plant shutdown', template_version: 1 });
+    const rescheduled = inspection();
+    listScheduled.mockResolvedValueOnce([cancelled]).mockResolvedValueOnce([rescheduled]);
+    createScheduledInspection.mockResolvedValue(rescheduled);
+    renderRoute();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'More actions for Feb–Apr' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Schedule again' }));
+    const dialog = screen.getByRole('dialog', { name: 'Schedule Feb–Apr again' });
+    expect(within(dialog).getByText(/cancellation stays on the record/)).toBeTruthy();
+    expect(within(dialog).getByText('Cancelled: Plant shutdown')).toBeTruthy();
+    expect(within(dialog).getByText(/Version 2 will be frozen/)).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Open period' }));
+
+    await waitFor(() => expect(createScheduledInspection).toHaveBeenCalledWith({
+      site_id: SITE,
+      template_id: TEMPLATE,
+      period_start: '2026-02-01',
+      visible_early: false,
+    }));
+    expect(await screen.findByText('Open')).toBeTruthy();
+  });
+
   it('mantiene el error de asignación en el diálogo del período que lo produjo', async () => {
     listScheduled.mockResolvedValue([inspection(), inspection({ id: '99999999-9999-4999-8999-999999999999', period_start: '2026-05-01', period_end: '2026-07-31' })]);
     assignInspector.mockRejectedValue(new Error('Inspector is no longer eligible'));
@@ -237,7 +315,7 @@ describe('operaciones por fila', () => {
     expect(screen.getAllByRole('alert')).toHaveLength(1);
   });
 
-  it('lee completados y cancelados sin controles', async () => {
+  it('lee completados sin controles y ofrece reprogramar cancelados', async () => {
     listScheduled.mockResolvedValue([
       inspection({ status: 'completed', inspector_id: CANDIDATE, inspector_name: 'Dana Okafor', inspection_id: USER }),
       inspection({ id: '99999999-9999-4999-8999-999999999999', period_start: '2026-05-01', period_end: '2026-07-31', status: 'cancelled', cancelled_at: '2026-05-01T00:00:00.000Z', cancellation_reason: 'Plant shutdown' }),
@@ -248,15 +326,17 @@ describe('operaciones por fila', () => {
     expect(screen.getByText('Dana Okafor')).toBeTruthy();
     expect(screen.getByText('Cancelled: Plant shutdown')).toBeTruthy();
     const rows = screen.getAllByRole('row').slice(1, 3);
-    expect(rows).toHaveLength(2);
-    for (const row of rows) {
-      expect(within(row).queryByRole('combobox', { name: /Assign inspector for/ })).toBeNull();
-      expect(within(row).queryByRole('button', { name: /^More actions for / })).toBeNull();
-    }
+    expect(within(rows[0]!).queryByRole('button', { name: /^More actions for / })).toBeNull();
+    fireEvent.click(within(rows[1]!).getByRole('button', { name: 'More actions for May–Jul' }));
+    expect(screen.getByRole('menuitem', { name: 'Schedule again' })).toBeTruthy();
   });
 
-  it('retira todos los controles para un lector', async () => {
+  it('retira cancelar y reprogramar para un lector', async () => {
     useAppSession.mockReturnValue(session('inspector'));
+    listScheduled.mockResolvedValue([
+      inspection(),
+      inspection({ id: '99999999-9999-4999-8999-999999999999', period_start: '2026-05-01', period_end: '2026-07-31', cancelled_at: '2026-05-01T00:00:00.000Z', cancellation_reason: 'Plant shutdown' }),
+    ]);
     renderRoute();
 
     expect(await screen.findAllByRole('row')).toHaveLength(5);

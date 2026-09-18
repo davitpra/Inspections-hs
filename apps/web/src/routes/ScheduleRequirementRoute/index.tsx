@@ -11,6 +11,7 @@ import { canAdministerScheduling } from '../../permissions/session';
 import { currentCivilYear } from '../../presentation/dates';
 import { earliestEligibleYear, frequencyNote, type YearEntry } from '../../presentation/scheduling';
 import { AssignInspectorDialog } from './AssignInspectorDialog';
+import { CancelPeriodDialog } from './CancelPeriodDialog';
 import { MakeVisibleDialog } from './MakeVisibleDialog';
 import { OpenPeriodDialog } from './OpenPeriodDialog';
 import { RequirementPeriodRow } from './RequirementPeriodRow';
@@ -39,7 +40,7 @@ export function ScheduleRequirementRoute(): React.JSX.Element {
   */
   const [acting, setActing] = useState<{
     entry: YearEntry;
-    kind: 'open' | 'assign' | 'visible';
+    kind: 'open' | 'assign' | 'visible' | 'cancel' | 'reschedule';
   } | null>(null);
 
   const changeYear = (nextYear: string) => {
@@ -143,6 +144,30 @@ export function ScheduleRequirementRoute(): React.JSX.Element {
           key={entryKey(acting.entry)}
           inspection={acting.entry.inspection}
           label={periodLabel(acting.entry, year)}
+          onClose={() => setActing(null)}
+        />
+      ) : null}
+      {acting?.kind === 'cancel' && acting.entry.kind === 'opened' ? (
+        <CancelPeriodDialog
+          key={entryKey(acting.entry)}
+          inspection={acting.entry.inspection}
+          label={periodLabel(acting.entry, year)}
+          onClose={() => setActing(null)}
+        />
+      ) : null}
+      {acting?.kind === 'reschedule' && acting.entry.kind === 'opened' ? (
+        <OpenPeriodDialog
+          key={entryKey(acting.entry)}
+          period={{
+            site_id: acting.entry.inspection.site_id,
+            template_id: acting.entry.inspection.template_id,
+            template_name: acting.entry.inspection.template_name,
+            period_start: acting.entry.inspection.period_start,
+            period_months: acting.entry.inspection.period_months,
+          }}
+          label={periodLabel(acting.entry, year)}
+          publishedVersion={publishedVersion}
+          rescheduling={{ reason: acting.entry.inspection.cancellation_reason }}
           onClose={() => setActing(null)}
         />
       ) : null}

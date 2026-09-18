@@ -2,7 +2,9 @@ import { civilToday } from '../../presentation/dates';
 import { RowMenu } from '../../components/RowMenu';
 import {
   actionLabel,
+  canCancel,
   canMakeVisible,
+  canReschedule,
   periodLabel,
   periodStatus,
   rowControl,
@@ -23,9 +25,9 @@ import type { YearEntry } from '../../presentation/scheduling';
  * de `unopened` a `opened` y con eso cambia su `key` (misma razón que
  * `SchedulingRoute/RequirementConfirmDialog`).
  *
- * Las acciones dejaron de ser UN botón y pasaron a un menú: adelantar la visibilidad
- * convive con asignar sobre la misma fila, y dos botones en una columna que se encoge
- * hasta su contenido rompen el renglón en teléfono.
+ * Las acciones dejaron de ser UN botón y pasaron a un menú: abrir, asignar, adelantar la
+ * visibilidad, cancelar y reprogramar conviven sobre la misma fila, y varios botones en una
+ * columna que se encoge hasta su contenido rompen el renglón en teléfono.
  */
 export function RequirementPeriodRow({
   entry,
@@ -38,7 +40,7 @@ export function RequirementPeriodRow({
   year: string;
   canAdminister: boolean;
   publishedVersion: number | null;
-  onAct: (kind: 'open' | 'assign' | 'visible') => void;
+  onAct: (kind: 'open' | 'assign' | 'visible' | 'cancel' | 'reschedule') => void;
 }): React.JSX.Element {
   const control = rowControl(entry, canAdminister);
   const today = civilToday();
@@ -55,6 +57,12 @@ export function RequirementPeriodRow({
       : []),
     ...(canMakeVisible(entry, today, canAdminister)
       ? [{ label: 'Make visible', onSelect: () => onAct('visible') }]
+      : []),
+    ...(canCancel(entry, canAdminister)
+      ? [{ label: 'Cancel period', tone: 'danger' as const, onSelect: () => onAct('cancel') }]
+      : []),
+    ...(canReschedule(entry, canAdminister)
+      ? [{ label: 'Schedule again', onSelect: () => onAct('reschedule') }]
       : []),
   ];
 

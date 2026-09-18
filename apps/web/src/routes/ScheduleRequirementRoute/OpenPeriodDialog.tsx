@@ -24,11 +24,13 @@ export function OpenPeriodDialog({
   period,
   label,
   publishedVersion,
+  rescheduling,
   onClose,
 }: {
   period: UnopenedPeriod;
   label: string;
   publishedVersion: number | null;
+  rescheduling?: { reason: string | null };
   onClose: () => void;
 }): React.JSX.Element {
   const queryClient = useQueryClient();
@@ -64,10 +66,17 @@ export function OpenPeriodDialog({
     <dialog
       ref={dialogRef}
       className="modal"
-      aria-label={`Open ${label}`}
+      aria-label={rescheduling ? `Schedule ${label} again` : `Open ${label}`}
       onClose={() => { onClose(); returnFocusRef.current?.focus(); }}
     >
-      <div className="modal__head"><h2>Open {label}?</h2></div>
+      <div className="modal__head"><h2>{rescheduling ? `Schedule ${label} again?` : `Open ${label}?`}</h2></div>
+
+      {rescheduling ? (
+        <>
+          <p className="modal__text">The cancellation stays on the record. This schedules the period again as a new inspection.</p>
+          {rescheduling.reason ? <p className="note">Cancelled: {rescheduling.reason}</p> : null}
+        </>
+      ) : null}
 
       <p className="modal__text">
         {publishedVersion === null

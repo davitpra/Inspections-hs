@@ -73,6 +73,18 @@ export function canMakeVisible(
   );
 }
 
+export function canCancel(entry: YearEntry, canAdminister: boolean): boolean {
+  if (!canAdminister || entry.kind === 'unopened') return false;
+
+  return entry.inspection.cancelled_at === null && entry.inspection.status !== 'completed';
+}
+
+export function canReschedule(entry: YearEntry, canAdminister: boolean): boolean {
+  if (!canAdminister || entry.kind === 'unopened') return false;
+
+  return entry.inspection.cancelled_at !== null;
+}
+
 /**
  * Lo que le FALTA a la fila, y nada más.
  *
