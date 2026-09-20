@@ -1,0 +1,53 @@
+# Ver docs/deployment/02-imagen-api.md.
+#
+# OJO: NO excluyas apps/web ni packages/* enteros. pnpm-workspace.yaml declara
+# `apps/*` y `packages/*`, y `pnpm install --frozen-lockfile` falla si un miembro
+# del workspace declarado en el lockfile no está en el contexto.
+
+# Lo que se reconstruye adentro. `dist` es el importante: uno sucio de tu máquina
+# no puede entrar a la imagen.
+node_modules
+**/node_modules
+dist
+**/dist
+build
+**/build
+*.tsbuildinfo
+.turbo
+
+# Secretos. La imagen no lleva variables horneadas: todas vienen del entorno del
+# contenedor (start:prod es `node dist/main` y no lee ningún .env).
+.env
+.env.*
+!.env.example
+
+# Historia y metadatos: engordan el contexto y no los usa ningún paso del build.
+.git
+.github
+.vscode
+.idea
+
+# Documentación y especificaciones.
+docs
+openspec
+*.md
+!README.md
+
+# Pruebas y sus artefactos.
+**/*.spec.ts
+**/*.test.ts
+**/*.test.tsx
+apps/api/test
+coverage
+**/coverage
+playwright-report
+.vitest
+**/.vite
+
+# Infraestructura de desarrollo. El compose de producción es otro archivo y lo
+# monta el VPS, no la imagen.
+docker-compose.yml
+
+# Sistema.
+.DS_Store
+*.log
