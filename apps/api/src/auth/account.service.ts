@@ -192,6 +192,8 @@ export class AccountService {
         return demote(client, actor.userId, actor.siteIds, accountId);
       }
 
+      if (!(await lockAccountPerson(client, accountId))) throw accountNotFound();
+
       const existing = await findAccountDetail(client, accountId);
       if (!existing) throw accountNotFound();
 
@@ -383,6 +385,8 @@ async function roleChangeTarget(
   accountId: string,
   selfError: () => AccountException,
 ): Promise<RoleChangeTarget> {
+  if (!(await lockAccountPerson(client, accountId))) throw accountNotFound();
+
   const { rows } = await client.query<RoleChangeTarget>(
     `SELECT u.id, u.role, hs_account_is_active(u) AS active, u.email,
             EXISTS (
@@ -407,6 +411,25 @@ async function roleChangeTarget(
   if (existing.id === actorUserId) throw selfError();
 
   return existing;
+}
+
+/**
+ * La persona es la frontera de alcance de todas las mutaciones de una cuenta. El lock
+ * `KEY SHARE` no modifica nada, pero hace que RLS aplique la politica de `person` tambien
+ * a promover, degradar, reemitir y retirar acceso. Una fila de management visible por la
+ * politica SELECT-only no pasa este lock desde un sitio ajeno.
+ */
+async function lockAccountPerson(client: PoolClient, accountId: string): Promise<boolean> {
+  const { rows } = await client.query<{ id: string }>(
+    `SELECT p.id
+       FROM person p
+       JOIN app_user u ON u.person_id = p.id
+      WHERE u.id = $1
+      FOR KEY SHARE OF p`,
+    [accountId],
+  );
+
+  return rows.length > 0;
 }
 
 /**

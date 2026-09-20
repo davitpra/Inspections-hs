@@ -5,6 +5,7 @@ import {
   accessCellClass,
   accessCellLabel,
   accountRoleLabel,
+  basedAtLabel,
   canPromoteAccount,
   canDemoteAccount,
   canEditPerson,
@@ -35,6 +36,7 @@ import {
   addPersonButtonText,
   importButtonText,
   importSummary,
+  isBasedElsewhere,
   sortRejections,
 } from './presentation';
 
@@ -776,6 +778,25 @@ describe('rowActions', () => {
     ];
 
     for (const row of rows) expect(rowActions(row, false)).toEqual([]);
+  });
+
+  it('una persona basada en otra planta es de solo lectura aunque haya permisos', () => {
+    const row = withAccount({ site_id: SITE_A }, { id: ACCOUNT_ID, role: 'inspector', active: true, can_sign_in: true });
+
+    expect(isBasedElsewhere(row, '22222222-2222-4222-8222-222222222222')).toBe(true);
+    expect(rowActions(row, true, true, true, '22222222-2222-4222-8222-222222222222')).toEqual([]);
+    expect(basedAtLabel('St. Thomas')).toBe('Based at St. Thomas');
+  });
+
+  it('una persona del sitio seleccionado conserva sus acciones', () => {
+    const row = withAccount({ site_id: SITE_A });
+
+    expect(isBasedElsewhere(row, SITE_A)).toBe(false);
+    expect(rowActions(row, true, false, false, SITE_A).map((action) => action.kind)).toEqual([
+      'edit',
+      'invite',
+      'deactivate',
+    ]);
   });
 
   it('nombra a la persona en cada botón: "Invite" solo se anuncia igual en las 200 filas', () => {

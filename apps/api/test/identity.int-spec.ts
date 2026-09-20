@@ -276,6 +276,114 @@ describe('el roster está aislado por sitio', () => {
 });
 
 // ---------------------------------------------------------------------------
+describe('la visibilidad de management sigue su alcance', () => {
+  async function managementBasedAtSiteA(): Promise<{ accountId: string; personId: string }> {
+    const account = await createAccount(db.app, {
+      role: 'management',
+      personSiteId: SITE_A,
+      siteIds: [SITE_A, SITE_B],
+    });
+
+    // La persona nace bajo el alcance de ambos sitios, pero el sitio A deja de ser un
+    // destino vigente de la cuenta. El sitio B queda como el alcance externo que se prueba.
+    await inScope(
+      db.app,
+      [SITE_A, SITE_B],
+      'UPDATE user_site_scope SET revoked_at = now() WHERE user_id = $1 AND site_id = $2',
+      [account.accountId, SITE_A],
+    );
+
+    return { accountId: account.accountId, personId: account.personId };
+  }
+
+  async function visiblePersonIds(siteIds: readonly string[], personId: string): Promise<string[]> {
+    const rows = await inScope<{ id: string; site_id: string }>(
+      db.app,
+      siteIds,
+      'SELECT id, site_id FROM person WHERE id = $1',
+      [personId],
+    );
+
+    return rows.map((row) => row.id);
+  }
+
+  it('permite leer desde otro sitio solo al management activo con alcance vigente', async () => {
+    const management = await managementBasedAtSiteA();
+    const ordinary = await createPerson(db.app, SITE_A);
+
+    const rows = await inScope<{ id: string; site_id: string }>(
+      db.app,
+      [SITE_B],
+      'SELECT id, site_id FROM person WHERE site_id = $1 OR id = $2 ORDER BY id',
+      [SITE_A, management.personId],
+    );
+
+    expect(rows).toEqual([{ id: management.personId, site_id: SITE_A }]);
+    expect(rows.map((row) => row.id)).not.toContain(ordinary);
+    expect(await visiblePersonIds([SITE_B], management.personId)).toEqual([management.personId]);
+  });
+
+  it.each([
+    ['la cuenta se desactiva', 'UPDATE app_user SET deactivated_at = now() WHERE id = $1'],
+    ['el rol deja de ser management', "UPDATE app_user SET role = 'coordinator' WHERE id = $1"],
+    [
+      'el alcance se revoca',
+      'UPDATE user_site_scope SET revoked_at = now() WHERE user_id = $1 AND site_id = $2',
+    ],
+  ])('%s hace desaparecer la persona del sitio externo', async (_case, statement) => {
+    const management = await managementBasedAtSiteA();
+    const params = statement.includes('site_id')
+      ? [management.accountId, SITE_B]
+      : [management.accountId];
+
+    await inScope(db.app, [SITE_A, SITE_B], statement, params);
+
+    expect(await visiblePersonIds([SITE_B], management.personId)).toEqual([]);
+  });
+
+  it('la lectura externa no permite actualizar ni bloquear la persona, ni siquiera al owner', async () => {
+    const management = await managementBasedAtSiteA();
+
+    const update = await inScope<{ id: string }>(
+      db.app,
+      [SITE_B],
+      'UPDATE person SET first_name = $1 WHERE id = $2 RETURNING id',
+      ['No cambia', management.personId],
+    );
+    const appUpdateLock = await inScope<{ id: string }>(
+      db.app,
+      [SITE_B],
+      'SELECT id FROM person WHERE id = $1 FOR UPDATE',
+      [management.personId],
+    );
+    const appKeyShareLock = await inScope<{ id: string }>(
+      db.app,
+      [SITE_B],
+      'SELECT id FROM person WHERE id = $1 FOR KEY SHARE',
+      [management.personId],
+    );
+    const ownerRead = await inScope<{ id: string }>(
+      db.migrator,
+      [SITE_B],
+      'SELECT id FROM person WHERE id = $1',
+      [management.personId],
+    );
+    const ownerUpdateLock = await inScope<{ id: string }>(
+      db.migrator,
+      [SITE_B],
+      'SELECT id FROM person WHERE id = $1 FOR UPDATE',
+      [management.personId],
+    );
+
+    expect(update).toEqual([]);
+    expect(appUpdateLock).toEqual([]);
+    expect(appKeyShareLock).toEqual([]);
+    expect(ownerRead).toEqual([{ id: management.personId }]);
+    expect(ownerUpdateLock).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
 describe('la transferencia de planta', () => {
   it('con las dos plantas en el alcance, la persona se muda', async () => {
     const id = await createPerson(db.migrator, SITE_A);

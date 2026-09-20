@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { DbService } from '../src/db/db.service';
+import { AccountService } from '../src/auth/account.service';
 import { RosterService } from '../src/roster/roster.service';
 import { registerSite } from './helpers/catalog';
 import { createAuthStack, grantCredential, type AuthStack } from './helpers/auth';
@@ -29,6 +30,7 @@ const SITE_B = 'a5000000-0000-4000-8000-000000000002';
 let db: TestDatabase;
 let dbService: DbService;
 let roster: RosterService;
+let accounts: AccountService;
 let auth: AuthStack;
 
 let retired: string;
@@ -36,17 +38,18 @@ let retired: string;
 let coordinatorId: string;
 let narrowId: string;
 let supervisorId: string;
+let managementElsewhere: { accountId: string; personId: string };
 
 const asCoordinator = () => ({
   userId: coordinatorId,
-  role: 'coordinator',
+  role: 'coordinator' as const,
   siteIds: [SITE_A, SITE_B],
 });
 
 /** Un coordinador que solo alcanza la planta A. Es con quien se prueba el borde. */
 const asNarrowCoordinator = () => ({
   userId: narrowId,
-  role: 'coordinator',
+  role: 'coordinator' as const,
   siteIds: [SITE_A],
 });
 
@@ -60,6 +63,7 @@ beforeAll(async () => {
 
   roster = new RosterService(dbService);
   auth = createAuthStack(db.appUrl);
+  accounts = new AccountService(auth.db, auth.invitations, auth.sessions);
 
   await registerSite(db.migrator, SITE_A, 'roster-a', 'Roster A');
   await registerSite(db.migrator, SITE_B, 'roster-b', 'Roster B');
@@ -75,6 +79,21 @@ beforeAll(async () => {
 
   const supervisor = await createAccount(db.app, { siteIds: [SITE_A], role: 'inspector' });
   supervisorId = supervisor.accountId;
+
+  const management = await createAccount(db.app, {
+    siteIds: [SITE_A, SITE_B],
+    personSiteId: SITE_B,
+    role: 'management',
+    firstName: 'Morgan',
+    lastName: 'Management',
+  });
+  managementElsewhere = { accountId: management.accountId, personId: management.personId };
+  await inScope(
+    db.app,
+    [SITE_A, SITE_B],
+    'UPDATE user_site_scope SET revoked_at = now() WHERE user_id = $1 AND site_id = $2',
+    [management.accountId, SITE_B],
+  );
 
   // Apellidos elegidos para que el orden sea comprobable y no coincida con el de alta.
   await createPerson(db.app, SITE_A, {
@@ -126,7 +145,10 @@ describe('leer el roster de una planta', () => {
     expect(mine.map((row) => row.last_name)).toEqual(['Alvarez', 'Okafor', 'Zeta']);
 
     expect(rows.map((row) => row.employee_number)).not.toContain('RB-1');
-    expect(rows.every((row) => row.site_id === SITE_A)).toBe(true);
+    expect(rows.find((row) => row.id === managementElsewhere.personId)?.site_id).toBe(SITE_B);
+    expect(rows.every((row) => row.site_id === SITE_A || row.id === managementElsewhere.personId)).toBe(
+      true,
+    );
   });
 
   it('devuelve el roster de la otra planta cuando se lo pide', async () => {
@@ -140,6 +162,67 @@ describe('leer el roster de una planta', () => {
     const rows = await roster.list(asNarrowCoordinator(), { site_id: SITE_B, status: 'all' });
 
     expect(rows).toEqual([]);
+  });
+
+  it('incluye management basado en otra planta solo en el roster del sitio con alcance', async () => {
+    const rows = await roster.list(asNarrowCoordinator(), { site_id: SITE_A, status: 'active' });
+
+    expect(rows.filter((row) => row.id === managementElsewhere.personId)).toHaveLength(1);
+    expect(rows.find((row) => row.id === managementElsewhere.personId)).toMatchObject({
+      site_id: SITE_B,
+      account: { id: managementElsewhere.accountId, role: 'management' },
+    });
+    expect(
+      await roster.list(asNarrowCoordinator(), { site_id: SITE_B, status: 'active' }),
+    ).toEqual([]);
+  });
+
+  it('lista una sola vez al mismo management en cada sitio de su alcance', async () => {
+    const inA = await roster.list(asCoordinator(), { site_id: SITE_A, status: 'active' });
+    const inB = await roster.list(asCoordinator(), { site_id: SITE_B, status: 'active' });
+
+    expect(inA.filter((row) => row.id === managementElsewhere.personId)).toHaveLength(1);
+    expect(inB.filter((row) => row.id === managementElsewhere.personId)).toHaveLength(1);
+  });
+
+  it('rechaza desde el sitio externo los writes de persona y cuenta', async () => {
+    await expect(
+      roster.update(asNarrowCoordinator(), managementElsewhere.personId, { first_name: 'No cambia' }),
+    ).rejects.toMatchObject({ response: { code: 'person_not_found' } });
+
+    const requests = [
+      { request: { promote_to: 'coordinator' as const }, code: 'account_promotion_forbidden' },
+      { request: { demote_to: 'inspector' as const }, code: 'account_demotion_forbidden' },
+      { request: { invite: true as const }, code: 'account_not_found' },
+      { request: { deactivated: true as const }, code: 'account_not_found' },
+    ];
+
+    for (const { request, code } of requests) {
+      await expect(
+        accounts.update(asNarrowCoordinator(), managementElsewhere.accountId, request),
+      ).rejects.toMatchObject({ code });
+    }
+
+    const stored = await inScope<{ role: string; deactivated_at: Date | null }>(
+      db.migrator,
+      [SITE_A, SITE_B],
+      'SELECT role, deactivated_at FROM app_user WHERE id = $1',
+      [managementElsewhere.accountId],
+    );
+    expect(stored[0]).toMatchObject({ role: 'management', deactivated_at: null });
+  });
+
+  it('deja de listar management cuando se revoca su alcance sobre el sitio', async () => {
+    await inScope(
+      db.app,
+      [SITE_A, SITE_B],
+      'UPDATE user_site_scope SET revoked_at = now() WHERE user_id = $1 AND site_id = $2',
+      [managementElsewhere.accountId, SITE_A],
+    );
+
+    const rows = await roster.list(asNarrowCoordinator(), { site_id: SITE_A, status: 'active' });
+
+    expect(rows.map((row) => row.id)).not.toContain(managementElsewhere.personId);
   });
 
   it('lo niega a cualquier rol que no sea el coordinador, también en la lectura', async () => {

@@ -12,9 +12,11 @@ import type {
  * devuelve, junto a cada persona, la cuenta que la referencia").
  *
  * `LEFT JOIN app_user`, y el aislamiento lo sigue dando la política sobre `person`
- * (ADR-002): ningún `WHERE site_id` de seguridad acá, el mismo criterio que ya explicaba
- * `roster.service.ts` antes de este archivo. `app_user` no lleva política, pero una
- * cuenta sin una `person` visible no aparece porque no hay fila de la que colgarla.
+ * (ADR-002). El `WHERE` elige las filas que forman la lista del sitio pedido: incluye la
+ * persona del sitio y el management activo con alcance vigente sobre ese sitio. No es una
+ * frontera de seguridad; RLS sigue siendo quien decide qué fila puede leer la transacción.
+ * `app_user` no lleva política, pero una cuenta sin una `person` visible no aparece porque
+ * no hay fila de la que colgarla.
  * `hs_account_is_active` es la misma función que ya usa el motor (0005 §"activa o no"),
  * envuelta en `CASE` porque llamarla sobre una fila `NULL` de un LEFT JOIN sin cuenta
  * devuelve `NULL IS NULL = true` — activa por accidente para quien no tiene cuenta.
@@ -32,8 +34,17 @@ export async function findRoster(
             ) AS can_sign_in
        FROM person p
        LEFT JOIN app_user u ON u.person_id = p.id
-      WHERE p.site_id = $1
-        AND ($2 = 'all'
+       WHERE (p.site_id = $1
+              OR EXISTS (
+                SELECT 1
+                  FROM user_site_scope s
+                 WHERE s.user_id = u.id
+                   AND s.site_id = $1
+                   AND s.revoked_at IS NULL
+                   AND u.role = 'management'
+                   AND hs_account_is_active(u)
+              ))
+         AND ($2 = 'all'
              OR ($2 = 'active' AND p.deactivated_at IS NULL)
              OR ($2 = 'inactive' AND p.deactivated_at IS NOT NULL))
       ORDER BY p.last_name, p.first_name, p.employee_number`,

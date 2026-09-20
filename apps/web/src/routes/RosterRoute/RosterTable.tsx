@@ -6,8 +6,10 @@ import { RowMenu } from "../../components/RowMenu";
 import {
   accessCellClass,
   accessCellLabel,
+  basedAtLabel,
   dialogFor,
   emailCellLabel,
+  isBasedElsewhere,
   matchesSearch,
   personInitials,
   personName,
@@ -26,7 +28,9 @@ import {
  */
 export function RosterTable({
   people,
+  siteId,
   siteName,
+  siteNameFor,
   ready,
   mayInvite,
   mayImport,
@@ -37,7 +41,9 @@ export function RosterTable({
   onAct,
 }: {
   people: readonly PersonWithAccount[];
+  siteId: string;
   siteName: string;
+  siteNameFor: (siteId: string) => string;
   ready: boolean;
   mayInvite: boolean;
   mayImport: boolean;
@@ -121,7 +127,8 @@ export function RosterTable({
               </thead>
               <tbody>
                 {visible.map((person) => {
-                  const actions = rowActions(person, mayInvite, mayPromote, mayDemote);
+                  const actions = rowActions(person, mayInvite, mayPromote, mayDemote, siteId);
+                  const basedElsewhere = isBasedElsewhere(person, siteId);
 
                   return (
                     <tr key={person.id}>
@@ -138,6 +145,9 @@ export function RosterTable({
                             <span className="roster__number">
                               {person.employee_number}
                             </span>
+                            {basedElsewhere ? (
+                              <span>{basedAtLabel(siteNameFor(person.site_id))}</span>
+                            ) : null}
                           </span>
                         </span>
                       </th>

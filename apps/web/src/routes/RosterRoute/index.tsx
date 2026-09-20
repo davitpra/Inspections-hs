@@ -181,7 +181,9 @@ function RosterConsole({
 
       <RosterTable
         people={all}
+        siteId={siteId}
         siteName={siteName(siteId)}
+        siteNameFor={siteName}
         ready={roster.isSuccess}
         mayInvite={mayInvite}
         mayImport={mayImport}

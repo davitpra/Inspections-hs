@@ -376,6 +376,14 @@ restrict every read and write of `person` to the sites declared as the transacti
 through a row-level security policy rather than a `WHERE` clause in the endpoint. A transaction
 that declares no scope SHALL see no person at all.
 
+As the single exception, the system SHALL also let a transaction READ a person whose `site_id` is
+outside its declared scope when that person is referenced by an `app_user` row whose `role` is
+`management`, which is active (`deactivated_at IS NULL`), and which holds a `user_site_scope` row with a null
+`revoked_at` for a site within the transaction's declared scope. This exception SHALL be expressed
+as a row-level security policy that applies to `SELECT` only. It SHALL NOT allow the transaction to
+update or lock that person: every write and every row lock over `person` SHALL remain restricted
+to the person's own `site_id` being within the declared scope.
+
 A transfer between workplaces SHALL be expressible by updating `person.site_id`, and SHALL be
 subject to the same policy: a transaction can only move a person between sites that are both
 within its declared scope.
@@ -389,7 +397,8 @@ within its declared scope.
 
 - **WHEN** a transaction declares a scope of `st-thomas` only
 - **THEN** selecting from `person` returns only people whose `site_id` is `st-thomas`
-- **AND** the people of `glencoe` are absent from the result
+- **AND** the people of `glencoe` are absent from the result, except those covered by the
+  management exception
 
 #### Scenario: A two-site scope sees both rosters
 
@@ -405,7 +414,8 @@ within its declared scope.
 
 - **WHEN** the migration role — which owns the table — selects from `person` in a transaction
   declaring a scope of `st-thomas` only
-- **THEN** the people of `glencoe` are absent from the result
+- **THEN** the people of `glencoe` are absent from the result, except those covered by the
+  management exception
 
 #### Scenario: A transfer within the declared scope is accepted
 
@@ -418,6 +428,26 @@ within its declared scope.
 - **WHEN** a transaction declaring a scope of `st-thomas` only updates a person's `site_id` to
   `glencoe`
 - **THEN** the update is rejected by the row-level security policy
+
+#### Scenario: A management person with scope over the site is readable from it
+
+- **GIVEN** a person whose `site_id` is `st-thomas`, referenced by an active `app_user` whose
+  `role` is `management` and who holds an unrevoked `user_site_scope` row for `glencoe`
+- **WHEN** a transaction declaring a scope of `glencoe` only selects from `person`
+- **THEN** that person is returned, carrying `site_id` `st-thomas`
+- **AND** no other person of `st-thomas` is returned
+
+#### Scenario: A management person from another site cannot be written or locked
+
+- **GIVEN** the same management person and a transaction declaring a scope of `glencoe` only
+- **WHEN** the transaction updates that person, or selects them `FOR UPDATE` or `FOR KEY SHARE`
+- **THEN** no row is updated or locked
+
+#### Scenario: The exception follows the role, the account and the scope
+
+- **WHEN** the account of that person is deactivated, or its `glencoe` scope row is revoked, or
+  its `role` is anything other than `management`
+- **THEN** a transaction declaring a scope of `glencoe` only no longer sees that person
 
 ### Requirement: People are deactivated, never deleted
 
@@ -460,6 +490,12 @@ The system SHALL expose the roster of one site as a list of `person` rows carryi
 SHALL be limited to the sites of the session's scope by the row-level security policy on
 `person`, never by a filter written into the endpoint.
 
+The roster of a site SHALL contain the people whose `site_id` is that site, and SHALL also contain
+every person whose account has `role` `management`, is active, and holds an unrevoked
+`user_site_scope` row for that site, whatever that person's own `site_id` is. Such a row SHALL
+carry the person's real `site_id`, so that a reader can tell that the person is based at another
+site. A site that is not within the session's scope SHALL return an empty list.
+
 Each row SHALL also carry the account that references that person, or `null` when no
 `app_user` row does. The account SHALL be reduced to what tells the coordinator whether this
 person can reach the system, as what and through which work address: its `id`, its `role`,
@@ -478,6 +514,9 @@ account, and the correction of the name and employee number of an active person.
 that does not exist yet SHALL be available as its own act, and loading the file itself SHALL remain
 available as a separate act that names no person and applies the whole file at once.
 
+The People console SHALL present a row whose `site_id` differs from the selected site as read-only:
+it SHALL offer no row action, and it SHALL name the site the person is based at.
+
 #### Scenario: The coordinator reads the roster of a site in scope
 
 - **WHEN** an account whose `role` is `coordinator` and whose scope contains `st-thomas`
@@ -490,7 +529,30 @@ available as a separate act that names no person and applies the whole file at o
 
 - **WHEN** the same coordinator requests the roster of `glencoe`
 - **THEN** the people of `glencoe` are returned
-- **AND** no `person` whose `site_id` is `st-thomas` appears in the result
+- **AND** no `person` whose `site_id` is `st-thomas` appears in the result, except those whose
+  active `management` account holds unrevoked scope over `glencoe`
+
+#### Scenario: A management account with scope over the site is listed there
+
+- **GIVEN** a person whose `site_id` is `st-thomas`, whose active account has `role` `management`
+  and holds unrevoked scope over both `st-thomas` and `glencoe`
+- **WHEN** a coordinator whose scope is `glencoe` only requests the roster of `glencoe`
+- **THEN** that person is returned with `site_id` `st-thomas` and an account whose `role` is
+  `management`
+- **AND** the same person is returned once, not twice, in the roster of `st-thomas`
+
+#### Scenario: A management account without scope over the site is not listed there
+
+- **WHEN** the scope row of that account for `glencoe` is revoked
+- **AND** the roster of `glencoe` is requested
+- **THEN** that person is absent from the result
+
+#### Scenario: A management person based elsewhere is read-only in the console
+
+- **WHEN** the People console shows the roster of `glencoe`
+- **AND** one of its rows carries `site_id` `st-thomas`
+- **THEN** that row offers no actions menu
+- **AND** it states that the person is based at St. Thomas
 
 #### Scenario: A site outside the scope returns nothing, not an error
 

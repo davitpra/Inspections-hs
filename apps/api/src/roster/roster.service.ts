@@ -51,19 +51,21 @@ export class RosterService {
    * El roster de UNA planta, con las seis columnas de `person` y la cuenta de cada una
    * (proposal — "GET /people devuelve, junto a cada persona, la cuenta que la referencia").
    *
-   * POR QUÉ ACÁ HAY UN `WHERE site_id` Y NO ES LA VIOLACIÓN QUE PARECE. `person` **sí**
-   * lleva política de aislamiento (`hs_apply_site_isolation`), así que el límite ya está
-   * puesto abajo: un `site_id` de otra planta devuelve cero filas sin filtrar nada. Este
-   * `WHERE` es SELECCIÓN entre las plantas del alcance, la misma categoría que el de
-   * `locationPackage` y `rosterPackage`.
+   * POR QUÉ EL `WHERE site_id` NO ES LA VIOLACIÓN QUE PARECE. `person` **sí** lleva
+   * política de aislamiento, y la consulta del repositorio solo selecciona las filas que
+   * componen la lista; RLS sigue siendo la frontera. La consulta también incluye el
+   * management activo con alcance sobre el sitio pedido, aunque su persona tenga otro
+   * `site_id`.
    *
-   * Y POR QUÉ NO ESTÁ EL CHEQUEO EXPLÍCITO QUE SÍ TIENE `/inspector-candidates`. Aquel
-   * endpoint compara `session.siteIds.includes(siteId)` a mano porque lee `app_user` y
-   * `user_site_scope`, que **no llevan política**. Acá sobra, y agregarlo sugeriría que RLS
-   * no alcanza — que es justo lo contrario de lo que garantiza ADR-004.
+   * El chequeo explícito de abajo es distinto: evita que una cuenta con alcance solo en
+   * Glencoe pida la lista de St. Thomas y reciba allí la persona de management que RLS le
+   * deja leer como excepción. No reemplaza el aislamiento; mantiene el nombre de la lista
+   * consistente con el sitio que el llamador puede administrar.
    */
   async list(session: SessionScope, query: RosterQuery): Promise<PersonWithAccount[]> {
     this.requireCoordinator(session, rosterForbidden);
+
+    if (!session.siteIds.includes(query.site_id)) return [];
 
     return this.db.withSessionClient(session, (client) => findRoster(client, query));
   }

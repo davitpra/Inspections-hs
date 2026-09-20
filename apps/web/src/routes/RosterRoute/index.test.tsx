@@ -12,6 +12,7 @@ const PERSON = '44444444-4444-4444-8444-444444444444';
 const ADA = '55555555-5555-4555-8555-555555555555';
 const BRUNO = '66666666-6666-4666-8666-666666666666';
 const ACCOUNT = '77777777-7777-4777-8777-777777777777';
+const CROSS_SITE_PERSON = '88888888-8888-4888-8888-888888888888';
 const EMAIL = 'ada.reid@example.com';
 
 const listSites = vi.hoisted(() => vi.fn());
@@ -222,6 +223,25 @@ describe('quién puede entrar', () => {
     useAppSession.mockReturnValue(session('management'));
     renderRoute();
     expect(await screen.findByRole('rowheader', { name: 'Reid, Ada' })).toBeTruthy();
+  });
+
+  it('muestra management basado en otra planta como fila de solo lectura', async () => {
+    const crossSite = person({
+      id: CROSS_SITE_PERSON,
+      site_id: SITE,
+      first_name: 'Morgan',
+      last_name: 'Management',
+      account: account({ role: 'management' }),
+    });
+    useAppSession.mockReturnValue(session('coordinator', [SITE_B, SITE]));
+    listSites.mockResolvedValue([site(SITE_B, 'Glencoe'), site()]);
+    listPeople.mockResolvedValue([crossSite]);
+
+    renderRoute();
+    expect(await screen.findByText('Based at St. Thomas')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /More actions for/ })).toBeNull();
+    const totalLabel = screen.getByText('People at this site');
+    expect(within(totalLabel.parentElement as HTMLElement).getByText('1')).toBeTruthy();
   });
 });
 

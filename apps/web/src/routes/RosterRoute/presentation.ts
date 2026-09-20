@@ -73,6 +73,15 @@ export function personLabel(person: Person): string {
   return `${personName(person)} (${person.employee_number})`;
 }
 
+/** Una fila traida por el alcance de management puede pertenecer a otra planta. */
+export function isBasedElsewhere(person: Person, siteId: string): boolean {
+  return person.site_id !== siteId;
+}
+
+export function basedAtLabel(siteName: string): string {
+  return `Based at ${siteName}`;
+}
+
 export function editPersonButtonLabel(person: Person): string {
   return `Edit ${personLabel(person)}`;
 }
@@ -408,8 +417,9 @@ export function rowActions(
   mayInvite: boolean,
   mayPromote = false,
   mayDemote = false,
+  siteId = person.site_id,
 ): RosterRowAction[] {
-  if (!mayInvite) return [];
+  if (!mayInvite || isBasedElsewhere(person, siteId)) return [];
 
   const actions: RosterRowAction[] = [];
 

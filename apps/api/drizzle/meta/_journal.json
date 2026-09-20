@@ -351,6 +351,13 @@
       "when": 1754524800050,
       "tag": "0050_administrator_verifier_exception",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1754524800051,
+      "tag": "0051_management_visible_across_scope",
+      "breakpoints": true
     }
   ]
 }
