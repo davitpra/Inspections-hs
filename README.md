@@ -107,8 +107,12 @@ Tres pasos, y los tres son actos distintos a propósito (ADR-011):
    —no puede iniciar sesión— y el comando imprime el paso 2 listo para copiar. Es
    idempotente y no crea personas: si no está en el roster, entra por `roster:import`.
 
-   Es el **único `auth:*` que corre en producción**, y la razón es que no siembra ni
-    reemplaza ninguna credencial. Solo acepta `coordinator`, `inspector` y `management`.
+   Corre en producción, y la razón es que no siembra ni reemplaza ninguna credencial.
+   Solo acepta `coordinator`, `inspector` y `management`. El paso 2, `auth:bootstrap`,
+   también corre en producción: es la única forma de emitir la primera invitación del
+   sistema, cuando todavía no hay una sesión administrativa que la firme. El único `auth:*`
+   que se niega con `NODE_ENV=production` es `auth:reset-password`, porque reemplaza una
+   credencial existente.
 
    Reusa el mismo `INSERT` que `POST /accounts` —`account.repository.ts`— compilado desde
    `dist/`, así que necesita `pnpm --filter api build` corrido antes; si falta, el comando
@@ -288,7 +292,7 @@ quien declara hecho el trabajo no puede ser quien lo verifica.
 | `pnpm db:seed`                             | Datos de referencia idempotentes. Sin credenciales.                                  |
 | `pnpm demo:data`                           | Entorno de demo local usable. Solo a mano.                                           |
 | `pnpm demo:content`                        | Historial de demo: hallazgos, acciones e incidentes.                                 |
-| `pnpm auth:create-account`                 | Crea la cuenta de una persona del roster. El único `auth:*` que corre en producción. |
+| `pnpm auth:create-account`                 | Crea la cuenta de una persona del roster. Corre en producción.                       |
 | `pnpm auth:bootstrap [userId]`             | Emite la invitación de una cuenta sin credencial.                                    |
 | `pnpm auth:reset-password <userId\|email>` | Contraseña nueva, o `--unlock` para destrabar. Solo fuera de producción.             |
 | `pnpm roster:import <csv>`                 | Importa el roster de ADP. El mismo CSV entra por el botón de `/roster`.              |

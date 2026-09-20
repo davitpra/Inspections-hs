@@ -109,6 +109,10 @@ export async function issueInvitation(pool, targetId) {
 async function main() {
   const targetId = process.argv[2] ?? COORDINATOR_ID;
 
+  if (!process.env.DATABASE_URL) {
+    throw new Error('Falta DATABASE_URL. Ver .env.example.');
+  }
+
   const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 
   try {

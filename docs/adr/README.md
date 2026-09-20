@@ -40,7 +40,7 @@ bloquea el recorrido crítico.
 | [005](005-pg-boss-not-bullmq.md)            | pg-boss, no BullMQ + Redis                        | Aceptada |
 | [006](006-object-storage-and-pdf.md)        | Almacenamiento de objetos versionado              | Aceptada |
 | [007](007-pnpm-monorepo.md)                 | Monorepo con pnpm workspaces                      | Aceptada |
-| [008](008-system-architecture.md)           | Arquitectura del sistema                          | Aceptada |
+| [008](008-system-architecture.md)           | Arquitectura del sistema                          | Parcialmente superada por ADR-026 |
 | [009](009-data-residency.md)                | Residencia de datos (ex-S1)                       | Aceptada |
 | [010](010-target-devices.md)                | Dispositivos objetivo: Android (ex-S2)            | Aceptada |
 | [011](011-authentication.md)                | Autenticación: better-auth en apps/api (ex-S3)    | Parcialmente superada por ADR-022 |
@@ -58,6 +58,7 @@ bloquea el recorrido crítico.
 | [023](023-membresia-jhsc-por-rol.md) | Membresía del JHSC derivada del rol | Aceptada |
 | [024](024-reportante-ejecuta-la-accion.md) | Quien reportó el hallazgo también ejecuta la acción | Aceptada |
 | [025](025-management-y-las-acciones-correctivas.md) | Management comparte las facultades administrativas sobre acciones correctivas | Aceptada |
+| [026](026-despliegue-vps-unico.md)            | Despliegue en un VPS único                         | Aceptada |
 
 Los ADR 001–008 conservan la numeración original citada en el encabezado de
 `docs/requisitos-v1.2.md`. Los 009–011 eran las "decisiones de contexto resueltas" S1, S2 y S3:
@@ -85,9 +86,9 @@ lecturas de ADR-011. Sus decisiones sobre autenticación, invitaciones y sesione
 | PDF                   | No hay renderer de documentos            | 013      |
 | Tests de integración  | Vitest + Testcontainers                  | —        |
 | Monorepo              | pnpm workspaces                          | 007      |
-| Hosting API           | Plataforma de contenedores, región única | 008, 009 |
-| Hosting cliente       | CDN estático                             | 008      |
-| Backups               | PITR ≥ 7 días + versioning de objetos    | 008      |
+| Hosting API           | Contenedor en VPS único, región única    | 008, 009, 026 |
+| Hosting cliente       | Servido por Caddy desde el mismo VPS     | 008, 026      |
+| Backups               | Volcado periódico + versioning de objetos | 006, 026     |
 
 El paquete de esquema compartido no es opcional: la validación de la plantilla tiene que
 correr idéntica en el dispositivo offline y en el servidor al recibir el envío.

@@ -23,14 +23,22 @@ import pg from 'pg';
  * antes de correr. Lo que SÍ se queda acá, sin compartir: el chequeo de rol, el de
  * conflicto y sus mensajes, porque responden a una terminal y no a una respuesta HTTP.
  *
- * CORRE EN PRODUCCIÓN, y es el único `auth:*` que lo hace. La regla detrás de la negativa
- * de `auth:bootstrap` y `auth:reset-password` no es "los comandos no corren en
- * producción": es que ninguno establece ni reemplaza una CREDENCIAL ahí. Los dos
- * convierten el acceso al servidor en acceso a una cuenta. Este no toca `app_credential`:
+ * CORRE EN PRODUCCIÓN. La regla detrás de la única negativa que existe —la de
+ * `auth:reset-password`— no es "los comandos no corren en producción": es que ese comando
+ * REEMPLAZA una credencial, y ahí esa operación ya tiene dueño y no es una terminal (la
+ * revoca el coordinador con `POST /auth/credentials/revoke`, y el bloqueo por intentos se
+ * espera). Este no toca `app_credential`:
  * la cuenta que crea no puede iniciar sesión —nace sin credencial y sigue necesitando la
  * invitación emitida y aceptada— así que lo peor que puede hacer quien lo corre es crear
  * una cuenta de más, visible, auditada y desactivable. Negarse en producción habría
  * dejado el alta REAL, la única que importa, en el mismo `psql` que este comando saca.
+ *
+ * `auth:bootstrap` TAMPOCO SE NIEGA, y eso no es un olvido: emite la PRIMERA invitación,
+ * la única que no puede venir de una sesión administrativa porque todavía no existe
+ * ninguna. `POST /auth/invitations` exige esa sesión. Si el comando se negara en el
+ * entorno de producción, la primera credencial del sistema no tendría cómo emitirse: es
+ * exactamente el huevo y la gallina que ese script existe para romper (ADR-011, y el
+ * encabezado de `bootstrap-invitation.mjs`). No le agregues la guarda.
  *
  * NO CREA PERSONAS. Si no está en el roster, entra por `pnpm roster:import`: crear
  * personas por un atajo del alta es exactamente cómo el roster deja de ser el roster.

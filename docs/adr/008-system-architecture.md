@@ -5,7 +5,7 @@
 | **Estado**                  | Aceptada                                                    |
 | **Fecha**                   | 2026-08-06                                                  |
 | **Supersede**               | —                                                           |
-| **Superada por**            | —                                                           |
+| **Superada por**            | ADR-026 (parcial: solo la sección "Topología de despliegue") |
 | **Referencias**             | `docs/requisitos-v1.2.md` §4; ADR-005, ADR-006, ADR-009     |
 | **Changes que la consumen** | Todos. Define los límites de módulo de la API               |
 
